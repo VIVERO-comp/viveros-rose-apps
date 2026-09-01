@@ -1,0 +1,14 @@
+# Dependencias y builds
+node_modules/
+dist/
+build/
+.vite/
+
+# Secretos: las claves reales nunca entran al repo
+.env
+.env.*
+!.env.example
+
+# Sistema y logs
+.DS_Store
+*.log
