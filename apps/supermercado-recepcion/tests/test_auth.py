@@ -43,11 +43,13 @@ def test_desactivar_revoca_al_instante(cliente):
     assert cliente.get("/", follow_redirects=False).status_code == 303
 
 
-def test_confirmacion_firmada_por_la_empleada_real(cliente, con_ordenes, monkeypatch):
-    capturado = {}
-    monkeypatch.setattr(datos, "odoo_confirmar_recepcion", lambda p: capturado.update(p))
+def test_confirmacion_firmada_por_la_empleada_real(cliente, con_ordenes):
+    import json
+
     cliente.post("/orden/S00770/confirmar", data={})
-    assert capturado["empleadoId"] == "genesis"
+    with datos._db() as con:
+        fila = con.execute("SELECT payload FROM pendientes_odoo WHERE pedido='S00770'").fetchone()
+    assert json.loads(fila["payload"])["empleadoId"] == "genesis"
 
 
 def test_contrasena_hasheada_nunca_en_claro(db_limpia):

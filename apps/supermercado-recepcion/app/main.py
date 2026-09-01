@@ -2,6 +2,8 @@
 
 import os
 import re
+import threading
+import time
 
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
@@ -53,6 +55,20 @@ plantillas.env.filters["numero_pedido"] = numero_pedido
 # Las tablas se crean al importar: es idempotente y así el proceso (o los
 # tests) nunca corren contra una base sin esquema.
 datos.iniciar_db()
+
+
+def _reintentar_sincronizacion():
+    # La cola local se vacía sola cada minuto (el servidor es idempotente).
+    while True:
+        time.sleep(60)
+        try:
+            datos.sincronizar_pendientes()
+        except Exception:
+            pass
+
+
+if os.environ.get("RECEPCION_SIN_HILO") != "1":  # los tests lo apagan
+    threading.Thread(target=_reintentar_sincronizacion, daemon=True).start()
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +174,9 @@ def intercambios(request: Request):
 
 @app.get("/historial")
 def historial(request: Request):
-    return _render_home(request, "historial", historial=datos.historial_movimientos())
+    return _render_home(request, "historial",
+                        historial=datos.historial_movimientos(),
+                        sin_sincronizar=datos.pedidos_sin_sincronizar())
 
 
 @app.post("/devoluciones/{pedido}/regreso")

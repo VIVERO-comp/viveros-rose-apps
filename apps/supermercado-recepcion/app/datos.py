@@ -179,18 +179,96 @@ def ahora():
 
 
 # ---------------------------------------------------------------------------
-# Interfaz que mañana implementará el order-api (router supermercado). Los
-# payloads son los mismos del prototipo React y de docs/odoo-integration.md.
+# Sincronización con Odoo, vía order-api (router supermercado). La única
+# operación que viaja es la RECEPCIÓN (opción B: la salida se valida con lo
+# aceptado, sin backorder ni devolución en Odoo); el regreso y los
+# intercambios son registro local a propósito. La confirmación se guarda
+# SIEMPRE en SQLite antes de intentar nada: si el order-api u Odoo no
+# responden, queda en la cola y el reintentador la manda después (el
+# servidor es idempotente, reintentar nunca duplica).
 # ---------------------------------------------------------------------------
 
-def odoo_confirmar_recepcion(payload):
-    # {odooId, pedido, lineas:[{sku, aceptado, devuelto}], empleadoId, fechaHora}
-    return {"ok": True, "payload": payload}
+def _orden_api():
+    url = os.environ.get("ORDER_API_URL")
+    clave = os.environ.get("ORDER_API_KEY")
+    return (url.rstrip("/"), clave) if url and clave else None
 
 
-def odoo_confirmar_regreso(payload):
-    # {odooId, pedido, lineas:[{sku, cantidad}], empleadoId, fechaHora}
-    return {"ok": True, "payload": payload}
+def sincronizacion_configurada():
+    return _orden_api() is not None
+
+
+def _encolar_para_odoo(operacion, pedido, payload):
+    with _db() as con:
+        con.execute(
+            "INSERT INTO pendientes_odoo (operacion, pedido, payload, estado, creada_en)"
+            " VALUES (?,?,?,'pendiente',?)",
+            (operacion, pedido, json.dumps(payload), datetime.now(ZONA_PANAMA).isoformat()),
+        )
+    # Mejor esfuerzo al instante; si falla, el reintentador la toma después.
+    try:
+        sincronizar_pendientes()
+    except Exception:
+        pass
+
+
+def pedidos_sin_sincronizar():
+    """Pedidos cuya recepción aún no llegó a Odoo (para avisarlo en la UI)."""
+    if not sincronizacion_configurada():
+        return set()
+    with _db() as con:
+        filas = con.execute(
+            "SELECT pedido FROM pendientes_odoo WHERE estado != 'hecha'"
+        ).fetchall()
+    return {f["pedido"] for f in filas}
+
+
+def sincronizar_pendientes():
+    """Manda la cola al order-api. 200 → hecha; error de conexión o 5xx →
+    sigue pendiente (se reintenta); 4xx → error permanente (no se martilla
+    con algo que nunca va a entrar solo)."""
+    configuracion = _orden_api()
+    if configuracion is None:
+        return 0
+    import httpx
+
+    url, clave = configuracion
+    with _db() as con:
+        filas = con.execute(
+            "SELECT n, payload FROM pendientes_odoo WHERE estado='pendiente' ORDER BY n"
+        ).fetchall()
+    sincronizadas = 0
+    for fila in filas:
+        try:
+            respuesta = httpx.post(
+                f"{url}/api/supermercado/recepciones",
+                json=json.loads(fila["payload"]),
+                headers={"X-API-Key": clave}, timeout=8,
+            )
+        except Exception as error:
+            # Servidor inalcanzable: no martillar el resto, se reintenta luego.
+            with _db() as con:
+                con.execute(
+                    "UPDATE pendientes_odoo SET intentos=intentos+1, ultimo_error=? WHERE n=?",
+                    (str(error)[:300], fila["n"]),
+                )
+            break
+        with _db() as con:
+            if respuesta.status_code == 200:
+                con.execute(
+                    "UPDATE pendientes_odoo SET estado='hecha', sincronizada_en=?,"
+                    " ultimo_error=NULL WHERE n=?",
+                    (datetime.now(ZONA_PANAMA).isoformat(), fila["n"]),
+                )
+                sincronizadas += 1
+            else:
+                estado = "error" if 400 <= respuesta.status_code < 500 else "pendiente"
+                con.execute(
+                    "UPDATE pendientes_odoo SET estado=?, intentos=intentos+1,"
+                    " ultimo_error=? WHERE n=?",
+                    (estado, f"HTTP {respuesta.status_code}: {respuesta.text[:250]}", fila["n"]),
+                )
+    return sincronizadas
 
 
 def odoo_crear_intercambio(payload):
@@ -259,6 +337,17 @@ def iniciar_db():
                 creada_en TEXT NOT NULL,
                 expira_en TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS pendientes_odoo (
+                n INTEGER PRIMARY KEY AUTOINCREMENT,
+                operacion TEXT NOT NULL,         -- recepcion
+                pedido TEXT NOT NULL,
+                payload TEXT NOT NULL,           -- JSON que espera el order-api
+                estado TEXT NOT NULL,            -- pendiente | hecha | error
+                intentos INTEGER NOT NULL DEFAULT 0,
+                ultimo_error TEXT,
+                creada_en TEXT NOT NULL,
+                sincronizada_en TEXT
+            );
             """
         )
         _migrar_esquema(con)
@@ -306,7 +395,7 @@ def confirmar_recepcion(pedido, aceptado, empleada):
     if orden is None:
         return None
     resultado = calcular_orden(orden["lineas"], aceptado)
-    odoo_confirmar_recepcion({
+    _encolar_para_odoo("recepcion", pedido, {
         "odooId": orden["odooId"], "pedido": pedido,
         "lineas": [
             {"sku": l["sku"], "aceptado": aceptado.get(l["sku"], l["enviado"]),
@@ -352,14 +441,11 @@ def devoluciones_pendientes():
 
 
 def confirmar_regreso(pedido, empleada):
+    # Registro local a propósito (opción B): en Odoo la orden ya quedó con lo
+    # aceptado al validar la recepción; el regreso físico no toca Odoo.
     devolucion = next((d for d in devoluciones_pendientes() if d["pedido"] == pedido), None)
     if devolucion is None:
         return
-    odoo_confirmar_regreso({
-        "odooId": devolucion["odooId"], "pedido": pedido,
-        "lineas": [{"sku": l["sku"], "cantidad": l["cantidad"]} for l in devolucion["lineas"]],
-        "empleadoId": empleada["id"], "fechaHora": datetime.now(ZONA_PANAMA).isoformat(),
-    })
     with _db() as con:
         con.execute("UPDATE devoluciones SET regresada=1 WHERE pedido=?", (pedido,))
         # El renglón del historial de esa entrega pasa a "regreso completado".

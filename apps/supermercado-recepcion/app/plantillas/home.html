@@ -145,7 +145,8 @@
             <div class="cuando">{{ h.hora }}{% if h.tipo == "entrega" %} · Pedido {{ h.pedido | numero_pedido }}{% else %} · Intercambio{% endif %}</div>
           </div>
           {% if h.tipo == "entrega" %}
-            {% if h.regreso %}<span class="pastilla verde">Completada</span>
+            {% if h.pedido in sin_sincronizar %}<span class="pastilla naranja">Sin sincronizar</span>
+            {% elif h.regreso %}<span class="pastilla verde">Completada</span>
             {% else %}<span class="pastilla naranja">Regreso pendiente</span>{% endif %}
           {% else %}
             <span class="pastilla verde">Reemplazado</span>

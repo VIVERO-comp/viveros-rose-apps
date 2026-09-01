@@ -3,6 +3,8 @@ import tempfile
 
 # Antes de importar la app: que ninguna prueba toque la base real.
 os.environ["RECEPCION_DB"] = os.path.join(tempfile.mkdtemp(), "pruebas.db")
+# Y sin el hilo reintentador de la cola: las pruebas sincronizan a mano.
+os.environ["RECEPCION_SIN_HILO"] = "1"
 
 import pytest
 

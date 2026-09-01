@@ -38,8 +38,18 @@ la app ve el catálogo completo. La app lo consume con degradación en cadena
 (caché → último valor bueno → datos de prueba) vía
 `STOCK_PROXY_URL`/`STOCK_API_KEY`.
 
-Las escrituras (`POST …`) siguen siendo **diseño propuesto, pendiente de
-implementación** en el order-api (router `supermercado`).
+La escritura de la **recepción ya es real**: `POST
+/api/supermercado/recepciones` en el order-api (con la X-API-Key interna)
+valida el albarán de salida del pedido **solo con lo aceptado, sin backorder
+y sin devolución en Odoo** ("opción B": la orden queda con lo que el súper
+aceptó y la factura manual, con política "cantidades entregadas", sale por
+lo aceptado; se acepta la ventana en que lo rechazado figura en stock hasta
+volver físicamente). Es idempotente por estado del albarán y deja constancia
+en la tabla `recepcion_super` de la base tienda. La app encola cada
+confirmación en SQLite (`pendientes_odoo`) y un reintentador la sincroniza:
+si el order-api u Odoo se caen, nada se pierde y nada se duplica; en el
+historial se ve "Sin sincronizar" hasta lograrlo. El **regreso** y los
+**intercambios** son registro local a propósito.
 
 > **Deuda técnica**: el stock-proxy lee la base de Odoo por SQL directo
 > (esquema fijado a Odoo 19). Cuando conectemos las facturas hay que evaluar
