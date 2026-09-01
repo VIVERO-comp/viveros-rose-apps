@@ -1,0 +1,4 @@
+# El prototipo React congelado es solo referencia de comportamiento y diseño:
+# fuera de las estadísticas de lenguaje de GitHub, para que el repositorio
+# refleje su lenguaje real (Python).
+apps/supermercado-recepcion/prototipo-react/** linguist-vendored
