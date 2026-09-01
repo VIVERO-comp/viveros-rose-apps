@@ -12,7 +12,7 @@
 
 **Vive en:** `apps/supermercado-recepcion/` (este repo) · **Estado:**
 desarrollo, prototipo con datos simulados · **Usuarios:** empleados que
-entregan a supermercados · **Tecnología:** React 18 + Vite, `lucide-react`.
+entregan a supermercados · **Tecnología:** Python (FastAPI + Jinja2 + SQLite), con login propio; el prototipo React quedó como referencia congelada.
 
 Registra desde el celular lo que pasó con cada entrega a un supermercado. La
 referencia del empleado es el **número de factura** (#774, #781, #770 en los
