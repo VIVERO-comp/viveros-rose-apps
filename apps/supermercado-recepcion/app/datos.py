@@ -22,8 +22,6 @@ from .calculos import calcular_orden
 
 ZONA_PANAMA = ZoneInfo("America/Panama")
 
-EMPLEADO = {"id": "emp-01", "nombre": "Génesis"}
-
 _CATALOGO_BASE = [
     ("VR-001", "Hierba Buena VR", 1.75), ("VR-002", "Romero VR", 1.75),
     ("VR-003", "Menta VR", 1.75), ("VR-004", "Ruda VR", 1.75),
@@ -249,6 +247,18 @@ def iniciar_db():
                 datos TEXT NOT NULL,             -- JSON del resumen mostrado
                 creado_en TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS empleadas (
+                usuario TEXT PRIMARY KEY,
+                nombre TEXT NOT NULL,
+                hash TEXT NOT NULL,              -- pbkdf2_sha256$iter$sal$hash
+                activa INTEGER NOT NULL DEFAULT 1
+            );
+            CREATE TABLE IF NOT EXISTS sesiones (
+                token TEXT PRIMARY KEY,
+                usuario TEXT NOT NULL,
+                creada_en TEXT NOT NULL,
+                expira_en TEXT NOT NULL
+            );
             """
         )
         _migrar_esquema(con)
@@ -290,7 +300,7 @@ def orden_confirmada(pedido):
         return con.execute("SELECT 1 FROM recepciones WHERE pedido=?", (pedido,)).fetchone() is not None
 
 
-def confirmar_recepcion(pedido, aceptado):
+def confirmar_recepcion(pedido, aceptado, empleada):
     """Sella la recepción: guarda estado, devolución (si hay) e historial."""
     orden = obtener_orden(pedido)
     if orden is None:
@@ -303,7 +313,7 @@ def confirmar_recepcion(pedido, aceptado):
              "devuelto": l["enviado"] - aceptado.get(l["sku"], l["enviado"])}
             for l in orden["lineas"]
         ],
-        "empleadoId": EMPLEADO["id"], "fechaHora": datetime.now(ZONA_PANAMA).isoformat(),
+        "empleadoId": empleada["id"], "fechaHora": datetime.now(ZONA_PANAMA).isoformat(),
     })
     with _db() as con:
         con.execute(
@@ -341,14 +351,14 @@ def devoluciones_pendientes():
     return [{"pedido": f["pedido"], **json.loads(f["datos"])} for f in filas]
 
 
-def confirmar_regreso(pedido):
+def confirmar_regreso(pedido, empleada):
     devolucion = next((d for d in devoluciones_pendientes() if d["pedido"] == pedido), None)
     if devolucion is None:
         return
     odoo_confirmar_regreso({
         "odooId": devolucion["odooId"], "pedido": pedido,
         "lineas": [{"sku": l["sku"], "cantidad": l["cantidad"]} for l in devolucion["lineas"]],
-        "empleadoId": EMPLEADO["id"], "fechaHora": datetime.now(ZONA_PANAMA).isoformat(),
+        "empleadoId": empleada["id"], "fechaHora": datetime.now(ZONA_PANAMA).isoformat(),
     })
     with _db() as con:
         con.execute("UPDATE devoluciones SET regresada=1 WHERE pedido=?", (pedido,))
@@ -366,7 +376,7 @@ def intercambios_todos():
     return [{"id": f["id"], "estado": f["estado"], **json.loads(f["datos"])} for f in filas]
 
 
-def crear_intercambio(cliente, sucursal, lineas):
+def crear_intercambio(cliente, sucursal, lineas, empleada):
     nuevo = {
         "id": f"I-{int(time.time() * 1000)}", "cliente": cliente, "sucursal": sucursal,
         "lineas": lineas, "hora": ahora(),
@@ -374,7 +384,7 @@ def crear_intercambio(cliente, sucursal, lineas):
     odoo_crear_intercambio({
         "cliente": cliente, "sucursal": sucursal,
         "lineas": [{"sku": l["sku"], "danadas": l["danadas"]} for l in lineas],
-        "empleadoId": EMPLEADO["id"], "fechaHora": datetime.now(ZONA_PANAMA).isoformat(),
+        "empleadoId": empleada["id"], "fechaHora": datetime.now(ZONA_PANAMA).isoformat(),
     })
     with _db() as con:
         con.execute(
@@ -384,12 +394,12 @@ def crear_intercambio(cliente, sucursal, lineas):
     return nuevo
 
 
-def completar_intercambio(intercambio_id):
+def completar_intercambio(intercambio_id, empleada):
     intercambio = next((i for i in intercambios_todos() if i["id"] == intercambio_id), None)
     if intercambio is None or intercambio["estado"] != "pendiente":
         return
     odoo_completar_intercambio({
-        "intercambioId": intercambio_id, "empleadoId": EMPLEADO["id"],
+        "intercambioId": intercambio_id, "empleadoId": empleada["id"],
         "fechaHora": datetime.now(ZONA_PANAMA).isoformat(),
     })
     with _db() as con:

@@ -315,3 +315,29 @@ body {
 .total-flotante .cuanto { font-weight: 800; }
 .nota-centrada { font-size: 14px; color: var(--apagado); text-align: center; margin: 16px 0 0; }
 .acciones { display: grid; gap: 12px; margin-top: 24px; }
+
+/* ---------- Login ---------- */
+.login { display: flex; flex-direction: column; align-items: center; padding-top: 44px; }
+.logo-redondo {
+  width: 150px; height: 150px; border-radius: 50%; overflow: hidden;
+  box-shadow: 0 0 0 6px var(--fondo), 0 0 0 9px var(--arena), 0 14px 30px rgba(90, 70, 52, .22);
+}
+.logo-redondo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.marca-login {
+  margin: 20px 0 24px; font-size: 13px; font-weight: 800; letter-spacing: 2.5px;
+  color: var(--cafe); text-align: center;
+}
+.form-login { width: 100%; display: grid; gap: 14px; }
+.campo { display: grid; gap: 6px; }
+.campo span { font-size: 14px; font-weight: 700; color: var(--cafe); }
+.campo input {
+  width: 100%; padding: 14px 16px; border-radius: 14px; border: 2px solid var(--linea);
+  background: var(--tarjeta); font-size: 17px; color: var(--tinta); outline: none; font-family: inherit;
+}
+.campo input:focus { border-color: var(--arena); }
+.error-campo { font-size: 14px; font-weight: 700; color: var(--rojo); }
+
+.salir {
+  border: none; background: none; color: var(--apagado); font-size: 12px; font-weight: 700;
+  cursor: pointer; font-family: inherit; padding: 2px 0 0; display: block; margin-left: auto;
+}

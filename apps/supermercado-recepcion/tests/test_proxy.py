@@ -1,12 +1,7 @@
 """Sucursales y catálogo vía stock-proxy, con su degradación en cadena."""
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app import datos
-from app.main import app
-
-cliente_http = TestClient(app)
 
 RESPUESTA_SUCURSALES = {
     "clients": [{
@@ -58,7 +53,7 @@ def proxy_configurado(monkeypatch):
     datos.reiniciar_cache_proxy()
 
 
-def test_sin_configuracion_usa_datos_de_prueba(db_limpia, monkeypatch):
+def test_sin_configuracion_usa_datos_de_prueba(cliente, monkeypatch):
     monkeypatch.delenv("STOCK_PROXY_URL", raising=False)
     datos.reiniciar_cache_proxy()
     clientes = datos.obtener_clientes_supermercado()
@@ -67,49 +62,49 @@ def test_sin_configuracion_usa_datos_de_prueba(db_limpia, monkeypatch):
     ]
     assert all(p["disponible"] is None for p in datos.obtener_catalogo())
     # Y la app entera arranca igual.
-    assert "¿En qué súper estás?" in cliente_http.get("/intercambios/nuevo").text
+    assert "¿En qué súper estás?" in cliente.get("/intercambios/nuevo").text
 
 
-def test_con_proxy_llegan_sucursales_reales(db_limpia, proxy_configurado):
-    r = cliente_http.get("/intercambios/nuevo")
+def test_con_proxy_llegan_sucursales_reales(cliente, proxy_configurado):
+    r = cliente.get("/intercambios/nuevo")
     assert "Super Extra" in r.text and "Supermercados Rey" not in r.text
 
-    r = cliente_http.get("/intercambios/nuevo/sucursales", params={"cliente": "SUPER-EXTRA"})
+    r = cliente.get("/intercambios/nuevo/sucursales", params={"cliente": "SUPER-EXTRA"})
     assert "¿En qué sucursal?" in r.text
     # El nombre se muestra sin el prefijo del cliente, con su código CL.
     assert ">Villa Lobos<" in r.text and "CL-0032" in r.text
 
 
-def test_con_proxy_el_catalogo_trae_disponible(db_limpia, proxy_configurado):
+def test_con_proxy_el_catalogo_trae_disponible(cliente, proxy_configurado):
     catalogo = datos.obtener_catalogo()
     menta = next(p for p in catalogo if p["sku"] == "PLT-MENTA-01")
     assert menta == {"sku": "PLT-MENTA-01", "nombre": "MENTA", "precio": 3.0, "disponible": 14}
     # La página de plantas embebe ese catálogo para la búsqueda local.
-    r = cliente_http.get("/intercambios/nuevo/plantas",
+    r = cliente.get("/intercambios/nuevo/plantas",
                          params={"cliente": "Super Extra", "sucursal": "Super Extra Arraiján"})
     assert "PLT-MENTA-01" in r.text and '"disponible": 14' in r.text
 
 
-def test_proxy_caido_sirve_ultimo_valor_bueno(db_limpia, proxy_configurado, monkeypatch):
+def test_proxy_caido_sirve_ultimo_valor_bueno(cliente, proxy_configurado, monkeypatch):
     monkeypatch.setattr(datos, "TTL_SUCURSALES", 0)
     assert datos.obtener_clientes_supermercado()[0]["nombre"] == "Super Extra"
     proxy_configurado["caido"] = True
     assert datos.obtener_clientes_supermercado()[0]["nombre"] == "Super Extra"
 
 
-def test_proxy_caido_sin_historia_cae_a_datos_de_prueba(db_limpia, proxy_configurado):
+def test_proxy_caido_sin_historia_cae_a_datos_de_prueba(cliente, proxy_configurado):
     proxy_configurado["caido"] = True
     assert datos.obtener_clientes_supermercado()[0]["nombre"] == "Super Xtra"
 
 
-def test_intercambio_con_producto_real_usa_su_precio(db_limpia, proxy_configurado):
-    r = cliente_http.post("/intercambios/nuevo/revisar", data={
+def test_intercambio_con_producto_real_usa_su_precio(cliente, proxy_configurado):
+    r = cliente.post("/intercambios/nuevo/revisar", data={
         "cliente": "Super Extra", "sucursal": "Super Extra Arraiján", "d_PLT-JADE-01": "2",
     })
     assert "JADE" in r.text and "B/.11.00" in r.text
 
 
-def test_con_proxy_llegan_pedidos_reales(db_limpia, proxy_configurado):
+def test_con_proxy_llegan_pedidos_reales(cliente, proxy_configurado):
     ordenes = datos.obtener_ordenes()
     assert len(ordenes) == 1
     orden = ordenes[0]
@@ -118,12 +113,12 @@ def test_con_proxy_llegan_pedidos_reales(db_limpia, proxy_configurado):
     assert orden["lineas"] == [
         {"sku": "PL-MENTA-01", "nombre": "MENTA", "precio": 3.0, "enviado": 4}
     ]
-    r = cliente_http.get("/")
+    r = cliente.get("/")
     assert "S00901" in r.text and "Ref. súper: FAC-901" in r.text
     assert "Super Extra · Arraiján" in r.text
 
 
-def test_sin_proxy_las_ordenes_quedan_vacias(db_limpia, monkeypatch):
+def test_sin_proxy_las_ordenes_quedan_vacias(cliente, monkeypatch):
     monkeypatch.delenv("STOCK_PROXY_URL", raising=False)
     datos.reiniciar_cache_proxy()
     assert datos.obtener_ordenes() == []

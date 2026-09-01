@@ -18,7 +18,10 @@
     <div class="marca">PLANTAS PANAMÁ</div>
     <h1>Hola, {{ empleado.nombre }}</h1>
   </div>
-  <img src="/static/icono.png" alt="Plantas Panamá" width="44" height="44" />
+  <div>
+    <img src="/static/icono.png" alt="Plantas Panamá" width="44" height="44" />
+    <form method="post" action="/logout"><button class="salir" type="submit">Salir</button></form>
+  </div>
 </div>
 
 {% if pestana == "pendientes" %}

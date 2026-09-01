@@ -2,14 +2,9 @@
 
 import re
 
-from fastapi.testclient import TestClient
-
-from app.main import app
-
-cliente = TestClient(app)
 
 
-def test_recepcion_con_diferencia_y_regreso(con_ordenes):
+def test_recepcion_con_diferencia_y_regreso(cliente, con_ordenes):
     # Abrir la orden: todo viene aceptado y los nombres van sin " VR".
     r = cliente.get("/orden/S00774")
     assert r.status_code == 200
@@ -40,18 +35,18 @@ def test_recepcion_con_diferencia_y_regreso(con_ordenes):
     assert "Completada" in cliente.get("/historial").text
 
 
-def test_recepcion_confirmada_sobrevive_reinicio(con_ordenes):
+def test_recepcion_confirmada_sobrevive_reinicio(cliente, con_ordenes):
     cliente.post("/orden/S00770/confirmar", data={})
     # Otra petición (nuevo request = como reabrir la app): sigue confirmada.
     assert "S00770" not in cliente.get("/").text
     assert cliente.get("/orden/S00770", follow_redirects=False).status_code == 303
 
 
-def test_orden_inexistente_redirige(con_ordenes):
+def test_orden_inexistente_redirige(cliente, con_ordenes):
     assert cliente.get("/orden/S99999", follow_redirects=False).status_code == 303
 
 
-def test_intercambio_completo(db_limpia):
+def test_intercambio_completo(cliente):
     r = cliente.get("/intercambios/nuevo")
     assert "¿En qué súper estás?" in r.text and "Supermercados Rey" in r.text
 
@@ -89,7 +84,7 @@ def test_intercambio_completo(db_limpia):
     assert "1 unidad reemplazada<" in cliente.get("/historial").text
 
 
-def test_sin_plantas_no_hay_revision(db_limpia):
+def test_sin_plantas_no_hay_revision(cliente):
     r = cliente.post("/intercambios/nuevo/revisar", data={
         "cliente": "Super Xtra", "sucursal": "Villalobos",
     }, follow_redirects=False)

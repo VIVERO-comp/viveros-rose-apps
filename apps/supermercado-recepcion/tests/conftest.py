@@ -22,3 +22,19 @@ def con_ordenes(monkeypatch, db_limpia):
     from ordenes_de_prueba import ordenes_falsas
 
     monkeypatch.setattr(datos, "obtener_ordenes", ordenes_falsas)
+
+
+@pytest.fixture
+def cliente(db_limpia):
+    """Un TestClient ya autenticado como la empleada Génesis."""
+    from fastapi.testclient import TestClient
+
+    from app import seguridad
+    from app.main import app
+
+    seguridad.crear_empleada("genesis", "Génesis", "clave-de-prueba")
+    c = TestClient(app)
+    respuesta = c.post("/login", data={"usuario": "genesis", "contrasena": "clave-de-prueba"},
+                       follow_redirects=False)
+    assert respuesta.status_code == 303
+    return c

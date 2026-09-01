@@ -8,7 +8,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import datos
+from . import datos, seguridad
 from .calculos import acotar_aceptado, calcular_orden, dinero, unidades
 
 app = FastAPI(title="Recepción de Supermercados")
@@ -55,6 +55,63 @@ plantillas.env.filters["numero_pedido"] = numero_pedido
 datos.iniciar_db()
 
 
+# ---------------------------------------------------------------------------
+# Autenticación: toda la app exige sesión, salvo el login y los estáticos.
+# ---------------------------------------------------------------------------
+
+def _cookie_segura():
+    # En producción (detrás de nginx con HTTPS) se pone COOKIE_SEGURA=1; en
+    # desarrollo local por http una cookie Secure nunca llegaría de vuelta.
+    return os.environ.get("COOKIE_SEGURA") == "1"
+
+
+@app.middleware("http")
+async def exigir_sesion(request: Request, call_next):
+    ruta = request.url.path
+    if ruta == "/login" or ruta.startswith("/static"):
+        return await call_next(request)
+    empleada = seguridad.empleada_de_sesion(request.cookies.get("sesion"))
+    if empleada is None:
+        return RedirectResponse("/login", status_code=303)
+    request.state.empleada = empleada
+    return await call_next(request)
+
+
+@app.get("/login")
+def login(request: Request):
+    if seguridad.empleada_de_sesion(request.cookies.get("sesion")):
+        return RedirectResponse("/", status_code=303)
+    return plantillas.TemplateResponse(request, "login.html", {"error": None, "usuario": ""})
+
+
+@app.post("/login")
+async def entrar(request: Request):
+    form = await request.form()
+    usuario = (form.get("usuario") or "").strip().lower()
+    empleada = seguridad.verificar(usuario, form.get("contrasena") or "")
+    if empleada is None:
+        respuesta = plantillas.TemplateResponse(request, "login.html", {
+            "error": "Usuario o contraseña incorrectos.", "usuario": usuario,
+        })
+        respuesta.status_code = 401
+        return respuesta
+    respuesta = RedirectResponse("/", status_code=303)
+    respuesta.set_cookie(
+        "sesion", seguridad.crear_sesion(empleada["id"]),
+        max_age=seguridad.DIAS_SESION * 24 * 3600,
+        httponly=True, samesite="lax", secure=_cookie_segura(),
+    )
+    return respuesta
+
+
+@app.post("/logout")
+def salir(request: Request):
+    seguridad.cerrar_sesion(request.cookies.get("sesion"))
+    respuesta = RedirectResponse("/login", status_code=303)
+    respuesta.delete_cookie("sesion")
+    return respuesta
+
+
 def _contadores():
     return {
         "pendientes": len(datos.ordenes_pendientes()),
@@ -66,7 +123,7 @@ def _contadores():
 def _render_home(request, pestana, **extra):
     return plantillas.TemplateResponse(request, "home.html", {
         "pestana": pestana,
-        "empleado": datos.EMPLEADO,
+        "empleado": request.state.empleada,
         "contadores": _contadores(),
         **extra,
     })
@@ -105,14 +162,14 @@ def historial(request: Request):
 
 
 @app.post("/devoluciones/{pedido}/regreso")
-def regreso(pedido: str):
-    datos.confirmar_regreso(pedido)
+def regreso(request: Request, pedido: str):
+    datos.confirmar_regreso(pedido, request.state.empleada)
     return RedirectResponse("/devoluciones", status_code=303)
 
 
 @app.post("/intercambios/{intercambio_id}/completar")
-def completar(intercambio_id: str):
-    datos.completar_intercambio(intercambio_id)
+def completar(request: Request, intercambio_id: str):
+    datos.completar_intercambio(intercambio_id, request.state.empleada)
     return RedirectResponse("/intercambios", status_code=303)
 
 
@@ -168,7 +225,7 @@ async def confirmar(request: Request, pedido: str):
     if abierta is None:
         return RedirectResponse("/", status_code=303)
     aceptado = await _aceptado_del_form(request, abierta)
-    r = datos.confirmar_recepcion(pedido, aceptado)
+    r = datos.confirmar_recepcion(pedido, aceptado, request.state.empleada)
     if r is None:
         return RedirectResponse("/", status_code=303)
     hay_devolucion = r["dev"] > 0
@@ -270,7 +327,7 @@ async def int_crear(request: Request):
     lineas = _lineas_danadas(danadas)
     if not lineas:
         return RedirectResponse("/intercambios/nuevo", status_code=303)
-    datos.crear_intercambio(cliente, sucursal, lineas)
+    datos.crear_intercambio(cliente, sucursal, lineas, request.state.empleada)
     total = sum(l["danadas"] for l in lineas)
     return plantillas.TemplateResponse(request, "exito.html", {
         "titulo": "Intercambio registrado",
