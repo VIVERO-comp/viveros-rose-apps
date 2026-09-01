@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>{% block titulo %}Recepción de Supermercados{% endblock %}</title>
+    <meta name="theme-color" content="#FDD671" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/static/icono-app-512.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/icono-app-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/icono-app-180.png" />
+    <link rel="manifest" href="/static/manifest.webmanifest" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      {% block splash %}{% endblock %}
+      <main class="contenido">{% block contenido %}{% endblock %}</main>
+      {% block nav %}{% endblock %}
+    </div>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

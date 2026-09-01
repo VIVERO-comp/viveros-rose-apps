@@ -1,0 +1,316 @@
+/* Paleta del objeto C del prototipo React, como variables. */
+:root {
+  --pagina: #FDD671; --fondo: #FFF7E3; --tarjeta: #FFFDF6; --tinta: #5A4634;
+  --apagado: #9C8A74; --linea: #F2E4C4; --dorado: #F7C74E; --arena: #E9B36B;
+  --cafe: #6B5443; --verde: #4F8F4A; --verde-suave: #E7F2E3; --azul: #4C7BB3;
+  --azul-suave: #E4ECF7; --naranja: #DD7E1F; --naranja-suave: #FCEBD5; --rojo: #C9614C;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--pagina); color: var(--tinta);
+  font-family: Montserrat, -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
+}
+.app {
+  position: relative; width: 100%; max-width: 480px; margin: 0 auto;
+  height: 100dvh; background: var(--fondo); overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.contenido { position: relative; z-index: 1; flex: 1; overflow-y: auto; padding: 8px 16px 20px; }
+
+/* ---------- Componentes básicos ---------- */
+.tarjeta { background: var(--tarjeta); border-radius: 18px; padding: 16px; border: 1px solid var(--linea); }
+.pastilla {
+  border-radius: 999px; padding: 5px 12px; font-size: 13px; font-weight: 800; white-space: nowrap;
+}
+.pastilla.azul { background: var(--azul-suave); color: var(--azul); }
+.pastilla.naranja { background: var(--naranja-suave); color: var(--naranja); }
+.pastilla.verde { background: var(--verde-suave); color: var(--verde); }
+
+.boton {
+  display: block; width: 100%; padding: 19px 16px; border-radius: 14px; font-size: 19px;
+  font-weight: 700; border: none; background: var(--cafe); color: #fff; cursor: pointer;
+  font-family: inherit; text-align: center; text-decoration: none;
+  box-shadow: 0 4px 0 rgba(90, 70, 52, .18);
+}
+.boton.chico { padding: 14px 16px; font-size: 17px; }
+.boton.verde { background: var(--verde); }
+.boton.naranja { background: var(--naranja); }
+.boton.contorno {
+  background: transparent; color: var(--tinta); border: 2px solid var(--arena); box-shadow: none;
+}
+.boton:disabled { opacity: .4; cursor: default; box-shadow: none; }
+
+.boton-volver {
+  width: 46px; height: 46px; border-radius: 14px; border: none; background: var(--tarjeta);
+  color: var(--cafe); cursor: pointer; display: grid; place-items: center; flex-shrink: 0;
+  box-shadow: 0 3px 0 rgba(90, 70, 52, .18), 0 0 0 2px var(--linea);
+}
+
+/* ---------- Encabezados ---------- */
+.encabezado { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.encabezado h1 { font-size: 22px; font-weight: 800; margin: 0; line-height: 1.15; }
+.encabezado .sub { font-size: 15px; color: var(--apagado); margin-top: 2px; }
+
+.saludo { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 14px; }
+.saludo .marca { font-size: 12px; font-weight: 800; letter-spacing: 1.5px; color: var(--cafe); }
+.saludo h1 { font-size: 24px; font-weight: 800; margin: 2px 0 0; }
+.saludo img { display: block; border-radius: 10px; box-shadow: 0 3px 0 rgba(90, 70, 52, .2); }
+
+/* ---------- Buscador ---------- */
+.buscador { position: relative; margin-bottom: 12px; }
+.buscador svg { position: absolute; left: 14px; top: 14px; color: var(--apagado); }
+.buscador input {
+  width: 100%; padding: 14px 44px; border-radius: 14px; border: 2px solid var(--linea);
+  background: var(--tarjeta); font-size: 17px; color: var(--tinta); outline: none; font-family: inherit;
+}
+.buscador .limpiar {
+  position: absolute; right: 10px; top: 9px; width: 32px; height: 32px; border-radius: 10px;
+  border: none; background: var(--linea); color: var(--tinta); cursor: pointer;
+  display: grid; place-items: center;
+}
+.buscador .limpiar[hidden] { display: none; }
+
+/* ---------- Lista de entregas ---------- */
+.titulo-seccion { font-size: 15px; font-weight: 700; color: var(--apagado); margin: 0 0 10px; }
+.lista { display: grid; gap: 8px; }
+.lista-separada { display: grid; gap: 12px; }
+.tarjeta-entrega {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; cursor: pointer;
+  padding: 12px 12px 12px 14px; border-radius: 16px; border: 1px solid var(--linea);
+  border-left: 5px solid var(--azul); background: var(--tarjeta); color: var(--tinta);
+  text-decoration: none;
+}
+.tarjeta-entrega .factura { font-size: 19px; font-weight: 800; color: var(--azul); }
+.tarjeta-entrega .fecha { font-size: 12px; color: var(--apagado); margin-left: 8px; }
+.tarjeta-entrega .cliente {
+  font-size: 16px; font-weight: 700; margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tarjeta-entrega .detalle { font-size: 13px; color: var(--apagado); margin-top: 2px; }
+.tarjeta-entrega .lado { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
+.tarjeta-entrega .abrir { font-size: 13px; font-weight: 800; color: var(--cafe); display: flex; align-items: center; }
+
+.vacio { text-align: center; color: var(--apagado); padding: 24px 12px; }
+.vacio .dibujo { margin-bottom: 8px; color: var(--arena); display: flex; justify-content: center; }
+.vacio p { font-size: 16px; margin: 0; }
+.vacio-tarjeta { text-align: center; color: var(--apagado); padding: 30px; }
+
+/* ---------- Navegación inferior ---------- */
+.nav {
+  flex-shrink: 0; display: flex; background: var(--tarjeta); border-top: 1px solid var(--linea);
+  padding: 8px 6px 14px; box-shadow: 0 -8px 24px rgba(90, 70, 52, .08);
+}
+.nav a {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 4px 0; color: var(--apagado); text-decoration: none;
+}
+.nav a.activo { color: var(--cafe); }
+.nav .icono {
+  position: relative; width: 52px; height: 32px; border-radius: 16px;
+  display: grid; place-items: center; transition: background .15s;
+}
+.nav a.activo .icono { background: var(--dorado); }
+.nav .etiqueta { font-size: 11px; font-weight: 600; }
+.nav a.activo .etiqueta { font-weight: 800; }
+.nav .globo {
+  position: absolute; top: -4px; right: 2px; background: var(--naranja); color: #fff;
+  border-radius: 999px; font-size: 10px; font-weight: 800; min-width: 17px; height: 17px;
+  display: grid; place-items: center; padding: 0 4px; box-shadow: 0 0 0 2px var(--tarjeta);
+}
+
+/* ---------- Splash (1 segundo) ---------- */
+.splash {
+  position: absolute; inset: 0; z-index: 20; background: var(--dorado); cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  animation: splash-fuera .4s ease .8s forwards;
+}
+.splash .logo-circulo {
+  width: 200px; height: 200px; border-radius: 50%; overflow: hidden;
+  box-shadow: 0 0 0 6px var(--fondo), 0 0 0 9px var(--arena), 0 18px 40px rgba(90, 70, 52, .25);
+  animation: logo-entra .6s cubic-bezier(.2, .9, .3, 1.2) both;
+}
+.splash .logo-circulo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.splash .texto { margin-top: 22px; text-align: center; animation: texto-entra .4s ease .3s both; }
+.splash .texto .titulo { font-size: 13px; font-weight: 800; letter-spacing: 3px; color: var(--cafe); }
+.splash .texto .sub { font-size: 14px; color: var(--cafe); opacity: .7; margin-top: 6px; }
+@keyframes logo-entra {
+  0% { transform: scale(.6) rotate(-8deg); opacity: 0 }
+  60% { transform: scale(1.06) rotate(1deg); opacity: 1 }
+  100% { transform: scale(1) rotate(0) }
+}
+@keyframes texto-entra { from { transform: translateY(14px); opacity: 0 } to { transform: none; opacity: 1 } }
+@keyframes splash-fuera { to { opacity: 0; visibility: hidden } }
+@media (prefers-reduced-motion: reduce) { .splash, .splash * { animation-duration: .01ms !important } }
+.splash[hidden] { display: none; }
+
+/* ---------- Olas decorativas (éxitos y selección de súper) ---------- */
+.ola { position: absolute; left: 0; right: 0; width: 100%; height: 150px; pointer-events: none; z-index: 0; }
+.ola-arriba { top: 0; transform: rotate(180deg); }
+.ola-abajo { bottom: 0; transform: scaleX(-1); }
+.exito { position: relative; z-index: 1; }
+
+/* ---------- Detalle de orden (contadores) ---------- */
+.franja-factura {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  background: var(--azul-suave); border-radius: 14px; padding: 10px 14px; margin-bottom: 10px;
+}
+.franja-factura .numero { font-size: 18px; font-weight: 800; color: var(--azul); }
+.franja-factura .fecha { font-size: 13px; color: var(--apagado); margin-left: 8px; }
+.franja-factura .estado { font-size: 12px; font-weight: 800; color: var(--azul); }
+
+.franja-aviso {
+  display: flex; align-items: center; gap: 10px; border-radius: 14px; padding: 9px 12px;
+  margin-bottom: 10px; font-size: 14px; font-weight: 700;
+}
+.franja-aviso.ok { background: var(--verde-suave); color: var(--verde); }
+.franja-aviso.difiere { background: var(--naranja-suave); color: var(--naranja); }
+.franja-aviso .mensaje { flex: 1; }
+.franja-aviso .restablecer {
+  border: none; background: var(--tarjeta); color: var(--naranja); border-radius: 10px;
+  padding: 6px 10px; font-size: 13px; font-weight: 800; cursor: pointer; font-family: inherit;
+}
+
+.linea-producto {
+  display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 14px;
+  border-radius: 16px; background: var(--tarjeta); border: 2px solid var(--linea);
+}
+.linea-producto.difiere { background: var(--naranja-suave); border-color: var(--naranja); }
+.linea-producto .nombre { font-size: 15px; font-weight: 700; line-height: 1.2; }
+.linea-producto .estado { font-size: 13px; color: var(--apagado); margin-top: 3px; }
+.linea-producto.difiere .estado { color: var(--naranja); font-weight: 800; }
+.linea-producto .datos { flex: 1; min-width: 0; }
+
+.contador { display: flex; align-items: center; gap: 6px; }
+.contador button {
+  width: 48px; height: 48px; border-radius: 14px; border: none; background: var(--cafe);
+  color: #fff; font-size: 28px; font-weight: 700; cursor: pointer; line-height: 1; font-family: inherit;
+}
+.contador.verde button { background: var(--verde); }
+.contador.naranja button { background: var(--naranja); }
+.contador button:disabled { background: var(--linea); color: var(--apagado); cursor: default; }
+.contador .valor {
+  width: 44px; text-align: center; font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums;
+}
+
+.pie-pegajoso {
+  position: sticky; bottom: 0; background: var(--fondo); padding-top: 12px; margin-top: 10px; z-index: 2;
+}
+.resumen-doble { display: flex; gap: 8px; margin-bottom: 10px; }
+.resumen-caja { flex: 1; border-radius: 14px; padding: 8px 12px; }
+.resumen-caja .titulo { font-size: 12px; font-weight: 700; }
+.resumen-caja .numero { font-size: 20px; font-weight: 800; line-height: 1.1; }
+.resumen-caja .numero .de { font-size: 13px; color: var(--apagado); font-weight: 700; }
+.resumen-caja .monto { font-size: 13px; font-weight: 700; }
+.resumen-caja.verde { background: var(--verde-suave); color: var(--verde); }
+.resumen-caja.naranja { background: var(--naranja-suave); color: var(--naranja); }
+.resumen-caja.neutra { background: var(--tarjeta); border: 1px solid var(--linea); color: var(--apagado); }
+
+/* ---------- Confirmación y éxito ---------- */
+.tarjeta-diferencia { border-left: 6px solid var(--naranja); padding: 12px 16px; }
+.tarjeta-diferencia .nombre { font-size: 17px; font-weight: 800; text-transform: uppercase; }
+.tarjeta-diferencia .cifras { display: flex; gap: 16px; margin-top: 6px; font-size: 16px; color: var(--apagado); }
+.tarjeta-diferencia b.ok { color: var(--tinta); }
+.tarjeta-diferencia b.verde { color: var(--verde); }
+.tarjeta-diferencia b.naranja { color: var(--naranja); }
+
+.resumen-filas { padding: 12px 16px; }
+.resumen-filas .fila {
+  display: flex; justify-content: space-between; align-items: baseline; padding: 5px 0; font-size: 16px;
+}
+.resumen-filas .fila.grande { font-size: 19px; }
+.resumen-filas .fila .clave { color: var(--apagado); }
+.resumen-filas .fila .valor { font-weight: 800; font-variant-numeric: tabular-nums; }
+
+.exito { text-align: center; padding-top: 60px; }
+.exito .circulo {
+  width: 110px; height: 110px; border-radius: 50%; background: var(--verde);
+  margin: 0 auto 24px; display: grid; place-items: center; color: #fff;
+  box-shadow: 0 0 0 10px var(--verde-suave);
+}
+.exito h1 { font-size: 28px; font-weight: 800; margin: 0 0 6px; }
+.exito .sub { font-size: 18px; color: var(--apagado); margin: 0 0 24px; }
+.exito .filas { text-align: left; }
+.exito .filas .fila {
+  display: flex; justify-content: space-between; padding: 8px 0; font-size: 18px;
+  border-bottom: 1px solid var(--linea);
+}
+.exito .filas .fila:last-child { border-bottom: none; }
+.exito .filas .clave { color: var(--apagado); }
+.exito .filas .valor { font-weight: 800; }
+
+/* ---------- Devoluciones / intercambios ---------- */
+.tarjeta-borde-naranja { border-left: 6px solid var(--naranja); }
+.tarjeta-borde-verde { border-left: 6px solid var(--verde); }
+.cabecera-tarjeta { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.cabecera-tarjeta .quien { font-size: 20px; font-weight: 800; }
+.cabecera-tarjeta .cuando { font-size: 15px; color: var(--apagado); }
+.renglones { margin: 12px 0 14px; }
+.renglon {
+  display: flex; justify-content: space-between; font-size: 17px; padding: 6px 0;
+  border-bottom: 1px solid var(--linea);
+}
+.renglon .cantidad { font-weight: 800; color: var(--naranja); }
+.renglones.apagados .renglon { font-size: 15px; padding: 5px 0; color: var(--apagado); }
+.renglones.apagados .renglon .cantidad { color: var(--tinta); }
+
+.titulo-con-boton { display: flex; justify-content: space-between; align-items: center; margin: 0 0 12px; }
+.titulo-con-boton h2, .titulo-tab { font-size: 20px; font-weight: 800; margin: 0; }
+.subtitulo-tab { font-size: 14px; color: var(--apagado); margin: 2px 0 12px; }
+.boton-mas {
+  width: 46px; height: 46px; border-radius: 14px; border: none; background: var(--cafe);
+  color: #fff; cursor: pointer; display: grid; place-items: center;
+  box-shadow: 0 4px 0 rgba(90, 70, 52, .18);
+}
+
+/* ---------- Historial ---------- */
+.tarjeta-historial { padding: 12px 16px; border-left: 6px solid var(--verde); }
+.tarjeta-historial .quien { font-size: 18px; font-weight: 800; display: flex; align-items: center; gap: 6px; }
+.tarjeta-historial .quien svg { color: var(--verde); }
+.tarjeta-historial .cuando { font-size: 14px; color: var(--apagado); }
+.tarjeta-historial .cifras { display: flex; justify-content: space-between; margin-top: 8px; font-size: 15px; }
+.tarjeta-historial .monto { font-weight: 800; }
+.tarjeta-historial .naranja { color: var(--naranja); }
+
+/* ---------- Selección de sucursal / plantas (intercambio) ---------- */
+.opcion-sucursal {
+  display: block; width: 100%; padding: 20px; border-radius: 18px; border: 1px solid var(--linea);
+  background: var(--tarjeta); text-align: left; cursor: pointer; color: var(--tinta);
+  text-decoration: none;
+}
+.opcion-sucursal .nombre { font-size: 21px; font-weight: 800; }
+.opcion-sucursal .lugar { font-size: 16px; color: var(--apagado); }
+
+.resultados {
+  background: var(--tarjeta); border: 2px solid var(--linea); border-radius: 16px; overflow: hidden;
+  margin-top: -4px; margin-bottom: 14px; box-shadow: 0 8px 24px rgba(90, 70, 52, .12);
+}
+.resultados .nada { padding: 16px; color: var(--apagado); text-align: center; }
+.resultado-planta {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; cursor: pointer;
+  padding: 14px 16px; border: none; border-bottom: 1px solid var(--linea); background: transparent;
+  color: var(--tinta); font-family: inherit;
+}
+.resultado-planta .datos { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.resultado-planta .nombre { font-size: 17px; font-weight: 700; }
+.resultado-planta .info { font-size: 13px; color: var(--apagado); }
+.resultado-planta .info.agotado { color: var(--naranja); font-weight: 700; }
+.resultado-planta .agregar {
+  width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+  background: var(--cafe); color: #fff;
+}
+.linea-danada {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 14px;
+  border-radius: 16px; background: var(--naranja-suave); border: 2px solid var(--naranja);
+}
+.linea-danada .datos { flex: 1; min-width: 0; }
+.linea-danada .nombre { font-size: 16px; font-weight: 700; line-height: 1.2; }
+.linea-danada .quitar {
+  border: none; background: none; color: var(--naranja); font-size: 13px; font-weight: 800;
+  padding: 0; margin-top: 4px; cursor: pointer; font-family: inherit;
+}
+.pegajoso-arriba { position: sticky; top: 0; background: var(--fondo); z-index: 2; }
+.total-flotante { display: flex; justify-content: space-between; font-size: 18px; margin-bottom: 10px; }
+.total-flotante .cuanto { font-weight: 800; }
+.nota-centrada { font-size: 14px; color: var(--apagado); text-align: center; margin: 16px 0 0; }
+.acciones { display: grid; gap: 12px; margin-top: 24px; }

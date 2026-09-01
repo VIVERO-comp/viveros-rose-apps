@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% from "iconos.html" import icono %}
+{% block titulo %}Factura #{{ orden.factura }} · Recepción{% endblock %}
+
+{% block contenido %}
+<div class="encabezado" style="margin-bottom:12px">
+  <a class="boton-volver" href="/" aria-label="Volver">{{ icono("volver", 22, 2.5) }}</a>
+  <div style="flex:1; min-width:0">
+    <div style="font-size:20px; font-weight:800; line-height:1.15">{{ orden.cliente }}</div>
+    <div style="font-size:15px; color:var(--apagado)">{{ orden.sucursal }}</div>
+  </div>
+</div>
+
+<div class="franja-factura">
+  <div>
+    <span class="numero">Factura #{{ orden.factura }}</span>
+    <span class="fecha">{{ orden.fecha | fecha_bonita }}</span>
+  </div>
+  <span class="estado">Pendiente</span>
+</div>
+
+<div class="franja-aviso ok" id="aviso-orden">
+  <span class="dibujo" id="aviso-ok">{{ icono("listo", 20, 3) }}</span>
+  <span class="dibujo" id="aviso-mal" hidden>{{ icono("alerta", 20) }}</span>
+  <span class="mensaje" id="aviso-texto">Todo aceptado. Baja solo lo que el súper no recibió.</span>
+  <button class="restablecer" type="button" id="restablecer" hidden>Restablecer</button>
+</div>
+
+<form method="post" action="/orden/{{ orden.factura }}/revisar" id="form-orden">
+  <div class="lista" id="lineas-orden">
+    {% for l in orden.lineas %}
+      {% set valor = aceptado.get(l.sku, l.enviado) %}
+      <div class="linea-producto {{ '' if valor == l.enviado else 'difiere' }}"
+           data-sku="{{ l.sku }}" data-enviado="{{ l.enviado }}" data-precio="{{ l.precio }}">
+        <div class="datos">
+          <div class="nombre">{{ l.nombre | sin_vr }}</div>
+          <div class="estado">Enviado {{ l.enviado }}</div>
+        </div>
+        <div class="contador {{ 'verde' if valor == l.enviado else 'naranja' }}">
+          <button type="button" class="menos" {{ "disabled" if valor <= 0 }}>−</button>
+          <div class="valor">{{ valor }}</div>
+          <button type="button" class="mas" {{ "disabled" if valor >= l.enviado }}>+</button>
+        </div>
+        <input type="hidden" name="a_{{ l.sku }}" value="{{ valor }}" />
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="pie-pegajoso">
+    <div class="resumen-doble">
+      <div class="resumen-caja verde">
+        <div class="titulo">Aceptado</div>
+        <div class="numero"><span id="caja-acep">0</span> <span class="de">/ <span id="caja-env">0</span></span></div>
+        <div class="monto" id="caja-acep-monto">B/.0.00</div>
+      </div>
+      <div class="resumen-caja neutra" id="caja-devuelto">
+        <div class="titulo">Devuelto</div>
+        <div class="numero" id="caja-dev">0</div>
+        <div class="monto" id="caja-dev-monto">B/.0.00</div>
+      </div>
+    </div>
+    <button class="boton verde" type="submit">Confirmar recepción</button>
+  </div>
+</form>
+{% endblock %}

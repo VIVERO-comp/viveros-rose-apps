@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "iconos.html" import icono %}
+{% from "olas.html" import olas %}
+{% block titulo %}{{ titulo }} · Recepción{% endblock %}
+
+{% block contenido %}
+{{ olas() }}
+<div class="exito">
+  <div class="circulo">{{ icono("listo", 60, 3) }}</div>
+  <h1>{{ titulo }}</h1>
+  <p class="sub">{{ sub }}</p>
+  <div class="tarjeta filas">
+    {% for clave, valor, color in filas %}
+      <div class="fila">
+        <span class="clave">{{ clave }}</span>
+        <span class="valor" {% if color %}style="color:var(--{{ color }})"{% endif %}>{{ valor }}</span>
+      </div>
+    {% endfor %}
+  </div>
+  <div style="margin-top:28px">
+    <a class="boton" href="{{ boton_href }}">{{ boton_texto }}</a>
+  </div>
+</div>
+{% endblock %}

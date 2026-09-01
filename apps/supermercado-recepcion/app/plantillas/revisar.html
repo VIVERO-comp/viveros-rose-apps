@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% from "iconos.html" import icono %}
+{% block titulo %}Confirmar · Factura #{{ orden.factura }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado">
+  <button class="boton-volver" type="submit" form="form-volver" aria-label="Volver">{{ icono("volver", 22, 2.5) }}</button>
+  <div style="flex:1; min-width:0">
+    <h1>{{ "Revisa las diferencias" if r.dif else "Todo aceptado" }}</h1>
+    <div class="sub">{{ orden.cliente }} · {{ orden.sucursal }} · Factura #{{ orden.factura }}</div>
+  </div>
+</div>
+
+{% if not r.dif %}
+  <div class="tarjeta" style="text-align:center; padding:28px">
+    <div style="color:var(--verde); display:flex; justify-content:center">{{ icono("paquete", 48) }}</div>
+    <p style="font-size:19px; font-weight:700; margin:8px 0 4px">El supermercado aceptó toda la mercancía.</p>
+    <p style="font-size:17px; color:var(--apagado); margin:0">{{ r.acep }} de {{ r.env }} unidades aceptadas · {{ r.t_acep | dinero }}</p>
+  </div>
+{% else %}
+  <div class="lista">
+    {% for l in r.dif %}
+      <div class="tarjeta tarjeta-diferencia">
+        <div class="nombre">{{ l.nombre }}</div>
+        <div class="cifras">
+          <span>Enviado <b class="ok">{{ l.enviado }}</b></span>
+          <span>Aceptado <b class="verde">{{ l.aceptado }}</b></span>
+          <span>Devuelto <b class="naranja">{{ l.devuelto }}</b></span>
+        </div>
+      </div>
+    {% endfor %}
+    <div class="tarjeta resumen-filas" style="margin-top:6px">
+      <div class="fila"><span class="clave">Enviado</span><span class="valor">{{ r.env }}</span></div>
+      <div class="fila"><span class="clave">Aceptado</span><span class="valor" style="color:var(--verde)">{{ r.acep }}</span></div>
+      <div class="fila"><span class="clave">Devuelto</span><span class="valor" style="color:var(--naranja)">{{ r.dev }}</span></div>
+      <div class="fila grande"><span class="clave">Valor devuelto</span><span class="valor" style="color:var(--naranja)">{{ r.t_dev | dinero }}</span></div>
+    </div>
+  </div>
+{% endif %}
+
+<div class="acciones">
+  <form method="post" action="/orden/{{ orden.factura }}/confirmar">
+    {% for sku, valor in aceptado.items() %}<input type="hidden" name="a_{{ sku }}" value="{{ valor }}" />{% endfor %}
+    <button class="boton verde" type="submit">{{ "Confirmar recepción" if r.dif else "Confirmar" }}</button>
+  </form>
+  <form method="post" action="/orden/{{ orden.factura }}" id="form-volver">
+    {% for sku, valor in aceptado.items() %}<input type="hidden" name="a_{{ sku }}" value="{{ valor }}" />{% endfor %}
+    <button class="boton contorno" type="submit">{{ "Volver a revisar" if r.dif else "Cancelar" }}</button>
+  </form>
+</div>
+{% endblock %}

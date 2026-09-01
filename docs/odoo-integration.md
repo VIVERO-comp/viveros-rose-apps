@@ -20,14 +20,29 @@ natural es que esta integración siga el mismo camino: un servicio Python
 ```text
 GET  entregas pendientes                → alimenta fetchOrdenes()
 GET  detalle de factura                 → incluido hoy en fetchOrdenes()
-GET  catálogo de productos              → alimenta fetchCatalogo() (intercambios)
-GET  sucursales                         → alimentará fetchSucursales() (intercambios)
+GET  catálogo de productos              → IMPLEMENTADO: stock-proxy /v1/catalogo
+GET  sucursales                         → IMPLEMENTADO: stock-proxy /v1/sucursales
 POST resultado de recepción             → recibe confirmarRecepcion()
 POST devolución confirmada (regreso)    → recibe confirmarRegreso()
 POST intercambio creado / completado    → recibe crearIntercambio() / completarIntercambio()
 ```
 
-Todas: **diseño propuesto, pendiente de implementación.**
+Las lecturas de **sucursales y catálogo ya son reales**: viven en
+`vivero-rose-stock-proxy` (`GET /v1/sucursales` y `GET /v1/catalogo`, con
+`X-API-Key` obligatoria). Los clientes supermercado se configuran con
+`SUPERMERCADOS_REFS` y el catálogo con `CATALOGO_FILTRO` (prefijos de SKU
+separados por coma; el catálogo de supermercado usa el prefijo `PLT-`,
+separado del `PL-` de la tienda online y con precios propios). La app las
+consume con degradación en cadena (caché → último valor bueno → datos de
+prueba) vía `STOCK_PROXY_URL`/`STOCK_API_KEY`.
+
+Las escrituras (`POST …`) siguen siendo **diseño propuesto, pendiente de
+implementación** en el order-api (router `supermercado`).
+
+> **Deuda técnica**: el stock-proxy lee la base de Odoo por SQL directo
+> (esquema fijado a Odoo 19). Cuando conectemos las facturas hay que evaluar
+> migrar estas lecturas a la API de Odoo (JSON-RPC) para no depender del
+> esquema de tablas en cada actualización de Odoo.
 
 ## Sucursales: vienen de Odoo, nunca hardcodeadas
 

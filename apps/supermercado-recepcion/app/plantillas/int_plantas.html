@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% from "iconos.html" import icono %}
+{% block titulo %}Plantas dañadas · Recepción{% endblock %}
+
+{% block contenido %}
+<div class="encabezado">
+  <a class="boton-volver" href="/intercambios/nuevo" aria-label="Volver">{{ icono("volver", 22, 2.5) }}</a>
+  <div style="flex:1; min-width:0">
+    <h1>¿Qué plantas se dañaron?</h1>
+    <div class="sub">{{ cliente }} · {{ sucursal }}</div>
+  </div>
+</div>
+
+<div class="pegajoso-arriba">
+  <div class="buscador">
+    {{ icono("buscar", 20) }}
+    <input id="buscar-planta" type="search" placeholder="Escribe el nombre de la planta…" autocomplete="off" />
+    <button class="limpiar" id="limpiar-planta" hidden aria-label="Limpiar búsqueda">{{ icono("cerrar", 16) }}</button>
+  </div>
+  <div class="resultados" id="resultados" hidden></div>
+</div>
+
+<div class="vacio" id="vacio-danadas" style="padding:40px 16px">
+  <div class="dibujo">{{ icono("brote", 48) }}</div>
+  <p style="font-size:17px">Busca cada planta dañada y tócala para agregarla. Luego ajusta cuántas.</p>
+</div>
+<div class="lista" id="lista-danadas"></div>
+
+<form method="post" action="/intercambios/nuevo/revisar" id="form-int">
+  <input type="hidden" name="cliente" value="{{ cliente }}" />
+  <input type="hidden" name="sucursal" value="{{ sucursal }}" />
+  <div class="pie-pegajoso" style="padding-top:14px">
+    <div class="total-flotante">
+      <span style="color:var(--apagado)">Total dañadas</span>
+      <span class="cuanto" id="total-danadas">0</span>
+    </div>
+    <button class="boton" type="submit" id="boton-revisar" disabled>Agrega al menos una planta</button>
+  </div>
+</form>
+
+{# Catálogo para la búsqueda local (mismos 22 SKUs del prototipo) e iniciales al volver de revisar. #}
+<script id="catalogo-json" type="application/json">{{ catalogo | tojson }}</script>
+<script id="danadas-json" type="application/json">{{ danadas | tojson }}</script>
+
+{# Plantilla de una línea dañada; app.js la clona. #}
+<template id="plantilla-danada">
+  <div class="linea-danada">
+    <div class="datos">
+      <div class="nombre"></div>
+      <button type="button" class="quitar">Quitar</button>
+    </div>
+    <div class="contador naranja">
+      <button type="button" class="menos">−</button>
+      <div class="valor">1</div>
+      <button type="button" class="mas">+</button>
+    </div>
+  </div>
+</template>
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% from "iconos.html" import icono %}
+{% block titulo %}Confirmar intercambio · Recepción{% endblock %}
+
+{% block contenido %}
+<div class="encabezado">
+  <button class="boton-volver" type="submit" form="form-volver" aria-label="Volver">{{ icono("volver", 22, 2.5) }}</button>
+  <div style="flex:1; min-width:0">
+    <h1>Confirmar intercambio</h1>
+    <div class="sub">{{ cliente }} · {{ sucursal }}</div>
+  </div>
+</div>
+
+<div class="tarjeta">
+  {% for l in lineas %}
+    <div class="renglon" style="font-size:17px; padding:9px 0">
+      <span>{{ l.nombre }}</span><span class="cantidad">{{ l.danadas }}</span>
+    </div>
+  {% endfor %}
+  <div style="display:flex; justify-content:space-between; font-size:20px; font-weight:800; padding-top:12px">
+    <span>Total dañadas</span><span>{{ total }}</span>
+  </div>
+  <div style="display:flex; justify-content:space-between; font-size:16px; color:var(--apagado); padding-top:4px">
+    <span>Valor a reemplazar</span><span style="font-weight:700">{{ valor | dinero }}</span>
+  </div>
+</div>
+
+<p class="nota-centrada">Las dañadas se registran y el reemplazo queda pendiente hasta que lo entregues en el súper.</p>
+
+<div class="acciones" style="margin-top:16px">
+  <form method="post" action="/intercambios/crear">
+    <input type="hidden" name="cliente" value="{{ cliente }}" />
+    <input type="hidden" name="sucursal" value="{{ sucursal }}" />
+    {% for l in lineas %}<input type="hidden" name="d_{{ l.sku }}" value="{{ l.danadas }}" />{% endfor %}
+    <button class="boton" type="submit">Confirmar intercambio</button>
+  </form>
+  <form method="post" action="/intercambios/nuevo/plantas" id="form-volver">
+    <input type="hidden" name="cliente" value="{{ cliente }}" />
+    <input type="hidden" name="sucursal" value="{{ sucursal }}" />
+    {% for l in lineas %}<input type="hidden" name="d_{{ l.sku }}" value="{{ l.danadas }}" />{% endfor %}
+    <button class="boton contorno" type="submit">Volver a revisar</button>
+  </form>
+</div>
+{% endblock %}

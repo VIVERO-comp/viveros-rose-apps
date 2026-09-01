@@ -9,6 +9,17 @@ build/
 .env.*
 !.env.example
 
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# Base local de la app de recepción (estado de la empleada, nunca al repo)
+recepcion.db
+recepcion.db-*
+
 # Sistema y logs
 .DS_Store
 *.log

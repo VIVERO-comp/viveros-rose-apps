@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% from "iconos.html" import icono %}
+{% from "olas.html" import olas %}
+{% block titulo %}Nuevo intercambio · Recepción{% endblock %}
+
+{% block contenido %}
+{{ olas() }}
+<div class="encabezado" style="position:relative; z-index:1">
+  <a class="boton-volver" href="/intercambios" aria-label="Volver">{{ icono("volver", 22, 2.5) }}</a>
+  <div style="flex:1; min-width:0"><h1>¿En qué súper estás?</h1></div>
+</div>
+<div class="lista-separada" style="position:relative; z-index:1">
+  {% for c in clientes %}
+    <a class="opcion-sucursal" href="/intercambios/nuevo/sucursales?cliente={{ c.clave | urlencode }}">
+      <div class="nombre">{{ c.nombre }}</div>
+      <div class="lugar">{{ c.sucursales | length }} sucursal{{ "" if c.sucursales | length == 1 else "es" }}</div>
+    </a>
+  {% endfor %}
+</div>
+{% endblock %}

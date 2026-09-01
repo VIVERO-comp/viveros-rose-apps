@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% from "iconos.html" import icono %}
+
+{% block splash %}
+{# Splash de 1 segundo con el logo, solo la primera vez por sesión del navegador (app.js lo oculta si ya se vio). #}
+<div class="splash" id="splash">
+  <div class="logo-circulo"><img src="/static/logo.jpg" alt="Plantas Panamá por Vivero Rose" /></div>
+  <div class="texto">
+    <div class="titulo">APP DE ENTREGAS</div>
+    <div class="sub">Cargando tus entregas…</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block contenido %}
+<div class="saludo">
+  <div>
+    <div class="marca">PLANTAS PANAMÁ</div>
+    <h1>Hola, {{ empleado.nombre }}</h1>
+  </div>
+  <img src="/static/icono.png" alt="Plantas Panamá" width="44" height="44" />
+</div>
+
+{% if pestana == "pendientes" %}
+  <div class="buscador">
+    {{ icono("buscar", 20) }}
+    <input id="buscador" type="search" placeholder="Buscar factura, súper o sucursal…" autocomplete="off" />
+    <button class="limpiar" id="limpiar-buscador" hidden aria-label="Limpiar búsqueda">{{ icono("cerrar", 16) }}</button>
+  </div>
+  <h2 class="titulo-seccion">Entregas pendientes · <span id="cuenta-pendientes">{{ pendientes | length }}</span></h2>
+  {% if pendientes %}
+    <div class="lista" id="lista-entregas">
+      {% for orden in pendientes %}
+        <a class="tarjeta-entrega" href="/orden/{{ orden.factura }}"
+           data-buscar="{{ orden.factura }} {{ orden.cliente | lower }} {{ orden.sucursal | lower }}">
+          <div style="flex:1; min-width:0">
+            <div>
+              <span class="factura">#{{ orden.factura }}</span>
+              <span class="fecha">{{ orden.fecha | fecha_bonita }}</span>
+            </div>
+            <div class="cliente">{{ orden.cliente }} · {{ orden.sucursal }}</div>
+            <div class="detalle">{{ orden.lineas | length }} productos · {{ orden.total | dinero }}</div>
+          </div>
+          <div class="lado">
+            <span class="pastilla azul">En ruta</span>
+            <span class="abrir">Abrir {{ icono("abrir", 16, 3) }}</span>
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% endif %}
+  <div class="tarjeta vacio-tarjeta" id="vacio-entregas" {% if pendientes %}hidden{% endif %}>
+    <span id="vacio-texto">No hay entregas pendientes. Las nuevas llegan desde Odoo.</span>
+  </div>
+
+{% elif pestana == "devoluciones" %}
+  <h2 class="titulo-tab">Devoluciones</h2>
+  <p class="subtitulo-tab">Plantas que un súper rechazó y van de regreso al vivero.</p>
+  {% if not devoluciones %}
+    <div class="vacio">
+      <div class="dibujo">{{ icono("devolver", 44) }}</div>
+      <p>Nada por regresar. Cuando registres una entrega y bajes alguna cantidad, esas plantas aparecen aquí para confirmar su regreso al vivero.</p>
+    </div>
+  {% endif %}
+  <div class="lista-separada">
+    {% for d in devoluciones %}
+      <div class="tarjeta tarjeta-borde-naranja">
+        <div class="cabecera-tarjeta">
+          <div>
+            <div class="quien">{{ d.cliente }} · {{ d.sucursal }}</div>
+            <div class="cuando">Factura #{{ d.factura }}</div>
+          </div>
+          <span class="pastilla naranja">Devolución pendiente</span>
+        </div>
+        <div class="renglones">
+          {% for l in d.lineas %}
+            <div class="renglon"><span>{{ l.nombre }}</span><span class="cantidad">{{ l.cantidad | unidades }}</span></div>
+          {% endfor %}
+        </div>
+        <form method="post" action="/devoluciones/{{ d.factura }}/regreso">
+          <button class="boton naranja" type="submit">Confirmar regreso</button>
+        </form>
+      </div>
+    {% endfor %}
+  </div>
+
+{% elif pestana == "intercambios" %}
+  <div class="titulo-con-boton">
+    <div>
+      <h2>Intercambios</h2>
+      <p class="subtitulo-tab" style="margin-bottom:0">Plantas dañadas que recoges y reemplazas.</p>
+    </div>
+    <a class="boton-mas" href="/intercambios/nuevo" aria-label="Nuevo intercambio">{{ icono("mas", 26, 3) }}</a>
+  </div>
+  {% if not intercambios %}
+    <div class="vacio">
+      <div class="dibujo">{{ icono("repetir", 44) }}</div>
+      <p style="margin-bottom:18px">Cuando recojas plantas dañadas en un súper, regístralas aquí para llevar el reemplazo.</p>
+      <a class="boton" href="/intercambios/nuevo">+ Nuevo intercambio</a>
+    </div>
+  {% endif %}
+  <div class="lista-separada">
+    {% for i in intercambios | reverse %}
+      <div class="tarjeta {{ 'tarjeta-borde-naranja' if i.estado == 'pendiente' else 'tarjeta-borde-verde' }}">
+        <div class="cabecera-tarjeta">
+          <div>
+            <div class="quien">{{ i.cliente }} · {{ i.sucursal }}</div>
+            <div class="cuando">{{ i.hora }} · {{ i.total_danadas | unidades }} dañadas</div>
+          </div>
+          {% if i.estado == "pendiente" %}
+            <span class="pastilla naranja">Pendiente de devolver</span>
+          {% else %}
+            <span class="pastilla verde">Completado</span>
+          {% endif %}
+        </div>
+        <div class="renglones apagados" style="margin-bottom:0">
+          {% for l in i.lineas %}
+            <div class="renglon"><span>{{ l.nombre }}</span><span class="cantidad">{{ l.danadas }}</span></div>
+          {% endfor %}
+        </div>
+        {% if i.estado == "pendiente" %}
+          <form method="post" action="/intercambios/{{ i.id }}/completar" style="margin-top:14px">
+            <button class="boton chico" type="submit">Confirmar reemplazo entregado</button>
+          </form>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+
+{% elif pestana == "historial" %}
+  <h2 class="titulo-tab" style="margin-bottom:12px">Historial</h2>
+  {% if not historial %}
+    <div class="tarjeta vacio-tarjeta">Aún no hay movimientos hoy.</div>
+  {% endif %}
+  <div class="lista" style="gap:10px">
+    {% for h in historial %}
+      <div class="tarjeta tarjeta-historial">
+        <div class="cabecera-tarjeta">
+          <div>
+            <div class="quien">{{ icono("listo", 18, 3) }} {{ h.cliente }} · {{ h.sucursal }}</div>
+            <div class="cuando">{{ h.hora }}{% if h.tipo == "entrega" %} · Factura #{{ h.factura }}{% else %} · Intercambio{% endif %}</div>
+          </div>
+          {% if h.tipo == "entrega" %}
+            {% if h.regreso %}<span class="pastilla verde">Completada</span>
+            {% else %}<span class="pastilla naranja">Regreso pendiente</span>{% endif %}
+          {% else %}
+            <span class="pastilla verde">Reemplazado</span>
+          {% endif %}
+        </div>
+        <div class="cifras">
+          {% if h.tipo == "entrega" %}
+            <span>{{ h.acep }} aceptadas{% if h.dev > 0 %}<span class="naranja"> · {{ h.dev }} devuelta{{ "" if h.dev == 1 else "s" }}</span>{% endif %}</span>
+            <span class="monto">{{ h.t_acep | dinero }}</span>
+          {% else %}
+            <span>{{ h.total | unidades }} reemplazada{{ "" if h.total == 1 else "s" }}</span>
+            <span class="monto">{{ h.valor | dinero }}</span>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+{% endblock %}
+
+{% block nav %}
+<nav class="nav">
+  <a href="/" class="{{ 'activo' if pestana == 'pendientes' else '' }}">
+    <span class="icono">{{ icono("camion", 22, 2.5 if pestana == "pendientes" else 2) }}
+      {% if contadores.pendientes %}<span class="globo">{{ contadores.pendientes }}</span>{% endif %}</span>
+    <span class="etiqueta">Entregas</span>
+  </a>
+  <a href="/devoluciones" class="{{ 'activo' if pestana == 'devoluciones' else '' }}">
+    <span class="icono">{{ icono("devolver", 22, 2.5 if pestana == "devoluciones" else 2) }}
+      {% if contadores.devoluciones %}<span class="globo">{{ contadores.devoluciones }}</span>{% endif %}</span>
+    <span class="etiqueta">Devolver</span>
+  </a>
+  <a href="/intercambios" class="{{ 'activo' if pestana == 'intercambios' else '' }}">
+    <span class="icono">{{ icono("repetir", 22, 2.5 if pestana == "intercambios" else 2) }}
+      {% if contadores.intercambios %}<span class="globo">{{ contadores.intercambios }}</span>{% endif %}</span>
+    <span class="etiqueta">Cambios</span>
+  </a>
+  <a href="/historial" class="{{ 'activo' if pestana == 'historial' else '' }}">
+    <span class="icono">{{ icono("historial", 22, 2.5 if pestana == "historial" else 2) }}</span>
+    <span class="etiqueta">Historial</span>
+  </a>
+</nav>
+{% endblock %}

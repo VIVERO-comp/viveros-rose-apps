@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "iconos.html" import icono %}
+{% block titulo %}Sucursal · Recepción{% endblock %}
+
+{% block contenido %}
+<div class="encabezado">
+  <a class="boton-volver" href="/intercambios/nuevo" aria-label="Volver">{{ icono("volver", 22, 2.5) }}</a>
+  <div style="flex:1; min-width:0">
+    <h1>¿En qué sucursal?</h1>
+    <div class="sub">{{ cliente.nombre }}</div>
+  </div>
+</div>
+
+<div class="buscador">
+  {{ icono("buscar", 20) }}
+  <input id="buscar-sucursal" type="search" placeholder="Buscar sucursal…" autocomplete="off" />
+  <button class="limpiar" id="limpiar-sucursal" hidden aria-label="Limpiar búsqueda">{{ icono("cerrar", 16) }}</button>
+</div>
+
+<div class="lista-separada" id="lista-sucursales">
+  {% for s in cliente.sucursales %}
+    <a class="opcion-sucursal"
+       data-buscar="{{ s.nombre | lower }}{% if s.ref %} {{ s.ref | lower }}{% endif %}"
+       href="/intercambios/nuevo/plantas?cliente={{ cliente.nombre | urlencode }}&sucursal={{ s.nombre | urlencode }}">
+      <div class="nombre">{{ s.nombre | quitar_prefijo(cliente.nombre) }}</div>
+      {% if s.ref %}<div class="lugar">{{ s.ref }}</div>{% endif %}
+    </a>
+  {% endfor %}
+</div>
+<div class="vacio" id="vacio-sucursales" hidden>
+  <p>No hay sucursales con ese nombre.</p>
+</div>
+{% endblock %}
