@@ -61,6 +61,29 @@ npm run dev      # http://localhost:5173
 npm run build    # genera dist/
 ```
 
+## Deploy
+
+La app se publica en **https://super.plantaspanama.com** (Vercel). Es una
+PWA instalable (`public/manifest.webmanifest`, sin service worker por
+ahora); `vercel.json` reescribe todas las rutas a `/index.html` (SPA).
+
+Pasos (los ejecuta Abraham):
+
+1. **Vercel**: proyecto nuevo importando el repo
+   `VIVERO-comp/viveros-rose-apps` · Root Directory:
+   `apps/supermercado-recepcion` · Framework Preset: **Vite** (build
+   `npm run build`, salida `dist/`, sin variables de entorno).
+2. **Dominio**: en el proyecto de Vercel, agregar
+   `super.plantaspanama.com`.
+3. **GoDaddy** (cuenta kortostocks, zona `plantaspanama.com`): registro
+   CNAME `super` → `cname.vercel-dns.com`.
+
+> **Pendiente importante**: la app **no tiene autenticación** — cualquiera
+> con la URL la abre. Con datos simulados es aceptable, pero **debe tener
+> autenticación antes de conectar Odoo** (el candidato natural es el patrón
+> de enlaces personales `...?clave=...` validados contra Odoo que ya usan
+> `/admin` y `/repartidor`).
+
 ## Variables de entorno
 
 Ninguna por ahora: la app trabaja con datos simulados. Cuando se conecte la
@@ -119,5 +142,7 @@ pendiente de implementación).
 - Identificación real del empleado (hoy hardcodeado).
 - Persistencia: que una recepción confirmada sobreviva a recargar la página.
 - Partir `src/App.jsx` en componentes cuando la app crezca.
-- Evaluar hacerla instalable (manifest + service worker), como ya lo es el
+- Autenticación de la empleada (obligatoria antes de conectar Odoo; ver
+  "Deploy").
+- Agregar un service worker (el manifest PWA ya existe), como ya lo tiene el
   portal del repartidor.

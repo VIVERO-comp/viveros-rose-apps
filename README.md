@@ -25,7 +25,7 @@ incluidas las que hoy viven en otros repositorios:
 
 | App | Dónde vive | Estado | Usuarios | Tecnología |
 | --- | --- | --- | --- | --- |
-| Recepción de Supermercados | `apps/supermercado-recepcion/` (este repo) | Desarrollo (prototipo con datos simulados) | Empleados que entregan a supermercados | React 18 + Vite |
+| Recepción de Supermercados | `apps/supermercado-recepcion/` (este repo) · [super.plantaspanama.com](https://super.plantaspanama.com) | Desarrollo (prototipo con datos simulados) | Empleados que entregan a supermercados | React 18 + Vite (PWA) |
 | Panel de administración | [`viveros-rose-frontend`](https://github.com/VIVERO-comp/viveros-rose-frontend) → ruta `/admin` | Producción | Dueño / administración | Astro + funciones serverless en Vercel |
 | Portal del repartidor | [`viveros-rose-frontend`](https://github.com/VIVERO-comp/viveros-rose-frontend) → ruta `/repartidor` | Producción | Repartidores | Astro + funciones serverless en Vercel (PWA instalable) |
 
