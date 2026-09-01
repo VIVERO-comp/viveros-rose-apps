@@ -31,10 +31,12 @@ Las lecturas de **sucursales y catálogo ya son reales**: viven en
 `vivero-rose-stock-proxy` (`GET /v1/sucursales` y `GET /v1/catalogo`, con
 `X-API-Key` obligatoria). Los clientes supermercado se configuran con
 `SUPERMERCADOS_REFS` y el catálogo con `CATALOGO_FILTRO` (prefijos de SKU
-separados por coma; el catálogo de supermercado usa el prefijo `PLT-`,
-separado del `PL-` de la tienda online y con precios propios). La app las
-consume con degradación en cadena (caché → último valor bueno → datos de
-prueba) vía `STOCK_PROXY_URL`/`STOCK_API_KEY`.
+separados por coma). Hoy **todos los productos comparten el prefijo `PL-`**
+(hubo un intento de catálogo aparte `PLT-` que se descartó el mismo día:
+esos 7 productos se renombraron a `PL-`), así que `CATALOGO_FILTRO=PL-` y
+la app ve el catálogo completo. La app lo consume con degradación en cadena
+(caché → último valor bueno → datos de prueba) vía
+`STOCK_PROXY_URL`/`STOCK_API_KEY`.
 
 Las escrituras (`POST …`) siguen siendo **diseño propuesto, pendiente de
 implementación** en el order-api (router `supermercado`).
