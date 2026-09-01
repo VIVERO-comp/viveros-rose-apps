@@ -1,9 +1,10 @@
 """Capa de datos de la app de recepción.
 
-Fase 1: el catálogo, las órdenes y las sucursales son los mismos datos de
-prueba del prototipo React (facturas #774, #781 y #770, no consecutivas a
-propósito). Lo que la empleada confirma (recepciones, devoluciones,
-intercambios, historial) vive en SQLite local para sobrevivir reinicios.
+Las órdenes, las sucursales y el catálogo vienen del stock-proxy (que los
+lee de Odoo). Sucursales y catálogo conservan datos de prueba como último
+fallback; las órdenes no: sin conexión, la pestaña Entregas queda vacía.
+Lo que la empleada confirma (recepciones, devoluciones, intercambios,
+historial) vive en SQLite local para sobrevivir reinicios.
 
 Cuando llegue la integración real, las funciones odoo_* de abajo pasarán a
 llamar al order-api (router supermercado) y SQLite quedará como caché/cola
@@ -41,42 +42,11 @@ CATALOGO = [{"sku": s, "nombre": n, "precio": p} for s, n, p in _CATALOGO_BASE]
 POR_SKU = {p["sku"]: p for p in CATALOGO}
 
 
-def _linea(sku, enviado):
-    p = POR_SKU[sku]
-    return {"sku": sku, "nombre": p["nombre"], "precio": p["precio"], "enviado": enviado}
-
-
-# `factura` es la referencia que ve la empleada; los demás IDs son técnicos
-# (Odoo) y no se muestran. Los números NO son consecutivos ni se generan aquí.
-ORDENES_ODOO = [
-    {
-        "factura": "774", "odooId": 10774, "pedido": "S00774", "reserva": "RES-2231",
-        "transferencia": "WH/OUT/00512", "cliente": "Super Xtra", "sucursal": "Villalobos",
-        "fecha": "2026-06-18",
-        "lineas": [_linea("VR-001", 2), _linea("VR-002", 3), _linea("VR-003", 2),
-                   _linea("VR-004", 3), _linea("VR-005", 6), _linea("VR-006", 4),
-                   _linea("VR-007", 4), _linea("VR-008", 4), _linea("VR-009", 3),
-                   _linea("VR-010", 2), _linea("VR-011", 2), _linea("VR-012", 4),
-                   _linea("VR-013", 2), _linea("VR-014", 3), _linea("VR-015", 4),
-                   _linea("VR-016", 2)],
-    },
-    {
-        "factura": "781", "odooId": 10781, "pedido": "S00781", "reserva": "RES-2240",
-        "transferencia": "WH/OUT/00519", "cliente": "Riba Smith", "sucursal": "Bella Vista",
-        "fecha": "2026-06-18",
-        "lineas": [_linea("VR-007", 4), _linea("VR-012", 3), _linea("VR-008", 4),
-                   _linea("VR-002", 3), _linea("VR-003", 2), _linea("VR-005", 6),
-                   _linea("VR-006", 4), _linea("VR-009", 3), _linea("VR-010", 2),
-                   _linea("VR-011", 2), _linea("VR-014", 3), _linea("VR-016", 2)],
-    },
-    {
-        "factura": "770", "odooId": 10770, "pedido": "S00770", "reserva": "RES-2225",
-        "transferencia": "WH/OUT/00508", "cliente": "Super 99", "sucursal": "Costa del Este",
-        "fecha": "2026-06-17",
-        "lineas": [_linea("VR-017", 3), _linea("VR-018", 2), _linea("VR-019", 4),
-                   _linea("VR-005", 6), _linea("VR-013", 2), _linea("VR-015", 3)],
-    },
-]
+# Las órdenes ya no tienen datos simulados: vienen del stock-proxy (pedidos
+# de venta confirmados a sucursales de supermercado en Odoo). Sin conexión,
+# la lista queda vacía. La referencia que ve la empleada es el NOMBRE DEL
+# PEDIDO (S00774); si el pedido trae "referencia de cliente" en Odoo, se
+# muestra debajo como "Ref. súper".
 
 # Datos de prueba (fallback): las reales vienen del stock-proxy, que las lee
 # de Odoo (hijos del partner Super Extra, ver docs/odoo-integration.md).
@@ -95,6 +65,7 @@ SUCURSALES = [
 
 TTL_SUCURSALES = 300
 TTL_CATALOGO = 60
+TTL_ENTREGAS = 30
 
 _cache_proxy = {}  # recurso -> {"valor": json, "en": epoch}
 
@@ -174,6 +145,36 @@ def buscar_producto(sku):
     return encontrado or POR_SKU.get(sku)
 
 
+def obtener_ordenes():
+    """Pedidos confirmados a supermercados, desde el stock-proxy.
+
+    No hay órdenes de prueba: sin conexión (o sin configurar el proxy) la
+    lista es vacía y la pestaña Entregas muestra su estado vacío."""
+    remoto = _obtener_del_proxy("entregas", TTL_ENTREGAS)
+    if not remoto:
+        return []
+    ordenes = []
+    for pedido in remoto.get("orders", []):
+        lineas = [
+            {"sku": l["sku"], "nombre": l["name"],
+             "precio": l["unit_price_cents"] / 100, "enviado": l["qty"]}
+            for l in pedido["lines"] if l["qty"] > 0
+        ]
+        if not lineas:
+            continue
+        ordenes.append({
+            "pedido": pedido["name"],
+            "refSuper": pedido.get("customer_ref"),
+            "odooId": pedido["id"],
+            "cliente": pedido["client"]["name"],
+            "sucursal": pedido["branch"]["name"],
+            "sucursalRef": pedido["branch"].get("ref"),
+            "fecha": pedido["date"],
+            "lineas": lineas,
+        })
+    return ordenes
+
+
 def ahora():
     """Hora local de Panamá en formato corto, como el prototipo (ej. 3:42 p.m.)."""
     return datetime.now(ZONA_PANAMA).strftime("%-I:%M %p").lower().replace("am", "a.m.").replace("pm", "p.m.")
@@ -185,12 +186,12 @@ def ahora():
 # ---------------------------------------------------------------------------
 
 def odoo_confirmar_recepcion(payload):
-    # {odooId, factura, lineas:[{sku, aceptado, devuelto}], empleadoId, fechaHora}
+    # {odooId, pedido, lineas:[{sku, aceptado, devuelto}], empleadoId, fechaHora}
     return {"ok": True, "payload": payload}
 
 
 def odoo_confirmar_regreso(payload):
-    # {odooId, factura, lineas:[{sku, cantidad}], empleadoId, fechaHora}
+    # {odooId, pedido, lineas:[{sku, cantidad}], empleadoId, fechaHora}
     return {"ok": True, "payload": payload}
 
 
@@ -228,12 +229,12 @@ def iniciar_db():
         con.executescript(
             """
             CREATE TABLE IF NOT EXISTS recepciones (
-                factura TEXT PRIMARY KEY,
+                pedido TEXT PRIMARY KEY,         -- nombre del pedido (S00774)
                 aceptado TEXT NOT NULL,          -- JSON {sku: cantidad}
                 confirmada_en TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS devoluciones (
-                factura TEXT PRIMARY KEY,
+                pedido TEXT PRIMARY KEY,
                 datos TEXT NOT NULL,             -- JSON {odooId, cliente, sucursal, lineas}
                 regresada INTEGER NOT NULL DEFAULT 0
             );
@@ -250,37 +251,53 @@ def iniciar_db():
             );
             """
         )
+        _migrar_esquema(con)
+
+
+def _migrar_esquema(con):
+    """El esquema v1 llamaba "factura" a la referencia; ahora es "pedido"."""
+    migrado = False
+    for tabla in ("recepciones", "devoluciones"):
+        columnas = [fila[1] for fila in con.execute(f"PRAGMA table_info({tabla})")]
+        if "factura" in columnas:
+            con.execute(f"ALTER TABLE {tabla} RENAME COLUMN factura TO pedido")
+            migrado = True
+    if migrado:
+        con.execute("""UPDATE historial SET datos = replace(datos, '"factura"', '"pedido"')""")
 
 
 def ordenes_pendientes(busqueda=""):
-    """Órdenes aún no confirmadas, por fecha descendente (nunca por factura)."""
+    """Órdenes aún no confirmadas, por fecha descendente (nunca por número)."""
     with _db() as con:
-        confirmadas = {f["factura"] for f in con.execute("SELECT factura FROM recepciones")}
-    pendientes = [o for o in ORDENES_ODOO if o["factura"] not in confirmadas]
+        confirmadas = {f["pedido"] for f in con.execute("SELECT pedido FROM recepciones")}
+    pendientes = [o for o in obtener_ordenes() if o["pedido"] not in confirmadas]
     q = _normalizar(busqueda.strip())
     if q:
         pendientes = [
             o for o in pendientes
-            if q in o["factura"] or q in _normalizar(o["cliente"]) or q in _normalizar(o["sucursal"])
+            if q in _normalizar(o["pedido"]) or q in _normalizar(o["refSuper"] or "")
+            or q in _normalizar(o["cliente"]) or q in _normalizar(o["sucursal"])
         ]
     return sorted(pendientes, key=lambda o: o["fecha"], reverse=True)
 
 
-def obtener_orden(factura):
-    return next((o for o in ORDENES_ODOO if o["factura"] == factura), None)
+def obtener_orden(pedido):
+    return next((o for o in obtener_ordenes() if o["pedido"] == pedido), None)
 
 
-def orden_confirmada(factura):
+def orden_confirmada(pedido):
     with _db() as con:
-        return con.execute("SELECT 1 FROM recepciones WHERE factura=?", (factura,)).fetchone() is not None
+        return con.execute("SELECT 1 FROM recepciones WHERE pedido=?", (pedido,)).fetchone() is not None
 
 
-def confirmar_recepcion(factura, aceptado):
+def confirmar_recepcion(pedido, aceptado):
     """Sella la recepción: guarda estado, devolución (si hay) e historial."""
-    orden = obtener_orden(factura)
+    orden = obtener_orden(pedido)
+    if orden is None:
+        return None
     resultado = calcular_orden(orden["lineas"], aceptado)
     odoo_confirmar_recepcion({
-        "odooId": orden["odooId"], "factura": factura,
+        "odooId": orden["odooId"], "pedido": pedido,
         "lineas": [
             {"sku": l["sku"], "aceptado": aceptado.get(l["sku"], l["enviado"]),
              "devuelto": l["enviado"] - aceptado.get(l["sku"], l["enviado"])}
@@ -290,13 +307,13 @@ def confirmar_recepcion(factura, aceptado):
     })
     with _db() as con:
         con.execute(
-            "INSERT OR REPLACE INTO recepciones (factura, aceptado, confirmada_en) VALUES (?,?,?)",
-            (factura, json.dumps(aceptado), datetime.now(ZONA_PANAMA).isoformat()),
+            "INSERT OR REPLACE INTO recepciones (pedido, aceptado, confirmada_en) VALUES (?,?,?)",
+            (pedido, json.dumps(aceptado), datetime.now(ZONA_PANAMA).isoformat()),
         )
         if resultado["dev"] > 0:
             con.execute(
-                "INSERT OR REPLACE INTO devoluciones (factura, datos, regresada) VALUES (?,?,0)",
-                (factura, json.dumps({
+                "INSERT OR REPLACE INTO devoluciones (pedido, datos, regresada) VALUES (?,?,0)",
+                (pedido, json.dumps({
                     "odooId": orden["odooId"], "cliente": orden["cliente"],
                     "sucursal": orden["sucursal"],
                     "lineas": [
@@ -309,7 +326,7 @@ def confirmar_recepcion(factura, aceptado):
         con.execute(
             "INSERT INTO historial (tipo, datos, creado_en) VALUES ('entrega', ?, ?)",
             (json.dumps({
-                "hora": ahora(), "factura": factura, "cliente": orden["cliente"],
+                "hora": ahora(), "pedido": pedido, "cliente": orden["cliente"],
                 "sucursal": orden["sucursal"], "acep": resultado["acep"],
                 "dev": resultado["dev"], "t_acep": resultado["t_acep"],
                 "regreso": resultado["dev"] == 0,
@@ -320,25 +337,25 @@ def confirmar_recepcion(factura, aceptado):
 
 def devoluciones_pendientes():
     with _db() as con:
-        filas = con.execute("SELECT factura, datos FROM devoluciones WHERE regresada=0 ORDER BY rowid").fetchall()
-    return [{"factura": f["factura"], **json.loads(f["datos"])} for f in filas]
+        filas = con.execute("SELECT pedido, datos FROM devoluciones WHERE regresada=0 ORDER BY rowid").fetchall()
+    return [{"pedido": f["pedido"], **json.loads(f["datos"])} for f in filas]
 
 
-def confirmar_regreso(factura):
-    devolucion = next((d for d in devoluciones_pendientes() if d["factura"] == factura), None)
+def confirmar_regreso(pedido):
+    devolucion = next((d for d in devoluciones_pendientes() if d["pedido"] == pedido), None)
     if devolucion is None:
         return
     odoo_confirmar_regreso({
-        "odooId": devolucion["odooId"], "factura": factura,
+        "odooId": devolucion["odooId"], "pedido": pedido,
         "lineas": [{"sku": l["sku"], "cantidad": l["cantidad"]} for l in devolucion["lineas"]],
         "empleadoId": EMPLEADO["id"], "fechaHora": datetime.now(ZONA_PANAMA).isoformat(),
     })
     with _db() as con:
-        con.execute("UPDATE devoluciones SET regresada=1 WHERE factura=?", (factura,))
+        con.execute("UPDATE devoluciones SET regresada=1 WHERE pedido=?", (pedido,))
         # El renglón del historial de esa entrega pasa a "regreso completado".
         for fila in con.execute("SELECT n, datos FROM historial WHERE tipo='entrega'").fetchall():
             datos = json.loads(fila["datos"])
-            if datos.get("factura") == factura:
+            if datos.get("pedido") == pedido:
                 datos["regreso"] = True
                 con.execute("UPDATE historial SET datos=? WHERE n=?", (json.dumps(datos), fila["n"]))
 

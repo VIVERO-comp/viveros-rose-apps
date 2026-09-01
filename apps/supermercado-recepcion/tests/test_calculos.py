@@ -30,11 +30,11 @@ def test_acotado_al_rango_valido():
     assert (r["acep"], r["dev"]) == (4, 6)
 
 
-def test_caso_real_factura_774():
-    """El ejemplo de la spec: #774 con 1 Novio Chino rechazado."""
-    from app.datos import obtener_orden
+def test_caso_real_pedido_s00774():
+    """El ejemplo de la spec: el pedido S00774 con 1 Novio Chino rechazado."""
+    from ordenes_de_prueba import orden_774
 
-    orden = obtener_orden("774")
+    orden = orden_774()
     completo = calcular_orden(orden["lineas"], {})
     assert completo["t_orig"] == 116.99
     con_rechazo = calcular_orden(orden["lineas"], {"VR-015": 3})

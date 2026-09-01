@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% from "iconos.html" import icono %}
-{% block titulo %}Confirmar · Factura #{{ orden.factura }}{% endblock %}
+{% block titulo %}Confirmar · Pedido {{ orden.pedido | numero_pedido }} · Recepción{% endblock %}
 
 {% block contenido %}
 <div class="encabezado">
   <button class="boton-volver" type="submit" form="form-volver" aria-label="Volver">{{ icono("volver", 22, 2.5) }}</button>
   <div style="flex:1; min-width:0">
     <h1>{{ "Revisa las diferencias" if r.dif else "Todo aceptado" }}</h1>
-    <div class="sub">{{ orden.cliente }} · {{ orden.sucursal }} · Factura #{{ orden.factura }}</div>
+    <div class="sub">{{ orden.cliente }} · {{ orden.sucursal | quitar_prefijo(orden.cliente) }} · Pedido {{ orden.pedido | numero_pedido }}</div>
   </div>
 </div>
 
@@ -39,11 +39,11 @@
 {% endif %}
 
 <div class="acciones">
-  <form method="post" action="/orden/{{ orden.factura }}/confirmar">
+  <form method="post" action="/orden/{{ orden.pedido }}/confirmar">
     {% for sku, valor in aceptado.items() %}<input type="hidden" name="a_{{ sku }}" value="{{ valor }}" />{% endfor %}
     <button class="boton verde" type="submit">{{ "Confirmar recepción" if r.dif else "Confirmar" }}</button>
   </form>
-  <form method="post" action="/orden/{{ orden.factura }}" id="form-volver">
+  <form method="post" action="/orden/{{ orden.pedido }}" id="form-volver">
     {% for sku, valor in aceptado.items() %}<input type="hidden" name="a_{{ sku }}" value="{{ valor }}" />{% endfor %}
     <button class="boton contorno" type="submit">{{ "Volver a revisar" if r.dif else "Cancelar" }}</button>
   </form>

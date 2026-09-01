@@ -24,21 +24,22 @@
 {% if pestana == "pendientes" %}
   <div class="buscador">
     {{ icono("buscar", 20) }}
-    <input id="buscador" type="search" placeholder="Buscar factura, súper o sucursal…" autocomplete="off" />
+    <input id="buscador" type="search" placeholder="Buscar pedido, súper o sucursal…" autocomplete="off" />
     <button class="limpiar" id="limpiar-buscador" hidden aria-label="Limpiar búsqueda">{{ icono("cerrar", 16) }}</button>
   </div>
   <h2 class="titulo-seccion">Entregas pendientes · <span id="cuenta-pendientes">{{ pendientes | length }}</span></h2>
   {% if pendientes %}
     <div class="lista" id="lista-entregas">
       {% for orden in pendientes %}
-        <a class="tarjeta-entrega" href="/orden/{{ orden.factura }}"
-           data-buscar="{{ orden.factura }} {{ orden.cliente | lower }} {{ orden.sucursal | lower }}">
+        <a class="tarjeta-entrega" href="/orden/{{ orden.pedido }}"
+           data-buscar="{{ orden.pedido | lower }} {{ (orden.refSuper or '') | lower }} {{ orden.cliente | lower }} {{ orden.sucursal | lower }}">
           <div style="flex:1; min-width:0">
             <div>
-              <span class="factura">#{{ orden.factura }}</span>
+              <span class="factura">Pedido {{ orden.pedido | numero_pedido }}</span>
               <span class="fecha">{{ orden.fecha | fecha_bonita }}</span>
             </div>
-            <div class="cliente">{{ orden.cliente }} · {{ orden.sucursal }}</div>
+            {% if orden.refSuper %}<div class="detalle">Ref. súper: {{ orden.refSuper }}</div>{% endif %}
+            <div class="cliente">{{ orden.cliente }} · {{ orden.sucursal | quitar_prefijo(orden.cliente) }}</div>
             <div class="detalle">{{ orden.lineas | length }} productos · {{ orden.total | dinero }}</div>
           </div>
           <div class="lado">
@@ -67,8 +68,8 @@
       <div class="tarjeta tarjeta-borde-naranja">
         <div class="cabecera-tarjeta">
           <div>
-            <div class="quien">{{ d.cliente }} · {{ d.sucursal }}</div>
-            <div class="cuando">Factura #{{ d.factura }}</div>
+            <div class="quien">{{ d.cliente }} · {{ d.sucursal | quitar_prefijo(d.cliente) }}</div>
+            <div class="cuando">Pedido {{ d.pedido | numero_pedido }}</div>
           </div>
           <span class="pastilla naranja">Devolución pendiente</span>
         </div>
@@ -77,7 +78,7 @@
             <div class="renglon"><span>{{ l.nombre }}</span><span class="cantidad">{{ l.cantidad | unidades }}</span></div>
           {% endfor %}
         </div>
-        <form method="post" action="/devoluciones/{{ d.factura }}/regreso">
+        <form method="post" action="/devoluciones/{{ d.pedido }}/regreso">
           <button class="boton naranja" type="submit">Confirmar regreso</button>
         </form>
       </div>
@@ -137,8 +138,8 @@
       <div class="tarjeta tarjeta-historial">
         <div class="cabecera-tarjeta">
           <div>
-            <div class="quien">{{ icono("listo", 18, 3) }} {{ h.cliente }} · {{ h.sucursal }}</div>
-            <div class="cuando">{{ h.hora }}{% if h.tipo == "entrega" %} · Factura #{{ h.factura }}{% else %} · Intercambio{% endif %}</div>
+            <div class="quien">{{ icono("listo", 18, 3) }} {{ h.cliente }} · {{ h.sucursal | quitar_prefijo(h.cliente) }}</div>
+            <div class="cuando">{{ h.hora }}{% if h.tipo == "entrega" %} · Pedido {{ h.pedido | numero_pedido }}{% else %} · Intercambio{% endif %}</div>
           </div>
           {% if h.tipo == "entrega" %}
             {% if h.regreso %}<span class="pastilla verde">Completada</span>

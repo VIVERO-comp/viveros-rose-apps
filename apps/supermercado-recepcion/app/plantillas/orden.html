@@ -1,20 +1,21 @@
 {% extends "base.html" %}
 {% from "iconos.html" import icono %}
-{% block titulo %}Factura #{{ orden.factura }} · Recepción{% endblock %}
+{% block titulo %}Pedido {{ orden.pedido | numero_pedido }} · Recepción{% endblock %}
 
 {% block contenido %}
 <div class="encabezado" style="margin-bottom:12px">
   <a class="boton-volver" href="/" aria-label="Volver">{{ icono("volver", 22, 2.5) }}</a>
   <div style="flex:1; min-width:0">
     <div style="font-size:20px; font-weight:800; line-height:1.15">{{ orden.cliente }}</div>
-    <div style="font-size:15px; color:var(--apagado)">{{ orden.sucursal }}</div>
+    <div style="font-size:15px; color:var(--apagado)">{{ orden.sucursal | quitar_prefijo(orden.cliente) }}</div>
   </div>
 </div>
 
 <div class="franja-factura">
   <div>
-    <span class="numero">Factura #{{ orden.factura }}</span>
+    <span class="numero">Pedido {{ orden.pedido | numero_pedido }}</span>
     <span class="fecha">{{ orden.fecha | fecha_bonita }}</span>
+    {% if orden.refSuper %}<div class="ref-super">Ref. súper: {{ orden.refSuper }}</div>{% endif %}
   </div>
   <span class="estado">Pendiente</span>
 </div>
@@ -26,7 +27,7 @@
   <button class="restablecer" type="button" id="restablecer" hidden>Restablecer</button>
 </div>
 
-<form method="post" action="/orden/{{ orden.factura }}/revisar" id="form-orden">
+<form method="post" action="/orden/{{ orden.pedido }}/revisar" id="form-orden">
   <div class="lista" id="lineas-orden">
     {% for l in orden.lineas %}
       {% set valor = aceptado.get(l.sku, l.enviado) %}

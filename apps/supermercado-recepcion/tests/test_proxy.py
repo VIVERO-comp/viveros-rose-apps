@@ -18,6 +18,18 @@ RESPUESTA_SUCURSALES = {
     }],
     "stale": False, "as_of": "2026-09-01T00:00:00+00:00",
 }
+RESPUESTA_ENTREGAS = {
+    "orders": [{
+        "id": 55, "name": "S00901", "customer_ref": "FAC-901", "date": "2026-09-01",
+        "client": {"ref": "SUPER-EXTRA", "name": "Super Extra"},
+        "branch": {"ref": "CL-0001", "name": "Super Extra Arraiján"},
+        "lines": [
+            {"sku": "PL-MENTA-01", "name": "MENTA", "unit_price_cents": 300, "qty": 4},
+            {"sku": "PL-JADE-01", "name": "JADE", "unit_price_cents": 550, "qty": 0},
+        ],
+    }],
+    "stale": False, "as_of": "2026-09-01T00:00:00+00:00",
+}
 RESPUESTA_CATALOGO = {
     "items": [
         {"sku": "PLT-MENTA-01", "name": "MENTA", "price_cents": 300, "available": 14},
@@ -38,7 +50,8 @@ def proxy_configurado(monkeypatch):
         if estado["caido"]:
             raise RuntimeError("proxy caido")
         estado["llamadas"] += 1
-        return {"sucursales": RESPUESTA_SUCURSALES, "catalogo": RESPUESTA_CATALOGO}[recurso]
+        return {"sucursales": RESPUESTA_SUCURSALES, "catalogo": RESPUESTA_CATALOGO,
+                "entregas": RESPUESTA_ENTREGAS}[recurso]
 
     monkeypatch.setattr(datos, "_pedir_al_proxy", pedir)
     yield estado
@@ -94,3 +107,23 @@ def test_intercambio_con_producto_real_usa_su_precio(db_limpia, proxy_configurad
         "cliente": "Super Extra", "sucursal": "Super Extra Arraiján", "d_PLT-JADE-01": "2",
     })
     assert "JADE" in r.text and "B/.11.00" in r.text
+
+
+def test_con_proxy_llegan_pedidos_reales(db_limpia, proxy_configurado):
+    ordenes = datos.obtener_ordenes()
+    assert len(ordenes) == 1
+    orden = ordenes[0]
+    assert orden["pedido"] == "S00901" and orden["refSuper"] == "FAC-901"
+    # La línea con cantidad 0 se descarta; la otra llega mapeada.
+    assert orden["lineas"] == [
+        {"sku": "PL-MENTA-01", "nombre": "MENTA", "precio": 3.0, "enviado": 4}
+    ]
+    r = cliente_http.get("/")
+    assert "S00901" in r.text and "Ref. súper: FAC-901" in r.text
+    assert "Super Extra · Arraiján" in r.text
+
+
+def test_sin_proxy_las_ordenes_quedan_vacias(db_limpia, monkeypatch):
+    monkeypatch.delenv("STOCK_PROXY_URL", raising=False)
+    datos.reiniciar_cache_proxy()
+    assert datos.obtener_ordenes() == []

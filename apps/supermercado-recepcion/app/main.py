@@ -41,6 +41,15 @@ def quitar_prefijo(nombre, prefijo):
 
 plantillas.env.filters["quitar_prefijo"] = quitar_prefijo
 
+
+def numero_pedido(nombre):
+    """'S00774' -> '00774': en pantalla el pedido va sin el prefijo; por
+    dentro (URLs, SQLite, proxy) se conserva completo."""
+    return re.sub(r"^S(?=\d)", "", nombre)
+
+
+plantillas.env.filters["numero_pedido"] = numero_pedido
+
 # Las tablas se crean al importar: es idempotente y así el proceso (o los
 # tests) nunca corren contra una base sin esquema.
 datos.iniciar_db()
@@ -95,9 +104,9 @@ def historial(request: Request):
     return _render_home(request, "historial", historial=datos.historial_movimientos())
 
 
-@app.post("/devoluciones/{factura}/regreso")
-def regreso(factura: str):
-    datos.confirmar_regreso(factura)
+@app.post("/devoluciones/{pedido}/regreso")
+def regreso(pedido: str):
+    datos.confirmar_regreso(pedido)
     return RedirectResponse("/devoluciones", status_code=303)
 
 
@@ -124,26 +133,26 @@ async def _aceptado_del_form(request, orden):
     return aceptado
 
 
-def _orden_abierta(factura):
-    orden = datos.obtener_orden(factura)
-    if orden is None or datos.orden_confirmada(factura):
+def _orden_abierta(pedido):
+    orden = datos.obtener_orden(pedido)
+    if orden is None or datos.orden_confirmada(pedido):
         return None
     return orden
 
 
-@app.api_route("/orden/{factura}", methods=["GET", "POST"])
-async def orden(request: Request, factura: str):
+@app.api_route("/orden/{pedido}", methods=["GET", "POST"])
+async def orden(request: Request, pedido: str):
     # El POST es el "volver a revisar": re-pinta los contadores con lo editado.
-    abierta = _orden_abierta(factura)
+    abierta = _orden_abierta(pedido)
     if abierta is None:
         return RedirectResponse("/", status_code=303)
     aceptado = await _aceptado_del_form(request, abierta) if request.method == "POST" else {}
     return plantillas.TemplateResponse(request, "orden.html", {"orden": abierta, "aceptado": aceptado})
 
 
-@app.post("/orden/{factura}/revisar")
-async def revisar(request: Request, factura: str):
-    abierta = _orden_abierta(factura)
+@app.post("/orden/{pedido}/revisar")
+async def revisar(request: Request, pedido: str):
+    abierta = _orden_abierta(pedido)
     if abierta is None:
         return RedirectResponse("/", status_code=303)
     aceptado = await _aceptado_del_form(request, abierta)
@@ -153,17 +162,19 @@ async def revisar(request: Request, factura: str):
     })
 
 
-@app.post("/orden/{factura}/confirmar")
-async def confirmar(request: Request, factura: str):
-    abierta = _orden_abierta(factura)
+@app.post("/orden/{pedido}/confirmar")
+async def confirmar(request: Request, pedido: str):
+    abierta = _orden_abierta(pedido)
     if abierta is None:
         return RedirectResponse("/", status_code=303)
     aceptado = await _aceptado_del_form(request, abierta)
-    r = datos.confirmar_recepcion(factura, aceptado)
+    r = datos.confirmar_recepcion(pedido, aceptado)
+    if r is None:
+        return RedirectResponse("/", status_code=303)
     hay_devolucion = r["dev"] > 0
     return plantillas.TemplateResponse(request, "exito.html", {
         "titulo": "Entrega registrada",
-        "sub": f"{abierta['cliente']} - {abierta['sucursal']} · Factura #{factura}",
+        "sub": f"{abierta['cliente']} - {quitar_prefijo(abierta['sucursal'], abierta['cliente'])} · Pedido {numero_pedido(pedido)}",
         "filas": [
             ("Aceptadas", unidades(r["acep"]), "verde"),
             ("Devueltas", unidades(r["dev"]), "naranja" if hay_devolucion else "apagado"),
