@@ -1,4 +1,11 @@
-# Recepción de Supermercados
+# Recepción de Supermercados — prototipo React (referencia congelada)
+
+> **Este prototipo ya no es la app oficial.** La app oficial se está
+> reescribiendo en Python (FastAPI + Jinja2) en la carpeta padre
+> `apps/supermercado-recepcion/`, usando este código como referencia de
+> comportamiento y diseño. Esta carpeta se borrará cuando la versión Python
+> alcance la paridad. No se despliega. Para ejecutarla localmente:
+> `npm install && npm run dev`.
 
 App móvil (web) para que el empleado que hace las entregas a supermercados
 registre desde el celular lo que pasó con cada factura. Conocida también como
