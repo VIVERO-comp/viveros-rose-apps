@@ -29,12 +29,12 @@ incluidas las que hoy viven en otros repositorios:
 | Panel de administración | [`viveros-rose-frontend`](https://github.com/VIVERO-comp/viveros-rose-frontend) → ruta `/admin` | Producción | Dueño / administración | Astro + funciones serverless en Vercel |
 | Portal del repartidor | [`viveros-rose-frontend`](https://github.com/VIVERO-comp/viveros-rose-frontend) → ruta `/repartidor` | Producción | Repartidores | Astro + funciones serverless en Vercel (PWA instalable) |
 
-- **Recepción de Supermercados** — compara una factura creada en Odoo contra
-  las cantidades realmente aceptadas por un supermercado, calcula las
+- **Recepción de Supermercados** — compara un pedido confirmado en Odoo
+  contra las cantidades realmente aceptadas por el supermercado, calcula las
   devoluciones (`devuelto = enviado − aceptado`) y registra intercambios de
-  plantas dañadas. Cómo ejecutarla: ver su
-  [README](apps/supermercado-recepcion/README.md); en corto,
-  `cd apps/supermercado-recepcion && npm install && npm run dev`.
+  plantas dañadas. Login propio por empleada. Cómo ejecutarla: ver su
+  [README](apps/supermercado-recepcion/README.md); en corto, venv +
+  `uvicorn app.main:app --reload --port 8091`.
 - **Panel de administración** — resumen del negocio, lista de pedidos,
   validación de pagos y consulta de stock. Vive dentro del sitio de la tienda
   porque sus funciones serverless guardan la clave del order-api fuera del

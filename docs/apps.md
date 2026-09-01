@@ -10,15 +10,17 @@
 
 ## Recepción de Supermercados
 
-**Vive en:** `apps/supermercado-recepcion/` (este repo) · **Estado:**
-desarrollo, prototipo con datos simulados · **Usuarios:** empleados que
+**Vive en:** `apps/supermercado-recepcion/` (este repo), en producción en
+[super.plantaspanama.com](https://super.plantaspanama.com) · **Estado:**
+lecturas de Odoo en vivo (pedidos, sucursales, catálogo vía stock-proxy);
+las confirmaciones aún se guardan localmente · **Usuarios:** empleadas que
 entregan a supermercados · **Tecnología:** Python (FastAPI + Jinja2 + SQLite), con login propio; el prototipo React quedó como referencia congelada.
 
 Registra desde el celular lo que pasó con cada entrega a un supermercado. La
-referencia del empleado es el **número de factura** (#774, #781, #770 en los
-datos de prueba); los números no son consecutivos y la app nunca infiere que
-falte una factura por un salto. Los IDs de Odoo (`odooId`, pedido, reserva,
-transferencia) viajan por dentro y no se muestran.
+referencia de la empleada es el **número del pedido sin prefijo** ("Pedido
+00774"; por dentro viaja completo, S00774), con la "Ref. súper"
+(`client_order_ref`) debajo cuando existe; los números no son consecutivos y
+la app nunca infiere que falte uno por un salto.
 
 Cuatro pestañas con navegación inferior y contadores:
 
@@ -33,17 +35,17 @@ Cuatro pestañas con navegación inferior y contadores:
   deja físicamente en el vivero ("Confirmar regreso" → a futuro repone stock
   en Odoo).
 - **Cambios**: intercambios de plantas dañadas recogidas en el súper — elegir
-  sucursal, buscar cada planta en el catálogo (22 SKUs de prueba), indicar
+  cliente y sucursal (las 38 reales, con buscador), buscar cada planta con su
+  disponible en vivo, indicar
   cantidades, confirmar; queda "Pendiente de devolver" hasta entregar el
   reemplazo.
 - **Historial**: entregas (con regreso pendiente/completada) e intercambios
   completados, con montos.
 
-Integración: los seis métodos simulados del objeto `odooApi` (payloads
-exactos en el [README de la app](../apps/supermercado-recepcion/README.md));
-diseño del lado servidor en [`odoo-integration.md`](odoo-integration.md).
-Limitaciones actuales: estado en memoria (se pierde al recargar), empleado
-fijo en el código, sin login.
+Integración: lecturas por el stock-proxy (`/v1/entregas`, `/v1/sucursales`,
+`/v1/catalogo`); las escrituras a Odoo esperan el router `supermercado` del
+order-api — ver [`odoo-integration.md`](odoo-integration.md). Autenticación
+propia por empleada (PBKDF2 + sesiones en SQLite, altas por consola).
 
 ---
 
