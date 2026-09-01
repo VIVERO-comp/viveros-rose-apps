@@ -35,29 +35,42 @@ El prototipo trae una constante `SUCURSALES` con 4 entradas fijas (incluye
 cadenas a las que no se vende): son **solo datos de prueba** y no pueden
 quedar así al conectar la API.
 
-Cómo está modelado en Odoo hoy:
+Cómo está modelado en Odoo:
 
-- El único cliente supermercado es **Super Xtra**, con ~20 sucursales.
-- Cada sucursal es un contacto (`res.partner`) con la **etiqueta
-  "Super Xtra"**. El nombre del contacto es el nombre de la sucursal
-  (ej. Villalobos, Costa del Este).
+- El único cliente supermercado es **Super Extra** (los datos de prueba del
+  prototipo lo escriben "Super Xtra"), con 38 sucursales.
+- **Padre**: un `res.partner` empresa (`is_company=True`),
+  `name="Super Extra"`, `ref="SUPER-EXTRA"`, `customer_rank=1`.
+- **Sucursales**: un `res.partner` hijo por sucursal, con `parent_id` al
+  padre, `type="delivery"`, `name="Super Extra <Sucursal>"` y `ref` = código
+  CL del ERP de origen (CL-0001, CL-0002…). La **identidad de una sucursal
+  es su `ref`**, no su nombre.
+- Estos registros los crea y mantiene
+  `viveros-rose-odoo-config/scripts/crear_sucursales.py` (idempotente por
+  `ref`, dry run por defecto).
 
 **`GET sucursales`** (diseño propuesto / pendiente de implementación):
-devuelve los partners con la etiqueta "Super Xtra", aproximadamente:
+devuelve los contactos hijos del partner con `ref="SUPER-EXTRA"`,
+aproximadamente:
 
 ```text
 partners:
     partner_id
-    branch_name          ← nombre del contacto (la sucursal)
+    ref                  ← código CL (la identidad estable de la sucursal)
+    branch_name          ← nombre del contacto
     address
 ```
 
-En `fetchOrdenes()`, por lo mismo: `cliente = "Super Xtra"` y
-`sucursal = nombre del contacto al que se facturó`.
+Alimentará el `fetchSucursales()` que reemplazará a la constante
+`SUCURSALES` de la app.
 
-Si en el futuro entra otra cadena, se le crea su propia etiqueta en Odoo y
-el endpoint pasa a filtrar por el **conjunto de etiquetas de supermercado**
-(devolviendo también a qué cadena pertenece cada sucursal).
+En `fetchOrdenes()`, por lo mismo: `cliente` = el partner **padre**
+("Super Extra") y `sucursal` = el contacto **hijo** al que se facturó.
+
+Si en el futuro entra otra cadena, se le crea su propio partner padre (con
+su `ref`) y sus sucursales como hijos; el endpoint pasa a devolver las
+sucursales del conjunto de padres supermercado, indicando a qué cadena
+pertenece cada una.
 
 ## Datos que la app necesita recibir (por entrega)
 
