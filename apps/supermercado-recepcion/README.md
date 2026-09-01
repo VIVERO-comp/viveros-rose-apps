@@ -92,6 +92,10 @@ pendiente de implementación).
 - **Prototipo funcional con datos simulados**: facturas de prueba #774
   (Super Xtra · Villalobos, 16 productos, B/.116.99), #781 (Riba Smith ·
   Bella Vista) y #770 (Super 99 · Costa del Este). Catálogo de 22 SKUs.
+- La constante `SUCURSALES` está **hardcodeada con datos de prueba** (4
+  sucursales fijas, incluyendo cadenas a las que no se vende). En la
+  realidad las sucursales viven en Odoo como contactos con la etiqueta
+  "Super Xtra" (ver `docs/odoo-integration.md`).
 - **Todo el estado vive en memoria**: al recargar la página se pierde lo
   registrado.
 - El empleado está fijo en el código (`EMPLEADO`, "Génesis"): no hay login.
@@ -108,6 +112,9 @@ pendiente de implementación).
 ## Próximos pasos
 
 - Implementar `odooApi` contra la API real (ver `docs/odoo-integration.md`).
+- Reemplazar la constante `SUCURSALES` por un `fetchSucursales()` en
+  `odooApi` que traiga las sucursales reales desde Odoo (partners con la
+  etiqueta "Super Xtra").
 - Identificación real del empleado (hoy hardcodeado).
 - Persistencia: que una recepción confirmada sobreviva a recargar la página.
 - Partir `src/App.jsx` en componentes cuando la app crezca.

@@ -21,12 +21,43 @@ natural es que esta integración siga el mismo camino: un servicio Python
 GET  entregas pendientes                → alimenta fetchOrdenes()
 GET  detalle de factura                 → incluido hoy en fetchOrdenes()
 GET  catálogo de productos              → alimenta fetchCatalogo() (intercambios)
+GET  sucursales                         → alimentará fetchSucursales() (intercambios)
 POST resultado de recepción             → recibe confirmarRecepcion()
 POST devolución confirmada (regreso)    → recibe confirmarRegreso()
 POST intercambio creado / completado    → recibe crearIntercambio() / completarIntercambio()
 ```
 
 Todas: **diseño propuesto, pendiente de implementación.**
+
+## Sucursales: vienen de Odoo, nunca hardcodeadas
+
+El prototipo trae una constante `SUCURSALES` con 4 entradas fijas (incluye
+cadenas a las que no se vende): son **solo datos de prueba** y no pueden
+quedar así al conectar la API.
+
+Cómo está modelado en Odoo hoy:
+
+- El único cliente supermercado es **Super Xtra**, con ~20 sucursales.
+- Cada sucursal es un contacto (`res.partner`) con la **etiqueta
+  "Super Xtra"**. El nombre del contacto es el nombre de la sucursal
+  (ej. Villalobos, Costa del Este).
+
+**`GET sucursales`** (diseño propuesto / pendiente de implementación):
+devuelve los partners con la etiqueta "Super Xtra", aproximadamente:
+
+```text
+partners:
+    partner_id
+    branch_name          ← nombre del contacto (la sucursal)
+    address
+```
+
+En `fetchOrdenes()`, por lo mismo: `cliente = "Super Xtra"` y
+`sucursal = nombre del contacto al que se facturó`.
+
+Si en el futuro entra otra cadena, se le crea su propia etiqueta en Odoo y
+el endpoint pasa a filtrar por el **conjunto de etiquetas de supermercado**
+(devolviendo también a qué cadena pertenece cada sucursal).
 
 ## Datos que la app necesita recibir (por entrega)
 
