@@ -1,0 +1,25 @@
+# App de recepción de supermercados (super.plantaspanama.com).
+# Solo escucha en loopback: el nginx del host pone el HTTPS. Se une a la red
+# del stack de Odoo para hablarle al stock-proxy por la red interna, y el
+# SQLite vive en ./datos para sobrevivir rebuilds del contenedor (y entrar
+# al respaldo diario del droplet).
+
+name: super-recepcion
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8091:8091"
+    env_file: .env
+    environment:
+      RECEPCION_DB: /datos/recepcion.db
+    volumes:
+      - ./datos:/datos
+    networks:
+      - odoo_default
+
+networks:
+  odoo_default:
+    external: true
