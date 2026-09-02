@@ -111,3 +111,7 @@ recordatorio semanal, aviso diario fuera de la app, umbral por producto.
 - Recordatorio semanal (día configurable) y notificación quincenal.
 - Aviso diario por correo/WhatsApp con el resumen de críticos.
 - Umbral por producto.
+- Usuario de Odoo dedicado para los ajustes (`ODOO_STOCK_USERNAME` /
+  `ODOO_STOCK_PASSWORD` en el `.env` del order-api). Hoy los ajustes usan el
+  usuario general de Odoo; el dedicado dejaría los movimientos de inventario
+  a nombre propio y con permisos mínimos. Mejora posterior, no bloqueante.
