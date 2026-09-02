@@ -115,3 +115,6 @@ recordatorio semanal, aviso diario fuera de la app, umbral por producto.
   `ODOO_STOCK_PASSWORD` en el `.env` del order-api). Hoy los ajustes usan el
   usuario general de Odoo; el dedicado dejaría los movimientos de inventario
   a nombre propio y con permisos mínimos. Mejora posterior, no bloqueante.
+- Vigilancia mínima de insumos (prefijo `IN-`): solo un aviso si un insumo
+  se va a negativo por ventas al súper, **sin** meterlos al score ni al
+  catálogo B2B. Hoy los insumos quedan del todo fuera de Control de Stock.
