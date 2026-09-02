@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block titulo %}Revisar conteo · Control de Stock{% endblock %}
+
+{% block contenido %}
+<header>
+  <div class="brand">
+    <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
+    <div>
+      <h1>Revisar conteo</h1>
+      <small>Plantas Panamá · Vivero Rose</small>
+    </div>
+  </div>
+</header>
+
+<main>
+  <a class="volver" href="/">← Volver al inventario</a>
+
+  {% for mensaje in errores %}
+  <div class="aviso-error">{{ mensaje }}</div>
+  {% endfor %}
+
+  {% if conteo %}
+  <div class="inv-card">
+    <h3>Conteo quincenal
+      {% if conteo.estado == 'pendiente' %}· por confirmar
+      {% elif conteo.estado == 'confirmado' %}· confirmado
+      {% elif conteo.estado == 'descartado' %}· descartado{% endif %}</h3>
+    <p>{{ conteo.creado_en | fecha_bonita }} · {{ conteo.empleada }} ·
+       {{ conteo.datos.get('contados', 0) }} producto{{ 's' if conteo.datos.get('contados', 0) != 1 }} contado{{ 's' if conteo.datos.get('contados', 0) != 1 }}{% if sin_contar %} · {{ sin_contar }} sin contar (se saltan){% endif %}</p>
+
+    {% if not diferencias %}
+    <p style="color:var(--ok);font-weight:600">Sin diferencias: el conteo cuadra con el sistema. 🎉</p>
+    {% endif %}
+  </div>
+
+  {% if diferencias %}
+  <div class="seccion-titulo">{{ diferencias | length }} diferencia{{ 's' if diferencias | length != 1 }}</div>
+  {% set resultados = conteo.datos.get('resultados') %}
+  {% for d in diferencias %}
+  <div class="dif-fila">
+    <div class="nombre"><b>{{ d.nombre }}</b><span>{{ d.sku }}</span></div>
+    <span class="dif-cambio">{{ d.en_sistema }}<span class="flecha">→</span>{{ d.contado }}</span>
+    {% if resultados %}
+      {% set r = (resultados | selectattr('sku', 'equalto', d.sku) | list | first) %}
+      {% if r %}
+        {% if r.resultado in ('aplicado', 'sin_cambio') %}
+        <span class="res-etiqueta res-aplicado">{{ 'Ajustado' if r.resultado == 'aplicado' else 'Ya estaba' }}</span>
+        {% elif r.resultado == 'conflicto' %}
+        <span class="res-etiqueta res-conflicto">Cambió: hay {{ r.anterior }}</span>
+        {% else %}
+        <span class="res-etiqueta res-otro">{{ r.resultado | replace('_', ' ') }}</span>
+        {% endif %}
+      {% endif %}
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  {% if conteo.estado == 'pendiente' %}
+  <div class="inv-card" style="margin-top:14px">
+    <h3>Aplicar en Odoo</h3>
+    <p>Al confirmar, estas {{ diferencias | length }} cantidades se fijan en Odoo tal cual (la tienda y Recepción lo toman de ahí). No hay deshacer automático: revertir es volver a ajustar a mano. Si algo cambió en Odoo desde que contaste, ese producto no se toca y te lo muestro aquí.</p>
+    <div class="botones">
+      <form method="post" action="/conteos/{{ conteo.n }}/confirmar">
+        <button class="btn btn-dorado" type="submit">Confirmar y ajustar</button>
+      </form>
+      <form method="post" action="/conteos/{{ conteo.n }}/descartar">
+        <button class="btn btn-linea" type="submit">Descartar conteo</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if resultados %}
+    {% set conflictos = resultados | selectattr('resultado', 'equalto', 'conflicto') | list %}
+    {% if conflictos %}
+    <div class="aviso-error" style="margin-top:14px">
+      {{ conflictos | length }} producto{{ 's' if conflictos | length != 1 }} cambió en Odoo mientras contabas y no se tocó. Vuelve a contar esos y ajústalos desde la pestaña Stock.
+    </div>
+    {% endif %}
+  {% endif %}
+  {% endif %}
+  {% endif %}
+</main>
+{% endblock %}

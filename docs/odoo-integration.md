@@ -56,6 +56,29 @@ historial se ve "Sin sincronizar" hasta lograrlo. El **regreso** y los
 > migrar estas lecturas a la API de Odoo (JSON-RPC) para no depender del
 > esquema de tablas en cada actualización de Odoo.
 
+## Control de Stock (`apps/control-stock`)
+
+Misma arquitectura, dos contratos reales:
+
+- **Lectura — `GET /v1/inventario`** (stock-proxy, `X-API-Key`
+  obligatoria): todos los productos activos de los prefijos de
+  `CATALOGO_FILTRO` con `{sku, name, category, on_hand, available}`.
+  `category` es la categoría de Odoo (`product_category.complete_name`,
+  `null` si no tiene); `on_hand` es lo físico (contra eso se compara un
+  conteo) y `available` descuenta reservas (sobre eso se alerta). Misma
+  degradación `stale` que el resto del proxy.
+- **Escritura — `POST /api/stock/ajustes`** (order-api, `X-API-Key`):
+  `{ajustes: [{sku, cantidad, esperada}], empleadoId, fechaHora, motivo}`.
+  Aplica el ajuste de inventario **estándar de Odoo** (fija
+  `inventory_quantity` en el `stock.quant` de `WH/Existencias` y llama
+  `action_apply_inventory`), cantidad **absoluta**. El candado: si la
+  cantidad actual en Odoo difiere de `esperada`, ese producto responde
+  `conflicto` con el valor fresco y no se escribe. La respuesta detalla cada
+  producto (`aplicado | sin_cambio | conflicto | no_existe | odoo_error |
+  no_intentado`) y todo queda auditado en la tabla `ajuste_stock` de la base
+  tienda (migración 012). Usuario de Odoo propio vía `ODOO_STOCK_USERNAME` /
+  `ODOO_STOCK_PASSWORD` (cae al general si no está configurado).
+
 ## Sucursales: vienen de Odoo, nunca hardcodeadas
 
 El prototipo trae una constante `SUCURSALES` con 4 entradas fijas (incluye

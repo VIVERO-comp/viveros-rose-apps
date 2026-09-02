@@ -20,6 +20,12 @@ __pycache__/
 recepcion.db
 recepcion.db-*
 
+# Base local y archivos generados de la app de control de stock
+control-stock.db
+control-stock.db-*
+apps/control-stock/archivos/
+apps/control-stock/datos/
+
 # Sistema y logs
 .DS_Store
 *.log

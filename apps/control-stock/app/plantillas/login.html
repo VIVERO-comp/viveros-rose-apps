@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block titulo %}Entrar · Control de Stock{% endblock %}
+
+{% block contenido %}
+<div class="login">
+  <div class="logo"><img src="/static/logo.jpg" alt="Plantas Panamá por Vivero Rose"></div>
+  <div class="marca-login">CONTROL DE STOCK</div>
+  <form method="post" action="/login" class="form-login">
+    <label class="campo">
+      <span>Usuario</span>
+      <input name="usuario" type="text" value="{{ usuario }}" autocomplete="username"
+             autocapitalize="none" autocorrect="off" required autofocus>
+    </label>
+    <label class="campo">
+      <span>Contraseña</span>
+      <input name="contrasena" type="password" autocomplete="current-password" required>
+      {% if error %}<span class="error-campo">{{ error }}</span>{% endif %}
+    </label>
+    <button class="boton" type="submit">Entrar</button>
+  </form>
+</div>
+{% endblock %}

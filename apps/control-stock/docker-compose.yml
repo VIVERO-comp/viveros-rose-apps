@@ -1,0 +1,26 @@
+# Nombres de proyecto y servicio ÚNICOS a propósito (control-stock, nunca
+# "app" ni otro alias genérico): los contenedores de prueba y producción
+# comparten redes Docker y un alias repetido ya causó fallos intermitentes
+# en el checkout real. La instancia de pruebas usa control-stock-pruebas y
+# la red de pruebas, nunca esta.
+name: control-stock
+
+services:
+  control-stock:
+    build: .
+    ports:
+      - "127.0.0.1:8092:8092"
+    env_file: .env
+    environment:
+      CONTROL_STOCK_DB: /datos/control-stock.db
+      CONTROL_STOCK_ARCHIVOS: /datos/archivos
+    volumes:
+      # SQLite y los PDFs sobreviven rebuilds y entran al respaldo del droplet.
+      - ./datos:/datos
+    networks:
+      - odoo_default
+    restart: unless-stopped
+
+networks:
+  odoo_default:
+    external: true

@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block intro %}
+<div class="intro" id="intro" hidden>
+  <div class="intro-brote" id="intro-brote">
+    <svg width="154" height="154" viewBox="0 0 100 100" fill="none">
+      <path class="trazo espiral" d="M50 42 a4 4 0 0 1 4 4 a6 6 0 0 1 -6 6 a9 9 0 0 1 -9 -9 a12 12 0 0 1 12 -12 a15 15 0 0 1 15 15 a18 18 0 0 1 -18 18" stroke-linecap="round"/>
+      <path class="trazo petalo1" d="M35 52 C24 54 18 62 20 72 C30 72 38 66 40 56" stroke-linecap="round"/>
+      <path class="trazo petalo2" d="M65 52 C76 54 82 62 80 72 C70 72 62 66 60 56" stroke-linecap="round"/>
+      <path class="trazo petalo3" d="M42 66 C44 76 56 76 58 66" stroke-linecap="round"/>
+      <path class="trazo luna" d="M26 74 A30 30 0 0 0 74 74" stroke-linecap="round"/>
+      <circle class="trazo aro" cx="50" cy="55" r="43.5" transform="rotate(-90 50 55)"/>
+    </svg>
+  </div>
+  <div class="intro-texto" id="intro-texto"></div>
+</div>
+{% endblock %}
+
+{% block contenido %}
+<header>
+  <div class="brand">
+    <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
+    <div>
+      <h1>Control de Stock</h1>
+      <small>Plantas Panamá · Vivero Rose</small>
+    </div>
+  </div>
+  <button class="bell" onclick="togglePanel()" aria-label="Alertas">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
+      <path d="M13.7 21a2 2 0 0 1-3.4 0"/>
+    </svg>
+    <span class="dot" {% if not alertas %}style="display:none"{% endif %}>{{ alertas | length }}</span>
+  </button>
+</header>
+
+<main>
+  {% if sin_proxy %}
+  <div class="aviso-error">No hay conexión con el stock: {{ sin_proxy }}. Vuelve a intentar en un momento.</div>
+  {% endif %}
+
+  <!-- ================= HOME ================= -->
+  <section class="tab activa" id="tab-home">
+    <div class="score-card">
+      <div class="score-ring">
+        <svg width="150" height="150" viewBox="0 0 150 150">
+          <circle cx="75" cy="75" r="64" fill="none" stroke="#323c5e" stroke-width="11"/>
+          <circle cx="75" cy="75" r="64" fill="none" stroke="url(#g)" stroke-width="11"
+                  stroke-linecap="round" stroke-dasharray="402" stroke-dashoffset="{{ anillo }}"/>
+          <defs>
+            <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#f0d3ab"/><stop offset="1" stop-color="#e3b57f"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <div class="score-num"><b>{{ puntos }}</b><span>salud del stock</span></div>
+      </div>
+      <div class="score-why">
+        <b>{{ cuentas.criticos }} crítica{{ 's' if cuentas.criticos != 1 }}</b> ·
+        <i>{{ cuentas.bajos }} baja{{ 's' if cuentas.bajos != 1 }}</i> ·
+        {% if dias_conteo is none %}sin conteo quincenal aún{% elif dias_conteo == 0 %}conteo hecho hoy{% else %}último conteo hace {{ dias_conteo }} día{{ 's' if dias_conteo != 1 }}{% endif %}
+      </div>
+    </div>
+
+    <div class="totales">
+      <div class="tot"><b>{{ "{:,}".format(cuentas.unidades) }}</b><span>unidades</span></div>
+      <div class="tot"><b>{{ cuentas.con_stock }}</b><span>con stock</span></div>
+      <div class="tot"><b>{{ cuentas.agotadas }}</b><span>agotadas</span></div>
+    </div>
+
+    <div class="seccion-titulo">Por categoría</div>
+    <div class="cats">
+      {% for cat in categorias %}
+      <button class="cat" onclick="irStock({{ cat.nombre | tojson }})">
+        <span class="emoji">{{ cat.emoji }}</span>
+        <b>{{ cat.nombre }}</b>
+        <span>{{ cat.productos }} producto{{ 's' if cat.productos != 1 }} · {{ "{:,}".format(cat.unidades) }} uds</span>
+        {% if cat.criticos %}<span class="alerta-mini">{{ cat.criticos }} crítica{{ 's' if cat.criticos != 1 }}</span>{% endif %}
+      </button>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- ================= STOCK ================= -->
+  <section class="tab" id="tab-stock">
+    <div class="buscador"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9aa3bd" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg><input id="busca" placeholder="Buscar planta…" oninput="filtrar()"></div>
+    <div class="filtros" id="filtros">
+      <button class="chip on" onclick="chip(this,'Todas')">Todas</button>
+      {% for cat in categorias %}
+      <button class="chip" onclick="chip(this,{{ cat.nombre | tojson }})">{{ cat.nombre }}</button>
+      {% endfor %}
+    </div>
+    <div class="sync">
+      {% if hora_actualizado %}Actualizado hoy {{ hora_actualizado }} · {% endif %}<a href="/?refrescar=1">Actualizar ↻</a>
+    </div>
+    <div id="lista"></div>
+  </section>
+
+  <!-- ================= INVENTARIO ================= -->
+  <section class="tab" id="tab-inv">
+    <div class="aviso">
+      <span class="ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6"/><path d="M9 16h6"/></svg></span>
+      <div><b>Inventario {% if conteo_vencido %}pendiente{% else %}al día{% endif %}</b><span>Genera la hoja y camina el vivero</span></div>
+    </div>
+
+    <div class="inv-card">
+      <h3>Revisión semanal</h3>
+      <p>Hoja con el stock del sistema y columna vacía para el conteo físico. Solo revisión, no ajusta nada.</p>
+      <div class="botones">
+        <form method="post" action="/conteos/pdf">
+          <button class="btn btn-dorado" type="submit"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg> Generar hoja PDF</button>
+        </form>
+        {% if ultima_hoja %}<a class="btn btn-linea" href="/conteos/{{ ultima_hoja.n }}/pdf">Ver último</a>{% endif %}
+        <form method="post" action="/revisiones">
+          <button class="btn btn-linea" type="submit">Revisión hecha</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="inv-card">
+      <h3>Conteo quincenal con Excel</h3>
+      <p>Descarga la plantilla, llénala con el conteo real y súbela. Antes de aplicar, verás las diferencias producto por producto.</p>
+      <div class="botones">
+        <a class="btn btn-crema" href="/plantilla.xlsx"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Plantilla Excel</a>
+        <form method="post" action="/conteos/importar" enctype="multipart/form-data" id="form-importar">
+          <input type="file" name="archivo" id="archivo-conteo" accept=".xlsx" hidden
+                 onchange="document.getElementById('form-importar').submit()">
+          <button class="btn btn-dorado" type="button" onclick="document.getElementById('archivo-conteo').click()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Importar conteo</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="seccion-titulo">Historial de conteos</div>
+    {% for c in conteos %}
+      {% if c.tipo == 'quincenal' %}
+      <a class="historial-item" href="/conteos/{{ c.n }}/revisar">
+        <div><b>Conteo quincenal{% if c.estado == 'pendiente' %} · por confirmar{% elif c.estado == 'descartado' %} · descartado{% endif %}</b><small>{{ c.creado_en | fecha_bonita }} · {{ c.empleada }}</small></div>
+        <span class="dif {{ 'ok' if not c.datos.diferencias }}">{{ c.datos.diferencias | length }} diferencia{{ 's' if c.datos.diferencias | length != 1 }}</span>
+      </a>
+      {% elif c.tipo == 'revision' %}
+      <div class="historial-item">
+        <div><b>Revisión semanal</b><small>{{ c.creado_en | fecha_bonita }} · {{ c.empleada }}</small></div>
+        <span class="dif ok">Hecha ✓</span>
+      </div>
+      {% else %}
+      <a class="historial-item" href="/conteos/{{ c.n }}/pdf">
+        <div><b>Hoja de conteo</b><small>{{ c.creado_en | fecha_bonita }} · {{ c.empleada }}</small></div>
+        <span class="dif ok">PDF</span>
+      </a>
+      {% endif %}
+    {% else %}
+    <p style="color:var(--texto-suave);font-size:12.5px;padding:6px 2px">Aún no hay conteos.</p>
+    {% endfor %}
+
+    <form method="post" action="/logout" style="margin-top:22px;text-align:center">
+      <button class="btn btn-linea" type="submit" style="margin:0 auto">Cerrar sesión · {{ empleada.nombre }}</button>
+    </form>
+  </section>
+</main>
+
+<!-- panel de alertas -->
+<div class="panel" id="panel">
+  <div class="panel-hoja">
+    <h3>Alertas</h3>
+    <div id="alertas-lista">
+      {% for alerta in alertas %}
+      <div class="alerta-item" data-ir="{{ alerta.sku }}">
+        <span class="pico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+        <p>{{ 'Queda' if alerta.cantidad == 1 else 'Quedan' }} <b>{{ alerta.cantidad }} de {{ alerta.nombre }}</b> — revisa si hay más en el vivero y ajusta, o repón.
+          <span class="ir">Toca para ir al producto →</span></p>
+        <form method="post" action="/alertas/atender"><input type="hidden" name="sku" value="{{ alerta.sku }}"><button type="submit">Atendida</button></form>
+      </div>
+      {% else %}
+      <p style="color:var(--texto-suave);font-size:13px;text-align:center;padding:20px 0">Sin alertas críticas. Todo en orden 🎉</p>
+      {% endfor %}
+    </div>
+    <form class="umbral-form" method="post" action="/umbral">
+      <span>Alertar con menos de</span>
+      <input name="umbral" type="number" inputmode="numeric" min="1" max="50" value="{{ umbral }}">
+      <button type="submit">Guardar</button>
+    </form>
+  </div>
+</div>
+
+<!-- modal modificar stock -->
+<div class="panel centrado" id="modal-editar">
+  <div class="panel-hoja">
+    <h3 id="edit-nombre">Modificar stock</h3>
+    <p class="edit-sub" id="edit-actual">En sistema: 0</p>
+    <div class="edit-qty">
+      <button class="qty-btn" onclick="cambiarQty(-1)">−</button>
+      <input type="number" id="edit-input" inputmode="numeric">
+      <button class="qty-btn" onclick="cambiarQty(1)">+</button>
+    </div>
+    <p class="edit-error" id="edit-error"></p>
+    <p class="edit-nota">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      El ajuste se aplica directo en Odoo y la tienda online lo toma de ahí. No tiene deshacer automático: para revertirlo hay que ajustar de nuevo.
+    </p>
+    <div class="botones">
+      <button class="btn btn-dorado" style="flex:1;justify-content:center" id="btn-guardar" onclick="guardarStock()">Guardar en Odoo</button>
+      <button class="btn btn-linea" onclick="cerrarEditar()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<nav>
+  <button class="on" onclick="tab('home',this)"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></svg></span>Inicio</button>
+  <button onclick="tab('stock',this)"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M12 10C12 6 9 3 4 3c0 5 3 8 8 7z"/><path d="M12 13c0-3.5 2.5-6 7-6 0 4.5-2.5 7-7 6z"/><path d="M7 21h10"/></svg></span>Stock</button>
+  <button onclick="tab('inv',this)"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6"/><path d="M9 16h6"/></svg></span>Inventario</button>
+</nav>
+{% endblock %}
+
+{% block scripts %}
+<script>window.DATOS = {{ datos_json | safe }};</script>
+<script src="/static/app.js"></script>
+{% endblock %}

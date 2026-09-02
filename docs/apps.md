@@ -1,6 +1,7 @@
 # Aplicaciones internas — detalle
 
 Índice: [Recepción de Supermercados](#recepción-de-supermercados) ·
+[Control de Stock](#control-de-stock) ·
 [Panel de administración](#panel-de-administración-admin) ·
 [Portal del repartidor](#portal-del-repartidor-repartidor) ·
 [Avisos Web Push compartidos](#avisos-web-push-compartidos) ·
@@ -46,6 +47,44 @@ Integración: lecturas por el stock-proxy (`/v1/entregas`, `/v1/sucursales`,
 `/v1/catalogo`); las escrituras a Odoo esperan el router `supermercado` del
 order-api — ver [`odoo-integration.md`](odoo-integration.md). Autenticación
 propia por empleada (PBKDF2 + sesiones en SQLite, altas por consola).
+
+---
+
+## Control de Stock
+
+**Vive en:** `apps/control-stock/` (este repo); irá a
+inventario.plantaspanama.com · **Estado:** fase 1 construida (falta la
+validación contra la instancia de pruebas y el deploy) · **Usuarios:** el
+encargado de stock (stockmaster) más Génesis y Rubén · **Tecnología:**
+Python (FastAPI + Jinja2 + SQLite), fpdf2 (PDF) y openpyxl (Excel); el
+prototipo HTML aprobado es la referencia visual y su CSS/JS vive casi
+intacto en `app/static/`.
+
+Que el vivero no se quede sin stock sin darse cuenta. Tres pestañas:
+
+- **Inicio**: score de salud 0–100 (100 − 6 por producto crítico − 2 por
+  bajo − 15 con el conteo quincenal vencido, >15 días), totales (unidades,
+  con stock, agotadas) y tarjetas por categoría.
+- **Stock**: buscador y filtros por categoría, lista de menor a mayor
+  cantidad. Tocar un producto abre el modal "Modificar stock" (−/+ y
+  cantidad a mano); guardar aplica el ajuste **absoluto** en Odoo vía
+  order-api. El ajuste viaja con la cantidad `esperada` que el empleado veía:
+  si Odoo cambió en el medio, vuelve `conflicto` con el valor fresco y nada
+  se escribe.
+- **Inventario**: hoja de conteo en PDF (solo revisión), ciclo quincenal con
+  Excel (plantilla protegida → contar → importar → pantalla de diferencias →
+  confirmar) e historial de conteos.
+
+Alertas: campanita con contador; se crea una por producto crítico
+(disponible < umbral, 3 por defecto y configurable desde el panel), lleva al
+producto, se marca atendida y se cierra sola si el stock se recupera.
+Historial en SQLite. El universo de productos es solo `PL-` (los insumos no
+llevan ese código y quedan fuera).
+
+Integración: lecturas por el stock-proxy (`/v1/inventario`); la única
+escritura es `POST /api/stock/ajustes` del order-api — ver
+[`odoo-integration.md`](odoo-integration.md). Autenticación propia por
+empleada, idéntica a Recepción.
 
 ---
 

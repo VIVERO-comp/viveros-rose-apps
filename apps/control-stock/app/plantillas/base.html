@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>{% block titulo %}Control de Stock — Plantas Panamá{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<div class="phone">
+  {% block intro %}{% endblock %}
+  <div class="stars">
+    <span style="top:8%;left:12%">✦</span><span style="top:5%;left:78%">✦</span>
+    <span style="top:15%;left:55%">✦</span><span style="top:24%;left:88%">✦</span>
+    <span style="top:30%;left:6%">✦</span><span style="top:44%;left:92%">✦</span>
+  </div>
+  {% block contenido %}{% endblock %}
+</div>
+{% block scripts %}{% endblock %}
+</body>
+</html>
