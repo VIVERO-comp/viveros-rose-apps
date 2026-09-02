@@ -112,7 +112,8 @@ def _resumen_categorias(inventario, umbral):
         })
         resumen["productos"] += 1
         resumen["unidades"] += max(0, producto["disponible"])
-        if calculos.estado(producto["disponible"], umbral) == "critico":
+        if (calculos.es_negativo(producto)
+                or calculos.estado(producto["disponible"], umbral) == "critico"):
             resumen["criticos"] += 1
     return sorted(porcategoria.values(), key=lambda c: c["nombre"])
 

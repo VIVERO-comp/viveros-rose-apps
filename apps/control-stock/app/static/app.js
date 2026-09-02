@@ -8,10 +8,12 @@ let catActiva = "Todas";
 let editando = null;
 let guardando = false;
 
-function estado(q) {
-  if (q <= 0) return ["Agotada", "b-agotado"];
-  if (q < UMBRAL) return ["Crítico", "b-critico"];
-  if (q < UMBRAL * 2) return ["Bajo", "b-bajo"];
+function estado(p) {
+  // Físico negativo: error de datos a corregir ya — pesa más que todo.
+  if (p.f < 0) return ["Negativo", "b-critico"];
+  if (p.q <= 0) return ["Agotada", "b-agotado"];
+  if (p.q < UMBRAL) return ["Crítico", "b-critico"];
+  if (p.q < UMBRAL * 2) return ["Bajo", "b-bajo"];
   return ["OK", "b-ok"];
 }
 
@@ -22,17 +24,20 @@ function normalizar(texto) {
 function pintar() {
   const t = normalizar(document.getElementById("busca").value);
   const l = document.getElementById("lista");
+  // Lo accionable primero: negativos (error de datos), luego criticos y
+  // bajos de menor a mayor, y las agotadas al final (con 100+ en cero,
+  // enterraban a las que se estan acabando).
+  const rango = p => (p.f < 0 ? 0 : (p.q > 0 ? 1 : 2));
   l.innerHTML = plantas
     .filter(p => (catActiva === "Todas" || p.c === catActiva) && normalizar(p.n).includes(t))
-    // Lo accionable primero: criticos y bajos de menor a mayor; las agotadas
-    // al final (con 100+ en cero, enterraban a las que se estan acabando).
-    .sort((a, b) => (a.q <= 0) - (b.q <= 0) || a.q - b.q)
+    .sort((a, b) => rango(a) - rango(b) || a.q - b.q)
     .map(p => {
-      const [et, cl] = estado(p.q);
-      return `<div class="planta ${p.q <= 0 ? "agotada" : ""}" id="planta-${p.sku}" data-planta="${p.sku}">
+      const [et, cl] = estado(p);
+      const negativo = p.f < 0;
+      return `<div class="planta ${!negativo && p.q <= 0 ? "agotada" : ""}" id="planta-${p.sku}" data-planta="${p.sku}">
         <div class="foto">${p.e}</div>
         <div class="info"><b>${p.n}</b><span>${p.c}</span></div>
-        <div class="qty"><b>${p.q}</b><span class="badge ${cl}">${et}</span></div>
+        <div class="qty"><b>${negativo ? p.f : p.q}</b><span class="badge ${cl}">${et}</span></div>
       </div>`;
     }).join("") || '<p style="color:var(--texto-suave);font-size:13px;text-align:center;padding:30px 0">Sin resultados</p>';
 }

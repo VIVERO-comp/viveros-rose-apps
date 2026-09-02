@@ -66,14 +66,24 @@ def estado(disponible, umbral):
     return "ok"
 
 
+def es_negativo(producto):
+    """Físico negativo en Odoo: se vendió sin existencias registradas. Es un
+    error de datos que el encargado debe corregir, así que cuenta como
+    crítico (no como agotada) en score, alertas y tarjetas."""
+    return producto.get("fisico", producto["disponible"]) < 0
+
+
 def clasificar(inventario, umbral):
     """Cuenta el inventario por estado. Devuelve un dict con los totales que
     usan el score y la pantalla de inicio."""
     cuentas = {"agotadas": 0, "criticos": 0, "bajos": 0, "ok": 0}
     unidades = 0
     for producto in inventario:
-        clave = {"agotada": "agotadas", "critico": "criticos",
-                 "bajo": "bajos", "ok": "ok"}[estado(producto["disponible"], umbral)]
+        if es_negativo(producto):
+            clave = "criticos"
+        else:
+            clave = {"agotada": "agotadas", "critico": "criticos",
+                     "bajo": "bajos", "ok": "ok"}[estado(producto["disponible"], umbral)]
         cuentas[clave] += 1
         unidades += max(0, producto["disponible"])
     cuentas["unidades"] = unidades

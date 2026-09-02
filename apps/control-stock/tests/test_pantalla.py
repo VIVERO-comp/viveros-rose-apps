@@ -56,6 +56,25 @@ def test_umbral_invalido_se_ignora(cliente, con_inventario):
     assert datos.umbral() == 3
 
 
+def test_fisico_negativo_alerta_con_el_numero_real(cliente, con_inventario):
+    # Ixora queda en negativo: -2 físicas (el disponible el proxy lo da en 0).
+    con_inventario[2]["fisico"] = -2
+    con_inventario[2]["disponible"] = 0
+    r = cliente.get("/")
+    alertas = datos.alertas_pendientes()
+    skus = {a["sku"]: a for a in alertas}
+    assert "PL-IXORA" in skus
+    assert skus["PL-IXORA"]["cantidad"] == -2
+    assert "Stock negativo" in r.text and "-2" in r.text
+    # Y en el score cuenta como crítico (Romero crítico + Ixora negativa).
+    assert "2 críticas" in r.text
+    # Al corregirse (conteo real), la alerta se cierra sola.
+    con_inventario[2]["fisico"] = 5
+    con_inventario[2]["disponible"] = 5
+    cliente.get("/")
+    assert "PL-IXORA" not in {a["sku"] for a in datos.alertas_pendientes()}
+
+
 def test_revision_hecha_queda_en_el_historial(cliente, con_inventario):
     cliente.post("/revisiones", follow_redirects=False)
     conteos = datos.conteos_recientes()

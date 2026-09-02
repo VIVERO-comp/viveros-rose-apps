@@ -166,7 +166,7 @@
       {% for alerta in alertas %}
       <div class="alerta-item" data-ir="{{ alerta.sku }}">
         <span class="pico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
-        <p>{{ 'Queda' if alerta.cantidad == 1 else 'Quedan' }} <b>{{ alerta.cantidad }} de {{ alerta.nombre }}</b> — revisa si hay más en el vivero y ajusta, o repón.
+        <p>{% if alerta.cantidad < 0 %}Stock negativo (<b>{{ alerta.cantidad }}</b>) de <b>{{ alerta.nombre }}</b> — se vendió sin existencias registradas; cuenta lo que hay y ajusta.{% else %}{{ 'Queda' if alerta.cantidad == 1 else 'Quedan' }} <b>{{ alerta.cantidad }} de {{ alerta.nombre }}</b> — revisa si hay más en el vivero y ajusta, o repón.{% endif %}
           <span class="ir">Toca para ir al producto →</span></p>
         <form method="post" action="/alertas/atender"><input type="hidden" name="sku" value="{{ alerta.sku }}"><button type="submit">Atendida</button></form>
       </div>

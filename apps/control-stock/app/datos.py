@@ -236,22 +236,26 @@ def fijar_umbral(valor):
 def refrescar_alertas(inventario, umbral_actual):
     """Cuadra las alertas con el inventario: crea una pendiente por producto
     crítico nuevo y cierra como 'auto' las de productos que se recuperaron.
-    Se llama en cada carga de la pantalla."""
+    Un físico NEGATIVO (venta sin existencias registradas) también alerta:
+    es justo lo que el encargado debe corregir. Se llama en cada carga."""
     criticos = {p["sku"]: p for p in inventario
-                if 0 < p["disponible"] < umbral_actual}
+                if 0 < p["disponible"] < umbral_actual or p["fisico"] < 0}
     with _db() as con:
         pendientes = {f["sku"]: f for f in con.execute(
             "SELECT n, sku FROM alertas WHERE atendida_en IS NULL")}
         for sku, producto in criticos.items():
+            # En una alerta por negativo, la cantidad ES el físico negativo:
+            # eso es lo que hay que corregir (y lo que ve el empleado).
+            cantidad = producto["fisico"] if producto["fisico"] < 0 else producto["disponible"]
             if sku not in pendientes:
                 con.execute(
                     "INSERT INTO alertas (sku, nombre, cantidad, creada_en) VALUES (?,?,?,?)",
-                    (sku, producto["nombre"], producto["disponible"], ahora_iso()),
+                    (sku, producto["nombre"], cantidad, ahora_iso()),
                 )
             else:
                 # La cantidad de la alerta sigue al inventario.
                 con.execute("UPDATE alertas SET cantidad=? WHERE n=?",
-                            (producto["disponible"], pendientes[sku]["n"]))
+                            (cantidad, pendientes[sku]["n"]))
         for sku, fila in pendientes.items():
             if sku not in criticos:
                 con.execute(

@@ -38,6 +38,20 @@ def test_clasificar_cuenta_todo():
     assert cuentas["con_stock"] == 3
 
 
+def test_fisico_negativo_cuenta_como_critico():
+    # Se vendió sin existencias: disponible sale 0 (el proxy lo recorta) pero
+    # el físico viene negativo tal cual. No es "agotada": es un error de
+    # datos que resta en el score como crítico.
+    inventario = [
+        {"disponible": 0, "fisico": -2},
+        {"disponible": 0, "fisico": 0},
+    ]
+    cuentas = calculos.clasificar(inventario, 3)
+    assert cuentas["criticos"] == 1
+    assert cuentas["agotadas"] == 1
+    assert cuentas["unidades"] == 0
+
+
 def test_emoji_por_palabra_clave():
     assert calculos.emoji_de("Cactus San Pedro") == "🌵"
     assert calculos.emoji_de("Menta") == "🌿"
