@@ -52,10 +52,9 @@ body {
 .encabezado h1 { font-size: 22px; font-weight: 800; margin: 0; line-height: 1.15; }
 .encabezado .sub { font-size: 15px; color: var(--apagado); margin-top: 2px; }
 
-.saludo { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 14px; }
+.saludo { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
 .saludo .marca { font-size: 12px; font-weight: 800; letter-spacing: 1.5px; color: var(--cafe); }
 .saludo h1 { font-size: 24px; font-weight: 800; margin: 2px 0 0; }
-.saludo img { display: block; border-radius: 10px; box-shadow: 0 3px 0 rgba(90, 70, 52, .2); }
 
 /* ---------- Buscador ---------- */
 .buscador { position: relative; margin-bottom: 12px; }
@@ -338,6 +337,7 @@ body {
 .error-campo { font-size: 14px; font-weight: 700; color: var(--rojo); }
 
 .salir {
-  border: none; background: none; color: var(--apagado); font-size: 12px; font-weight: 700;
-  cursor: pointer; font-family: inherit; padding: 2px 0 0; display: block; margin-left: auto;
+  border: 2px solid var(--linea); background: var(--tarjeta); color: var(--apagado);
+  font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit;
+  padding: 8px 14px; border-radius: 12px; display: block; margin-left: auto;
 }
