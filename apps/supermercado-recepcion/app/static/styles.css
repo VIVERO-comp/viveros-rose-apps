@@ -337,7 +337,8 @@ body {
 .error-campo { font-size: 14px; font-weight: 700; color: var(--rojo); }
 
 .salir {
-  border: 2px solid var(--linea); background: var(--tarjeta); color: var(--apagado);
-  font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit;
-  padding: 8px 14px; border-radius: 12px; display: block; margin-left: auto;
+  border: none; background: none; color: var(--apagado);
+  font-size: 15px; font-weight: 700; cursor: pointer; font-family: inherit;
+  padding: 4px 0; text-decoration: underline; text-underline-offset: 3px;
+  display: block; margin-left: auto;
 }
