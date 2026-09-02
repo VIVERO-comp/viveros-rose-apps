@@ -13,11 +13,13 @@ def test_ajuste_rapido_viaja_al_order_api(cliente, con_inventario, ajustes_regis
 
 def test_ajuste_aplicado_cierra_la_alerta_a_nombre_de_quien_ajusto(
         cliente, con_inventario, ajustes_registrados):
-    cliente.get("/")  # crea la alerta del Romero
+    cliente.get("/")  # crea las alertas (Romero e Ixora)
     cliente.post("/ajustar", json={"sku": "PL-ROMERO", "cantidad": 7, "esperada": 2})
-    assert datos.alertas_pendientes() == []
+    # Se cierra la del Romero (la ajustada); las demás siguen.
+    assert "PL-ROMERO" not in {a["sku"] for a in datos.alertas_pendientes()}
     with datos._db() as con:
-        fila = con.execute("SELECT atendida_por FROM alertas").fetchone()
+        fila = con.execute(
+            "SELECT atendida_por FROM alertas WHERE sku='PL-ROMERO'").fetchone()
     assert fila["atendida_por"] == "genesis"
 
 
@@ -33,7 +35,8 @@ def test_conflicto_pasa_tal_cual_y_no_toca_alertas(cliente, con_inventario, monk
     r = cliente.post("/ajustar", json={"sku": "PL-ROMERO", "cantidad": 7, "esperada": 2})
     assert r.json() == {"sku": "PL-ROMERO", "cantidad": 7,
                         "resultado": "conflicto", "anterior": 5}
-    assert len(datos.alertas_pendientes()) == 1  # la alerta sigue pendiente
+    # No se atendió nada: las alertas (Romero e Ixora) siguen pendientes.
+    assert "PL-ROMERO" in {a["sku"] for a in datos.alertas_pendientes()}
 
 
 def test_payload_invalido_es_400(cliente, con_inventario, ajustes_registrados):

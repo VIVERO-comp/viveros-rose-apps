@@ -12,28 +12,29 @@ def test_home_muestra_score_y_totales(cliente, con_inventario):
     assert ">47</b>" in r.text
 
 
-def test_alerta_se_crea_para_el_critico(cliente, con_inventario):
+def test_alerta_se_crea_para_criticos_y_bajos(cliente, con_inventario):
+    # Alerta desde 'bajo' (< 2×umbral): Romero (2, crítico) e Ixora (4, bajo).
     cliente.get("/")
     pendientes = datos.alertas_pendientes()
-    assert [a["sku"] for a in pendientes] == ["PL-ROMERO"]
-    assert pendientes[0]["cantidad"] == 2
+    assert [a["sku"] for a in pendientes] == ["PL-ROMERO", "PL-IXORA"]
+    assert pendientes[0]["cantidad"] == 2 and pendientes[1]["cantidad"] == 4
 
 
 def test_alerta_atendida_y_reabierta_no_se_duplica(cliente, con_inventario):
     cliente.get("/")
     cliente.post("/alertas/atender", data={"sku": "PL-ROMERO"}, follow_redirects=False)
-    assert datos.alertas_pendientes() == []
-    # Sigue crítico: la próxima carga abre una alerta nueva (historial de 2).
+    assert [a["sku"] for a in datos.alertas_pendientes()] == ["PL-IXORA"]
+    # Sigue bajo: la próxima carga reabre Romero una sola vez (no duplica).
     cliente.get("/")
-    assert len(datos.alertas_pendientes()) == 1
-    with datos._db() as con:
-        total = con.execute("SELECT COUNT(*) c FROM alertas").fetchone()["c"]
-    assert total == 2
+    pendientes = [a["sku"] for a in datos.alertas_pendientes()]
+    assert pendientes.count("PL-ROMERO") == 1
+    assert set(pendientes) == {"PL-ROMERO", "PL-IXORA"}
 
 
 def test_alerta_se_cierra_sola_si_el_stock_se_recupera(cliente, con_inventario):
     cliente.get("/")
-    con_inventario[0]["disponible"] = 9  # Romero repuesto
+    con_inventario[0]["disponible"] = 9  # Romero repuesto (>= 2×umbral)
+    con_inventario[2]["disponible"] = 9  # Ixora repuesta también
     cliente.get("/")
     assert datos.alertas_pendientes() == []
     with datos._db() as con:
@@ -68,9 +69,9 @@ def test_fisico_negativo_alerta_con_el_numero_real(cliente, con_inventario):
     assert "Stock negativo" in r.text and "-2" in r.text
     # Y en el score cuenta como crítico (Romero crítico + Ixora negativa).
     assert "2 críticas" in r.text
-    # Al corregirse (conteo real), la alerta se cierra sola.
-    con_inventario[2]["fisico"] = 5
-    con_inventario[2]["disponible"] = 5
+    # Al corregirse (conteo real, por encima de 2×umbral), se cierra sola.
+    con_inventario[2]["fisico"] = 9
+    con_inventario[2]["disponible"] = 9
     cliente.get("/")
     assert "PL-IXORA" not in {a["sku"] for a in datos.alertas_pendientes()}
 

@@ -76,13 +76,14 @@ def obtener_inventario(refrescar=False):
     productos: [{sku, nombre, categoria, disponible, fisico}] con nombres en
     español; actualizado_en: epoch de cuándo se leyó del proxy.
     """
+    # Es una herramienta interna de una o dos personas: SIEMPRE se lee fresco
+    # de Odoo (refresh=true, rompiendo tambien el cache del proxy). Asi el
+    # numero en pantalla es el real y el candado del ajuste nunca choca por
+    # comparar contra un valor viejo. El cache local solo sirve de respaldo
+    # si el proxy se cae.
     entrada = _cache_proxy.get("inventario")
-    if entrada and not refrescar and time.time() - entrada["en"] < TTL_INVENTARIO:
-        return entrada["valor"], entrada["en"]
     try:
-        # refrescar rompe tambien el cache DEL PROXY (90 s): sin eso, justo
-        # despues de un ajuste la pantalla mostraria el numero viejo.
-        crudo = _pedir_al_proxy("inventario?refresh=true" if refrescar else "inventario")
+        crudo = _pedir_al_proxy("inventario?refresh=true")
     except Exception:
         if entrada:
             # Proxy caído: el último valor bueno vale más que un error.
@@ -237,9 +238,11 @@ def refrescar_alertas(inventario, umbral_actual):
     """Cuadra las alertas con el inventario: crea una pendiente por producto
     crítico nuevo y cierra como 'auto' las de productos que se recuperaron.
     Un físico NEGATIVO (venta sin existencias registradas) también alerta:
-    es justo lo que el encargado debe corregir. Se llama en cada carga."""
+    es justo lo que el encargado debe corregir. Se llama en cada carga.
+    Alerta desde que un producto entra en 'bajo' (disponible < 2×umbral),
+    no solo en crítico, para avisar con más anticipación."""
     criticos = {p["sku"]: p for p in inventario
-                if 0 < p["disponible"] < umbral_actual or p["fisico"] < 0}
+                if 0 < p["disponible"] < umbral_actual * 2 or p["fisico"] < 0}
     with _db() as con:
         pendientes = {f["sku"]: f for f in con.execute(
             "SELECT n, sku FROM alertas WHERE atendida_en IS NULL")}

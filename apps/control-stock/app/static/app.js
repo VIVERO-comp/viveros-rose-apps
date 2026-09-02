@@ -24,13 +24,13 @@ function normalizar(texto) {
 function pintar() {
   const t = normalizar(document.getElementById("busca").value);
   const l = document.getElementById("lista");
-  // Lo accionable primero: negativos (error de datos), luego criticos y
-  // bajos de menor a mayor, y las agotadas al final (con 100+ en cero,
-  // enterraban a las que se estan acabando).
-  const rango = p => (p.f < 0 ? 0 : (p.q > 0 ? 1 : 2));
+  // De menor a mayor cantidad, estricto: los negativos (por su fisico real)
+  // primero, luego las agotadas en 0, luego 1, 2, 3... Asi lo mas urgente
+  // siempre queda arriba.
+  const cantidad = p => (p.f < 0 ? p.f : p.q);
   l.innerHTML = plantas
     .filter(p => (catActiva === "Todas" || p.c === catActiva) && normalizar(p.n).includes(t))
-    .sort((a, b) => rango(a) - rango(b) || a.q - b.q)
+    .sort((a, b) => cantidad(a) - cantidad(b))
     .map(p => {
       const [et, cl] = estado(p);
       const negativo = p.f < 0;
