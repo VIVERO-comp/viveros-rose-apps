@@ -86,6 +86,7 @@
     <div class="buscador"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9aa3bd" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg><input id="busca" placeholder="Buscar planta…" oninput="filtrar()"></div>
     <div class="filtros" id="filtros">
       <button class="chip on" onclick="chip(this,'Todas')">Todas</button>
+      <button class="chip chip-alerta" onclick="chip(this,'__alerta__')">Solo con alerta</button>
       {% for cat in categorias %}
       <button class="chip" onclick="chip(this,{{ cat.nombre | tojson }})">{{ cat.nombre }}</button>
       {% endfor %}

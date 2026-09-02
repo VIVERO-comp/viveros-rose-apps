@@ -28,8 +28,15 @@ function pintar() {
   // primero, luego las agotadas en 0, luego 1, 2, 3... Asi lo mas urgente
   // siempre queda arriba.
   const cantidad = p => (p.f < 0 ? p.f : p.q);
+  // "Solo con alerta": negativos, criticos y bajos (lo mismo que alerta la
+  // campanita); deja fuera las agotadas en 0 y las que estan OK.
+  const esAlerta = p => p.f < 0 || (p.q > 0 && p.q < UMBRAL * 2);
+  const pasaCategoria = p =>
+    catActiva === "Todas" ? true :
+    catActiva === "__alerta__" ? esAlerta(p) :
+    p.c === catActiva;
   l.innerHTML = plantas
-    .filter(p => (catActiva === "Todas" || p.c === catActiva) && normalizar(p.n).includes(t))
+    .filter(p => pasaCategoria(p) && normalizar(p.n).includes(t))
     .sort((a, b) => cantidad(a) - cantidad(b))
     .map(p => {
       const [et, cl] = estado(p);
