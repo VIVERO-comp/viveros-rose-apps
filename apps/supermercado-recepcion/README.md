@@ -61,6 +61,12 @@ sesión salvo `/login` y `/static`. Altas y mantenimiento por consola:
 `python -m app.usuarias crear|clave|desactivar|lista`. Las contraseñas se
 entregan en persona y no se apuntan en ningún sistema.
 
+**Opción de fase 2 (decidido el 03/09/2026, no construir todavía):** alta por
+enlace con clave de un solo uso, validado contra el contacto de Odoo
+SUPERMERCADO ADMIN (ref `SUPER-ADMIN`, id 66). Abraham dio por cubierto el
+acceso de Génesis con el usuario/contraseña por consola; el enlace queda
+anotado solo como mejora futura.
+
 ## Integraciones
 
 Lecturas por el stock-proxy (`/v1/entregas`, `/v1/sucursales`,
