@@ -15,7 +15,8 @@ RESPUESTA_SUCURSALES = {
 }
 RESPUESTA_ENTREGAS = {
     "orders": [{
-        "id": 55, "name": "S00901", "customer_ref": "FAC-901", "date": "2026-09-01",
+        "id": 55, "name": "S00901", "customer_ref": "FAC-901",
+        "factura_no": "922", "date": "2026-09-01",
         "client": {"ref": "SUPER-EXTRA", "name": "Super Extra"},
         "branch": {"ref": "CL-0001", "name": "Super Extra Arraiján"},
         "lines": [
@@ -109,6 +110,7 @@ def test_con_proxy_llegan_pedidos_reales(cliente, proxy_configurado):
     assert len(ordenes) == 1
     orden = ordenes[0]
     assert orden["pedido"] == "S00901" and orden["refSuper"] == "FAC-901"
+    assert orden["facturaNo"] == "922"
     # La línea con cantidad 0 se descarta; la otra llega mapeada.
     assert orden["lineas"] == [
         {"sku": "PL-MENTA-01", "nombre": "MENTA", "precio": 3.0, "enviado": 4}

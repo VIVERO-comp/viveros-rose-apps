@@ -16,7 +16,8 @@ def _linea(sku, enviado):
 
 _ORDENES = [
     {
-        "pedido": "S00774", "refSuper": "FAC-774", "odooId": 10774,
+        "pedido": "S00774", "refSuper": "FAC-774", "facturaNo": "881",
+        "odooId": 10774,
         "cliente": "Super Xtra", "sucursal": "Super Xtra Villalobos",
         "sucursalRef": "CL-0032", "fecha": "2026-06-18",
         "lineas": [_linea("VR-001", 2), _linea("VR-002", 3), _linea("VR-003", 2),

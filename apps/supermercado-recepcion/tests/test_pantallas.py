@@ -16,6 +16,14 @@ def test_entregas_muestra_los_tres_pedidos(cliente, con_ordenes):
     assert "Super Xtra · Villalobos" in r.text
 
 
+def test_tarjeta_muestra_factura_y_pedido(cliente, con_ordenes):
+    # Con numero de talonario, la tarjeta trae los dos numeros; sin el,
+    # solo el pedido, como siempre.
+    texto = cliente.get("/").text
+    assert "Factura 881 · Pedido 00774" in texto
+    assert "Factura" not in texto.split("Pedido 00781")[0].rsplit("tarjeta-entrega", 1)[-1]
+
+
 def test_orden_por_fecha_mas_reciente_primero(cliente, con_ordenes):
     texto = cliente.get("/").text
     assert texto.index("Pedido 00774") < texto.index("Pedido 00770")

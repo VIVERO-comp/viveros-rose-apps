@@ -32,10 +32,12 @@
     <div class="lista" id="lista-entregas">
       {% for orden in pendientes %}
         <a class="tarjeta-entrega" href="/orden/{{ orden.pedido }}"
-           data-buscar="{{ orden.pedido | lower }} {{ (orden.refSuper or '') | lower }} {{ orden.cliente | lower }} {{ orden.sucursal | lower }}">
+           data-buscar="{{ orden.pedido | lower }} {{ (orden.facturaNo or '') | lower }} {{ (orden.refSuper or '') | lower }} {{ orden.cliente | lower }} {{ orden.sucursal | lower }}">
           <div style="flex:1; min-width:0">
             <div>
-              <span class="factura">Pedido {{ orden.pedido | numero_pedido }}</span>
+              {# Los dos numeros: el de la factura del talonario (el que
+                 Genesis tiene en la mano) y el del pedido de Odoo. #}
+              <span class="factura">{% if orden.facturaNo %}Factura {{ orden.facturaNo }} · {% endif %}Pedido {{ orden.pedido | numero_pedido }}</span>
               <span class="fecha">{{ orden.fecha | fecha_bonita }}</span>
             </div>
             {% if orden.refSuper %}<div class="detalle">Ref. súper: {{ orden.refSuper }}</div>{% endif %}

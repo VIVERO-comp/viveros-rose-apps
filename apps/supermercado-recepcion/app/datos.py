@@ -163,6 +163,7 @@ def obtener_ordenes():
         ordenes.append({
             "pedido": pedido["name"],
             "refSuper": pedido.get("customer_ref"),
+            "facturaNo": pedido.get("factura_no"),
             "odooId": pedido["id"],
             "cliente": pedido["client"]["name"],
             "sucursal": pedido["branch"]["name"],
@@ -375,6 +376,7 @@ def ordenes_pendientes(busqueda=""):
         pendientes = [
             o for o in pendientes
             if q in _normalizar(o["pedido"]) or q in _normalizar(o["refSuper"] or "")
+            or q in _normalizar(o.get("facturaNo") or "")
             or q in _normalizar(o["cliente"]) or q in _normalizar(o["sucursal"])
         ]
     return sorted(pendientes, key=lambda o: o["fecha"], reverse=True)
