@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "iconos.html" import icono %}
-{% block titulo %}Pedido {{ orden.pedido | numero_pedido }} · Recepción{% endblock %}
+{% block titulo %}{% if orden.facturaNo %}Factura {{ orden.facturaNo }} · {% endif %}Pedido {{ orden.pedido | numero_pedido }} · Recepción{% endblock %}
 
 {% block contenido %}
 <div class="encabezado" style="margin-bottom:12px">
@@ -13,7 +13,7 @@
 
 <div class="franja-factura">
   <div>
-    <span class="numero">Pedido {{ orden.pedido | numero_pedido }}</span>
+    <span class="numero">{% if orden.facturaNo %}Factura {{ orden.facturaNo }} · {% endif %}Pedido {{ orden.pedido | numero_pedido }}</span>
     <span class="fecha">{{ orden.fecha | fecha_bonita }}</span>
     {% if orden.refSuper %}<div class="ref-super">Ref. súper: {{ orden.refSuper }}</div>{% endif %}
   </div>

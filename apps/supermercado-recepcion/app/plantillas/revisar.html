@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% from "iconos.html" import icono %}
-{% block titulo %}Confirmar · Pedido {{ orden.pedido | numero_pedido }} · Recepción{% endblock %}
+{% block titulo %}Confirmar · {% if orden.facturaNo %}Factura {{ orden.facturaNo }} · {% endif %}Pedido {{ orden.pedido | numero_pedido }} · Recepción{% endblock %}
 
 {% block contenido %}
 <div class="encabezado">
   <button class="boton-volver" type="submit" form="form-volver" aria-label="Volver">{{ icono("volver", 22, 2.5) }}</button>
   <div style="flex:1; min-width:0">
     <h1>{{ "Revisa las diferencias" if r.dif else "Todo aceptado" }}</h1>
-    <div class="sub">{{ orden.cliente }} · {{ orden.sucursal | quitar_prefijo(orden.cliente) }} · Pedido {{ orden.pedido | numero_pedido }}</div>
+    <div class="sub">{{ orden.cliente }} · {{ orden.sucursal | quitar_prefijo(orden.cliente) }} · {% if orden.facturaNo %}Factura {{ orden.facturaNo }} · {% endif %}Pedido {{ orden.pedido | numero_pedido }}</div>
   </div>
 </div>
 

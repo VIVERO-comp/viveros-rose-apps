@@ -24,6 +24,12 @@ def test_tarjeta_muestra_factura_y_pedido(cliente, con_ordenes):
     assert "Factura" not in texto.split("Pedido 00781")[0].rsplit("tarjeta-entrega", 1)[-1]
 
 
+def test_orden_y_revisar_muestran_factura_y_pedido(cliente, con_ordenes):
+    assert "Factura 881 · Pedido 00774" in cliente.get("/orden/S00774").text
+    r = cliente.post("/orden/S00774/revisar", data={})
+    assert "Factura 881 · Pedido 00774" in r.text
+
+
 def test_orden_por_fecha_mas_reciente_primero(cliente, con_ordenes):
     texto = cliente.get("/").text
     assert texto.index("Pedido 00774") < texto.index("Pedido 00770")
