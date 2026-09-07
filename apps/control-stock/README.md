@@ -94,9 +94,17 @@ fallos intermitentes en el checkout). La instancia de pruebas se llama
 `control-stock-pruebas` y va en la red de pruebas.
 
 ```bash
+./scripts/actualizar_fotos.sh   # refresca la copia del mapa de fotos del catálogo
 rsync -a --exclude .venv --exclude datos . hermes@143.244.167.222:control-stock/
 ssh hermes@143.244.167.222 'cd control-stock && docker compose up -d --build'
 ```
+
+Las fotos de las tarjetas salen de Cloudinary con el mapa sku → hash de
+`app/datos_fotos/fotos.json` (copia del `src/data/fotos.json` de
+viveros-rose-frontend): una foto nueva del catálogo aparece en inventario
+recién en el siguiente deploy. El precio "app" (20% de descuento sobre el
+`list_price` que trae `/v1/inventario`) se calcula en el servidor
+(`calculos.precio_app`).
 
 Rollback: `docker compose down` (la base y los PDFs quedan en `./datos`).
 **Ningún deploy sin el OK explícito del dueño.**

@@ -21,6 +21,14 @@ function normalizar(texto) {
   return (texto || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
+// Los dos precios juntos: el online de Odoo tachado y el de la app (20% off)
+// resaltado. Vienen ya formateados del servidor (p.po y p.p).
+function lineaPrecio(p) {
+  return p.p
+    ? `<s>${p.po}</s> <b>${p.p}</b> <em>20% off en app</em>`
+    : "Precio pendiente";
+}
+
 function pintar() {
   const t = normalizar(document.getElementById("busca").value);
   const l = document.getElementById("lista");
@@ -41,9 +49,14 @@ function pintar() {
     .map(p => {
       const [et, cl] = estado(p);
       const negativo = p.f < 0;
+      // La foto de Cloudinary se pinta ENCIMA del emoji: si no hay foto (o
+      // no carga y el onerror la quita), el emoji de siempre queda de
+      // placeholder y el layout no se mueve.
+      const foto = p.img ? `<img src="${p.img}" alt="" loading="lazy" onerror="this.remove()">` : "";
+      const precio = lineaPrecio(p);
       return `<div class="planta ${!negativo && p.q <= 0 ? "agotada" : ""}" id="planta-${p.sku}" data-planta="${p.sku}">
-        <div class="foto">${p.e}</div>
-        <div class="info"><b>${p.n}</b><span>${p.c}</span></div>
+        <div class="foto">${p.e}${foto}</div>
+        <div class="info"><b>${p.n}</b><span>${p.c}</span><span class="precio">${precio}</span></div>
         <div class="qty"><b>${negativo ? p.f : p.q}</b><span class="badge ${cl}">${et}</span></div>
       </div>`;
     }).join("") || '<p style="color:var(--texto-suave);font-size:13px;text-align:center;padding:30px 0">Sin resultados</p>';
@@ -98,6 +111,16 @@ function abrirEditar(sku) {
   if (!p) return;
   editando = p;
   document.getElementById("edit-nombre").textContent = p.n;
+  const foto = document.getElementById("edit-foto");
+  foto.textContent = p.e;
+  if (p.img) {
+    const img = document.createElement("img");
+    img.src = p.img;
+    img.alt = "";
+    img.onerror = () => img.remove();
+    foto.appendChild(img);
+  }
+  document.getElementById("edit-precio").innerHTML = lineaPrecio(p);
   // El conteo y el ajuste trabajan sobre lo FISICO (es lo que Odoo fija con
   // el ajuste de inventario); el disponible se muestra aparte porque es lo
   // que ve la tienda.
@@ -164,6 +187,14 @@ async function guardarStock() {
       mostrarErrorEdicion("Este producto ya no existe en Odoo. Actualiza la lista.");
       return;
     }
+    if (r.resultado !== "aplicado" && r.resultado !== "sin_cambio") {
+      // odoo_error u otro resultado desconocido: NADA se escribió en Odoo.
+      // Nunca celebrar un ajuste que falló (pasó con un producto consumible:
+      // el toast decía "ajustado" y el stock seguía igual).
+      mostrarErrorEdicion("Odoo rechazó el ajuste" +
+        (r.detalle ? ": " + r.detalle : ". Intenta de nuevo o avisa al encargado."));
+      return;
+    }
     // aplicado o sin_cambio: recargar trae el stock fresco de Odoo y
     // recalcula score y alertas en el servidor.
     sessionStorage.setItem("toast-pendiente",
@@ -175,6 +206,44 @@ async function guardarStock() {
     guardando = false;
     boton.textContent = "Guardar en Odoo";
   }
+}
+
+/* ---------- modal agregar planta (sugerencia por WhatsApp) ---------- */
+// Solo un link wa.me con el mensaje pre-armado: no toca Odoo ni el servidor.
+const WHATSAPP_NEGOCIO = "50765673062";
+
+function abrirAgregar() {
+  document.getElementById("agregar-nombre").value = "";
+  document.getElementById("agregar-cantidad").value = "1";
+  document.getElementById("agregar-comentario").value = "";
+  mostrarErrorAgregar("");
+  document.getElementById("modal-agregar").classList.add("abierto");
+}
+function cerrarAgregar() {
+  document.getElementById("modal-agregar").classList.remove("abierto");
+}
+function mostrarErrorAgregar(mensaje) {
+  const el = document.getElementById("agregar-error");
+  el.textContent = mensaje;
+  el.classList.toggle("visible", Boolean(mensaje));
+}
+function enviarAgregar() {
+  const nombre = document.getElementById("agregar-nombre").value.trim();
+  const cantidad = parseInt(document.getElementById("agregar-cantidad").value);
+  const comentario = document.getElementById("agregar-comentario").value.trim();
+  if (!nombre) {
+    mostrarErrorAgregar("Escribe el nombre de la planta.");
+    return;
+  }
+  if (isNaN(cantidad) || cantidad < 1) {
+    mostrarErrorAgregar("Escribe una cantidad válida (1 o más).");
+    return;
+  }
+  let texto = `Nueva planta sugerida: ${nombre}, cantidad ${cantidad}.`;
+  if (comentario) texto += ` ${comentario}`;
+  window.open(`https://wa.me/${WHATSAPP_NEGOCIO}?text=${encodeURIComponent(texto)}`, "_blank");
+  cerrarAgregar();
+  toast("✓ Se abrió WhatsApp con la sugerencia");
 }
 
 /* ---------- animación de inicio (una vez por sesión) ---------- */
@@ -214,6 +283,9 @@ document.getElementById("panel").addEventListener("click", e => {
 });
 document.getElementById("modal-editar").addEventListener("click", e => {
   if (e.target.id === "modal-editar") cerrarEditar();
+});
+document.getElementById("modal-agregar").addEventListener("click", e => {
+  if (e.target.id === "modal-agregar") cerrarAgregar();
 });
 
 const toastPendiente = sessionStorage.getItem("toast-pendiente");

@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import calculos, conteos, datos, seguridad
+from . import calculos, conteos, datos, fotos, seguridad
 
 app = FastAPI(title="Control de Stock")
 
@@ -139,6 +139,13 @@ def inicio(request: Request, refrescar: int = 0):
             "sku": p["sku"], "n": p["nombre"], "c": p["categoria"],
             "q": p["disponible"], "f": p["fisico"],
             "e": calculos.emoji_de(p["nombre"]),
+            # Precios ya calculados y formateados en el servidor: po es el
+            # online de Odoo y p el de la app con descuento (null = precio
+            # pendiente en Odoo). img: foto de Cloudinary (null = sin foto,
+            # la tarjeta cae al emoji).
+            "po": calculos.precio_online(p.get("precio_centavos", 0)),
+            "p": calculos.precio_app(p.get("precio_centavos", 0)),
+            "img": fotos.url_foto(p["sku"]),
         }
         for p in inventario
     ]

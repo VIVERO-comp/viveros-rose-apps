@@ -66,3 +66,24 @@ def test_emoji_por_categoria():
     assert calculos.emoji_categoria("Interior") == "🪴"
     assert calculos.emoji_categoria("Exterior") == "🌳"
     assert calculos.emoji_categoria("Sin categoría") == calculos.EMOJI_DEFECTO
+
+
+def test_precio_app_descuenta_20_por_ciento():
+    assert calculos.precio_app(350) == "$2.80"
+    assert calculos.precio_app(1500) == "$12.00"
+    # Redondeo a centavos: 4.75 * 0.8 = 3.80 exacto; 6.49 * 0.8 = 5.192 -> 5.19.
+    assert calculos.precio_app(649) == "$5.19"
+
+
+def test_precio_app_sin_precio_en_odoo_es_none():
+    # 0 o un marcador menor a $1.00 no es un precio real (misma regla del
+    # catálogo): la pantalla muestra "Precio pendiente", nunca "$0.00".
+    assert calculos.precio_app(0) is None
+    assert calculos.precio_app(None) is None
+    assert calculos.precio_app(99) is None
+
+
+def test_precio_online_formatea_sin_descuento():
+    assert calculos.precio_online(350) == "$3.50"
+    assert calculos.precio_online(0) is None
+    assert calculos.precio_online(99) is None

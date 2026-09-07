@@ -197,11 +197,26 @@ main{position:relative;z-index:1;flex:1;overflow-y:auto;padding:6px 20px 110px}
 .planta .foto{
   width:46px;height:46px;border-radius:14px;flex-shrink:0;
   background:#e6dcc8;display:flex;align-items:center;justify-content:center;
-  font-size:22px;
+  font-size:22px;position:relative;overflow:hidden;
 }
+/* La foto real va encima del emoji; si falla y el onerror la quita, el
+   emoji queda de placeholder y la caja no cambia de tamaño. */
+.planta .foto img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .planta .info{flex:1;min-width:0}
 .planta .info b{display:block;font-size:14px;font-weight:700}
 .planta .info span{font-size:11px;color:#8a7c62}
+.planta .info .precio{display:block;font-size:11px;color:#6d5c3a;margin-top:2px}
+.planta .info .precio s{color:#a1937a;margin-right:3px}
+.planta .info .precio b{display:inline;font-size:12.5px;font-weight:800;color:#2e6c40}
+.planta .info .precio em{
+  font-style:normal;font-size:9.5px;font-weight:700;color:#2e6c40;
+  background:#d9ecdc;border-radius:7px;padding:1px 6px;margin-left:3px;
+  vertical-align:1px;
+}
+.planta.agotada .info .precio{color:var(--texto-suave)}
+.planta.agotada .info .precio s{color:var(--texto-suave)}
+.planta.agotada .info .precio b{color:var(--dorado-suave)}
+.planta.agotada .info .precio em{background:var(--noche-3);color:var(--dorado-suave)}
 .planta .qty{text-align:right}
 .planta .qty b{display:block;font-size:20px;font-weight:800}
 .badge{
@@ -317,6 +332,21 @@ main{position:relative;z-index:1;flex:1;overflow-y:auto;padding:6px 20px 110px}
 }
 
 /* ---------- modal modificar stock ---------- */
+.edit-cab{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.edit-cab h3{margin-bottom:2px}
+.foto-mini{
+  width:52px;height:52px;border-radius:16px;flex-shrink:0;
+  background:#e6dcc8;display:flex;align-items:center;justify-content:center;
+  font-size:24px;position:relative;overflow:hidden;
+}
+.foto-mini img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.edit-cab .precio{font-size:12px;color:var(--texto-suave)}
+.edit-cab .precio s{color:var(--texto-suave);margin-right:3px}
+.edit-cab .precio b{font-size:13px;font-weight:800;color:var(--dorado-suave)}
+.edit-cab .precio em{
+  font-style:normal;font-size:10px;font-weight:700;color:var(--dorado-suave);
+  background:var(--noche-3);border-radius:7px;padding:1px 6px;margin-left:3px;
+}
 .edit-sub{font-size:12.5px;color:var(--texto-suave);margin:-8px 0 16px}
 .edit-qty{display:flex;align-items:center;gap:12px;margin-bottom:14px}
 .qty-btn{
@@ -357,6 +387,21 @@ nav button{
 }
 nav button .ic{display:flex;align-items:center;justify-content:center;height:20px}
 nav button.on{color:var(--dorado);background:rgba(227,181,127,.1)}
+
+/* ---------- FAB agregar planta ---------- */
+.fab{
+  position:absolute;right:16px;bottom:calc(94px + env(safe-area-inset-bottom));
+  z-index:15;border:none;border-radius:18px;
+  background:var(--dorado);color:#3a2c14;
+  font-family:inherit;font-size:13px;font-weight:800;
+  display:flex;align-items:center;gap:7px;padding:14px 17px;
+  cursor:pointer;box-shadow:0 8px 22px rgba(0,0,0,.4);
+  transition:transform .12s ease;
+}
+.fab:active{transform:scale(.95)}
+
+/* ---------- modal agregar planta ---------- */
+.form-agregar{display:flex;flex-direction:column;gap:11px;margin-bottom:14px}
 
 /* ---------- toast ---------- */
 .toast{

@@ -12,13 +12,15 @@ from app import datos
 
 INVENTARIO_FALSO = [
     {"sku": "PL-ROMERO", "nombre": "Romero", "categoria": "Aromáticas",
-     "disponible": 2, "fisico": 2},
+     "disponible": 2, "fisico": 2, "precio_centavos": 350},
+    # Albahaca sin precio en Odoo todavía: la pantalla debe decir
+    # "Precio pendiente" y nunca "$0.00".
     {"sku": "PL-ALBAHACA", "nombre": "Albahaca", "categoria": "Aromáticas",
-     "disponible": 0, "fisico": 0},
+     "disponible": 0, "fisico": 0, "precio_centavos": 0},
     {"sku": "PL-IXORA", "nombre": "Ixora Roja", "categoria": "Ornamentales",
-     "disponible": 4, "fisico": 5},
+     "disponible": 4, "fisico": 5, "precio_centavos": 650},
     {"sku": "PL-PALMA", "nombre": "Palma Areca", "categoria": "Ornamentales",
-     "disponible": 41, "fisico": 41},
+     "disponible": 41, "fisico": 41, "precio_centavos": 1500},
 ]
 
 

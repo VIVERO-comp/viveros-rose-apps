@@ -94,3 +94,22 @@ def test_sin_proxy_la_pantalla_avisa(cliente, monkeypatch, db_limpia):
     r = cliente.get("/")
     assert r.status_code == 200
     assert "No hay conexión con el stock" in r.text
+
+
+def test_datos_json_lleva_precio_y_foto(cliente, con_inventario, monkeypatch):
+    from app import fotos
+
+    # Solo Romero tiene foto en este caso; el resto cae al emoji en el JS.
+    monkeypatch.setattr(fotos, "url_foto", lambda sku: (
+        "https://res.cloudinary.com/demo123/image/upload/f_auto/productos/PL-ROMERO/abc111"
+        if sku == "PL-ROMERO" else None))
+    r = cliente.get("/")
+    assert r.status_code == 200
+    # Romero: online $3.50 y app $2.80 (20% off), con su foto de Cloudinary.
+    assert '"po": "$3.50"' in r.text
+    assert '"p": "$2.80"' in r.text
+    assert "productos/PL-ROMERO/abc111" in r.text
+    # Albahaca sin precio en Odoo: viaja null (el JS pinta "Precio pendiente")
+    # y jamás un "$0.00".
+    assert '"p": null' in r.text
+    assert "$0.00" not in r.text

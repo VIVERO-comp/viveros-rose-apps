@@ -26,19 +26,20 @@ ZONA_PANAMA = ZoneInfo("America/Panama")
 TTL_INVENTARIO = 60  # segundos
 
 # Datos de prueba para desarrollo sin STOCK_PROXY_URL: los del prototipo.
+# PL-ALBAHACA sin precio a propósito, para ver el "Precio pendiente".
 INVENTARIO_DE_PRUEBA = [
-    {"sku": "PL-HIERBA-BUENA", "nombre": "Hierba Buena", "categoria": "Aromáticas", "disponible": 1, "fisico": 1},
-    {"sku": "PL-ROMERO", "nombre": "Romero", "categoria": "Aromáticas", "disponible": 2, "fisico": 2},
-    {"sku": "PL-CROTON-PETRA", "nombre": "Croton Petra", "categoria": "Ornamentales", "disponible": 2, "fisico": 2},
-    {"sku": "PL-ALBAHACA", "nombre": "Albahaca", "categoria": "Aromáticas", "disponible": 0, "fisico": 0},
-    {"sku": "PL-LIMON-PERSA", "nombre": "Limón Persa", "categoria": "Frutales", "disponible": 4, "fisico": 4},
-    {"sku": "PL-OREGANO", "nombre": "Orégano", "categoria": "Aromáticas", "disponible": 5, "fisico": 5},
-    {"sku": "PL-IXORA-ROJA", "nombre": "Ixora Roja", "categoria": "Ornamentales", "disponible": 5, "fisico": 6},
-    {"sku": "PL-CINTA-VERDE", "nombre": "Cinta Verde", "categoria": "Ornamentales", "disponible": 6, "fisico": 6},
-    {"sku": "PL-PAPAYA", "nombre": "Papaya", "categoria": "Frutales", "disponible": 11, "fisico": 11},
-    {"sku": "PL-VERANERA-FUCSIA", "nombre": "Veranera Fucsia", "categoria": "Ornamentales", "disponible": 14, "fisico": 14},
-    {"sku": "PL-CULANTRO", "nombre": "Culantro", "categoria": "Aromáticas", "disponible": 26, "fisico": 26},
-    {"sku": "PL-PALMA-ARECA", "nombre": "Palma Areca", "categoria": "Ornamentales", "disponible": 41, "fisico": 41},
+    {"sku": "PL-HIERBA-BUENA", "nombre": "Hierba Buena", "categoria": "Aromáticas", "disponible": 1, "fisico": 1, "precio_centavos": 350},
+    {"sku": "PL-ROMERO", "nombre": "Romero", "categoria": "Aromáticas", "disponible": 2, "fisico": 2, "precio_centavos": 350},
+    {"sku": "PL-CROTON-PETRA", "nombre": "Croton Petra", "categoria": "Ornamentales", "disponible": 2, "fisico": 2, "precio_centavos": 550},
+    {"sku": "PL-ALBAHACA", "nombre": "Albahaca", "categoria": "Aromáticas", "disponible": 0, "fisico": 0, "precio_centavos": 0},
+    {"sku": "PL-LIMON-PERSA", "nombre": "Limón Persa", "categoria": "Frutales", "disponible": 4, "fisico": 4, "precio_centavos": 1200},
+    {"sku": "PL-OREGANO", "nombre": "Orégano", "categoria": "Aromáticas", "disponible": 5, "fisico": 5, "precio_centavos": 350},
+    {"sku": "PL-IXORA-ROJA", "nombre": "Ixora Roja", "categoria": "Ornamentales", "disponible": 5, "fisico": 6, "precio_centavos": 650},
+    {"sku": "PL-CINTA-VERDE", "nombre": "Cinta Verde", "categoria": "Ornamentales", "disponible": 6, "fisico": 6, "precio_centavos": 450},
+    {"sku": "PL-PAPAYA", "nombre": "Papaya", "categoria": "Frutales", "disponible": 11, "fisico": 11, "precio_centavos": 800},
+    {"sku": "PL-VERANERA-FUCSIA", "nombre": "Veranera Fucsia", "categoria": "Ornamentales", "disponible": 14, "fisico": 14, "precio_centavos": 750},
+    {"sku": "PL-CULANTRO", "nombre": "Culantro", "categoria": "Aromáticas", "disponible": 26, "fisico": 26, "precio_centavos": 250},
+    {"sku": "PL-PALMA-ARECA", "nombre": "Palma Areca", "categoria": "Ornamentales", "disponible": 41, "fisico": 41, "precio_centavos": 1500},
 ]
 
 
@@ -98,6 +99,9 @@ def obtener_inventario(refrescar=False):
             "categoria": item["category"] or "Sin categoría",
             "disponible": item["available"],
             "fisico": item["on_hand"],
+            # list_price de Odoo en centavos; .get por si el proxy en
+            # producción aún no expone el campo (0 = precio pendiente).
+            "precio_centavos": item.get("price_cents", 0),
         }
         for item in crudo["items"]
     ]

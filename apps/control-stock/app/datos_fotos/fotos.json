@@ -1,0 +1,322 @@
+{
+  "cloud": "yb93cnmu",
+  "macetasPorSku": {},
+  "manoPorSku": {
+    "PL-AJI-BOLITA": "8b125605186d",
+    "PL-ALBAHACA-VERDE": "240dd5e2111b",
+    "PL-ANTHURIO-FLOR": "e0e860e092e6",
+    "PL-CACTUS-GRANDE": "d27a27678ace",
+    "PL-CIELITO-AZUL": "1caa63a836d4",
+    "PL-CLAVELITO": "221a06da1630",
+    "PL-FICUS-TRIANGULAR-GRANDE": "d338d33484ce",
+    "PL-HELECHOS": "024ad5db9ce0",
+    "PL-LENGUA-DE-SUEGRA-ENANA": "83c3925ae31d",
+    "PL-LENGUA-DE-SUEGRA-MINI": "3ef1e03b84f1",
+    "PL-MINI-JADE": "e32e9708ad99",
+    "PL-OREGANO": "6ced31823982",
+    "PL-PALMA-ABANICO": "3e9b9379a399",
+    "PL-ROMERO": "b9ded11b46d4",
+    "PL-ROSITA-MINIATURA": "32caba1ca20b",
+    "PL-SUCULENTA-PEQUENA": "73408df239fc",
+    "PL-SUCULENTAS-GRANDE": "578042c1228b",
+    "PL-TRASDESCANTIA": "7db61b458983",
+    "PLT-CHAVELITAS-01": "97c414192043",
+    "PLT-HIERBABUENA-01": "0a1431e20aee",
+    "PLT-JADE-01": "7e0558b32180",
+    "PLT-MENTA-01": "220026b0bdec",
+    "PLT-RUDA-01": "6d4f6fd5d5e9"
+  },
+  "porSku": {
+    "PL-AGAVE-GIGANTE": [
+      "2f7968c812ea"
+    ],
+    "PL-AGLONEMAS": [
+      "34a89785695d"
+    ],
+    "PL-AJI-BOLITA": [
+      "8b125605186d"
+    ],
+    "PL-ALBAHACA-ROJA": [
+      "93e8911b0c3c"
+    ],
+    "PL-ALBAHACA-VERDE": [
+      "240dd5e2111b",
+      "98d20e11c51f"
+    ],
+    "PL-ALCANCEL": [
+      "1ca6c3fd21f6"
+    ],
+    "PL-ANTHURIO-FLOR": [
+      "3abb5e90ac5f",
+      "e0e860e092e6",
+      "25e4c5f5a6d0"
+    ],
+    "PL-ARALIAS": [
+      "59fb36ee39a5",
+      "75d8343d9c0e"
+    ],
+    "PL-BAMBU-ENTRENZAS": [
+      "e7dd11ae1488"
+    ],
+    "PL-BIJAO-TRICOLOR": [
+      "8f64655e0282"
+    ],
+    "PL-CACTUS-GRANDE": [
+      "d27a27678ace"
+    ],
+    "PL-CACTUS-HUESO-DE-DRAGON": [
+      "1df576063aff"
+    ],
+    "PL-CACTUS-MEDIANO": [
+      "eda19e752adb"
+    ],
+    "PL-CACTUS-PEQUENO": [
+      "beeaaf274d6e"
+    ],
+    "PL-CALATHEA-CEBRINA": [
+      "29debd6f2508",
+      "6487f0697028"
+    ],
+    "PL-CELOCIA": [
+      "1a4c88ba90ba"
+    ],
+    "PL-CIELITO-AZUL": [
+      "1caa63a836d4"
+    ],
+    "PL-CINTA": [
+      "b7073f280a9c"
+    ],
+    "PL-CIPRE-RASTRERO": [
+      "011f3f45bc69"
+    ],
+    "PL-CLAVEL-CHINO": [
+      "c5885cc086a0"
+    ],
+    "PL-CLAVELITO": [
+      "221a06da1630",
+      "fa416c7b9195",
+      "044e7b38da5e"
+    ],
+    "PL-COLEOS": [
+      "f25d513a8b85",
+      "8c822e07d824",
+      "559f67c8ec3c",
+      "1b474b91fa6b"
+    ],
+    "PL-CORDILINIA": [
+      "6f4fd252477d"
+    ],
+    "PL-CORONITA": [
+      "6d6f10ce52cd"
+    ],
+    "PL-CRINUM-ASIATICO-VARIEGADO": [
+      "a163d864940e"
+    ],
+    "PL-CROTO-MAMY-AMARILLO": [
+      "bc93bd32129e"
+    ],
+    "PL-DRACAENA-ROJA": [
+      "f212acbfea6a",
+      "76cca1ba514b"
+    ],
+    "PL-ESCUDO-PERSA": [
+      "368c35d72737"
+    ],
+    "PL-FICUS-ELASTICA": [
+      "01f835488b10",
+      "32314d7b3bb1"
+    ],
+    "PL-FICUS-LYRATA": [
+      "473aee587cda"
+    ],
+    "PL-FICUS-LYRATA-3-RAMAS": [
+      "e3128ed07d26"
+    ],
+    "PL-FICUS-TRIANGULAR-GRANDE": [
+      "c54eb3be1972",
+      "d338d33484ce"
+    ],
+    "PL-GINGER": [
+      "4c01bab2b04f",
+      "9efbf1120b89"
+    ],
+    "PL-HELECHOS": [
+      "024ad5db9ce0"
+    ],
+    "PL-HYPOESTES": [
+      "072454db7feb"
+    ],
+    "PL-JAZMIN-BLANCO-ENANO": [
+      "18f7ae9f65e4"
+    ],
+    "PL-KALANCHOE": [
+      "2daab0b5a783",
+      "219d73a31a17"
+    ],
+    "PL-LENGUA-DE-SUEGRA-ENANA": [
+      "0bbfcefc57be",
+      "83c3925ae31d"
+    ],
+    "PL-LENGUA-DE-SUEGRA-MINI": [
+      "7798a5e8d79e",
+      "3ef1e03b84f1",
+      "76db66709cc2"
+    ],
+    "PL-LIRIO": [
+      "3e7b517adb4b",
+      "788264b552e8"
+    ],
+    "PL-LIRIO-GIGANTE-MORADO": [
+      "fb2badac69da"
+    ],
+    "PL-MARGINATA": [
+      "bcc3c11b235d"
+    ],
+    "PL-MINI-JADE": [
+      "9d091d10862a",
+      "e32e9708ad99"
+    ],
+    "PL-MOLLEJA": [
+      "a457d9d76a52"
+    ],
+    "PL-MONSTERA-ADANSONII": [
+      "c2bf7eddfd94"
+    ],
+    "PL-MONSTERA-DELICIOSA": [
+      "3cd7e4b43d15"
+    ],
+    "PL-NOVIO-CHINO": [
+      "6ad5e5007536"
+    ],
+    "PL-OREGANO": [
+      "6ced31823982"
+    ],
+    "PL-ORTENCIA": [
+      "24e47d84c326"
+    ],
+    "PL-PALMA-ABANICO": [
+      "3e9b9379a399"
+    ],
+    "PL-PALMA-BISMARKIA-GRANDE": [
+      "a0e10f7d29dc"
+    ],
+    "PL-PALMA-BISMARKIA-MEDIANA": [
+      "3b9fc79a25b5",
+      "d645a94c36a5"
+    ],
+    "PL-PALMA-BISMARKIA-PEQUENA": [
+      "f15676a48344"
+    ],
+    "PL-PALMA-FENIX": [
+      "e287fad6cf38"
+    ],
+    "PL-PALMA-MADAGASCAR": [
+      "027e6e32cdfd",
+      "18a516258d21"
+    ],
+    "PL-PALMA-MULTIPLE": [
+      "ead76ccf6693"
+    ],
+    "PL-PALMA-NAVIDAD": [
+      "d22f5f63846a"
+    ],
+    "PL-PALMA-ROJA": [
+      "99853811abfc"
+    ],
+    "PL-PALMA-WASHINTONIA": [
+      "ee1151b25c40"
+    ],
+    "PL-PALMA-ZICA": [
+      "582fecd58698"
+    ],
+    "PL-PHOTOS-MULTI-RAMA": [
+      "e453618828d2"
+    ],
+    "PL-PINO-ENANO": [
+      "47a4332ad831"
+    ],
+    "PL-PINO-ESTRELLA": [
+      "b5846377d228"
+    ],
+    "PL-PINO-HINDU": [
+      "b74eaf1402e1"
+    ],
+    "PL-PINO-MONTESUMA": [
+      "5e8b0df021aa",
+      "44bb5b257752",
+      "36f1dc203581"
+    ],
+    "PL-PINO-ROMANO": [
+      "51dc67075729",
+      "f04c7a3eda04"
+    ],
+    "PL-POTHOS": [
+      "2b5e5f3b4a31"
+    ],
+    "PL-ROMERO": [
+      "b9ded11b46d4"
+    ],
+    "PL-ROSITA-MINIATURA": [
+      "b13a789dc1ee",
+      "c4f1f85a5446",
+      "9c42a839db3b",
+      "32caba1ca20b"
+    ],
+    "PL-SUCULENTA-PEQUENA": [
+      "f35bf487bf59",
+      "73408df239fc"
+    ],
+    "PL-SUCULENTAS-GRANDE": [
+      "215d5da20753",
+      "89dc602d74f7",
+      "a1a5b40bea66",
+      "578042c1228b"
+    ],
+    "PL-TRASDESCANTIA": [
+      "7db61b458983"
+    ],
+    "PLT-CHAVELITAS-01": [
+      "97c414192043",
+      "b01a40787659"
+    ],
+    "PLT-CRISANTEMOS-01": [
+      "954d03c7a83c"
+    ],
+    "PLT-HIERBABUENA-01": [
+      "0a1431e20aee"
+    ],
+    "PLT-JADE-01": [
+      "253c22f0869f",
+      "7e0558b32180"
+    ],
+    "PLT-MENTA-01": [
+      "220026b0bdec"
+    ],
+    "PLT-RUDA-01": [
+      "6d4f6fd5d5e9"
+    ],
+    "PLT-TORENIA-01": [
+      "853a3c9aa66c"
+    ]
+  },
+  "recortesPorHash": {
+    "2f7968c812ea": [
+      0.0033,
+      0.0038,
+      0.9933,
+      0.9211
+    ],
+    "582fecd58698": [
+      0.1806,
+      0.0056,
+      0.8027,
+      0.8064
+    ],
+    "e3128ed07d26": [
+      0.0726,
+      0.0508,
+      0.9274,
+      0.8308
+    ]
+  }
+}
