@@ -26,8 +26,10 @@ def test_recepcion_con_diferencia_y_regreso(cliente, con_ordenes):
     # La devolución quedó pendiente y el historial la marca así.
     r = cliente.get("/devoluciones")
     assert "Novio Chino VR" in r.text and "1 unidad" in r.text
-    assert "Pedido 00774" in r.text
-    assert "Regreso pendiente" in cliente.get("/historial").text
+    assert "Factura 881 · Pedido 00774" in r.text
+    historial = cliente.get("/historial").text
+    assert "Regreso pendiente" in historial
+    assert "Factura 881 · Pedido 00774" in historial
 
     # Confirmar el regreso al vivero: se limpia y el historial cierra.
     cliente.post("/devoluciones/S00774/regreso")

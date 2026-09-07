@@ -71,7 +71,7 @@
         <div class="cabecera-tarjeta">
           <div>
             <div class="quien">{{ d.cliente }} · {{ d.sucursal | quitar_prefijo(d.cliente) }}</div>
-            <div class="cuando">Pedido {{ d.pedido | numero_pedido }}</div>
+            <div class="cuando">{% if d.facturaNo %}Factura {{ d.facturaNo }} · {% endif %}Pedido {{ d.pedido | numero_pedido }}</div>
           </div>
           <span class="pastilla naranja">Devolución pendiente</span>
         </div>
@@ -141,7 +141,7 @@
         <div class="cabecera-tarjeta">
           <div>
             <div class="quien">{{ icono("listo", 18, 3) }} {{ h.cliente }} · {{ h.sucursal | quitar_prefijo(h.cliente) }}</div>
-            <div class="cuando">{{ h.hora }}{% if h.tipo == "entrega" %} · Pedido {{ h.pedido | numero_pedido }}{% else %} · Intercambio{% endif %}</div>
+            <div class="cuando">{{ h.hora }}{% if h.tipo == "entrega" %} · {% if h.facturaNo %}Factura {{ h.facturaNo }} · {% endif %}Pedido {{ h.pedido | numero_pedido }}{% else %} · Intercambio{% endif %}</div>
           </div>
           {% if h.tipo == "entrega" %}
             {% if h.pedido in sin_sincronizar %}<span class="pastilla naranja">Sin sincronizar</span>

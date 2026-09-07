@@ -417,6 +417,7 @@ def confirmar_recepcion(pedido, aceptado, empleada):
                 (pedido, json.dumps({
                     "odooId": orden["odooId"], "cliente": orden["cliente"],
                     "sucursal": orden["sucursal"],
+                    "facturaNo": orden.get("facturaNo"),
                     "lineas": [
                         {"sku": d["sku"], "nombre": d["nombre"], "cantidad": d["devuelto"],
                          "precio": d["precio"]}
@@ -428,6 +429,7 @@ def confirmar_recepcion(pedido, aceptado, empleada):
             "INSERT INTO historial (tipo, datos, creado_en) VALUES ('entrega', ?, ?)",
             (json.dumps({
                 "hora": ahora(), "pedido": pedido, "cliente": orden["cliente"],
+                "facturaNo": orden.get("facturaNo"),
                 "sucursal": orden["sucursal"], "acep": resultado["acep"],
                 "dev": resultado["dev"], "t_acep": resultado["t_acep"],
                 "regreso": resultado["dev"] == 0,
