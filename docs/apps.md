@@ -60,7 +60,8 @@ Python (FastAPI + Jinja2 + SQLite), fpdf2 (PDF) y openpyxl (Excel); el
 prototipo HTML aprobado es la referencia visual y su CSS/JS vive casi
 intacto en `app/static/`.
 
-Que el vivero no se quede sin stock sin darse cuenta. Tres pestañas:
+Que el vivero no se quede sin stock sin darse cuenta — y desde el
+08/09/2026, también vender localmente. Cuatro pestañas:
 
 - **Inicio**: score de salud 0–100 (100 − 6 por producto crítico − 2 por
   bajo − 15 con el conteo quincenal vencido, >15 días), totales (unidades,
@@ -71,6 +72,15 @@ Que el vivero no se quede sin stock sin darse cuenta. Tres pestañas:
   order-api. El ajuste viaja con la cantidad `esperada` que el empleado veía:
   si Odoo cambió en el medio, vuelve `conflicto` con el valor fresco y nada
   se escribe.
+- **Vender**: ventas locales del vivero. El botón "+ Nueva venta" abre un
+  formulario con cliente (nombre y celular, opcionales; vacío = "Cliente
+  Local"), buscador en vivo para añadir plantas con cantidades y el total.
+  Dos acciones: Generar cotización (sale.order borrador) o Pagado y
+  confirmar (Yappy/Efectivo: confirma, valida la entrega, factura y
+  registra el pago en Odoo, diario de ventas normal con etiqueta LOCAL,
+  nunca el de Super Extra). Historial local con estado por pasos y
+  reintento. Es la única conexión XML-RPC directa de la app a Odoo,
+  aprobada por el dueño; ver el README de control-stock.
 - **Inventario**: hoja de conteo en PDF (solo revisión), ciclo quincenal con
   Excel (plantilla protegida → contar → importar → pantalla de diferencias →
   confirmar) e historial de conteos.
@@ -81,8 +91,9 @@ producto, se marca atendida y se cierra sola si el stock se recupera.
 Historial en SQLite. El universo de productos es solo `PL-` (los insumos no
 llevan ese código y quedan fuera).
 
-Integración: lecturas por el stock-proxy (`/v1/inventario`); la única
-escritura es `POST /api/stock/ajustes` del order-api — ver
+Integración: lecturas por el stock-proxy (`/v1/inventario`); los ajustes
+de stock van por `POST /api/stock/ajustes` del order-api, y la pestaña
+Vender escribe en Odoo por XML-RPC propio (la excepción aprobada) — ver
 [`odoo-integration.md`](odoo-integration.md). Autenticación propia por
 empleada, idéntica a Recepción.
 
