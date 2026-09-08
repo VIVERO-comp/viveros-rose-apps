@@ -24,6 +24,17 @@ app.mount("/static", StaticFiles(directory=os.path.join(RUTA_APP, "static")), na
 
 plantillas = Jinja2Templates(directory=os.path.join(RUTA_APP, "plantillas"))
 
+# Cache-busting de estáticos: el navegador guarda app.js/styles.css por
+# heurística y tras un deploy puede quedarse con la versión vieja (JS viejo
+# contra datos nuevos pinta mal la pantalla). La versión es el mtime más
+# reciente de los estáticos al arrancar el proceso: cambia con cada deploy
+# y las URLs ?v= nuevas fuerzan la descarga.
+VERSION_ESTATICOS = int(max(
+    os.path.getmtime(os.path.join(RUTA_APP, "static", nombre))
+    for nombre in os.listdir(os.path.join(RUTA_APP, "static"))
+))
+plantillas.env.globals["v_estaticos"] = VERSION_ESTATICOS
+
 
 def fecha_bonita(iso):
     """2026-09-02T10:05:00-05:00 -> 02/09/2026."""
@@ -139,12 +150,11 @@ def inicio(request: Request, refrescar: int = 0):
             "sku": p["sku"], "n": p["nombre"], "c": p["categoria"],
             "q": p["disponible"], "f": p["fisico"],
             "e": calculos.emoji_de(p["nombre"]),
-            # Precios ya calculados y formateados en el servidor: po es el
-            # online de Odoo y p el de la app con descuento (null = precio
-            # pendiente en Odoo). img: foto de Cloudinary (null = sin foto,
-            # la tarjeta cae al emoji).
+            # Precio ya formateado en el servidor: el list_price de Odoo tal
+            # cual, igual que en la tienda (null = precio pendiente en Odoo).
+            # img: foto de Cloudinary (null = sin foto, la tarjeta cae al
+            # emoji).
             "po": calculos.precio_online(p.get("precio_centavos", 0)),
-            "p": calculos.precio_app(p.get("precio_centavos", 0)),
             "img": fotos.url_foto(p["sku"]),
         }
         for p in inventario

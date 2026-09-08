@@ -21,12 +21,10 @@ function normalizar(texto) {
   return (texto || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
-// Los dos precios juntos: el online de Odoo tachado y el de la app (20% off)
-// resaltado. Vienen ya formateados del servidor (p.po y p.p).
+// El precio de venta de Odoo tal cual, igual que en la tienda online.
+// Viene ya formateado del servidor (p.po).
 function lineaPrecio(p) {
-  return p.p
-    ? `<s>${p.po}</s> <b>${p.p}</b> <em>20% off en app</em>`
-    : "Precio pendiente";
+  return p.po ? `<b>${p.po}</b>` : "Precio pendiente";
 }
 
 function pintar() {

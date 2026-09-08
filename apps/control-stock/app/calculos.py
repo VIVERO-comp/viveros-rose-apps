@@ -55,9 +55,6 @@ def emoji_de(nombre):
     return EMOJI_DEFECTO
 
 
-# Descuento de la app sobre el precio de venta online (list_price de Odoo).
-DESCUENTO_APP = 0.20
-
 # Misma regla del catálogo: un precio menor a $1.00 es un marcador de
 # "todavía sin precio real" en Odoo, no un precio.
 _PRECIO_MINIMO_CENTAVOS = 100
@@ -69,18 +66,6 @@ def precio_online(centavos):
     if not centavos or centavos < _PRECIO_MINIMO_CENTAVOS:
         return None
     return f"${centavos / 100:.2f}"
-
-
-def precio_app(centavos):
-    """Precio online con el descuento de la app, formateado "$X.XX".
-
-    Recibe el list_price en centavos (como lo da el stock-proxy) y descuenta
-    server-side: el navegador solo pinta el texto. None si el producto aún no
-    tiene precio en Odoo (la pantalla muestra "Precio pendiente")."""
-    if precio_online(centavos) is None:
-        return None
-    con_descuento = round(centavos * (1 - DESCUENTO_APP))
-    return f"${con_descuento / 100:.2f}"
 
 
 def estado(disponible, umbral):

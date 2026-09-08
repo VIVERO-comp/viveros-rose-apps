@@ -102,9 +102,9 @@ ssh hermes@143.244.167.222 'cd control-stock && docker compose up -d --build'
 Las fotos de las tarjetas salen de Cloudinary con el mapa sku → hash de
 `app/datos_fotos/fotos.json` (copia del `src/data/fotos.json` de
 viveros-rose-frontend): una foto nueva del catálogo aparece en inventario
-recién en el siguiente deploy. El precio "app" (20% de descuento sobre el
-`list_price` que trae `/v1/inventario`) se calcula en el servidor
-(`calculos.precio_app`).
+recién en el siguiente deploy. El precio que se muestra es el `list_price`
+de Odoo tal cual (igual que la tienda), formateado en el servidor
+(`calculos.precio_online`).
 
 Rollback: `docker compose down` (la base y los PDFs quedan en `./datos`).
 **Ningún deploy sin el OK explícito del dueño.**
