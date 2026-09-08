@@ -388,31 +388,62 @@ def _fecha_venta(iso):
     return momento.strftime("%d/%m/%Y ") + hora
 
 
-def _redirigir_venta(error=None):
-    destino = "/venta" + (f"?error={quote(error)}" if error else "")
+def _redirigir_venta(error=None, nueva=False):
+    destino = ("/venta/nueva" if nueva else "/venta") + \
+        (f"?error={quote(error)}" if error else "")
     return RedirectResponse(destino, status_code=303)
 
 
 @app.get("/venta")
-def venta(request: Request, q: str = "", error: str = ""):
-    contexto = {
-        "ventas_activo": ventas.configurado(), "q": q.strip(),
-        "resultados": None, "carrito": [], "total_carrito": 0.0,
+def venta(request: Request, error: str = ""):
+    # La pestaña: el botón grande "+ Nueva venta" y el historial local.
+    en_curso = 0
+    if ventas.configurado():
+        try:
+            en_curso = len(ventas.carrito_de(request.state.empleada["id"])[0])
+        except Exception:
+            pass
+    return plantillas.TemplateResponse(request, "venta.html", {
+        "ventas_activo": ventas.configurado(),
         "error_venta": error or None,
+        "en_curso": en_curso,
         "ventas": [{**v, "fecha_texto": _fecha_venta(v["creado_en"]),
                     "etiqueta_estado": ventas.ETIQUETAS_ESTADO[v["estado"]]}
                    for v in ventas.ventas_todas()],
+    })
+
+
+@app.get("/venta/nueva")
+def venta_nueva(request: Request, q: str = "", error: str = ""):
+    # El formulario de la venta: cliente (nombre y celular), buscador en
+    # vivo para añadir plantas, la lista con cantidades y el total.
+    usuario = request.state.empleada["id"]
+    contexto = {
+        "ventas_activo": ventas.configurado(), "q": q.strip(),
+        "resultados": None, "carrito": [], "total_carrito": 0.0,
+        "borrador": ventas.borrador_de(usuario),
+        "error_venta": error or None,
     }
     if contexto["ventas_activo"]:
         try:
             if contexto["q"]:
                 contexto["resultados"] = ventas.buscar_productos(contexto["q"])
-            contexto["carrito"], contexto["total_carrito"] = \
-                ventas.carrito_de(request.state.empleada["id"])
+            contexto["carrito"], contexto["total_carrito"] = ventas.carrito_de(usuario)
         except Exception:
             contexto["error_venta"] = ("Sin conexión con Odoo en este momento. "
-                                       "El carrito y el historial local siguen aquí.")
-    return plantillas.TemplateResponse(request, "venta.html", contexto)
+                                       "Vuelve a intentar en un rato.")
+    return plantillas.TemplateResponse(request, "venta_nueva.html", contexto)
+
+
+@app.post("/venta/borrador")
+async def venta_borrador(request: Request):
+    # venta.js guarda nombre/celular mientras se escriben, para que
+    # sobrevivan a los reloads de agregar/quitar plantas.
+    form = await request.form()
+    ventas.guardar_borrador(request.state.empleada["id"],
+                            (form.get("cliente") or "").strip()[:120],
+                            (form.get("celular") or "").strip()[:30])
+    return Response(status_code=204)
 
 
 @app.get("/venta/buscar")
@@ -438,7 +469,7 @@ async def venta_agregar(request: Request):
     # Conservar la búsqueda activa: así se pueden agregar varias plantas
     # seguidas sin volver a escribir.
     q = (form.get("q") or "").strip()
-    return RedirectResponse("/venta" + (f"?q={quote(q)}" if q else ""), status_code=303)
+    return RedirectResponse("/venta/nueva" + (f"?q={quote(q)}" if q else ""), status_code=303)
 
 
 @app.post("/venta/carrito/cantidad")
@@ -450,7 +481,7 @@ async def venta_cantidad(request: Request):
                                 int(form.get("cantidad", "")))
     except (TypeError, ValueError):
         pass
-    return RedirectResponse("/venta", status_code=303)
+    return RedirectResponse("/venta/nueva", status_code=303)
 
 
 @app.post("/venta/carrito/quitar")
@@ -461,18 +492,20 @@ async def venta_quitar(request: Request):
                                   int(form.get("producto_id", "")))
     except (TypeError, ValueError):
         pass
-    return RedirectResponse("/venta", status_code=303)
+    return RedirectResponse("/venta/nueva", status_code=303)
 
 
 @app.post("/venta/cotizar")
 async def venta_cotizar(request: Request):
     form = await request.form()
     try:
-        registro = ventas.crear_cotizacion(request.state.empleada, form.get("cliente", ""))
+        registro = ventas.crear_cotizacion(request.state.empleada,
+                                           form.get("cliente", ""), form.get("celular", ""))
     except ValueError as error:
-        return _redirigir_venta(str(error))
+        return _redirigir_venta(str(error), nueva=True)
     except Exception as error:
-        return _redirigir_venta(f"Odoo no aceptó la cotización: {ventas._mensaje_de_error(error)}")
+        return _redirigir_venta(f"Odoo no aceptó la cotización: {ventas._mensaje_de_error(error)}",
+                                nueva=True)
     return plantillas.TemplateResponse(request, "venta_exito.html", {
         "titulo": "Cotización creada",
         "sub": f"{registro['orden']} · {registro['cliente']}",
@@ -489,11 +522,13 @@ async def venta_pagar(request: Request):
     # carrito y pasa a elegir el método de pago (el cobro corre después).
     form = await request.form()
     try:
-        registro = ventas.crear_cotizacion(request.state.empleada, form.get("cliente", ""))
+        registro = ventas.crear_cotizacion(request.state.empleada,
+                                           form.get("cliente", ""), form.get("celular", ""))
     except ValueError as error:
-        return _redirigir_venta(str(error))
+        return _redirigir_venta(str(error), nueva=True)
     except Exception as error:
-        return _redirigir_venta(f"Odoo no aceptó el pedido: {ventas._mensaje_de_error(error)}")
+        return _redirigir_venta(f"Odoo no aceptó el pedido: {ventas._mensaje_de_error(error)}",
+                                nueva=True)
     return RedirectResponse(f"/venta/cobrar/{registro['n']}", status_code=303)
 
 

@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block titulo %}Nueva venta — Control de Stock{% endblock %}
+
+{% block contenido %}
+<header>
+  <div class="brand">
+    <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
+    <div>
+      <h1>Nueva venta</h1>
+      <small>Cliente, plantas y total · cotiza o cobra</small>
+    </div>
+  </div>
+</header>
+
+<main>
+  <a class="volver" href="/venta">← Volver a Vender</a>
+
+  {% if error_venta %}
+  <div class="aviso-error">{{ error_venta }}</div>
+  {% endif %}
+
+  {% if not ventas_activo %}
+  <div class="aviso-error">La conexión con Odoo no está configurada en este
+    servidor. Avísale a Abraham.</div>
+  {% else %}
+
+  {# ---- Cliente ---- #}
+  <div class="seccion-titulo">Cliente</div>
+  <div class="campos-cliente">
+    <div class="campo">
+      <span>Nombre (opcional)</span>
+      <input id="cliente-nombre" name="cliente" value="{{ borrador.nombre }}"
+             autocomplete="off" placeholder="Si lo dejas vacío: Cliente Local">
+    </div>
+    <div class="campo">
+      <span>Celular (opcional)</span>
+      <input id="cliente-celular" name="celular" value="{{ borrador.celular }}"
+             autocomplete="off" inputmode="tel" placeholder="Ej: 6567-3062">
+    </div>
+  </div>
+
+  {# ---- Añadir plantas ---- #}
+  <div class="seccion-titulo" style="margin-top:16px">Añadir plantas</div>
+  <form class="buscador" method="get" action="/venta/nueva">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9aa3bd" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+    <input id="busca-venta" name="q" value="{{ q }}" placeholder="Buscar planta por nombre o SKU…"
+           autocomplete="off" enterkeyhint="search">
+  </form>
+
+  {# Los resultados se pintan en vivo mientras se escribe (venta.js); el
+     bloque server-rendered cubre el regreso con ?q= tras agregar. #}
+  <div id="resultados-venta">
+  {% if resultados is not none %}
+    {% if not resultados %}
+    <p class="nada-venta">Nada con "{{ q }}". Prueba otro nombre o el SKU.</p>
+    {% endif %}
+    {% for p in resultados %}
+    <form method="post" action="/venta/carrito/agregar" class="sin-margen">
+      <input type="hidden" name="producto_id" value="{{ p.id }}">
+      <input type="hidden" name="cantidad" value="1">
+      <input type="hidden" name="q" value="{{ q }}">
+      <button class="planta planta-boton" type="submit">
+        <div class="foto">🪴<img src="/venta/foto/{{ p.id }}" alt="" loading="lazy" onerror="this.remove()"></div>
+        <div class="info"><b>{{ p.nombre }}</b><span>{{ p.sku }}</span>
+          <span class="precio"><b>{{ p.precio | dinero }}</b></span></div>
+        <div class="agregar-venta">+</div>
+      </button>
+    </form>
+    {% endfor %}
+  {% endif %}
+  </div>
+
+  {# ---- Plantas de la venta ---- #}
+  <div class="seccion-titulo" style="margin-top:14px">Plantas de la venta · {{ carrito | length }}</div>
+  {% if not carrito %}
+  <p class="nada-venta">Todavía no has añadido plantas: búscalas arriba y
+    tócalas para sumarlas a la venta.</p>
+  {% else %}
+    {% for l in carrito %}
+    <div class="planta" style="cursor:default">
+      <div class="foto">🪴<img src="/venta/foto/{{ l.producto_id }}" alt="" loading="lazy" onerror="this.remove()"></div>
+      <div class="info">
+        <b>{{ l.nombre }}</b>
+        <span>{{ l.sku }} · {{ l.precio | dinero }} c/u</span>
+        <span class="precio"><b>{{ l.importe | dinero }}</b></span>
+        <form method="post" action="/venta/carrito/quitar" class="sin-margen">
+          <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
+          <button class="quitar-venta" type="submit">Quitar</button>
+        </form>
+      </div>
+      <div class="qty-mini">
+        <form method="post" action="/venta/carrito/cantidad">
+          <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
+          <input type="hidden" name="cantidad" value="{{ l.cantidad - 1 }}">
+          <button type="submit" aria-label="Menos">−</button>
+        </form>
+        <span class="valor">{{ l.cantidad }}</span>
+        <form method="post" action="/venta/carrito/cantidad">
+          <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
+          <input type="hidden" name="cantidad" value="{{ l.cantidad + 1 }}">
+          <button type="submit" aria-label="Más">+</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+
+    <div class="total-venta">
+      <span>Total (precios de Odoo)</span>
+      <b>{{ total_carrito | dinero }}</b>
+    </div>
+
+    <form method="post" action="/venta/cotizar" id="form-acciones">
+      <input type="hidden" name="cliente" id="post-cliente" value="{{ borrador.nombre }}">
+      <input type="hidden" name="celular" id="post-celular" value="{{ borrador.celular }}">
+      <div class="botones-venta">
+        <button class="btn btn-dorado btn-grande" formaction="/venta/pagar" type="submit">PAGADO Y CONFIRMAR PEDIDO</button>
+        <button class="btn btn-linea btn-grande" type="submit">GENERAR COTIZACIÓN</button>
+      </div>
+    </form>
+  {% endif %}
+
+  {% endif %}{# ventas_activo #}
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/venta.js?v={{ v_estaticos }}"></script>
+{% endblock %}

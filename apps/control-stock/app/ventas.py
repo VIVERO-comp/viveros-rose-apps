@@ -188,11 +188,17 @@ def iniciar_tablas():
                 cantidad INTEGER NOT NULL,
                 PRIMARY KEY (usuario, producto_id)
             );
+            CREATE TABLE IF NOT EXISTS venta_borrador (
+                usuario TEXT PRIMARY KEY,   -- cliente del formulario en curso
+                nombre TEXT NOT NULL DEFAULT '',
+                celular TEXT NOT NULL DEFAULT ''
+            );
             CREATE TABLE IF NOT EXISTS ventas_locales (
                 n INTEGER PRIMARY KEY AUTOINCREMENT,
                 creado_en TEXT NOT NULL,
                 empleada TEXT NOT NULL,
                 cliente TEXT NOT NULL,
+                celular TEXT,
                 orden_id INTEGER,
                 orden TEXT,
                 factura_id INTEGER,
@@ -204,6 +210,33 @@ def iniciar_tablas():
             );
             """
         )
+        # Migración suave: la tabla pudo nacer sin la columna celular.
+        columnas = [fila[1] for fila in con.execute("PRAGMA table_info(ventas_locales)")]
+        if "celular" not in columnas:
+            con.execute("ALTER TABLE ventas_locales ADD COLUMN celular TEXT")
+
+
+def guardar_borrador(usuario, nombre, celular):
+    """El nombre/celular del formulario en curso: sobrevive a los reloads de
+    agregar/quitar plantas (venta.js lo manda mientras se escribe)."""
+    with _db() as con:
+        con.execute(
+            "INSERT INTO venta_borrador (usuario, nombre, celular) VALUES (?,?,?)"
+            " ON CONFLICT (usuario) DO UPDATE SET nombre=?, celular=?",
+            (usuario, nombre, celular, nombre, celular))
+
+
+def borrador_de(usuario):
+    with _db() as con:
+        fila = con.execute("SELECT nombre, celular FROM venta_borrador WHERE usuario=?",
+                           (usuario,)).fetchone()
+    return {"nombre": fila["nombre"], "celular": fila["celular"]} if fila \
+        else {"nombre": "", "celular": ""}
+
+
+def _limpiar_borrador(usuario):
+    with _db() as con:
+        con.execute("DELETE FROM venta_borrador WHERE usuario=?", (usuario,))
 
 
 def carrito_de(usuario):
@@ -292,28 +325,31 @@ def _actualizar_venta(n, **campos):
 # Flujo contra Odoo
 # ---------------------------------------------------------------------------
 
-def _cliente_id(nombre):
+def _cliente_id(nombre, celular=""):
     """El partner para la orden: el genérico "Cliente Local" si no dieron
-    nombre; si lo dieron, se busca por nombre exacto y se crea si no existe."""
+    nombre; si lo dieron, se busca por nombre exacto y se crea si no existe
+    (con el celular como móvil del contacto)."""
     nombre = (nombre or "").strip()
     if not nombre:
         return _id_config("VENTA_CLIENTE_LOCAL")
     ids = _ejecutar("res.partner", "search", [[["name", "=ilike", nombre]]], {"limit": 1})
     if ids:
         return ids[0]
-    return _ejecutar("res.partner", "create",
-                     [{"name": nombre, "customer_rank": 1, "company_type": "person"}])
+    valores = {"name": nombre, "customer_rank": 1, "company_type": "person"}
+    if (celular or "").strip():
+        valores["mobile"] = celular.strip()
+    return _ejecutar("res.partner", "create", [valores])
 
 
-def crear_cotizacion(empleada, nombre_cliente):
+def crear_cotizacion(empleada, nombre_cliente, celular=""):
     """Crea el sale.order borrador (etiqueta LOCAL, diario de ventas normal)
-    y el registro local. Devuelve el registro. El carrito se vacía solo si
-    Odoo aceptó la orden."""
+    y el registro local. Devuelve el registro. El carrito y el borrador se
+    limpian solo si Odoo aceptó la orden."""
     usuario = empleada["id"]
     lineas, _total_visto = carrito_de(usuario)
     if not lineas:
-        raise ValueError("El carrito está vacío.")
-    partner = _cliente_id(nombre_cliente)
+        raise ValueError("Agrega al menos una planta a la venta.")
+    partner = _cliente_id(nombre_cliente, celular)
     orden_id = _ejecutar("sale.order", "create", [{
         "partner_id": partner,
         "tag_ids": [[6, 0, [_id_config("VENTA_TAG_LOCAL")]]],
@@ -328,12 +364,14 @@ def crear_cotizacion(empleada, nombre_cliente):
                       {"fields": ["name", "amount_total"]})[0]
     with _db() as con:
         cursor = con.execute(
-            "INSERT INTO ventas_locales (creado_en, empleada, cliente, orden_id,"
-            " orden, total, estado) VALUES (?,?,?,?,?,?, 'cotizacion')",
+            "INSERT INTO ventas_locales (creado_en, empleada, cliente, celular,"
+            " orden_id, orden, total, estado) VALUES (?,?,?,?,?,?,?, 'cotizacion')",
             (_ahora(), empleada["nombre"], (nombre_cliente or "").strip() or "Cliente Local",
+             (celular or "").strip() or None,
              orden_id, leido["name"], leido["amount_total"]))
         n = cursor.lastrowid
     vaciar_carrito(usuario)
+    _limpiar_borrador(usuario)
     return obtener_venta(n)
 
 

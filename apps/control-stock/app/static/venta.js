@@ -58,6 +58,34 @@ if (entradaBusca) {
       }
     }, 300);
   });
-  // El Enter del teclado sigue funcionando (el form hace GET /venta?q=...),
+  // El Enter del teclado sigue funcionando (el form hace GET con ?q=...),
   // pero ya nadie lo necesita.
+}
+
+/* Nombre y celular del cliente: se copian a los campos ocultos del form de
+   acciones (para que viajen con Cotizar/Pagar) y se guardan como borrador
+   en el servidor, para sobrevivir a los reloads de agregar/quitar plantas. */
+
+const entradaNombre = document.getElementById("cliente-nombre");
+const entradaCelular = document.getElementById("cliente-celular");
+let temporizadorBorrador = null;
+
+function sincronizarCliente() {
+  const nombre = entradaNombre ? entradaNombre.value : "";
+  const celular = entradaCelular ? entradaCelular.value : "";
+  const ocultoNombre = document.getElementById("post-cliente");
+  const ocultoCelular = document.getElementById("post-celular");
+  if (ocultoNombre) ocultoNombre.value = nombre;
+  if (ocultoCelular) ocultoCelular.value = celular;
+  clearTimeout(temporizadorBorrador);
+  temporizadorBorrador = setTimeout(() => {
+    const datos = new FormData();
+    datos.append("cliente", nombre);
+    datos.append("celular", celular);
+    fetch("/venta/borrador", { method: "POST", body: datos }).catch(() => {});
+  }, 400);
+}
+
+for (const entrada of [entradaNombre, entradaCelular]) {
+  if (entrada) entrada.addEventListener("input", sincronizarCliente);
 }

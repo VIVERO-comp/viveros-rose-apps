@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% block titulo %}Crear venta — Control de Stock{% endblock %}
+{% block titulo %}Vender — Control de Stock{% endblock %}
 
 {% block contenido %}
 <header>
   <div class="brand">
     <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
     <div>
-      <h1>Crear venta</h1>
-      <small>Venta local en el vivero · cotiza o cobra</small>
+      <h1>Vender</h1>
+      <small>Ventas locales del vivero</small>
     </div>
   </div>
 </header>
@@ -19,91 +19,16 @@
 
   {% if not ventas_activo %}
   <div class="aviso-error">La conexión con Odoo no está configurada en este
-    servidor, así que Crear venta está apagado. Avísale a Abraham.</div>
+    servidor, así que Vender está apagado. Avísale a Abraham.</div>
   {% else %}
-
-  <form class="buscador" method="get" action="/venta">
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9aa3bd" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
-    <input id="busca-venta" name="q" value="{{ q }}" placeholder="Buscar planta por nombre o SKU…"
-           autocomplete="off" enterkeyhint="search">
-  </form>
-
-  {# Los resultados se pintan en vivo mientras se escribe (venta.js); el
-     bloque server-rendered cubre el regreso con ?q= tras agregar. #}
-  <div id="resultados-venta">
-  {% if resultados is not none %}
-    {% if not resultados %}
-    <p class="nada-venta">Nada con "{{ q }}". Prueba otro nombre o el SKU.</p>
-    {% endif %}
-    {% for p in resultados %}
-    <form method="post" action="/venta/carrito/agregar" class="sin-margen">
-      <input type="hidden" name="producto_id" value="{{ p.id }}">
-      <input type="hidden" name="cantidad" value="1">
-      <input type="hidden" name="q" value="{{ q }}">
-      <button class="planta planta-boton" type="submit">
-        <div class="foto">🪴<img src="/venta/foto/{{ p.id }}" alt="" loading="lazy" onerror="this.remove()"></div>
-        <div class="info"><b>{{ p.nombre }}</b><span>{{ p.sku }}</span>
-          <span class="precio"><b>{{ p.precio | dinero }}</b></span></div>
-        <div class="agregar-venta">+</div>
-      </button>
-    </form>
-    {% endfor %}
-  {% endif %}
-  </div>
-
-  <div class="seccion-titulo" style="margin-top:14px">Carrito · {{ carrito | length }} producto{{ '' if carrito | length == 1 else 's' }}</div>
-  {% if not carrito %}
-  <p class="nada-venta">El carrito está vacío. Busca una planta arriba y tócala
-    para agregarla.</p>
-  {% else %}
-    {% for l in carrito %}
-    <div class="planta" style="cursor:default">
-      <div class="foto">🪴<img src="/venta/foto/{{ l.producto_id }}" alt="" loading="lazy" onerror="this.remove()"></div>
-      <div class="info">
-        <b>{{ l.nombre }}</b>
-        <span>{{ l.sku }} · {{ l.precio | dinero }} c/u</span>
-        <span class="precio"><b>{{ l.importe | dinero }}</b></span>
-        <form method="post" action="/venta/carrito/quitar" class="sin-margen">
-          <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
-          <button class="quitar-venta" type="submit">Quitar</button>
-        </form>
-      </div>
-      <div class="qty-mini">
-        <form method="post" action="/venta/carrito/cantidad">
-          <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
-          <input type="hidden" name="cantidad" value="{{ l.cantidad - 1 }}">
-          <button type="submit" aria-label="Menos">−</button>
-        </form>
-        <span class="valor">{{ l.cantidad }}</span>
-        <form method="post" action="/venta/carrito/cantidad">
-          <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
-          <input type="hidden" name="cantidad" value="{{ l.cantidad + 1 }}">
-          <button type="submit" aria-label="Más">+</button>
-        </form>
-      </div>
-    </div>
-    {% endfor %}
-
-    <div class="total-venta">
-      <span>Total (precios de Odoo)</span>
-      <b>{{ total_carrito | dinero }}</b>
-    </div>
-
-    <form method="post" action="/venta/cotizar">
-      <div class="campo" style="margin-bottom:12px">
-        <span>Cliente (opcional)</span>
-        <input name="cliente" autocomplete="off" placeholder="Si lo dejas vacío: Cliente Local">
-      </div>
-      <div class="botones-venta">
-        <button class="btn btn-dorado btn-grande" formaction="/venta/pagar" type="submit">PAGADO Y CONFIRMAR PEDIDO</button>
-        <button class="btn btn-linea btn-grande" type="submit">GENERAR COTIZACIÓN</button>
-      </div>
-    </form>
+  <a class="btn btn-dorado btn-grande" href="/venta/nueva" style="margin-bottom:6px">
+    + NUEVA VENTA{% if en_curso %} ({{ en_curso }} planta{{ '' if en_curso == 1 else 's' }} en curso){% endif %}
+  </a>
+  <p class="nada-venta" style="text-align:center">Abre el formulario: cliente,
+    plantas y total, para cotizar o cobrar.</p>
   {% endif %}
 
-  {% endif %}{# ventas_activo #}
-
-  <div class="seccion-titulo" style="margin-top:20px">Ventas y cotizaciones locales</div>
+  <div class="seccion-titulo" style="margin-top:16px">Ventas y cotizaciones locales</div>
   {% if not ventas %}
   <p class="nada-venta">Aún no hay ventas locales.</p>
   {% endif %}
@@ -112,7 +37,7 @@
     <div class="fila1">
       <div>
         <b class="titulo">{{ v.orden }} · {{ v.cliente }}</b>
-        <small>{{ v.fecha_texto }}{% if v.factura %} · Factura {{ v.factura }}{% endif %}{% if v.metodo %} · {{ "Yappy" if v.metodo == "yappy" else "Efectivo" }}{% endif %}</small>
+        <small>{{ v.fecha_texto }}{% if v.celular %} · {{ v.celular }}{% endif %}{% if v.factura %} · Factura {{ v.factura }}{% endif %}{% if v.metodo %} · {{ "Yappy" if v.metodo == "yappy" else "Efectivo" }}{% endif %}</small>
       </div>
       {% if v.estado == "pagado" %}<span class="badge b-ok">Pagado</span>
       {% elif v.estado == "cotizacion" %}<span class="badge b-bajo">Cotización</span>
@@ -144,8 +69,4 @@
   <a href="/venta" class="on"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg></span>Vender</a>
   <a href="/?tab=inv"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6"/><path d="M9 16h6"/></svg></span>Inventario</a>
 </nav>
-{% endblock %}
-
-{% block scripts %}
-<script src="/static/venta.js?v={{ v_estaticos }}"></script>
 {% endblock %}

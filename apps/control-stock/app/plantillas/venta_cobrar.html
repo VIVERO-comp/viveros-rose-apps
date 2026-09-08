@@ -17,6 +17,9 @@
 
   <div class="inv-card resumen-cobro">
     <div class="fila"><span>Creada</span><b>{{ v.fecha_texto }}</b></div>
+    {% if v.celular %}
+    <div class="fila"><span>Celular</span><b>{{ v.celular }}</b></div>
+    {% endif %}
     <div class="fila"><span>Estado</span><b>{{ v.etiqueta_estado }}</b></div>
     {% if v.factura %}
     <div class="fila"><span>Factura</span><b>{{ v.factura }}</b></div>

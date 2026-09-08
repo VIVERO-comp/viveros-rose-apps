@@ -63,6 +63,8 @@ class OdooFalso:
     def res_partner_create(self, args, kw):
         nuevo = self._nuevo_id()
         self.partners[nuevo] = args[0]["name"]
+        self.partners_vals = getattr(self, "partners_vals", [])
+        self.partners_vals.append(args[0])
         return nuevo
 
     # ---- órdenes ----
@@ -202,7 +204,7 @@ def test_sin_configurar_muestra_aviso(cliente, monkeypatch):
 
 
 def test_buscar_muestra_precio_y_foto(cliente_venta):
-    r = cliente_venta.get("/venta?q=romero")
+    r = cliente_venta.get("/venta/nueva?q=romero")
     assert "ROMERO" in r.text and "$3.50" in r.text
     assert "/venta/foto/501" in r.text
 
@@ -218,19 +220,19 @@ def test_agregar_conserva_la_busqueda(cliente_venta):
     r = cliente_venta.post("/venta/carrito/agregar",
                            data={"producto_id": 501, "cantidad": 1, "q": "romero"},
                            follow_redirects=False)
-    assert r.status_code == 303 and r.headers["location"] == "/venta?q=romero"
+    assert r.status_code == 303 and r.headers["location"] == "/venta/nueva?q=romero"
 
 
 def test_carrito_agrega_edita_y_quita(cliente_venta):
     _agregar(cliente_venta, 501, veces=2)
-    r = cliente_venta.get("/venta")
+    r = cliente_venta.get("/venta/nueva")
     assert "$7.00" in r.text  # 2 × 3.50, calculado en el servidor
     cliente_venta.post("/venta/carrito/cantidad",
                        data={"producto_id": 501, "cantidad": 5}, follow_redirects=False)
-    assert "$17.50" in cliente_venta.get("/venta").text
+    assert "$17.50" in cliente_venta.get("/venta/nueva").text
     cliente_venta.post("/venta/carrito/quitar",
                        data={"producto_id": 501}, follow_redirects=False)
-    assert "El carrito está vacío" in cliente_venta.get("/venta").text
+    assert "Todavía no has añadido plantas" in cliente_venta.get("/venta/nueva").text
 
 
 def test_precio_manda_el_de_odoo(cliente_venta, odoo):
@@ -325,3 +327,26 @@ def test_foto_se_cachea_en_disco(cliente_venta, odoo, monkeypatch):
     # Segunda vez: sale del disco aunque Odoo ya no responda.
     monkeypatch.setattr(ventas, "_ejecutar", None)
     assert cliente_venta.get("/venta/foto/501").status_code == 200
+
+
+def test_celular_va_al_contacto_y_al_registro(cliente_venta, odoo):
+    _agregar(cliente_venta, 501)
+    r = cliente_venta.post("/venta/pagar",
+                           data={"cliente": "María", "celular": "6567-3062"},
+                           follow_redirects=False)
+    assert r.status_code == 303
+    assert odoo.partners_vals[0] == {"name": "María", "customer_rank": 1,
+                                     "company_type": "person", "mobile": "6567-3062"}
+    assert ventas.ventas_todas()[0]["celular"] == "6567-3062"
+
+
+def test_borrador_sobrevive_los_reloads(cliente_venta):
+    r = cliente_venta.post("/venta/borrador",
+                           data={"cliente": "María", "celular": "6567-3062"})
+    assert r.status_code == 204
+    pagina = cliente_venta.get("/venta/nueva")
+    assert 'value="María"' in pagina.text and 'value="6567-3062"' in pagina.text
+    # Y se limpia al crear la venta.
+    _agregar(cliente_venta, 501)
+    cliente_venta.post("/venta/cotizar", data={"cliente": "María", "celular": "6567-3062"})
+    assert ventas.borrador_de("genesis") == {"nombre": "", "celular": ""}

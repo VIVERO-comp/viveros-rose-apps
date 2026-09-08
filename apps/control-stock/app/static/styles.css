@@ -462,6 +462,7 @@ nav button.on, nav a.on{color:var(--dorado);background:rgba(227,181,127,.1)}
 
 /* ---------- Crear venta (/venta) ---------- */
 .sin-margen{margin:0}
+.campos-cliente{display:grid;gap:11px}
 .planta-boton{width:100%;border:none;font-family:inherit;text-align:left}
 .agregar-venta{
   width:38px;height:38px;border-radius:12px;flex-shrink:0;
