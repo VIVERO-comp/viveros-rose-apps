@@ -83,7 +83,28 @@ Ver [.env.example](.env.example): `STOCK_PROXY_URL` + `STOCK_API_KEY`
   inventario absolutos en Odoo (`stock.quant` + `action_apply_inventory`),
   con candado de cantidad esperada y auditoría en la base tienda
   (migración 012). Exige `X-API-Key`.
-- La app **nunca** toca Odoo ni su base directamente.
+- La app **nunca** toca Odoo ni su base directamente, con UNA excepción
+  aprobada por el dueño (08/09/2026): la página **Crear Venta** (abajo).
+
+## Crear Venta (página /venta, pestaña "Vender")
+
+Ventas locales del vivero, aparte por completo del flujo Super Extra: la
+empleada busca plantas PL- (nombre o SKU, con foto `image_128` de Odoo
+cacheada 24h en disco), arma un carrito y elige entre **Generar cotización**
+(`sale.order` borrador) o **Pagado y confirmar pedido** (elige
+Yappy/Efectivo y la app corre en Odoo: confirmar → validar la entrega →
+facturar → publicar → registrar el pago). Usa el diario de ventas normal
+(nunca el EXTRA), la etiqueta LOCAL y el contacto "Cliente Local" si no dan
+nombre; los precios y totales siempre los pone Odoo. Vive en
+`app/ventas.py`, habla XML-RPC directo (la excepción de arriba) y registra
+cada venta en SQLite (`ventas_locales`) con estado por pasos: si Odoo falla
+a la mitad, el historial muestra hasta dónde llegó y Reintentar retoma sin
+duplicar. Los PDF (cotización y factura estándar de Odoo) salen por
+`/report/pdf/...` con sesión web: eso exige que `ODOO_PASSWORD` sea una
+contraseña real de login, no una API key (las API keys solo sirven para
+XML-RPC). Como los productos facturan por cantidad entregada, validar la
+salida es obligatorio antes de facturar — y además deja el stock correcto:
+la venta local se lleva las plantas en el momento.
 
 ## Despliegue
 

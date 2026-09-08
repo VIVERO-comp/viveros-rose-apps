@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block titulo %}Cobrar venta — Control de Stock{% endblock %}
+
+{% block contenido %}
+<header>
+  <div class="brand">
+    <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
+    <div>
+      <h1>Cobrar venta</h1>
+      <small>{{ v.orden }} · {{ v.cliente }}</small>
+    </div>
+  </div>
+</header>
+
+<main>
+  <a class="volver" href="/venta">← Volver a Crear venta</a>
+
+  <div class="inv-card resumen-cobro">
+    <div class="fila"><span>Creada</span><b>{{ v.fecha_texto }}</b></div>
+    <div class="fila"><span>Estado</span><b>{{ v.etiqueta_estado }}</b></div>
+    {% if v.factura %}
+    <div class="fila"><span>Factura</span><b>{{ v.factura }}</b></div>
+    {% endif %}
+    <div class="fila grande"><span>Total</span><b>{{ v.total | dinero }}</b></div>
+  </div>
+
+  {% if v.ultimo_error %}
+  <div class="aviso-error">El intento anterior quedó en "{{ v.etiqueta_estado }}":
+    {{ v.ultimo_error }}. Al confirmar se reintenta desde ese paso, sin duplicar nada.</div>
+  {% endif %}
+
+  <form method="post" action="/venta/cobrar/{{ v.n }}">
+    <div class="seccion-titulo">¿Cómo pagó el cliente?</div>
+    <p class="nota-cobro">Verifica el pago tú misma antes de confirmar; la app
+      no lo comprueba sola.</p>
+    <div class="metodos-venta">
+      <label class="metodo-venta">
+        <input type="radio" name="metodo" value="yappy"
+               {% if v.metodo != "efectivo" %}checked{% endif %}>
+        <span class="caja"><b>Yappy</b><small>Ya viste la confirmación en el teléfono</small></span>
+      </label>
+      <label class="metodo-venta">
+        <input type="radio" name="metodo" value="efectivo"
+               {% if v.metodo == "efectivo" %}checked{% endif %}>
+        <span class="caja"><b>Efectivo</b><small>Recibiste el dinero en mano</small></span>
+      </label>
+    </div>
+    <div class="botones-venta">
+      <button class="btn btn-dorado btn-grande" type="submit">
+        {% if v.ultimo_error %}REINTENTAR COBRO{% else %}CONFIRMAR PAGO Y PEDIDO{% endif %}
+      </button>
+      <a class="btn btn-linea btn-grande" href="/venta">Volver sin cobrar</a>
+    </div>
+    <p class="edit-nota" style="margin-top:14px">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      Esto confirma el pedido en Odoo, saca las plantas del inventario, publica
+      la factura y registra el pago. No tiene deshacer automático.
+    </p>
+  </form>
+</main>
+{% endblock %}

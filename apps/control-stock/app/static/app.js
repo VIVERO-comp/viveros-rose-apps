@@ -292,4 +292,11 @@ if (toastPendiente) {
   toast(toastPendiente);
 }
 
+// Los enlaces de la página /venta vuelven con ?tab=stock o ?tab=inv para
+// aterrizar en esa pestaña (las pestañas son 100% del navegador).
+const tabPedida = new URLSearchParams(location.search).get("tab");
+if (tabPedida === "stock" || tabPedida === "inv") {
+  tab(tabPedida, document.querySelectorAll("nav button")[tabPedida === "stock" ? 1 : 2]);
+}
+
 pintar();

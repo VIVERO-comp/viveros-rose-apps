@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block titulo %}{{ titulo }} — Control de Stock{% endblock %}
+
+{% block contenido %}
+<main>
+  <div class="exito-venta">
+    <div class="circulo">
+      <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+    </div>
+    <h1>{{ titulo }}</h1>
+    <p class="sub">{{ sub }}</p>
+    <div class="inv-card resumen-cobro" style="text-align:left">
+      {% for clave, valor, color in filas %}
+      <div class="fila"><span>{{ clave }}</span>
+        <b {% if color %}style="color:var(--{{ color }})"{% endif %}>{{ valor }}</b></div>
+      {% endfor %}
+    </div>
+    <div class="botones-venta" style="margin-top:20px">
+      <a class="btn btn-dorado btn-grande" href="{{ pdf_href }}">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        {{ pdf_texto }}
+      </a>
+      <a class="btn btn-linea btn-grande" href="/venta">Volver a Crear venta</a>
+    </div>
+  </div>
+</main>
+{% endblock %}

@@ -9,13 +9,14 @@ son POSTs de vuelta a este mismo servidor; la app nunca toca Odoo directo.
 import json
 import os
 from datetime import datetime
+from urllib.parse import quote
 
 from fastapi import FastAPI, Request, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import calculos, conteos, datos, fotos, seguridad
+from . import calculos, conteos, datos, fotos, seguridad, ventas
 
 app = FastAPI(title="Control de Stock")
 
@@ -44,9 +45,18 @@ def fecha_bonita(iso):
 
 plantillas.env.filters["fecha_bonita"] = fecha_bonita
 
+
+def dinero_venta(monto):
+    """Mismo formato de moneda del resto de la app: $3.50."""
+    return f"${monto:.2f}"
+
+
+plantillas.env.filters["dinero"] = dinero_venta
+
 # Las tablas se crean al importar: es idempotente y así el proceso (o los
 # tests) nunca corren contra una base sin esquema.
 datos.iniciar_db()
+ventas.iniciar_tablas()
 
 
 # ---------------------------------------------------------------------------
@@ -363,3 +373,186 @@ def descartar(request: Request, n: int):
     if conteo is not None and conteo["estado"] == "pendiente":
         datos.actualizar_conteo(n, "descartado", conteo["datos"])
     return RedirectResponse("/", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Crear Venta: ventas locales directas contra Odoo (app/ventas.py). Es una
+# página propia (/venta) con la misma navegación inferior; nada del flujo
+# Super Extra ni del stock-proxy/order-api se toca.
+# ---------------------------------------------------------------------------
+
+def _fecha_venta(iso):
+    """2026-09-08T15:42:00-05:00 -> 08/09/2026 3:42 p.m."""
+    momento = datetime.fromisoformat(iso)
+    hora = momento.strftime("%-I:%M %p").lower().replace("am", "a.m.").replace("pm", "p.m.")
+    return momento.strftime("%d/%m/%Y ") + hora
+
+
+def _redirigir_venta(error=None):
+    destino = "/venta" + (f"?error={quote(error)}" if error else "")
+    return RedirectResponse(destino, status_code=303)
+
+
+@app.get("/venta")
+def venta(request: Request, q: str = "", error: str = ""):
+    contexto = {
+        "ventas_activo": ventas.configurado(), "q": q.strip(),
+        "resultados": None, "carrito": [], "total_carrito": 0.0,
+        "error_venta": error or None,
+        "ventas": [{**v, "fecha_texto": _fecha_venta(v["creado_en"]),
+                    "etiqueta_estado": ventas.ETIQUETAS_ESTADO[v["estado"]]}
+                   for v in ventas.ventas_todas()],
+    }
+    if contexto["ventas_activo"]:
+        try:
+            if contexto["q"]:
+                contexto["resultados"] = ventas.buscar_productos(contexto["q"])
+            contexto["carrito"], contexto["total_carrito"] = \
+                ventas.carrito_de(request.state.empleada["id"])
+        except Exception:
+            contexto["error_venta"] = ("Sin conexión con Odoo en este momento. "
+                                       "El carrito y el historial local siguen aquí.")
+    return plantillas.TemplateResponse(request, "venta.html", contexto)
+
+
+@app.post("/venta/carrito/agregar")
+async def venta_agregar(request: Request):
+    form = await request.form()
+    try:
+        ventas.agregar_al_carrito(request.state.empleada["id"],
+                                  int(form.get("producto_id", "")),
+                                  int(form.get("cantidad", 1)))
+    except (TypeError, ValueError):
+        pass
+    return RedirectResponse("/venta", status_code=303)
+
+
+@app.post("/venta/carrito/cantidad")
+async def venta_cantidad(request: Request):
+    form = await request.form()
+    try:
+        ventas.cambiar_cantidad(request.state.empleada["id"],
+                                int(form.get("producto_id", "")),
+                                int(form.get("cantidad", "")))
+    except (TypeError, ValueError):
+        pass
+    return RedirectResponse("/venta", status_code=303)
+
+
+@app.post("/venta/carrito/quitar")
+async def venta_quitar(request: Request):
+    form = await request.form()
+    try:
+        ventas.quitar_del_carrito(request.state.empleada["id"],
+                                  int(form.get("producto_id", "")))
+    except (TypeError, ValueError):
+        pass
+    return RedirectResponse("/venta", status_code=303)
+
+
+@app.post("/venta/cotizar")
+async def venta_cotizar(request: Request):
+    form = await request.form()
+    try:
+        registro = ventas.crear_cotizacion(request.state.empleada, form.get("cliente", ""))
+    except ValueError as error:
+        return _redirigir_venta(str(error))
+    except Exception as error:
+        return _redirigir_venta(f"Odoo no aceptó la cotización: {ventas._mensaje_de_error(error)}")
+    return plantillas.TemplateResponse(request, "venta_exito.html", {
+        "titulo": "Cotización creada",
+        "sub": f"{registro['orden']} · {registro['cliente']}",
+        "filas": [("Total", dinero_venta(registro["total"]), None),
+                  ("Estado", "Cotización (borrador en Odoo)", "dorado")],
+        "pdf_href": f"/venta/{registro['n']}/cotizacion.pdf",
+        "pdf_texto": "Descargar cotización (PDF)",
+    })
+
+
+@app.post("/venta/pagar")
+async def venta_pagar(request: Request):
+    # El botón grande "PAGADO Y CONFIRMAR PEDIDO": crea la orden desde el
+    # carrito y pasa a elegir el método de pago (el cobro corre después).
+    form = await request.form()
+    try:
+        registro = ventas.crear_cotizacion(request.state.empleada, form.get("cliente", ""))
+    except ValueError as error:
+        return _redirigir_venta(str(error))
+    except Exception as error:
+        return _redirigir_venta(f"Odoo no aceptó el pedido: {ventas._mensaje_de_error(error)}")
+    return RedirectResponse(f"/venta/cobrar/{registro['n']}", status_code=303)
+
+
+@app.get("/venta/cobrar/{n}")
+def venta_cobrar(request: Request, n: int):
+    registro = ventas.obtener_venta(n)
+    if registro is None or registro["estado"] == "pagado":
+        return RedirectResponse("/venta", status_code=303)
+    return plantillas.TemplateResponse(request, "venta_cobrar.html", {
+        "v": {**registro, "fecha_texto": _fecha_venta(registro["creado_en"]),
+              "etiqueta_estado": ventas.ETIQUETAS_ESTADO[registro["estado"]]},
+    })
+
+
+@app.post("/venta/cobrar/{n}")
+async def venta_cobrar_confirmar(request: Request, n: int):
+    form = await request.form()
+    metodo = form.get("metodo", "")
+    if metodo not in ("yappy", "efectivo"):
+        return RedirectResponse(f"/venta/cobrar/{n}", status_code=303)
+    registro = ventas.cobrar(n, metodo)
+    if registro is None:
+        return RedirectResponse("/venta", status_code=303)
+    if registro["estado"] != "pagado":
+        # Quedó a medias: la pantalla de cobro muestra el estado real y el
+        # error, y el mismo botón reintenta desde el paso que faltó.
+        return RedirectResponse(f"/venta/cobrar/{n}", status_code=303)
+    metodo_texto = "Yappy" if metodo == "yappy" else "Efectivo"
+    return plantillas.TemplateResponse(request, "venta_exito.html", {
+        "titulo": "Venta cobrada",
+        "sub": f"{registro['orden']} · {registro['cliente']}",
+        "filas": [("Factura", registro["factura"], None),
+                  ("Total", dinero_venta(registro["total"]), "ok"),
+                  ("Método", metodo_texto, None)],
+        "pdf_href": f"/venta/{n}/factura.pdf",
+        "pdf_texto": "Descargar factura (PDF)",
+    })
+
+
+def _respuesta_pdf(reporte, objetivo_id, nombre):
+    # Un PDF que falla (ej. credenciales web sin configurar) no debe tirar un
+    # error 500 pelado: se vuelve a /venta con el aviso en pantalla.
+    try:
+        contenido = ventas.descargar_pdf(reporte, objetivo_id)
+    except Exception as error:
+        return _redirigir_venta(f"No se pudo descargar el PDF: {ventas._mensaje_de_error(error)}")
+    return Response(contenido, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
+
+
+@app.get("/venta/{n}/cotizacion.pdf")
+def venta_pdf_cotizacion(request: Request, n: int):
+    registro = ventas.obtener_venta(n)
+    if registro is None or not registro["orden_id"]:
+        return RedirectResponse("/venta", status_code=303)
+    return _respuesta_pdf("sale.report_saleorder", registro["orden_id"],
+                          f"cotizacion-{registro['orden'].replace('/', '-')}.pdf")
+
+
+@app.get("/venta/{n}/factura.pdf")
+def venta_pdf_factura(request: Request, n: int):
+    registro = ventas.obtener_venta(n)
+    if registro is None or not registro["factura_id"]:
+        return RedirectResponse("/venta", status_code=303)
+    return _respuesta_pdf("account.report_invoice", registro["factura_id"],
+                          f"factura-{(registro['factura'] or str(n)).replace('/', '-')}.pdf")
+
+
+@app.get("/venta/foto/{producto_id}")
+def venta_foto(request: Request, producto_id: int):
+    foto = ventas.foto_producto(producto_id)
+    if foto is None:
+        return Response(status_code=404)
+    contenido, tipo = foto
+    return Response(contenido, media_type=tipo,
+                    headers={"Cache-Control": "private, max-age=86400"})

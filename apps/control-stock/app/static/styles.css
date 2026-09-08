@@ -376,14 +376,14 @@ nav{
   display:flex;padding:10px 18px calc(14px + env(safe-area-inset-bottom));
   gap:8px;
 }
-nav button{
+nav button, nav a{
   flex:1;background:none;border:none;color:var(--texto-suave);
   font-family:inherit;font-size:10.5px;font-weight:600;
   display:flex;flex-direction:column;align-items:center;gap:4px;
-  padding:8px 0;cursor:pointer;border-radius:16px;
+  padding:8px 0;cursor:pointer;border-radius:16px;text-decoration:none;
 }
-nav button .ic{display:flex;align-items:center;justify-content:center;height:20px}
-nav button.on{color:var(--dorado);background:rgba(227,181,127,.1)}
+nav button .ic, nav a .ic{display:flex;align-items:center;justify-content:center;height:20px}
+nav button.on, nav a.on{color:var(--dorado);background:rgba(227,181,127,.1)}
 
 /* ---------- FAB agregar planta ---------- */
 .fab{
@@ -459,3 +459,84 @@ nav button.on{color:var(--dorado);background:rgba(227,181,127,.1)}
   color:var(--critico);border-radius:16px;padding:13px 15px;
   font-size:12.5px;line-height:1.5;margin-bottom:12px;
 }
+
+/* ---------- Crear venta (/venta) ---------- */
+.sin-margen{margin:0}
+.planta-boton{width:100%;border:none;font-family:inherit;text-align:left}
+.agregar-venta{
+  width:38px;height:38px;border-radius:12px;flex-shrink:0;
+  background:var(--dorado);color:#3a2c14;
+  display:flex;align-items:center;justify-content:center;
+  font-size:22px;font-weight:800;
+}
+.nada-venta{color:var(--texto-suave);font-size:12.5px;padding:8px 2px;line-height:1.5}
+.qty-mini{display:flex;align-items:center;gap:5px}
+.qty-mini form{margin:0}
+.qty-mini button{
+  width:38px;height:38px;border-radius:12px;border:none;cursor:pointer;
+  background:#efe6d2;color:#2c2416;font-size:20px;font-weight:800;
+  font-family:inherit;line-height:1;
+}
+.qty-mini .valor{
+  width:30px;text-align:center;font-size:17px;font-weight:800;color:#2c2416;
+  font-variant-numeric:tabular-nums;
+}
+.quitar-venta{
+  border:none;background:none;color:#a4432f;font-size:11px;font-weight:700;
+  padding:0;margin-top:3px;cursor:pointer;font-family:inherit;
+}
+.total-venta{
+  display:flex;justify-content:space-between;align-items:baseline;
+  font-size:14px;color:var(--texto);margin:14px 2px;
+}
+.total-venta b{font-size:19px;color:var(--dorado-suave)}
+.botones-venta{display:grid;gap:10px;margin:4px 0 8px}
+.btn-grande{width:100%;justify-content:center;padding:16px;font-size:14.5px}
+.venta-item{
+  background:var(--noche-2);border-radius:16px;padding:13px 15px;
+  margin-bottom:8px;border-left:4px solid var(--bajo);
+}
+.venta-item.pagado{border-left-color:var(--ok)}
+.venta-item.cotizacion{border-left-color:var(--dorado)}
+.venta-item .fila1{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.venta-item .titulo{font-size:13.5px;font-weight:700}
+.venta-item small{display:block;font-size:11px;color:var(--texto-suave);margin-top:2px}
+.venta-item .badge{margin-top:0;flex-shrink:0}
+.error-venta{font-size:11.5px;color:var(--critico);line-height:1.4;margin-top:6px}
+.venta-acciones{display:flex;justify-content:space-between;align-items:center;margin-top:9px}
+.venta-acciones a{
+  color:var(--dorado);font-size:12px;font-weight:700;text-decoration:none;
+  margin-right:14px;
+}
+.venta-monto{font-size:16px;font-weight:800;color:var(--dorado-suave)}
+.resumen-cobro .fila{
+  display:flex;justify-content:space-between;align-items:baseline;
+  padding:5px 0;font-size:13px;color:var(--texto-suave);
+}
+.resumen-cobro .fila b{color:var(--texto);font-weight:700}
+.resumen-cobro .fila.grande{font-size:15px}
+.resumen-cobro .fila.grande b{font-size:19px;color:var(--dorado-suave)}
+.nota-cobro{font-size:12px;color:var(--texto-suave);margin:0 0 4px;line-height:1.5}
+.metodos-venta{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 16px}
+.metodo-venta{position:relative}
+.metodo-venta input{position:absolute;opacity:0}
+.metodo-venta .caja{
+  display:flex;flex-direction:column;gap:3px;padding:16px 12px;
+  border-radius:16px;border:2px solid var(--noche-3);background:var(--noche-2);
+  text-align:center;cursor:pointer;
+}
+.metodo-venta .caja b{font-size:17px;color:var(--texto)}
+.metodo-venta .caja small{font-size:10.5px;color:var(--texto-suave);line-height:1.35}
+.metodo-venta input:checked + .caja{
+  border-color:var(--dorado);background:rgba(227,181,127,.12);
+}
+.metodo-venta input:checked + .caja b{color:var(--dorado)}
+.metodo-venta input:focus-visible + .caja{outline:2px solid var(--dorado-suave)}
+.exito-venta{text-align:center;padding-top:36px}
+.exito-venta .circulo{
+  width:96px;height:96px;border-radius:50%;background:var(--ok);color:#123c1e;
+  display:grid;place-items:center;margin:0 auto 18px;
+  box-shadow:0 0 0 8px rgba(143,208,160,.15);
+}
+.exito-venta h1{font-size:24px;font-weight:800;margin-bottom:4px}
+.exito-venta .sub{font-size:14px;color:var(--texto-suave);margin-bottom:18px}
