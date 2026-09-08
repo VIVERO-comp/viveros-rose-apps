@@ -207,6 +207,20 @@ def test_buscar_muestra_precio_y_foto(cliente_venta):
     assert "/venta/foto/501" in r.text
 
 
+def test_buscar_en_vivo_devuelve_json(cliente_venta):
+    r = cliente_venta.get("/venta/buscar?q=romero")
+    assert r.status_code == 200
+    assert r.json()["resultados"] == [
+        {"id": 501, "sku": "PL-ROMERO", "nombre": "ROMERO", "precio": "$3.50"}]
+
+
+def test_agregar_conserva_la_busqueda(cliente_venta):
+    r = cliente_venta.post("/venta/carrito/agregar",
+                           data={"producto_id": 501, "cantidad": 1, "q": "romero"},
+                           follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/venta?q=romero"
+
+
 def test_carrito_agrega_edita_y_quita(cliente_venta):
     _agregar(cliente_venta, 501, veces=2)
     r = cliente_venta.get("/venta")

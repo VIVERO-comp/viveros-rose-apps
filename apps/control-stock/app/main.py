@@ -415,6 +415,17 @@ def venta(request: Request, q: str = "", error: str = ""):
     return plantillas.TemplateResponse(request, "venta.html", contexto)
 
 
+@app.get("/venta/buscar")
+def venta_buscar(request: Request, q: str = ""):
+    # Alimenta el buscador en vivo (venta.js): mismo resultado que la
+    # búsqueda server-rendered, en JSON y con el precio ya formateado.
+    try:
+        resultados = ventas.buscar_productos(q)
+    except Exception:
+        return {"error": "Sin conexión con Odoo en este momento."}
+    return {"resultados": [{**p, "precio": dinero_venta(p["precio"])} for p in resultados]}
+
+
 @app.post("/venta/carrito/agregar")
 async def venta_agregar(request: Request):
     form = await request.form()
@@ -424,7 +435,10 @@ async def venta_agregar(request: Request):
                                   int(form.get("cantidad", 1)))
     except (TypeError, ValueError):
         pass
-    return RedirectResponse("/venta", status_code=303)
+    # Conservar la búsqueda activa: así se pueden agregar varias plantas
+    # seguidas sin volver a escribir.
+    q = (form.get("q") or "").strip()
+    return RedirectResponse("/venta" + (f"?q={quote(q)}" if q else ""), status_code=303)
 
 
 @app.post("/venta/carrito/cantidad")
