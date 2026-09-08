@@ -52,9 +52,9 @@ propia por empleada (PBKDF2 + sesiones en SQLite, altas por consola).
 
 ## Control de Stock
 
-**Vive en:** `apps/control-stock/` (este repo); irá a
-inventario.plantaspanama.com · **Estado:** fase 1 construida (falta la
-validación contra la instancia de pruebas y el deploy) · **Usuarios:** el
+**Vive en:** `apps/control-stock/` (este repo), en producción en
+[inventario.plantaspanama.com](https://inventario.plantaspanama.com) ·
+**Estado:** producción · **Usuarios:** el
 encargado de stock (stockmaster) más Génesis y Rubén · **Tecnología:**
 Python (FastAPI + Jinja2 + SQLite), fpdf2 (PDF) y openpyxl (Excel); el
 prototipo HTML aprobado es la referencia visual y su CSS/JS vive casi
