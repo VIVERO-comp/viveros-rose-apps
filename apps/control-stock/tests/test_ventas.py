@@ -21,6 +21,16 @@ class OdooFalso:
             502: {"default_code": "PL-JADE", "name": "JADE", "list_price": 5.25},
         }
         self.partners = {74: "Cliente Local"}
+        # Plantillas para la foto de la pantalla de Stock: una con imagen de
+        # ficha, una solo con adjunto (foto de referencia) y una sin nada.
+        self.plantillas = {
+            701: {"default_code": "PL-CON-FICHA",
+                  "image_128": base64.b64encode(b"\xff\xd8ficha").decode()},
+            702: {"default_code": "PL-CON-ADJUNTO", "image_128": False},
+            703: {"default_code": "PL-SIN-NADA", "image_128": False},
+        }
+        self.adjuntos = {801: {"res_id": 702,
+                               "datas": base64.b64encode(b"\x89PNGadjunto").decode()}}
         self.ordenes = {}
         self.pickings = {}
         self.movimientos = {}
@@ -54,6 +64,18 @@ class OdooFalso:
             return [{"id": i, "image_128": base64.b64encode(b"\xff\xd8foto").decode()}
                     for i in args[0]]
         return [{"id": i, **self.productos[i]} for i in args[0] if i in self.productos]
+
+    def product_template_search_read(self, args, kw):
+        sku = args[0][0][2]
+        return [{"id": i, "image_128": p["image_128"]}
+                for i, p in self.plantillas.items()
+                if p["default_code"] == sku][:1]
+
+    def ir_attachment_search_read(self, args, kw):
+        res_id = next(c[2] for c in args[0]
+                      if isinstance(c, list) and c[0] == "res_id")
+        return [{"id": i, "datas": a["datas"]}
+                for i, a in self.adjuntos.items() if a["res_id"] == res_id][:1]
 
     # ---- partners ----
     def res_partner_search(self, args, kw):
@@ -357,6 +379,36 @@ def test_foto_se_cachea_en_disco(cliente_venta, odoo, monkeypatch):
     # Segunda vez: sale del disco aunque Odoo ya no responda.
     monkeypatch.setattr(ventas, "_ejecutar", None)
     assert cliente_venta.get("/venta/foto/501").status_code == 200
+
+
+def test_stock_foto_usa_la_imagen_de_la_ficha(cliente_venta):
+    r = cliente_venta.get("/stock/foto/PL-CON-FICHA")
+    assert r.status_code == 200 and r.content == b"\xff\xd8ficha"
+
+
+def test_stock_foto_cae_al_adjunto(cliente_venta):
+    # Sin imagen de ficha, sirve la foto de referencia adjunta al producto
+    # (los adjuntos son la fuente de fotos que maneja el dueño en Odoo).
+    r = cliente_venta.get("/stock/foto/PL-CON-ADJUNTO")
+    assert r.status_code == 200 and r.content == b"\x89PNGadjunto"
+
+
+def test_stock_foto_sin_foto_es_404(cliente_venta):
+    # El 404 dispara el onerror de la tarjeta y queda el emoji.
+    assert cliente_venta.get("/stock/foto/PL-SIN-NADA").status_code == 404
+    assert cliente_venta.get("/stock/foto/PL-NO-EXISTE").status_code == 404
+
+
+def test_stock_foto_rechaza_sku_invalido(cliente_venta):
+    # Nada de rutas raras hacia el caché en disco.
+    assert ventas.foto_por_sku("../etc/passwd") is None
+    assert ventas.foto_por_sku("") is None
+
+
+def test_stock_foto_se_cachea_en_disco(cliente_venta, monkeypatch):
+    assert cliente_venta.get("/stock/foto/PL-CON-FICHA").status_code == 200
+    monkeypatch.setattr(ventas, "_ejecutar", None)
+    assert cliente_venta.get("/stock/foto/PL-CON-FICHA").status_code == 200
 
 
 def test_celular_va_al_contacto_y_al_registro(cliente_venta, odoo):

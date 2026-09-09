@@ -164,10 +164,12 @@ def inicio(request: Request, refrescar: int = 0):
             "e": calculos.emoji_de(p["nombre"]),
             # Precio ya formateado en el servidor: el list_price de Odoo tal
             # cual, igual que en la tienda (null = precio pendiente en Odoo).
-            # img: foto de Cloudinary (null = sin foto, la tarjeta cae al
-            # emoji).
+            # img: foto de Cloudinary; sin ella, el respaldo /stock/foto
+            # sirve la de Odoo (si tampoco hay, el 404 dispara el onerror y
+            # la tarjeta cae al emoji).
             "po": calculos.precio_online(p.get("precio_centavos", 0)),
-            "img": fotos.url_foto(p["sku"]),
+            "img": fotos.url_foto(p["sku"])
+                   or (f"/stock/foto/{quote(p['sku'])}" if ventas.configurado() else None),
         }
         for p in inventario
     ]
@@ -662,6 +664,18 @@ def factura_publica(request: Request, token: str):
         "fecha_corta": fecha.strftime("%d/%m/%Y"),
         "metodo": "Yappy" if registro["metodo"] == "yappy" else "Efectivo",
     })
+
+
+@app.get("/stock/foto/{sku}")
+def stock_foto(request: Request, sku: str):
+    """Respaldo de la pantalla de Stock: la foto de Odoo para los SKUs que
+    no tienen foto en Cloudinary."""
+    foto = ventas.foto_por_sku(sku)
+    if foto is None:
+        return Response(status_code=404)
+    contenido, tipo = foto
+    return Response(contenido, media_type=tipo,
+                    headers={"Cache-Control": "private, max-age=86400"})
 
 
 @app.get("/venta/foto/{producto_id}")

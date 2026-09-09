@@ -89,7 +89,9 @@
         <button class="chip on" onclick="chip(this,'Todas')">Todas</button>
         <button class="chip chip-alerta" onclick="chip(this,'__alerta__')">Solo con alerta</button>
         {% for cat in categorias %}
-        <button class="chip" onclick="chip(this,{{ cat.nombre | tojson }})">{{ cat.nombre }}</button>
+        {# data-cat y no tojson en el onclick: tojson deja comillas dobles
+           que rompen el atributo y el chip queda muerto. #}
+        <button class="chip" data-cat="{{ cat.nombre }}" onclick="chip(this, this.dataset.cat)">{{ cat.nombre }}</button>
         {% endfor %}
       </div>
     </div>

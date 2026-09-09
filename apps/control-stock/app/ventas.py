@@ -23,6 +23,7 @@ para una venta local: el cliente se lleva las plantas en el momento.
 import base64
 import json
 import os
+import re
 import secrets
 import sqlite3
 import time
@@ -167,6 +168,51 @@ def foto_producto(producto_id):
     with open(ruta, "wb") as archivo:
         archivo.write(contenido)
     return _como_foto(contenido)
+
+
+def foto_por_sku(sku):
+    """(bytes, tipo_mime) de la foto de Odoo para la pantalla de Stock, que
+    solo la pide para los SKUs sin foto en Cloudinary: la imagen de la ficha
+    si la tiene y, si no, el primer adjunto de imagen del producto (las fotos
+    de referencia que el dueño deja en Archivos). Misma caché en disco y TTL
+    que foto_producto, con clave por SKU."""
+    sku = str(sku or "")
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", sku):
+        return None
+    ruta = os.path.join(_dir_fotos(), f"sku-{sku}.bin")
+    if os.path.exists(ruta) and time.time() - os.path.getmtime(ruta) < TTL_FOTOS:
+        with open(ruta, "rb") as archivo:
+            return _como_foto(archivo.read())
+    try:
+        contenido = _foto_de_odoo(sku)
+    except Exception:
+        # Sin Odoo se sirve lo que haya en disco aunque esté vencido.
+        if os.path.exists(ruta):
+            with open(ruta, "rb") as archivo:
+                return _como_foto(archivo.read())
+        return None
+    with open(ruta, "wb") as archivo:
+        archivo.write(contenido)
+    return _como_foto(contenido)
+
+
+def _foto_de_odoo(sku):
+    filas = _ejecutar("product.template", "search_read",
+                      [[["default_code", "=", sku]]],
+                      {"fields": ["image_128"], "limit": 1,
+                       "context": {"active_test": False}})
+    if not filas:
+        return b""
+    if filas[0].get("image_128"):
+        return base64.b64decode(filas[0]["image_128"])
+    adjuntos = _ejecutar("ir.attachment", "search_read",
+                         [[["res_model", "=", "product.template"],
+                           ["res_id", "=", filas[0]["id"]],
+                           ["mimetype", "like", "image%"]]],
+                         {"fields": ["datas"], "limit": 1, "order": "id"})
+    if adjuntos and adjuntos[0].get("datas"):
+        return base64.b64decode(adjuntos[0]["datas"])
+    return b""
 
 
 def _como_foto(contenido):

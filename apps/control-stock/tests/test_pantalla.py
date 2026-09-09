@@ -113,3 +113,34 @@ def test_datos_json_lleva_precio_y_foto(cliente, con_inventario, monkeypatch):
     # y jamás un "$0.00".
     assert '"po": null' in r.text
     assert "$0.00" not in r.text
+
+
+def test_sin_odoo_configurado_no_hay_respaldo_de_foto(cliente, con_inventario, monkeypatch):
+    from app import fotos
+
+    monkeypatch.setattr(fotos, "url_foto", lambda sku: None)
+    for variable in ("ODOO_URL", "ODOO_DB", "ODOO_USER", "ODOO_PASSWORD"):
+        monkeypatch.delenv(variable, raising=False)
+    r = cliente.get("/")
+    assert '"img": null' in r.text
+    assert "/stock/foto/" not in r.text
+
+
+def test_sin_cloudinary_cae_a_la_foto_de_odoo(cliente, con_inventario, monkeypatch):
+    from app import fotos
+
+    # Sin foto en Cloudinary y con Odoo configurado, la tarjeta apunta al
+    # respaldo /stock/foto (que sirve la imagen de la ficha o el adjunto).
+    monkeypatch.setattr(fotos, "url_foto", lambda sku: None)
+    for variable in ("ODOO_URL", "ODOO_DB", "ODOO_USER", "ODOO_PASSWORD"):
+        monkeypatch.setenv(variable, "x")
+    r = cliente.get("/")
+    assert '"img": "/stock/foto/PL-ROMERO"' in r.text
+
+
+def test_chips_de_categoria_no_rompen_el_onclick(cliente, con_inventario):
+    # tojson dentro de un atributo con comillas dobles partía el onclick y
+    # los chips de categoría quedaban muertos (solo funcionaban los fijos).
+    r = cliente.get("/")
+    assert 'data-cat="Exterior"' in r.text
+    assert 'onclick="chip(this,"' not in r.text
