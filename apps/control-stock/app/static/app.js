@@ -27,6 +27,17 @@ function lineaPrecio(p) {
   return p.po ? `<b>${p.po}</b>` : "Precio pendiente";
 }
 
+// Si la foto de Cloudinary falla (URL rota, CDN con 404 cacheado), se
+// intenta UNA vez la foto de Odoo (/stock/foto) antes de caer al emoji.
+function fotoRespaldo(img, sku) {
+  if (!img.dataset.respaldo && !img.src.startsWith(location.origin + "/stock/foto/")) {
+    img.dataset.respaldo = "1";
+    img.src = "/stock/foto/" + sku;
+  } else {
+    img.remove();
+  }
+}
+
 function pintar() {
   const t = normalizar(document.getElementById("busca").value);
   const l = document.getElementById("lista");
@@ -47,10 +58,9 @@ function pintar() {
     .map(p => {
       const [et, cl] = estado(p);
       const negativo = p.f < 0;
-      // La foto de Cloudinary se pinta ENCIMA del emoji: si no hay foto (o
-      // no carga y el onerror la quita), el emoji de siempre queda de
-      // placeholder y el layout no se mueve.
-      const foto = p.img ? `<img src="${p.img}" alt="" loading="lazy" onerror="this.remove()">` : "";
+      // La foto se pinta ENCIMA del emoji: si no carga, fotoRespaldo prueba
+      // la de Odoo y recien despues queda el emoji; el layout no se mueve.
+      const foto = p.img ? `<img src="${p.img}" alt="" loading="lazy" onerror="fotoRespaldo(this,'${p.sku}')">` : "";
       const precio = lineaPrecio(p);
       return `<div class="planta ${!negativo && p.q <= 0 ? "agotada" : ""}" id="planta-${p.sku}" data-planta="${p.sku}">
         <div class="foto">${p.e}${foto}</div>
@@ -115,7 +125,7 @@ function abrirEditar(sku) {
     const img = document.createElement("img");
     img.src = p.img;
     img.alt = "";
-    img.onerror = () => img.remove();
+    img.onerror = () => fotoRespaldo(img, p.sku);
     foto.appendChild(img);
   }
   document.getElementById("edit-precio").innerHTML = lineaPrecio(p);
