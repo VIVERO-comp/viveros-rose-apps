@@ -6,25 +6,25 @@
     "PL-ALBAHACA-VERDE": "240dd5e2111b",
     "PL-ANTHURIO-FLOR": "e0e860e092e6",
     "PL-CACTUS-GRANDE": "d27a27678ace",
+    "PL-CHAVELITAS-01": "97c414192043",
     "PL-CIELITO-AZUL": "1caa63a836d4",
     "PL-CLAVELITO": "221a06da1630",
     "PL-FICUS-TRIANGULAR-GRANDE": "d338d33484ce",
     "PL-HELECHOS": "024ad5db9ce0",
+    "PL-HIERBABUENA-01": "0a1431e20aee",
+    "PL-JADE-01": "7e0558b32180",
     "PL-LENGUA-DE-SUEGRA-ENANA": "83c3925ae31d",
     "PL-LENGUA-DE-SUEGRA-MINI": "3ef1e03b84f1",
+    "PL-MENTA-01": "220026b0bdec",
     "PL-MINI-JADE": "e32e9708ad99",
     "PL-OREGANO": "6ced31823982",
     "PL-PALMA-ABANICO": "3e9b9379a399",
     "PL-ROMERO": "b9ded11b46d4",
     "PL-ROSITA-MINIATURA": "32caba1ca20b",
+    "PL-RUDA-01": "6d4f6fd5d5e9",
     "PL-SUCULENTA-PEQUENA": "73408df239fc",
     "PL-SUCULENTAS-GRANDE": "578042c1228b",
-    "PL-TRASDESCANTIA": "7db61b458983",
-    "PL-CHAVELITAS-01": "97c414192043",
-    "PL-HIERBABUENA-01": "0a1431e20aee",
-    "PL-JADE-01": "7e0558b32180",
-    "PL-MENTA-01": "220026b0bdec",
-    "PL-RUDA-01": "6d4f6fd5d5e9"
+    "PL-TRASDESCANTIA": "7db61b458983"
   },
   "porSku": {
     "PL-AGAVE-GIGANTE": [
@@ -80,6 +80,10 @@
     "PL-CELOCIA": [
       "1a4c88ba90ba"
     ],
+    "PL-CHAVELITAS-01": [
+      "97c414192043",
+      "b01a40787659"
+    ],
     "PL-CIELITO-AZUL": [
       "1caa63a836d4"
     ],
@@ -112,8 +116,15 @@
     "PL-CRINUM-ASIATICO-VARIEGADO": [
       "a163d864940e"
     ],
+    "PL-CRISANTEMOS-01": [
+      "954d03c7a83c"
+    ],
     "PL-CROTO-MAMY-AMARILLO": [
       "bc93bd32129e"
+    ],
+    "PL-CUNA-DE-MOISES": [
+      "3e7b517adb4b",
+      "788264b552e8"
     ],
     "PL-DRACAENA-ROJA": [
       "f212acbfea6a",
@@ -143,8 +154,15 @@
     "PL-HELECHOS": [
       "024ad5db9ce0"
     ],
+    "PL-HIERBABUENA-01": [
+      "0a1431e20aee"
+    ],
     "PL-HYPOESTES": [
       "072454db7feb"
+    ],
+    "PL-JADE-01": [
+      "253c22f0869f",
+      "7e0558b32180"
     ],
     "PL-JAZMIN-BLANCO-ENANO": [
       "18f7ae9f65e4"
@@ -162,15 +180,14 @@
       "3ef1e03b84f1",
       "76db66709cc2"
     ],
-    "PL-LIRIO-CAMINANTE": [
-      "3e7b517adb4b",
-      "788264b552e8"
-    ],
     "PL-LIRIO-GIGANTE-MORADO": [
       "fb2badac69da"
     ],
     "PL-MARGINATA": [
       "bcc3c11b235d"
+    ],
+    "PL-MENTA-01": [
+      "220026b0bdec"
     ],
     "PL-MINI-JADE": [
       "9d091d10862a",
@@ -229,9 +246,6 @@
     "PL-PALMA-ZICA": [
       "582fecd58698"
     ],
-    "PL-POTHOS-MULTI-RAMA": [
-      "e453618828d2"
-    ],
     "PL-PINO-ENANO": [
       "47a4332ad831"
     ],
@@ -253,6 +267,9 @@
     "PL-POTHOS": [
       "2b5e5f3b4a31"
     ],
+    "PL-POTHOS-MULTI-RAMA": [
+      "e453618828d2"
+    ],
     "PL-ROMERO": [
       "b9ded11b46d4"
     ],
@@ -261,6 +278,9 @@
       "c4f1f85a5446",
       "9c42a839db3b",
       "32caba1ca20b"
+    ],
+    "PL-RUDA-01": [
+      "6d4f6fd5d5e9"
     ],
     "PL-SUCULENTA-PEQUENA": [
       "f35bf487bf59",
@@ -272,31 +292,11 @@
       "a1a5b40bea66",
       "578042c1228b"
     ],
-    "PL-TRASDESCANTIA": [
-      "7db61b458983"
-    ],
-    "PL-CHAVELITAS-01": [
-      "97c414192043",
-      "b01a40787659"
-    ],
-    "PL-CRISANTEMOS-01": [
-      "954d03c7a83c"
-    ],
-    "PL-HIERBABUENA-01": [
-      "0a1431e20aee"
-    ],
-    "PL-JADE-01": [
-      "253c22f0869f",
-      "7e0558b32180"
-    ],
-    "PL-MENTA-01": [
-      "220026b0bdec"
-    ],
-    "PL-RUDA-01": [
-      "6d4f6fd5d5e9"
-    ],
     "PL-TORENIA-01": [
       "853a3c9aa66c"
+    ],
+    "PL-TRASDESCANTIA": [
+      "7db61b458983"
     ]
   },
   "recortesPorHash": {
