@@ -86,13 +86,12 @@
     <div class="stock-top">
       <div class="buscador"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9aa3bd" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg><input id="busca" placeholder="Buscar planta…" oninput="filtrar()"></div>
       <div class="filtros" id="filtros">
-        <button class="chip on" onclick="chip(this,'Todas')">Todas</button>
-        <button class="chip chip-alerta" onclick="chip(this,'__alerta__')">Solo con alerta</button>
-        {% for cat in categorias %}
-        {# data-cat y no tojson en el onclick: tojson deja comillas dobles
-           que rompen el atributo y el chip queda muerto. #}
-        <button class="chip" data-cat="{{ cat.nombre }}" onclick="chip(this, this.dataset.cat)">{{ cat.nombre }}</button>
-        {% endfor %}
+        <button class="chip on" data-cat="Todas" onclick="chip(this,'Todas')">Todas</button>
+        <button class="chip chip-alerta" data-cat="__alerta__" onclick="chip(this,'__alerta__')">Solo con alerta</button>
+        <button class="chip" data-cat="__cero__" onclick="chip(this,'__cero__')">En 0</button>
+        {# Solo estas tres opciones (pedido del dueño): sin chips de
+           categoría (Interior/Exterior/Florales); esas plantas siguen
+           saliendo en "Todas", en "En 0" y por el buscador. #}
       </div>
     </div>
     <div class="sync">

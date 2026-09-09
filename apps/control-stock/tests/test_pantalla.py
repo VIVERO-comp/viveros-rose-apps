@@ -138,9 +138,14 @@ def test_sin_cloudinary_cae_a_la_foto_de_odoo(cliente, con_inventario, monkeypat
     assert '"img": "/stock/foto/PL-ROMERO"' in r.text
 
 
-def test_chips_de_categoria_no_rompen_el_onclick(cliente, con_inventario):
-    # tojson dentro de un atributo con comillas dobles partía el onclick y
-    # los chips de categoría quedaban muertos (solo funcionaban los fijos).
+def test_solo_tres_chips_de_filtro(cliente, con_inventario):
+    # Pedido del dueño: solo tres opciones de filtro (Todas, Solo con alerta
+    # y En 0). Sin chips de categoría: las categorías siguen existiendo en
+    # las tarjetas y en la pestaña de inicio, pero no como filtro.
     r = cliente.get("/")
-    assert 'data-cat="Exterior"' in r.text
+    for chip in ('data-cat="Todas"', 'data-cat="__alerta__"', 'data-cat="__cero__"'):
+        assert chip in r.text
+    for categoria in ("Interior", "Exterior", "Florales"):
+        assert f'data-cat="{categoria}"' not in r.text
+    assert "En 0" in r.text
     assert 'onclick="chip(this,"' not in r.text

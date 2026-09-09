@@ -48,9 +48,11 @@ function pintar() {
   // "Solo con alerta": negativos, criticos y bajos (lo mismo que alerta la
   // campanita); deja fuera las agotadas en 0 y las que estan OK.
   const esAlerta = p => p.f < 0 || (p.q > 0 && p.q < UMBRAL * 2);
+  // "En 0": las que ya no tienen nada que vender (incluye fisico negativo).
   const pasaCategoria = p =>
     catActiva === "Todas" ? true :
     catActiva === "__alerta__" ? esAlerta(p) :
+    catActiva === "__cero__" ? p.q <= 0 :
     p.c === catActiva;
   l.innerHTML = plantas
     .filter(p => pasaCategoria(p) && normalizar(p.n).includes(t))
@@ -204,10 +206,17 @@ async function guardarStock() {
       return;
     }
     // aplicado o sin_cambio: recargar trae el stock fresco de Odoo y
-    // recalcula score y alertas en el servidor.
+    // recalcula score y alertas en el servidor. La URL conserva pestaña,
+    // categoría y búsqueda para volver exactamente donde estaba el empleado.
     sessionStorage.setItem("toast-pendiente",
       "✓ " + editando.n + " ajustado a " + nueva + " en Odoo");
-    location.href = "/?refrescar=1";
+    const destino = new URLSearchParams({ refrescar: "1" });
+    const tabActiva = document.querySelector(".tab.activa");
+    if (tabActiva) destino.set("tab", tabActiva.id.replace("tab-", ""));
+    if (catActiva !== "Todas") destino.set("cat", catActiva);
+    const busqueda = document.getElementById("busca").value.trim();
+    if (busqueda) destino.set("q", busqueda);
+    location.href = "/?" + destino.toString();
   } catch (e) {
     mostrarErrorEdicion("Sin conexión. Intenta de nuevo.");
   } finally {
@@ -302,11 +311,21 @@ if (toastPendiente) {
   toast(toastPendiente);
 }
 
-// Los enlaces de la página /venta vuelven con ?tab=stock o ?tab=inv para
-// aterrizar en esa pestaña (las pestañas son 100% del navegador).
-const tabPedida = new URLSearchParams(location.search).get("tab");
+// Los enlaces de la página /venta y la recarga tras guardar un ajuste
+// vuelven con ?tab= (y opcionalmente cat= y q=) para aterrizar exactamente
+// donde estaba el empleado (las pestañas son 100% del navegador).
+const parametros = new URLSearchParams(location.search);
+const tabPedida = parametros.get("tab");
 if (tabPedida === "stock" || tabPedida === "inv") {
   tab(tabPedida, document.querySelectorAll("nav button")[tabPedida === "stock" ? 1 : 2]);
 }
+const catPedida = parametros.get("cat");
+if (catPedida) {
+  catActiva = catPedida;
+  document.querySelectorAll(".chip").forEach(x =>
+    x.classList.toggle("on", x.dataset.cat === catPedida));
+}
+const buscaPedida = parametros.get("q");
+if (buscaPedida) document.getElementById("busca").value = buscaPedida;
 
 pintar();
