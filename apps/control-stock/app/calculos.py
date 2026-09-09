@@ -30,11 +30,11 @@ _EMOJIS_ESPECIALES = [
 ]
 EMOJI_DEFECTO = "🪴"
 
-# Emoji de las tarjetas por categoria (los del prototipo). Se busca por
+# Emoji de las tarjetas por categoria: las tres del sitio web (Interior,
+# Exterior, Florales), que son las unicas que existen en Odoo. Se busca por
 # fragmento para no depender de mayusculas o acentos exactos de Odoo.
 _EMOJIS_CATEGORIA = [
-    ("aromatic", "🌿"), ("floral", "🌺"), ("frutal", "🍋"),
-    ("interior", "🪴"), ("exterior", "🌳"),
+    ("floral", "🌺"), ("interior", "🪴"), ("exterior", "🌳"),
 ]
 
 

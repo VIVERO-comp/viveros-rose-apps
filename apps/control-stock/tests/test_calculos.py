@@ -60,9 +60,7 @@ def test_emoji_por_palabra_clave():
 
 
 def test_emoji_por_categoria():
-    assert calculos.emoji_categoria("Aromáticas") == "🌿"
     assert calculos.emoji_categoria("Florales") == "🌺"
-    assert calculos.emoji_categoria("Frutales") == "🍋"
     assert calculos.emoji_categoria("Interior") == "🪴"
     assert calculos.emoji_categoria("Exterior") == "🌳"
     assert calculos.emoji_categoria("Sin categoría") == calculos.EMOJI_DEFECTO

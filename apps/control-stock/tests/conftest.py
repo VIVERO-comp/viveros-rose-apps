@@ -11,15 +11,15 @@ import pytest
 from app import datos, ventas
 
 INVENTARIO_FALSO = [
-    {"sku": "PL-ROMERO", "nombre": "Romero", "categoria": "Aromáticas",
+    {"sku": "PL-ROMERO", "nombre": "Romero", "categoria": "Exterior",
      "disponible": 2, "fisico": 2, "precio_centavos": 350},
     # Albahaca sin precio en Odoo todavía: la pantalla debe decir
     # "Precio pendiente" y nunca "$0.00".
-    {"sku": "PL-ALBAHACA", "nombre": "Albahaca", "categoria": "Aromáticas",
+    {"sku": "PL-ALBAHACA", "nombre": "Albahaca", "categoria": "Exterior",
      "disponible": 0, "fisico": 0, "precio_centavos": 0},
-    {"sku": "PL-IXORA", "nombre": "Ixora Roja", "categoria": "Ornamentales",
+    {"sku": "PL-IXORA", "nombre": "Ixora Roja", "categoria": "Florales",
      "disponible": 4, "fisico": 5, "precio_centavos": 650},
-    {"sku": "PL-PALMA", "nombre": "Palma Areca", "categoria": "Ornamentales",
+    {"sku": "PL-PALMA", "nombre": "Palma Areca", "categoria": "Exterior",
      "disponible": 41, "fisico": 41, "precio_centavos": 1500},
 ]
 

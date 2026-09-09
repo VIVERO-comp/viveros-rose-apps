@@ -12,8 +12,8 @@ def test_plantilla_trae_el_inventario_y_protege_columnas(con_inventario):
     filas = list(hoja.iter_rows(values_only=True))
     assert filas[0] == ("Código", "Nombre", "Categoría", "En sistema", "Conteo físico")
     # Ordenada por categoría y nombre; 'En sistema' es lo físico.
-    assert [f[0] for f in filas[1:]] == ["PL-ALBAHACA", "PL-ROMERO", "PL-IXORA", "PL-PALMA"]
-    assert filas[2][3] == 2 and filas[3][3] == 5
+    assert [f[0] for f in filas[1:]] == ["PL-ALBAHACA", "PL-PALMA", "PL-ROMERO", "PL-IXORA"]
+    assert filas[3][3] == 2 and filas[4][3] == 5
     assert hoja.protection.sheet is True
     # Solo la columna del conteo es editable.
     assert hoja["E2"].protection.locked is False
