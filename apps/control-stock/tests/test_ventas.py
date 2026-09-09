@@ -97,6 +97,23 @@ class OdooFalso:
                 }
         return True
 
+    def sale_order_line_search_read(self, args, kw):
+        orden_id = args[0][0][2]
+        return [{
+            "id": indice,
+            "name": self.productos[l["product_id"]]["name"],
+            "product_uom_qty": l["product_uom_qty"],
+            "price_unit": self.productos[l["product_id"]]["list_price"],
+            "price_subtotal": round(
+                l["product_uom_qty"]
+                * self.productos[l["product_id"]]["list_price"], 2),
+        } for indice, l in enumerate(self.ordenes[orden_id]["lineas"], start=1)]
+
+    def sale_order_action_cancel(self, args, kw):
+        for orden_id in args[0]:
+            self.ordenes[orden_id]["state"] = "cancel"
+        return True
+
     # ---- entrega ----
     def stock_picking_search_read(self, args, kw):
         orden_id = args[0][0][2]
@@ -136,9 +153,22 @@ class OdooFalso:
         self.facturas[factura] = {
             "name": f"INV/2026/{factura}", "state": "draft",
             "amount_total": orden["amount_total"], "payment_state": "not_paid",
+            "lineas": [{
+                "name": self.productos[l["product_id"]]["name"],
+                "quantity": l["product_uom_qty"],
+                "price_unit": self.productos[l["product_id"]]["list_price"],
+                "price_subtotal": round(
+                    l["product_uom_qty"]
+                    * self.productos[l["product_id"]]["list_price"], 2),
+            } for l in orden["lineas"]],
         }
         orden["invoice_ids"].append(factura)
         return True
+
+    def account_move_line_search_read(self, args, kw):
+        factura_id = args[0][0][2]
+        return [{"id": indice, **linea} for indice, linea
+                in enumerate(self.facturas[factura_id]["lineas"], start=1)]
 
     def account_move_read(self, args, kw):
         return [{"id": i, **{c: self.facturas[i][c] for c in kw["fields"]}} for i in args[0]]
@@ -350,3 +380,83 @@ def test_borrador_sobrevive_los_reloads(cliente_venta):
     _agregar(cliente_venta, 501)
     cliente_venta.post("/venta/cotizar", data={"cliente": "María", "celular": "6567-3062"})
     assert ventas.borrador_de("genesis") == {"nombre": "", "celular": ""}
+
+
+def test_cancelar_cotizacion(cliente_venta, odoo):
+    _agregar(cliente_venta, 501)
+    cliente_venta.post("/venta/cotizar", data={"cliente": ""})
+    registro = ventas.ventas_todas()[0]
+    r = cliente_venta.post(f"/venta/cancelar/{registro['n']}", follow_redirects=False)
+    assert r.status_code == 303 and "error=" not in r.headers["location"]
+    assert ventas.obtener_venta(registro["n"])["estado"] == "cancelada"
+    assert odoo.ordenes[registro["orden_id"]]["state"] == "cancel"
+    pagina = cliente_venta.get("/venta")
+    assert "Cancelada" in pagina.text and "Cobrar" not in pagina.text
+
+
+def test_cancelar_solo_cotizaciones(cliente_venta, odoo):
+    _agregar(cliente_venta, 501)
+    r = cliente_venta.post("/venta/pagar", data={"cliente": ""}, follow_redirects=False)
+    n = r.headers["location"].rsplit("/", 1)[1]
+    cliente_venta.post(f"/venta/cobrar/{n}", data={"metodo": "yappy"})
+    r = cliente_venta.post(f"/venta/cancelar/{n}", follow_redirects=False)
+    assert r.status_code == 303 and "error=" in r.headers["location"]
+    assert ventas.obtener_venta(int(n))["estado"] == "pagado"
+
+
+def test_mandar_factura_solo_con_celular(cliente_venta, odoo):
+    _agregar(cliente_venta, 501)
+    r = cliente_venta.post("/venta/pagar",
+                           data={"cliente": "María", "celular": "6123-4567"},
+                           follow_redirects=False)
+    n = r.headers["location"].rsplit("/", 1)[1]
+    cliente_venta.post(f"/venta/cobrar/{n}", data={"metodo": "yappy"})
+    pagina = cliente_venta.get("/venta")
+    assert "Mandar factura" in pagina.text
+    assert "wa.me/50761234567" in pagina.text
+    token = ventas.obtener_venta(int(n))["token"]
+    assert token and f"/f/{token}" in pagina.text
+    # El PDF nativo sigue, ahora rotulado "Factura".
+    assert ">Factura</a>" in pagina.text and "Factura PDF" not in pagina.text
+
+
+def test_factura_publica_sin_sesion(cliente_venta, odoo):
+    _agregar(cliente_venta, 501)
+    r = cliente_venta.post("/venta/pagar",
+                           data={"cliente": "María", "celular": "6123-4567"},
+                           follow_redirects=False)
+    n = r.headers["location"].rsplit("/", 1)[1]
+    cliente_venta.post(f"/venta/cobrar/{n}", data={"metodo": "yappy"})
+    cliente_venta.get("/venta")  # genera el token del enlace
+    token = ventas.obtener_venta(int(n))["token"]
+    cliente_venta.cookies.clear()  # el cliente final no tiene sesion
+    pagina = cliente_venta.get(f"/f/{token}")
+    assert pagina.status_code == 200
+    assert "ROMERO" in pagina.text and "$3.50" in pagina.text
+    assert "Yappy" in pagina.text and "María" in pagina.text
+    assert cliente_venta.get("/f/token-falso").status_code == 404
+
+
+def test_tarjeta_muestra_lo_comprado(cliente_venta, odoo):
+    _agregar(cliente_venta, 501)
+    _agregar(cliente_venta, 502, veces=3)
+    cliente_venta.post("/venta/cotizar", data={"cliente": ""})
+    assert ventas.ventas_todas()[0]["resumen"] == "1\u00d7 ROMERO, 3\u00d7 JADE"
+    pagina = cliente_venta.get("/venta")
+    assert "1\u00d7 ROMERO, 3\u00d7 JADE" in pagina.text
+
+
+def test_cotizacion_publica_por_whatsapp(cliente_venta, odoo):
+    _agregar(cliente_venta, 501)
+    cliente_venta.post("/venta/cotizar",
+                       data={"cliente": "María", "celular": "6123-4567"})
+    pagina = cliente_venta.get("/venta")
+    assert "Mandar cotizaci\u00f3n" in pagina.text
+    assert "wa.me/50761234567" in pagina.text
+    registro = ventas.ventas_todas()[0]
+    token = ventas.obtener_venta(registro["n"])["token"]
+    cliente_venta.cookies.clear()
+    documento = cliente_venta.get(f"/f/{token}")
+    assert documento.status_code == 200
+    assert "COTIZACI\u00d3N" in documento.text and "ROMERO" in documento.text
+    assert "Pendiente" in documento.text and "FACTURA" not in documento.text

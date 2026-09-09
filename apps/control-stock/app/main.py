@@ -70,7 +70,9 @@ def _cookie_segura():
 @app.middleware("http")
 async def exigir_sesion(request: Request, call_next):
     ruta = request.url.path
-    if ruta == "/login" or ruta.startswith("/static"):
+    # /f/ es el enlace público de la factura (con token): lo abre el cliente
+    # desde WhatsApp, sin sesión.
+    if ruta == "/login" or ruta.startswith("/static") or ruta.startswith("/f/"):
         return await call_next(request)
     empleada = seguridad.empleada_de_sesion(request.cookies.get("sesion"))
     if empleada is None:
@@ -394,6 +396,28 @@ def _redirigir_venta(error=None, nueva=False):
     return RedirectResponse(destino, status_code=303)
 
 
+def _enlace_whatsapp(request, venta):
+    """El enlace wa.me al celular del cliente con el mensaje y el enlace
+    público (con token) de su factura (pagada) o cotización; None si la
+    venta no lo permite."""
+    if not venta.get("celular"):
+        return None
+    if venta["estado"] == "pagado" and venta.get("factura_id"):
+        mensaje = (f"¡Gracias por su compra en Vivero Rose! 🌿 "
+                   f"Aquí está su factura {venta['factura']}: {{enlace}}")
+    elif venta["estado"] == "cotizacion":
+        mensaje = (f"¡Gracias por su visita a Vivero Rose! 🌿 "
+                   f"Aquí está su cotización {venta['orden']}: {{enlace}}")
+    else:
+        return None
+    digitos = "".join(c for c in venta["celular"] if c.isdigit())
+    if len(digitos) == 8:
+        digitos = "507" + digitos
+    base = os.environ.get("PUBLIC_BASE_URL") or str(request.base_url).rstrip("/")
+    enlace = f"{base}/f/{ventas.token_de(venta['n'])}"
+    return f"https://wa.me/{digitos}?text={quote(mensaje.format(enlace=enlace))}"
+
+
 @app.get("/venta")
 def venta(request: Request, error: str = ""):
     # La pestaña: el botón grande "+ Nueva venta" y el historial local.
@@ -408,9 +432,21 @@ def venta(request: Request, error: str = ""):
         "error_venta": error or None,
         "en_curso": en_curso,
         "ventas": [{**v, "fecha_texto": _fecha_venta(v["creado_en"]),
-                    "etiqueta_estado": ventas.ETIQUETAS_ESTADO[v["estado"]]}
+                    "etiqueta_estado": ventas.ETIQUETAS_ESTADO[v["estado"]],
+                    "whatsapp": _enlace_whatsapp(request, v)}
                    for v in ventas.ventas_todas()],
     })
+
+
+@app.post("/venta/cancelar/{n}")
+def venta_cancelar(request: Request, n: int):
+    try:
+        ventas.cancelar(n)
+    except Exception as error:
+        return RedirectResponse(
+            "/venta?error=" + quote(f"No se pudo cancelar: {error}"),
+            status_code=303)
+    return RedirectResponse("/venta", status_code=303)
 
 
 @app.get("/venta/nueva")
@@ -595,6 +631,37 @@ def venta_pdf_factura(request: Request, n: int):
         return RedirectResponse("/venta", status_code=303)
     return _respuesta_pdf("account.report_invoice", registro["factura_id"],
                           f"factura-{(registro['factura'] or str(n)).replace('/', '-')}.pdf")
+
+
+MESES = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+         "agosto", "septiembre", "octubre", "noviembre", "diciembre")
+
+
+@app.get("/f/{token}")
+def factura_publica(request: Request, token: str):
+    # El documento que el cliente abre desde WhatsApp: la factura si la
+    # venta está pagada, la cotización si aún no. Público, solo con el
+    # token; no expone nada más de la app.
+    registro = ventas.venta_por_token(token)
+    if registro is None:
+        return Response("Documento no disponible.", status_code=404)
+    es_factura = registro["estado"] == "pagado" and registro["factura_id"]
+    if not es_factura and registro["estado"] != "cotizacion":
+        return Response("Documento no disponible.", status_code=404)
+    try:
+        lineas = (ventas.lineas_de_factura(registro) if es_factura
+                  else ventas.lineas_de_cotizacion(registro))
+    except Exception:
+        lineas = []
+    fecha = datetime.fromisoformat(registro["creado_en"])
+    return plantillas.TemplateResponse(request, "factura_publica.html", {
+        "v": registro,
+        "es_factura": bool(es_factura),
+        "lineas": lineas,
+        "fecha_larga": f"{fecha.day} de {MESES[fecha.month - 1]} de {fecha.year}",
+        "fecha_corta": fecha.strftime("%d/%m/%Y"),
+        "metodo": "Yappy" if registro["metodo"] == "yappy" else "Efectivo",
+    })
 
 
 @app.get("/venta/foto/{producto_id}")

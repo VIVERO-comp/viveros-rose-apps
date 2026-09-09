@@ -33,14 +33,16 @@
   <p class="nada-venta">Aún no hay ventas locales.</p>
   {% endif %}
   {% for v in ventas %}
-  <div class="venta-item {{ 'pagado' if v.estado == 'pagado' else ('cotizacion' if v.estado == 'cotizacion' else 'parcial') }}">
+  <div class="venta-item {{ 'pagado' if v.estado == 'pagado' else ('cotizacion' if v.estado == 'cotizacion' else ('cancelada' if v.estado == 'cancelada' else 'parcial')) }}">
     <div class="fila1">
       <div>
         <b class="titulo">{{ v.orden }} · {{ v.cliente }}</b>
         <small>{{ v.fecha_texto }}{% if v.celular %} · {{ v.celular }}{% endif %}{% if v.factura %} · Factura {{ v.factura }}{% endif %}{% if v.metodo %} · {{ "Yappy" if v.metodo == "yappy" else "Efectivo" }}{% endif %}</small>
+        {% if v.resumen %}<small class="compra">{{ v.resumen }}</small>{% endif %}
       </div>
       {% if v.estado == "pagado" %}<span class="badge b-ok">Pagado</span>
       {% elif v.estado == "cotizacion" %}<span class="badge b-bajo">Cotización</span>
+      {% elif v.estado == "cancelada" %}<span class="badge b-neutro">Cancelada</span>
       {% else %}<span class="badge b-critico">{{ v.etiqueta_estado }}</span>{% endif %}
     </div>
     {% if v.ultimo_error %}
@@ -50,11 +52,20 @@
       <span>
         {% if v.estado == "cotizacion" %}
           <a href="/venta/cobrar/{{ v.n }}">Cobrar</a>
-          <a href="/venta/{{ v.n }}/cotizacion.pdf">PDF</a>
-        {% elif v.estado != "pagado" %}
+          {% if v.whatsapp %}
+          <a href="{{ v.whatsapp }}" target="_blank" rel="noopener">Mandar cotización</a>
+          {% endif %}
+          <form class="forma-cancelar" method="post" action="/venta/cancelar/{{ v.n }}"
+                onsubmit="return confirm('Cancela la cotización {{ v.orden }} también en Odoo y no tiene marcha atrás desde la app: para revivirla habría que crear la venta de nuevo. ¿Cancelar?')">
+            <button type="submit" class="enlace-sub">Cancelar</button>
+          </form>
+        {% elif v.estado == "pagado" %}
+          <a href="/venta/{{ v.n }}/factura.pdf">Factura</a>
+          {% if v.whatsapp %}
+          <a class="enlace-sub" href="{{ v.whatsapp }}" target="_blank" rel="noopener">Mandar factura</a>
+          {% endif %}
+        {% elif v.estado != "cancelada" %}
           <a href="/venta/cobrar/{{ v.n }}">Reintentar</a>
-        {% else %}
-          <a href="/venta/{{ v.n }}/factura.pdf">Factura PDF</a>
         {% endif %}
       </span>
       <span class="venta-monto">{{ v.total | dinero }}</span>

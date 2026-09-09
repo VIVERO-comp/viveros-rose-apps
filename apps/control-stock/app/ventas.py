@@ -23,6 +23,7 @@ para una venta local: el cliente se lleva las plantas en el momento.
 import base64
 import json
 import os
+import secrets
 import sqlite3
 import time
 import xmlrpc.client
@@ -40,6 +41,7 @@ ETIQUETAS_ESTADO = {
     "entregada": "Entregada · factura pendiente",
     "facturada": "Facturada · pago pendiente",
     "pagado": "Pagado",
+    "cancelada": "Cancelada",
 }
 
 TTL_FOTOS = 24 * 3600
@@ -214,6 +216,12 @@ def iniciar_tablas():
         columnas = [fila[1] for fila in con.execute("PRAGMA table_info(ventas_locales)")]
         if "celular" not in columnas:
             con.execute("ALTER TABLE ventas_locales ADD COLUMN celular TEXT")
+        # Migración suave: token del enlace público de la factura.
+        if "token" not in columnas:
+            con.execute("ALTER TABLE ventas_locales ADD COLUMN token TEXT")
+        # Migración suave: qué compró el cliente, para la tarjeta del historial.
+        if "resumen" not in columnas:
+            con.execute("ALTER TABLE ventas_locales ADD COLUMN resumen TEXT")
 
 
 def guardar_borrador(usuario, nombre, celular):
@@ -321,6 +329,27 @@ def _actualizar_venta(n, **campos):
                     (*campos.values(), n))
 
 
+def token_de(n):
+    """El token del enlace público de la factura; se crea la primera vez."""
+    venta = obtener_venta(n)
+    if venta is None:
+        return None
+    if venta.get("token"):
+        return venta["token"]
+    token = secrets.token_urlsafe(12)
+    _actualizar_venta(n, token=token)
+    return token
+
+
+def venta_por_token(token):
+    if not token:
+        return None
+    with _db() as con:
+        fila = con.execute("SELECT * FROM ventas_locales WHERE token=?",
+                           (token,)).fetchone()
+    return dict(fila) if fila else None
+
+
 # ---------------------------------------------------------------------------
 # Flujo contra Odoo
 # ---------------------------------------------------------------------------
@@ -362,13 +391,15 @@ def crear_cotizacion(empleada, nombre_cliente, celular=""):
         orden_id = orden_id[0]
     leido = _ejecutar("sale.order", "read", [[orden_id]],
                       {"fields": ["name", "amount_total"]})[0]
+    resumen = ", ".join(f"{l['cantidad']}× {l['nombre']}" for l in lineas)
     with _db() as con:
         cursor = con.execute(
             "INSERT INTO ventas_locales (creado_en, empleada, cliente, celular,"
-            " orden_id, orden, total, estado) VALUES (?,?,?,?,?,?,?, 'cotizacion')",
+            " orden_id, orden, total, estado, resumen)"
+            " VALUES (?,?,?,?,?,?,?, 'cotizacion', ?)",
             (_ahora(), empleada["nombre"], (nombre_cliente or "").strip() or "Cliente Local",
              (celular or "").strip() or None,
-             orden_id, leido["name"], leido["amount_total"]))
+             orden_id, leido["name"], leido["amount_total"], resumen))
         n = cursor.lastrowid
     vaciar_carrito(usuario)
     _limpiar_borrador(usuario)
@@ -487,6 +518,45 @@ def cobrar(n, metodo):
     except Exception as error:
         _actualizar_venta(n, ultimo_error=_mensaje_de_error(error))
     return obtener_venta(n)
+
+
+def cancelar(n):
+    """Cancela una cotización: la orden en Odoo pasa a cancelada y el
+    registro local queda en estado 'cancelada'. Solo aplica a cotizaciones
+    (una venta ya cobrada no se cancela desde aquí)."""
+    venta = obtener_venta(n)
+    if venta is None:
+        return None
+    if venta["estado"] != "cotizacion":
+        raise ValueError("Solo se puede cancelar una cotización.")
+    _ejecutar("sale.order", "action_cancel", [[venta["orden_id"]]])
+    _actualizar_venta(n, estado="cancelada", ultimo_error=None)
+    return obtener_venta(n)
+
+
+def lineas_de_factura(venta):
+    """Las líneas de producto de la factura en Odoo, para la plantilla
+    pública: nombre, cantidad, precio unitario e importe."""
+    filas = _ejecutar("account.move.line", "search_read",
+                      [[["move_id", "=", venta["factura_id"]],
+                        ["display_type", "=", "product"]]],
+                      {"fields": ["name", "quantity", "price_unit",
+                                  "price_subtotal"]})
+    return [{"nombre": f["name"], "cantidad": int(f["quantity"]),
+             "precio": f["price_unit"], "importe": f["price_subtotal"]}
+            for f in filas]
+
+
+def lineas_de_cotizacion(venta):
+    """Las líneas de la orden en Odoo, para la cotización pública."""
+    filas = _ejecutar("sale.order.line", "search_read",
+                      [[["order_id", "=", venta["orden_id"]],
+                        ["display_type", "=", False]]],
+                      {"fields": ["name", "product_uom_qty", "price_unit",
+                                  "price_subtotal"]})
+    return [{"nombre": f["name"], "cantidad": int(f["product_uom_qty"]),
+             "precio": f["price_unit"], "importe": f["price_subtotal"]}
+            for f in filas]
 
 
 def _mensaje_de_error(error):

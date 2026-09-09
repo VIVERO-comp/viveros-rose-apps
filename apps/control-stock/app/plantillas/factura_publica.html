@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>{% if es_factura %}Factura {{ v.factura }}{% else %}Cotización {{ v.orden }}{% endif %} — Vivero Rose</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@400;500;700&family=Playfair+Display:wght@500&family=Sacramento&display=swap">
+<style>
+  /* Diseño aprobado por el dueño (09/09/2026): referencia rosada de Canva
+     con toques verdes; un solo look, colores explícitos. */
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    background:#fdf6f6;
+    font-family:'Lato',-apple-system,'Helvetica Neue',Arial,sans-serif;
+  }
+  .escenario{
+    position:relative;overflow:hidden;
+    min-height:100vh;padding:26px 12px 40px;
+  }
+  .escenario::before{
+    content:"";position:absolute;inset:0;
+    background:#f4dcdd;
+    clip-path:polygon(30% 0, 100% 0, 100% 34%, 58% 100%, 34% 100%);
+  }
+
+  .hoja{
+    position:relative;
+    background:#ffffff;color:#3a3835;
+    width:100%;max-width:620px;min-height:88vh;
+    margin:0 auto;padding:44px 34px 0;
+    box-shadow:0 16px 40px rgba(122,74,80,.20);
+    display:flex;flex-direction:column;
+  }
+  @media (min-width:600px){.hoja{padding:52px 56px 0}}
+
+  .marca{display:flex;align-items:center;gap:18px}
+  .sello{
+    width:70px;height:70px;border-radius:50%;flex-shrink:0;
+    background:#f6dcdd;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .sello .aro{
+    width:54px;height:54px;border-radius:50%;
+    border:1px solid #b98d90;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Playfair Display',Georgia,serif;font-weight:500;font-style:italic;
+    font-size:19px;letter-spacing:.02em;color:#4b4946;
+  }
+  .marca h1{
+    font-family:'Sacramento',cursive;font-weight:400;
+    font-size:44px;color:#3a3835;
+  }
+
+  .titulo{
+    font-size:30px;font-weight:500;letter-spacing:.24em;
+    margin-top:34px;color:#2e2c29;
+  }
+
+  .bloques{
+    display:flex;justify-content:space-between;align-items:flex-end;
+    gap:16px;margin-top:26px;flex-wrap:wrap;
+  }
+  .etiqueta{
+    font-size:11px;font-weight:700;letter-spacing:.16em;
+    text-transform:uppercase;color:#4a7354;
+  }
+  .cliente p{font-size:13px;margin-top:8px;letter-spacing:.05em;color:#55534e}
+  .cliente .nombre{font-weight:700;text-transform:uppercase;color:#2e2c29}
+  .meta{
+    text-align:right;font-size:11px;letter-spacing:.08em;
+    text-transform:uppercase;color:#8a877f;line-height:2.1;
+  }
+  .meta b{color:#2e2c29;font-weight:700}
+
+  table{width:100%;border-collapse:collapse;margin-top:26px}
+  thead th{
+    background:#f9e4e6;
+    font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+    color:#2e2c29;text-align:left;padding:11px 12px;
+  }
+  th.num,td.num{text-align:right;font-variant-numeric:tabular-nums}
+  tbody td{font-size:13.5px;padding:15px 12px;color:#3a3835}
+  tbody{border-bottom:1.6px solid #2e2c29}
+  .total{
+    display:flex;justify-content:flex-end;align-items:baseline;gap:30px;
+    padding:14px 12px 0;
+  }
+  .total .rotulo{
+    font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+    color:#2e2c29;
+  }
+  .total .monto{
+    font-size:17px;font-weight:700;color:#2e2c29;
+    font-variant-numeric:tabular-nums;
+  }
+
+  .gracias{
+    font-family:'Sacramento',cursive;font-size:32px;color:#4a7354;
+    margin-top:30px;
+  }
+
+  .banda-pago{
+    margin-top:auto;background:#f9e4e6;
+    margin-left:-34px;margin-right:-34px;
+    padding:20px 34px 24px;
+    display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap;
+    font-size:12.5px;line-height:1.9;color:#3a3835;
+  }
+  @media (min-width:600px){
+    .banda-pago{margin-left:-56px;margin-right:-56px;padding:22px 56px 26px}
+  }
+  .banda-pago .etiqueta{margin-bottom:5px;display:block;color:#2e2c29}
+  .banda-pago .der{text-align:right}
+</style>
+</head>
+<body>
+<div class="escenario">
+  <div class="hoja">
+    <div class="marca">
+      <div class="sello"><span class="aro">VR</span></div>
+      <h1>Vivero Rose</h1>
+    </div>
+
+    <div class="titulo">{{ "FACTURA" if es_factura else "COTIZACIÓN" }}</div>
+
+    <div class="bloques">
+      <div class="cliente">
+        <span class="etiqueta">{{ "Factura a:" if es_factura else "Cotización para:" }}</span>
+        <p class="nombre">{{ v.cliente }}</p>
+        {% if v.celular %}<p>Celular {{ v.celular }}</p>{% endif %}
+      </div>
+      <div class="meta">
+        {% if es_factura %}Factura n.º: <b>{{ v.factura }}</b><br>{% endif %}
+        Fecha: <b>{{ fecha_larga }}</b><br>
+        Orden: <b>{{ v.orden }}</b>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr><th>Planta</th><th class="num">Precio</th><th class="num">Cant.</th><th class="num">Importe</th></tr>
+      </thead>
+      <tbody>
+        {% for l in lineas %}
+        <tr>
+          <td>{{ l.nombre }}</td>
+          <td class="num">{{ l.precio | dinero }}</td>
+          <td class="num">{{ l.cantidad }}</td>
+          <td class="num">{{ l.importe | dinero }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4">Compra en el vivero</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="total">
+      <span class="rotulo">Total</span>
+      <span class="monto">{{ v.total | dinero }}</span>
+    </div>
+
+    <p class="gracias">{{ "¡Gracias por su compra!" if es_factura else "¡Gracias por su preferencia!" }}</p>
+
+    <div class="banda-pago">
+      <div>
+        <span class="etiqueta">Pago</span>
+        {% if es_factura %}Método: {{ metodo }}<br>
+        Estado: Pagado · {{ fecha_corta }}{% else %}Pendiente · cotización del {{ fecha_corta }}{% endif %}
+      </div>
+      <div class="der">
+        <span class="etiqueta">Vivero Rose</span>
+        plantaspanama.com<br>
+        Instagram @Viverorosepty
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

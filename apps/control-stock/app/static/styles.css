@@ -289,6 +289,7 @@ main{position:relative;z-index:1;flex:1;overflow-y:auto;padding:6px 20px 110px}
 }
 .panel.abierto{display:flex}
 .panel-hoja{
+  position:relative;
   width:100%;background:var(--noche-2);
   border-radius:24px;padding:20px 20px 22px;
   max-height:75%;overflow-y:auto;
@@ -334,7 +335,14 @@ main{position:relative;z-index:1;flex:1;overflow-y:auto;padding:6px 20px 110px}
 }
 
 /* ---------- modal modificar stock ---------- */
-.edit-cab{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.edit-x{
+  position:absolute;top:14px;right:14px;
+  width:34px;height:34px;border-radius:12px;border:none;
+  background:var(--noche-3);color:var(--texto-suave);
+  font-size:16px;line-height:1;cursor:pointer;font-family:inherit;
+  display:flex;align-items:center;justify-content:center;
+}
+.edit-cab{display:flex;align-items:center;gap:12px;margin-bottom:10px;padding-right:40px}
 .edit-cab h3{margin-bottom:2px}
 .foto-mini{
   width:52px;height:52px;border-radius:16px;flex-shrink:0;
@@ -347,13 +355,13 @@ main{position:relative;z-index:1;flex:1;overflow-y:auto;padding:6px 20px 110px}
 .edit-sub{font-size:12.5px;color:var(--texto-suave);margin:-8px 0 16px}
 .edit-qty{display:flex;align-items:center;gap:12px;margin-bottom:14px}
 .qty-btn{
-  width:52px;height:52px;border-radius:16px;border:none;
+  width:58px;height:58px;border-radius:16px;border:none;flex-shrink:0;
   background:var(--noche-3);color:var(--dorado);
-  font-size:24px;font-weight:700;cursor:pointer;font-family:inherit;
+  font-size:26px;font-weight:700;cursor:pointer;font-family:inherit;
 }
 .edit-qty input{
-  flex:1;height:52px;background:var(--crema);border:none;border-radius:16px;
-  text-align:center;font-family:inherit;font-size:24px;font-weight:800;
+  flex:1;min-width:0;height:58px;background:var(--crema);border:none;border-radius:16px;
+  text-align:center;font-family:inherit;font-size:19px;font-weight:800;
   color:#2c2416;outline:none;
 }
 .edit-nota{
@@ -506,9 +514,26 @@ nav button.on, nav a.on{color:var(--dorado);background:rgba(227,181,127,.1)}
 .error-venta{font-size:11.5px;color:var(--critico);line-height:1.4;margin-top:6px}
 .venta-acciones{display:flex;justify-content:space-between;align-items:center;margin-top:9px}
 .venta-acciones a{
-  color:var(--dorado);font-size:12px;font-weight:700;text-decoration:none;
+  color:var(--dorado);font-size:12px;font-weight:700;
+  text-decoration:underline;text-underline-offset:2px;
   margin-right:14px;
 }
+.venta-acciones .forma-cancelar{display:inline;margin:0}
+.venta-acciones .enlace-sub,
+button.enlace-sub{
+  background:none;border:none;padding:0;cursor:pointer;font-family:inherit;
+  color:var(--dorado);font-size:12px;font-weight:700;
+  text-decoration:underline;text-underline-offset:2px;margin-right:14px;
+}
+.venta-item .compra{color:var(--texto);margin-top:3px}
+.venta-item.cancelada{border-left-color:#6b7183;opacity:.8}
+.x-salir{
+  width:34px;height:34px;border-radius:12px;flex-shrink:0;
+  background:var(--noche-3);color:var(--texto-suave);
+  font-size:16px;line-height:1;text-decoration:none;
+  display:flex;align-items:center;justify-content:center;
+}
+.b-neutro{background:#dfe2ea;color:#4c5265}
 .venta-monto{font-size:16px;font-weight:800;color:var(--dorado-suave)}
 .resumen-cobro .fila{
   display:flex;justify-content:space-between;align-items:baseline;
@@ -525,6 +550,7 @@ nav button.on, nav a.on{color:var(--dorado);background:rgba(227,181,127,.1)}
   display:flex;flex-direction:column;gap:3px;padding:16px 12px;
   border-radius:16px;border:2px solid var(--noche-3);background:var(--noche-2);
   text-align:center;cursor:pointer;
+  height:100%;box-sizing:border-box;justify-content:center;
 }
 .metodo-venta .caja b{font-size:17px;color:var(--texto)}
 .metodo-venta .caja small{font-size:10.5px;color:var(--texto-suave);line-height:1.35}
