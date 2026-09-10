@@ -8,6 +8,7 @@ son POSTs de vuelta a este mismo servidor; la app nunca toca Odoo directo.
 
 import json
 import os
+import re
 from datetime import datetime
 from urllib.parse import quote
 
@@ -157,6 +158,20 @@ def inicio(request: Request, refrescar: int = 0):
     conteo_vencido = dias_conteo is None or dias_conteo > calculos.DIAS_CONTEO_QUINCENAL
     puntos = calculos.score(cuentas["criticos"], cuentas["bajos"], conteo_vencido)
 
+    subidas = datos.fotos_subidas()
+
+    def _fotos_de(p):
+        # img: miniatura de Cloudinary (la subida desde la app gana); sin
+        # ella, el respaldo /stock/foto sirve la de Odoo (si tampoco hay, el
+        # 404 dispara el onerror y la tarjeta cae al emoji). imgG/imgD son
+        # la versión grande y la de descarga del modal de foto: para el
+        # respaldo de Odoo son la misma URL (es la única imagen que hay).
+        info = fotos.info_foto(p["sku"], subidas.get(p["sku"]))
+        if info:
+            return {"img": info["img"], "imgG": info["grande"], "imgD": info["descarga"]}
+        respaldo = f"/stock/foto/{quote(p['sku'])}" if ventas.configurado() else None
+        return {"img": respaldo, "imgG": respaldo, "imgD": respaldo}
+
     plantas = [
         {
             "sku": p["sku"], "n": p["nombre"], "c": p["categoria"],
@@ -164,12 +179,8 @@ def inicio(request: Request, refrescar: int = 0):
             "e": calculos.emoji_de(p["nombre"]),
             # Precio ya formateado en el servidor: el list_price de Odoo tal
             # cual, igual que en la tienda (null = precio pendiente en Odoo).
-            # img: foto de Cloudinary; sin ella, el respaldo /stock/foto
-            # sirve la de Odoo (si tampoco hay, el 404 dispara el onerror y
-            # la tarjeta cae al emoji).
             "po": calculos.precio_online(p.get("precio_centavos", 0)),
-            "img": fotos.url_foto(p["sku"])
-                   or (f"/stock/foto/{quote(p['sku'])}" if ventas.configurado() else None),
+            **_fotos_de(p),
         }
         for p in inventario
     ]
@@ -196,6 +207,9 @@ def inicio(request: Request, refrescar: int = 0):
             "plantas": plantas,
             "umbral": umbral,
             "alertas": alertas,
+            # Sin credenciales de Cloudinary el pincel del modal de foto no
+            # se ofrece (el zoom y la descarga siguen funcionando).
+            "puedeSubir": fotos.subida_configurada(),
         }, ensure_ascii=False),
     })
 
@@ -676,6 +690,38 @@ def stock_foto(request: Request, sku: str):
     contenido, tipo = foto
     return Response(contenido, media_type=tipo,
                     headers={"Cache-Control": "private, max-age=86400"})
+
+
+@app.post("/fotos/{sku}")
+async def cambiar_foto(request: Request, sku: str, archivo: UploadFile):
+    """El pincel del modal de foto: sube la imagen a Cloudinary bajo
+    apps/{sku}/ (solo apps internas, la tienda no cambia) y deja el puntero
+    en la base. La foto anterior no se borra de Cloudinary."""
+    def error(codigo, clave, mensaje):
+        return Response(json.dumps({"error": clave, "mensaje": mensaje}),
+                        status_code=codigo, media_type="application/json")
+
+    if not fotos.subida_configurada():
+        return error(503, "sin_configurar",
+                     "La subida de fotos no está configurada en este servidor.")
+    # El sku viaja en el public_id de Cloudinary: solo el alfabeto de los
+    # SKUs reales (PL-..., letras, dígitos y guiones).
+    if not re.fullmatch(r"[A-Za-z0-9-]{1,80}", sku):
+        return error(400, "sku_invalido", "SKU inválido.")
+    if not (archivo.content_type or "").startswith("image/"):
+        return error(400, "no_es_imagen", "El archivo no es una imagen.")
+    contenido = await archivo.read()
+    if not contenido:
+        return error(400, "vacio", "El archivo llegó vacío.")
+    if len(contenido) > 15 * 1024 * 1024:
+        return error(400, "muy_grande", "La foto pesa más de 15 MB.")
+    try:
+        hash_foto = fotos.subir_foto(contenido, sku)
+    except RuntimeError as errores:
+        return error(502, "cloudinary", str(errores))
+    datos.fijar_foto_subida(sku, hash_foto, request.state.empleada["id"])
+    info = fotos.info_foto(sku, hash_foto)
+    return {"resultado": "aplicada", **info}
 
 
 @app.get("/venta/foto/{producto_id}")

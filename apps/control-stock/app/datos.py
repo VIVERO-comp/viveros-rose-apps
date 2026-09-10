@@ -210,6 +210,16 @@ def iniciar_db():
             clave TEXT PRIMARY KEY,
             valor TEXT NOT NULL
         );
+        -- Fotos cambiadas desde la propia app (el pincel del modal de foto):
+        -- puntero sku -> hash de Cloudinary bajo apps/{sku}/. Gana sobre los
+        -- json empaquetados y vive en el volumen /datos, así sobrevive a los
+        -- deploys. La foto anterior no se borra de Cloudinary.
+        CREATE TABLE IF NOT EXISTS fotos_subidas (
+            sku TEXT PRIMARY KEY,
+            hash TEXT NOT NULL,
+            subida_en TEXT NOT NULL,
+            subida_por TEXT NOT NULL
+        );
         """)
 
 
@@ -232,6 +242,29 @@ def fijar_umbral(valor):
     with _db() as con:
         con.execute("INSERT INTO config (clave, valor) VALUES ('umbral', ?) "
                     "ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor", (str(valor),))
+
+
+# ---------------------------------------------------------------------------
+# Fotos cambiadas desde la app
+# ---------------------------------------------------------------------------
+
+def fotos_subidas():
+    """{sku: hash} de las fotos cambiadas desde la app (una consulta por
+    pantalla, no una por producto)."""
+    with _db() as con:
+        return {f["sku"]: f["hash"] for f in con.execute(
+            "SELECT sku, hash FROM fotos_subidas")}
+
+
+def fijar_foto_subida(sku, hash_foto, empleada):
+    with _db() as con:
+        con.execute(
+            "INSERT INTO fotos_subidas (sku, hash, subida_en, subida_por) "
+            "VALUES (?,?,?,?) ON CONFLICT(sku) DO UPDATE SET "
+            "hash=excluded.hash, subida_en=excluded.subida_en, "
+            "subida_por=excluded.subida_por",
+            (sku, hash_foto, ahora_iso(), empleada),
+        )
 
 
 # ---------------------------------------------------------------------------

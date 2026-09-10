@@ -408,6 +408,21 @@ nav button.on, nav a.on{color:var(--dorado);background:rgba(227,181,127,.1)}
 /* ---------- modal agregar planta ---------- */
 .form-agregar{display:flex;flex-direction:column;gap:11px;margin-bottom:14px}
 
+/* ---------- modal foto de producto ---------- */
+/* El atributo hidden debe ganar aunque la clase fije display (ej. .btn es
+   flex): sin esto, botón "oculto" seguiría visible. */
+[hidden]{display:none!important}
+.hoja-foto{max-width:440px}
+.foto-grande{
+  width:100%;aspect-ratio:1;border-radius:18px;
+  background:var(--noche-3);display:flex;align-items:center;justify-content:center;
+  font-size:72px;position:relative;overflow:hidden;margin-bottom:14px;
+}
+/* contain, no cover: aquí se ve la foto entera, sin recorte cuadrado */
+.foto-grande img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.hoja-foto .botones{margin-bottom:12px}
+.hoja-foto .btn{flex:1;justify-content:center}
+
 /* ---------- toast ---------- */
 .toast{
   position:absolute;left:50%;bottom:96px;transform:translateX(-50%) translateY(8px);

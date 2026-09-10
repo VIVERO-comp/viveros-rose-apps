@@ -100,8 +100,11 @@ def test_datos_json_lleva_precio_y_foto(cliente, con_inventario, monkeypatch):
     from app import fotos
 
     # Solo Romero tiene foto en este caso; el resto cae al emoji en el JS.
-    monkeypatch.setattr(fotos, "url_foto", lambda sku: (
-        "https://res.cloudinary.com/demo123/image/upload/f_auto/productos/PL-ROMERO/abc111"
+    base = "https://res.cloudinary.com/demo123/image/upload"
+    monkeypatch.setattr(fotos, "info_foto", lambda sku, hash_subido=None: (
+        {"img": f"{base}/f_auto/productos/PL-ROMERO/abc111",
+         "grande": f"{base}/c_limit/productos/PL-ROMERO/abc111",
+         "descarga": f"{base}/fl_attachment:PL-ROMERO/productos/PL-ROMERO/abc111"}
         if sku == "PL-ROMERO" else None))
     r = cliente.get("/")
     assert r.status_code == 200
@@ -118,7 +121,7 @@ def test_datos_json_lleva_precio_y_foto(cliente, con_inventario, monkeypatch):
 def test_sin_odoo_configurado_no_hay_respaldo_de_foto(cliente, con_inventario, monkeypatch):
     from app import fotos
 
-    monkeypatch.setattr(fotos, "url_foto", lambda sku: None)
+    monkeypatch.setattr(fotos, "info_foto", lambda sku, hash_subido=None: None)
     for variable in ("ODOO_URL", "ODOO_DB", "ODOO_USER", "ODOO_PASSWORD"):
         monkeypatch.delenv(variable, raising=False)
     r = cliente.get("/")
@@ -131,11 +134,14 @@ def test_sin_cloudinary_cae_a_la_foto_de_odoo(cliente, con_inventario, monkeypat
 
     # Sin foto en Cloudinary y con Odoo configurado, la tarjeta apunta al
     # respaldo /stock/foto (que sirve la imagen de la ficha o el adjunto).
-    monkeypatch.setattr(fotos, "url_foto", lambda sku: None)
+    monkeypatch.setattr(fotos, "info_foto", lambda sku, hash_subido=None: None)
     for variable in ("ODOO_URL", "ODOO_DB", "ODOO_USER", "ODOO_PASSWORD"):
         monkeypatch.setenv(variable, "x")
     r = cliente.get("/")
     assert '"img": "/stock/foto/PL-ROMERO"' in r.text
+    # En el modal de foto, la grande y la descarga son la misma URL de
+    # respaldo (es la única imagen que hay).
+    assert '"imgG": "/stock/foto/PL-ROMERO"' in r.text
 
 
 def test_solo_tres_chips_de_filtro(cliente, con_inventario):

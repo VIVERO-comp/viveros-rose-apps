@@ -225,6 +225,91 @@ async function guardarStock() {
   }
 }
 
+/* ---------- modal foto de producto (ver, descargar, cambiar) ---------- */
+let fotoSku = null;
+let subiendoFoto = false;
+
+function pintarFotoGrande(p) {
+  const caja = document.getElementById("foto-grande");
+  caja.textContent = p.e;
+  if (p.imgG) {
+    const img = document.createElement("img");
+    img.src = p.imgG;
+    img.alt = p.n;
+    // Si la grande falla, se intenta la miniatura; si tampoco, queda el emoji.
+    img.onerror = () => {
+      if (p.img && img.src !== p.img) { img.src = p.img; } else { img.remove(); }
+    };
+    caja.appendChild(img);
+  }
+  const descargar = document.getElementById("btn-descargar");
+  descargar.hidden = !p.imgD;
+  if (p.imgD) descargar.href = p.imgD;
+}
+
+function abrirFoto(sku) {
+  const p = plantas.find(x => x.sku === sku);
+  if (!p) return;
+  fotoSku = sku;
+  document.getElementById("foto-nombre").textContent = p.n;
+  // Sin credenciales de Cloudinary en el servidor no hay pincel: el modal
+  // queda solo de zoom y descarga.
+  document.getElementById("btn-pincel").hidden = !DATOS.puedeSubir;
+  document.getElementById("foto-nota").hidden = !DATOS.puedeSubir;
+  mostrarErrorFoto("");
+  pintarFotoGrande(p);
+  document.getElementById("modal-foto").classList.add("abierto");
+}
+function cerrarFoto() {
+  if (subiendoFoto) return; // no cerrar a mitad de subida
+  document.getElementById("modal-foto").classList.remove("abierto");
+  fotoSku = null;
+}
+function mostrarErrorFoto(mensaje) {
+  const el = document.getElementById("foto-error");
+  el.textContent = mensaje;
+  el.classList.toggle("visible", Boolean(mensaje));
+}
+
+async function subirFoto(input) {
+  const archivo = input.files && input.files[0];
+  input.value = ""; // permite volver a elegir el mismo archivo
+  if (!archivo || !fotoSku || subiendoFoto) return;
+  const p = plantas.find(x => x.sku === fotoSku);
+  if (!p) return;
+  subiendoFoto = true;
+  const boton = document.getElementById("btn-pincel");
+  const texto = boton.innerHTML;
+  boton.disabled = true;
+  boton.textContent = "Subiendo…";
+  mostrarErrorFoto("");
+  try {
+    const cuerpo = new FormData();
+    cuerpo.append("archivo", archivo);
+    const respuesta = await fetch("/fotos/" + encodeURIComponent(fotoSku), {
+      method: "POST",
+      body: cuerpo,
+    });
+    const r = await respuesta.json();
+    if (!respuesta.ok) {
+      mostrarErrorFoto(r.mensaje || "No se pudo subir la foto. Intenta de nuevo.");
+      return;
+    }
+    p.img = r.img;
+    p.imgG = r.grande;
+    p.imgD = r.descarga;
+    pintarFotoGrande(p);
+    pintar();
+    toast("✓ Foto de " + p.n + " actualizada");
+  } catch (e) {
+    mostrarErrorFoto("Sin conexión. Intenta de nuevo.");
+  } finally {
+    subiendoFoto = false;
+    boton.disabled = false;
+    boton.innerHTML = texto;
+  }
+}
+
 /* ---------- modal agregar planta (sugerencia por WhatsApp) ---------- */
 // Solo un link wa.me con el mensaje pre-armado: no toca Odoo ni el servidor.
 const WHATSAPP_NEGOCIO = "50765673062";
@@ -288,7 +373,14 @@ function enviarAgregar() {
 /* ---------- eventos por delegación (más confiable en móvil) ---------- */
 document.getElementById("lista").addEventListener("click", e => {
   const fila = e.target.closest(".planta");
-  if (fila) abrirEditar(fila.dataset.planta);
+  if (!fila) return;
+  // Tocar la FOTO abre el modal de foto (ver en grande / cambiar con el
+  // pincel); tocar el resto de la fila sigue abriendo el ajuste de stock.
+  if (e.target.closest(".foto")) {
+    abrirFoto(fila.dataset.planta);
+  } else {
+    abrirEditar(fila.dataset.planta);
+  }
 });
 document.getElementById("alertas-lista").addEventListener("click", e => {
   if (e.target.closest("form")) return; // el botón Atendida hace su POST
@@ -300,6 +392,9 @@ document.getElementById("panel").addEventListener("click", e => {
 });
 document.getElementById("modal-editar").addEventListener("click", e => {
   if (e.target.id === "modal-editar") cerrarEditar();
+});
+document.getElementById("modal-foto").addEventListener("click", e => {
+  if (e.target.id === "modal-foto") cerrarFoto();
 });
 document.getElementById("modal-agregar").addEventListener("click", e => {
   if (e.target.id === "modal-agregar") cerrarAgregar();
