@@ -47,6 +47,13 @@ def test_editoras_por_coma(monkeypatch):
     assert not fichas.es_editora("ruben")
 
 
+def test_asterisco_abre_a_todos(monkeypatch):
+    monkeypatch.setenv("FICHAS_EDITORES", "*")
+    assert fichas.es_editora("genesis")
+    assert fichas.es_editora("ruben")
+    assert fichas.es_editora("stockmaster")
+
+
 def test_guardar_y_releer(db_limpia, editora):
     fichas.guardar("PL-ROMERO", dict(FICHA_BUENA), "genesis")
     todas = fichas.todas()

@@ -62,7 +62,7 @@ intacto en `app/static/`.
 
 Que el vivero no se quede sin stock sin darse cuenta — y desde el
 08/09/2026, también vender localmente. Pestañas del menú: Inicio, Stock,
-Vender y, para los editores, Fichas (Inventario sigue vivo en `/?tab=inv`
+Vender y Fichas (Inventario sigue vivo en `/?tab=inv`
 pero fuera del menú desde el 11/09/2026, pedido del dueño):
 
 - **Inicio**: score de salud 0–100 (100 − 6 por producto crítico − 2 por
@@ -86,7 +86,8 @@ pero fuera del menú desde el 11/09/2026, pedido del dueño):
 - **Inventario**: hoja de conteo en PDF (solo revisión), ciclo quincenal con
   Excel (plantilla protegida → contar → importar → pantalla de diferencias →
   confirmar) e historial de conteos. Fuera del menú; se llega con `/?tab=inv`.
-- **Fichas** (solo usuarios de `FICHAS_EDITORES`): descripción y guía de
+- **Fichas** (`FICHAS_EDITORES=*`: todos los usuarios; una lista por coma
+  la limita): descripción y guía de
   cuidado (luz, riego, dificultad y nota) por producto, precargadas con lo
   que hoy dice el sitio. Se guardan en la tabla `fichas_producto` de la base
   `tienda` (migración 015 del order-api; sin `TIENDA_DSN` caen al SQLite

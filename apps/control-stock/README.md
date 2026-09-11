@@ -45,7 +45,8 @@ En producción: `docker compose exec control-stock python -m app.usuarias …`
 - **Inventario**: hoja PDF, plantilla/import de Excel con pantalla de
   diferencias y confirmación, historial de conteos. Desde el 11/09/2026
   está fuera del menú (pedido del dueño); todo sigue vivo en `/?tab=inv`.
-- **Fichas** (solo usuarios de `FICHAS_EDITORES`): descripción y guía de
+- **Fichas** (`FICHAS_EDITORES=*`: todos los usuarios; una lista por coma
+  la limita): descripción y guía de
   cuidado (luz, riego, dificultad, nota) por producto, precargadas con lo
   que hoy dice el sitio (`app/datos_fichas/catalogo.json`, copia que
   refresca `scripts/actualizar_catalogo.py` antes de cada deploy). Tocar un

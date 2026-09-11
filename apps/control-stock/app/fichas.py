@@ -45,6 +45,10 @@ def editoras():
 
 
 def es_editora(usuario):
+    # "*" = todos los usuarios de la app (decisión del dueño, 11/09/2026);
+    # una lista por coma limita a esos usuarios; sin la variable, nadie.
+    if os.environ.get("FICHAS_EDITORES", "").strip() == "*":
+        return True
     return usuario in editoras()
 
 
