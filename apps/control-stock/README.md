@@ -43,7 +43,21 @@ En producción: `docker compose exec control-stock python -m app.usuarias …`
   marca atendida (o se cierra sola si el stock se recupera). El umbral se
   cambia desde el mismo panel. Historial en SQLite.
 - **Inventario**: hoja PDF, plantilla/import de Excel con pantalla de
-  diferencias y confirmación, historial de conteos.
+  diferencias y confirmación, historial de conteos. Desde el 11/09/2026
+  está fuera del menú (pedido del dueño); todo sigue vivo en `/?tab=inv`.
+- **Fichas** (solo usuarios de `FICHAS_EDITORES`): descripción y guía de
+  cuidado (luz, riego, dificultad, nota) por producto, precargadas con lo
+  que hoy dice el sitio (`app/datos_fichas/catalogo.json`, copia que
+  refresca `scripts/actualizar_catalogo.py` antes de cada deploy). Tocar un
+  producto abre la mini ficha; Guardar escribe en la tabla
+  `fichas_producto` de la base `tienda` (Postgres del droplet, `TIENDA_DSN`,
+  migración 015 del order-api; sin la variable cae al SQLite local, solo
+  desarrollo). El sitio público toma las fichas cuando el dueño corre
+  `scripts/traer_fichas.py` + `generar_catalogo.py` en el frontend: guardar
+  aquí NO cambia la tienda al instante. Estreno: correr una vez
+  `docker compose exec control-stock python -m app.sembrar_fichas` para
+  sembrar la tabla con los textos actuales del sitio (idempotente; sin eso,
+  una regeneración del catálogo con la tabla vacía dejaría placeholders).
 
 El ajuste trabaja sobre la cantidad **física** (lo que se cuenta caminando
 el vivero; el disponible para vender se muestra aparte) y manda también la

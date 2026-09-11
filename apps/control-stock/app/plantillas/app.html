@@ -79,6 +79,12 @@
       </button>
       {% endfor %}
     </div>
+
+    {# El logout vivía en la pestaña Inventario; al salir esa del menú se
+       muda aquí, que lo ven todos. #}
+    <form method="post" action="/logout" style="margin-top:22px;text-align:center">
+      <button class="btn btn-linea" type="submit" style="margin:0 auto">Cerrar sesión · {{ empleada.nombre }}</button>
+    </form>
   </section>
 
   <!-- ================= STOCK ================= -->
@@ -156,10 +162,29 @@
     <p style="color:var(--texto-suave);font-size:12.5px;padding:6px 2px">Aún no hay conteos.</p>
     {% endfor %}
 
-    <form method="post" action="/logout" style="margin-top:22px;text-align:center">
-      <button class="btn btn-linea" type="submit" style="margin:0 auto">Cerrar sesión · {{ empleada.nombre }}</button>
-    </form>
   </section>
+
+  {% if puede_fichas %}
+  <!-- ================= FICHAS ================= -->
+  {# La pestaña Fichas: descripción y guía de cuidado curadas por producto.
+     Solo la ven los editores (FICHAS_EDITORES). Inventario sigue vivo en
+     /?tab=inv pero ya no está en el menú (pedido del dueño). #}
+  <section class="tab" id="tab-fichas">
+    <div class="aviso">
+      <span class="ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
+      <div><b>Fichas de producto</b><span>Descripción y guía de cuidado que usará la tienda</span></div>
+    </div>
+    <div class="stock-top">
+      <div class="buscador"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9aa3bd" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg><input id="busca-fichas" placeholder="Buscar planta…" oninput="pintarFichas()"></div>
+      <div class="filtros">
+        <button class="chip on" data-fcat="Todas" onclick="chipFicha(this,'Todas')">Todas</button>
+        <button class="chip" data-fcat="__sin__" onclick="chipFicha(this,'__sin__')">Sin ficha</button>
+        <button class="chip" data-fcat="__con__" onclick="chipFicha(this,'__con__')">Con ficha</button>
+      </div>
+    </div>
+    <div id="lista-fichas"></div>
+  </section>
+  {% endif %}
 </main>
 
 <!-- panel de alertas -->
@@ -240,6 +265,55 @@
   </div>
 </div>
 
+{% if puede_fichas %}
+<!-- panel ficha de producto: descripción + guía de cuidado (solo editores) -->
+<div class="panel centrado" id="modal-ficha">
+  <div class="panel-hoja hoja-ficha">
+    <button class="edit-x" onclick="cerrarFicha()" aria-label="Cerrar">✕</button>
+    <div class="edit-cab">
+      <div class="foto-mini" id="ficha-foto">🪴</div>
+      <div>
+        <h3 id="ficha-nombre">Ficha</h3>
+        <p class="precio" id="ficha-sku"></p>
+      </div>
+      <button class="btn btn-linea btn-foto-ficha" type="button" id="ficha-btn-foto">Foto</button>
+    </div>
+
+    <div class="ficha-form">
+      <div class="campo campo-area">
+        <span>Descripción <small id="ficha-desc-largo"></small></span>
+        <textarea id="ficha-descripcion" rows="5" maxlength="600"></textarea>
+        <small class="ayuda">Las primeras oraciones (hasta ~155 letras) son lo que sale en Google.</small>
+      </div>
+      <div class="campo"><span>Luz</span><input id="ficha-luz" maxlength="80" placeholder="Ej: Luz indirecta brillante"></div>
+      <div class="campo"><span>Riego</span><input id="ficha-riego" maxlength="80" placeholder="Ej: 2 veces por semana"></div>
+      <div class="campo"><span>Dificultad</span>
+        <select id="ficha-dificultad">
+          <option value="Facil">Fácil</option>
+          <option value="Media">Media</option>
+          <option value="Exigente">Exigente</option>
+        </select>
+      </div>
+      <div class="campo campo-area">
+        <span>Nota de cuidado (opcional)</span>
+        <textarea id="ficha-nota" rows="3" maxlength="600" placeholder="Un consejo extra para la guía de cuidado de la tienda"></textarea>
+      </div>
+    </div>
+
+    <p class="edit-error" id="ficha-error"></p>
+    <p class="edit-sub" id="ficha-estado"></p>
+    <p class="edit-nota">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      Se guarda en la base de la tienda; el sitio público la toma cuando se regenera el catálogo, no al instante.
+    </p>
+    <div class="botones">
+      <button class="btn btn-dorado" style="flex:1;justify-content:center" id="ficha-guardar" onclick="guardarFicha()">Guardar ficha</button>
+      <button class="btn btn-linea" onclick="cerrarFicha()">Cancelar</button>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <!-- modal agregar planta (sugerencia por WhatsApp, no escribe en Odoo) -->
 <div class="panel centrado" id="modal-agregar">
   <div class="panel-hoja">
@@ -268,11 +342,15 @@
 
 <div class="toast" id="toast"></div>
 
+{# Inventario ya no está en el menú (sus rutas y su pestaña siguen vivas en
+   /?tab=inv); en su lugar los editores ven Fichas. #}
 <nav>
-  <button class="on" onclick="tab('home',this)"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></svg></span>Inicio</button>
-  <button onclick="tab('stock',this)"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M12 10C12 6 9 3 4 3c0 5 3 8 8 7z"/><path d="M12 13c0-3.5 2.5-6 7-6 0 4.5-2.5 7-7 6z"/><path d="M7 21h10"/></svg></span>Stock</button>
+  <button class="on" data-tab="home" onclick="tab('home',this)"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></svg></span>Inicio</button>
+  <button data-tab="stock" onclick="tab('stock',this)"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M12 10C12 6 9 3 4 3c0 5 3 8 8 7z"/><path d="M12 13c0-3.5 2.5-6 7-6 0 4.5-2.5 7-7 6z"/><path d="M7 21h10"/></svg></span>Stock</button>
   <a href="/venta"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg></span>Vender</a>
-  <button onclick="tab('inv',this)"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6"/><path d="M9 16h6"/></svg></span>Inventario</button>
+  {% if puede_fichas %}
+  <button data-tab="fichas" onclick="tab('fichas',this)"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>Fichas</button>
+  {% endif %}
 </nav>
 {% endblock %}
 

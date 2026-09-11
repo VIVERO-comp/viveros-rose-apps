@@ -74,22 +74,28 @@ function pintar() {
 function filtrar() { pintar(); }
 
 function chip(el, c) {
-  document.querySelectorAll(".chip").forEach(x => x.classList.remove("on"));
+  // Solo los chips de Stock: la pestaña Fichas tiene los suyos propios.
+  document.querySelectorAll("#tab-stock .chip").forEach(x => x.classList.remove("on"));
   el.classList.add("on");
   catActiva = c;
   pintar();
 }
 
 function tab(id, btn) {
+  const seccion = document.getElementById("tab-" + id);
+  if (!seccion) return;
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("activa"));
-  document.getElementById("tab-" + id).classList.add("activa");
+  seccion.classList.add("activa");
   document.querySelectorAll("nav button").forEach(b => b.classList.remove("on"));
-  btn.classList.add("on");
+  // Inventario ya no tiene botón en el menú pero su pestaña sigue viva
+  // (?tab=inv): en ese caso el menú queda sin selección y ya.
+  const boton = btn || document.querySelector(`nav button[data-tab="${id}"]`);
+  if (boton) boton.classList.add("on");
 }
 
 function irStock(cat) {
-  tab("stock", document.querySelectorAll("nav button")[1]);
-  document.querySelectorAll(".chip").forEach(x => {
+  tab("stock");
+  document.querySelectorAll("#tab-stock .chip").forEach(x => {
     x.classList.toggle("on", x.textContent === cat);
   });
   catActiva = cat;
@@ -104,7 +110,7 @@ function irProducto(sku) {
   document.getElementById("panel").classList.remove("abierto");
   document.getElementById("busca").value = "";
   irStock("Todas");
-  document.querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x.textContent === "Todas"));
+  document.querySelectorAll("#tab-stock .chip").forEach(x => x.classList.toggle("on", x.textContent === "Todas"));
   setTimeout(() => {
     const el = document.getElementById("planta-" + sku);
     if (el) {
@@ -370,6 +376,135 @@ function enviarAgregar() {
   }, 1650 + letras.length * 50 + 800);
 })();
 
+/* ---------- pestaña fichas: descripción y guía curadas (solo editores) ----------
+   Guardar escribe en la base de la tienda vía POST /fichas/{sku}; el sitio
+   público toma la ficha cuando el dueño regenera el catálogo. La referencia
+   precargada es lo que hoy dice el sitio (DATOS.referencias). */
+let fichaSku = null;
+let fcatActiva = "Todas";
+
+function fichaDe(sku) { return (DATOS.fichas || {})[sku] || null; }
+function referenciaDe(sku) { return (DATOS.referencias || {})[sku] || null; }
+
+function pintarFichas() {
+  const l = document.getElementById("lista-fichas");
+  if (!l) return;
+  const t = normalizar(document.getElementById("busca-fichas").value);
+  l.innerHTML = plantas
+    .filter(p => {
+      const con = Boolean(fichaDe(p.sku));
+      const pasa = fcatActiva === "Todas" ? true :
+        fcatActiva === "__con__" ? con : !con;
+      return pasa && normalizar(p.n).includes(t);
+    })
+    .sort((a, b) => a.n.localeCompare(b.n, "es"))
+    .map(p => {
+      const ficha = fichaDe(p.sku);
+      const ref = referenciaDe(p.sku);
+      const texto = (ficha && ficha.descripcion) || (ref && ref.descripcion) || "";
+      const foto = p.img ? `<img src="${p.img}" alt="" loading="lazy" onerror="fotoRespaldo(this,'${p.sku}')">` : "";
+      // "Curada ✓" = ya la editó alguien aquí; "Del sitio" = solo existe la
+      // referencia del catálogo; "Sin texto" = ni una ni otra.
+      const sello = ficha ? '<span class="badge b-ok">Curada ✓</span>'
+        : texto ? '<span class="badge b-bajo">Del sitio</span>'
+        : '<span class="badge b-critico">Sin texto</span>';
+      return `<div class="planta" data-ficha="${p.sku}">
+        <div class="foto">${p.e}${foto}</div>
+        <div class="info"><b>${p.n}</b><span class="extracto">${texto || "Sin descripción todavía"}</span></div>
+        <div class="qty">${sello}</div>
+      </div>`;
+    }).join("") || '<p style="color:var(--texto-suave);font-size:13px;text-align:center;padding:30px 0">Sin resultados</p>';
+}
+
+function chipFicha(el, c) {
+  document.querySelectorAll("#tab-fichas .chip").forEach(x => x.classList.remove("on"));
+  el.classList.add("on");
+  fcatActiva = c;
+  pintarFichas();
+}
+
+function contarDescripcion() {
+  const largo = document.getElementById("ficha-descripcion").value.trim().length;
+  document.getElementById("ficha-desc-largo").textContent = "· " + largo + " caracteres";
+}
+
+function abrirFicha(sku) {
+  const p = plantas.find(x => x.sku === sku);
+  if (!p) return;
+  fichaSku = sku;
+  const ficha = fichaDe(sku) || referenciaDe(sku) ||
+    { descripcion: "", luz: "", riego: "", dificultad: "", nota: "" };
+  document.getElementById("ficha-nombre").textContent = p.n;
+  document.getElementById("ficha-sku").textContent = sku + " · " + p.c;
+  const foto = document.getElementById("ficha-foto");
+  foto.textContent = p.e;
+  if (p.img) {
+    const img = document.createElement("img");
+    img.src = p.img;
+    img.alt = "";
+    img.onerror = () => fotoRespaldo(img, p.sku);
+    foto.appendChild(img);
+  }
+  document.getElementById("ficha-descripcion").value = ficha.descripcion || "";
+  document.getElementById("ficha-luz").value = ficha.luz || "";
+  document.getElementById("ficha-riego").value = ficha.riego || "";
+  document.getElementById("ficha-dificultad").value = ficha.dificultad || "Media";
+  document.getElementById("ficha-nota").value = ficha.nota || "";
+  contarDescripcion();
+  mostrarErrorFicha("");
+  const guardada = fichaDe(sku);
+  document.getElementById("ficha-estado").textContent = guardada
+    ? "Última edición: " + (guardada.actualizado_por || "") + " · " + (guardada.actualizado_en || "").slice(0, 10)
+    : (referenciaDe(sku) ? "Precargada con lo que hoy dice el sitio." : "Producto sin textos todavía.");
+  document.getElementById("modal-ficha").classList.add("abierto");
+}
+
+function cerrarFicha() {
+  document.getElementById("modal-ficha").classList.remove("abierto");
+  fichaSku = null;
+}
+
+function mostrarErrorFicha(mensaje) {
+  const el = document.getElementById("ficha-error");
+  el.textContent = mensaje;
+  el.classList.toggle("visible", Boolean(mensaje));
+}
+
+async function guardarFicha() {
+  if (!fichaSku) return;
+  const boton = document.getElementById("ficha-guardar");
+  boton.disabled = true;
+  boton.textContent = "Guardando…";
+  mostrarErrorFicha("");
+  try {
+    const respuesta = await fetch("/fichas/" + encodeURIComponent(fichaSku), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        descripcion: document.getElementById("ficha-descripcion").value,
+        luz: document.getElementById("ficha-luz").value,
+        riego: document.getElementById("ficha-riego").value,
+        dificultad: document.getElementById("ficha-dificultad").value,
+        nota: document.getElementById("ficha-nota").value,
+      }),
+    });
+    const cuerpo = await respuesta.json();
+    if (!respuesta.ok) {
+      mostrarErrorFicha(cuerpo.mensaje || "No se pudo guardar. Intenta de nuevo.");
+      return;
+    }
+    DATOS.fichas[fichaSku] = cuerpo.ficha;
+    toast("Ficha guardada 🌿");
+    cerrarFicha();
+    pintarFichas();
+  } catch {
+    mostrarErrorFicha("Sin conexión con el servidor. Intenta de nuevo.");
+  } finally {
+    boton.disabled = false;
+    boton.textContent = "Guardar ficha";
+  }
+}
+
 /* ---------- eventos por delegación (más confiable en móvil) ---------- */
 document.getElementById("lista").addEventListener("click", e => {
   const fila = e.target.closest(".planta");
@@ -399,6 +534,26 @@ document.getElementById("modal-foto").addEventListener("click", e => {
 document.getElementById("modal-agregar").addEventListener("click", e => {
   if (e.target.id === "modal-agregar") cerrarAgregar();
 });
+// Fichas: sus nodos solo existen para los editores.
+if (document.getElementById("tab-fichas")) {
+  document.getElementById("lista-fichas").addEventListener("click", e => {
+    const fila = e.target.closest("[data-ficha]");
+    if (!fila) return;
+    if (e.target.closest(".foto")) {
+      abrirFoto(fila.dataset.ficha); // ver en grande / pincel, como en Stock
+    } else {
+      abrirFicha(fila.dataset.ficha);
+    }
+  });
+  document.getElementById("modal-ficha").addEventListener("click", e => {
+    if (e.target.id === "modal-ficha") cerrarFicha();
+  });
+  document.getElementById("ficha-btn-foto").addEventListener("click", () => {
+    if (fichaSku) abrirFoto(fichaSku);
+  });
+  document.getElementById("ficha-descripcion").addEventListener("input", contarDescripcion);
+  pintarFichas();
+}
 
 const toastPendiente = sessionStorage.getItem("toast-pendiente");
 if (toastPendiente) {
@@ -411,13 +566,13 @@ if (toastPendiente) {
 // donde estaba el empleado (las pestañas son 100% del navegador).
 const parametros = new URLSearchParams(location.search);
 const tabPedida = parametros.get("tab");
-if (tabPedida === "stock" || tabPedida === "inv") {
-  tab(tabPedida, document.querySelectorAll("nav button")[tabPedida === "stock" ? 1 : 2]);
+if (tabPedida === "stock" || tabPedida === "inv" || tabPedida === "fichas") {
+  tab(tabPedida); // tab() encuentra el botón por data-tab (inv ya no tiene)
 }
 const catPedida = parametros.get("cat");
 if (catPedida) {
   catActiva = catPedida;
-  document.querySelectorAll(".chip").forEach(x =>
+  document.querySelectorAll("#tab-stock .chip").forEach(x =>
     x.classList.toggle("on", x.dataset.cat === catPedida));
 }
 const buscaPedida = parametros.get("q");

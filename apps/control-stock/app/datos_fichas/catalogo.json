@@ -1,0 +1,812 @@
+{
+ "PL-AGAVE-GIGANTE": {
+  "descripcion": "Agave (Agave americana), escultural y resistente, con rosetas de hojas gruesas azul verdosas. Perfecto para jardines de sol pleno y bajo mantenimiento. Riego mínimo: prefiere la sequía al exceso de agua.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Cada 10–15 días"
+ },
+ "PL-AGLONEMAS": {
+  "descripcion": "Aglaonema (Aglaonema commutatum), follaje jaspeado que aguanta interiores con poca luz. Riego moderado cuando la tierra seque arriba. De las plantas de interior más resistentes y agradecidas.",
+  "dificultad": "Facil",
+  "luz": "Luz baja o indirecta",
+  "riego": "1 vez por semana"
+ },
+ "PL-AJI-BOLITA": {
+  "descripcion": "Ají ornamental (Capsicum annuum) cargado de frutitos redondos que pasan del verde al rojo. Quiere sol directo y riego regular; sus ajíes le dan color al balcón o al huerto por meses.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Diario o interdiario"
+ },
+ "PL-ALBAHACA-ROJA": {
+  "descripcion": "Albahaca morada (Ocimum basilicum var. purpurascens), aromática y decorativa con su follaje púrpura. A pleno sol o semisombra, con riego frecuente sin encharcar. Corta las puntas seguido para que se mantenga tupida.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Diario o interdiario"
+ },
+ "PL-ALBAHACA-VERDE": {
+  "descripcion": "Albahaca (Ocimum basilicum) fresca para la cocina: pesto, ensaladas y sofritos. Quiere sol y tierra húmeda con buen drenaje. Cosecha las hojas de arriba para estimular más brotes.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Diario o interdiario"
+ },
+ "PL-ALCANCEL": {
+  "descripcion": "Alcancel, planta de follaje vistoso para interiores y rincones frescos. Luz indirecta y riego moderado. Fácil de mantener y de buen crecimiento.",
+  "dificultad": "Facil",
+  "luz": "Luz indirecta brillante",
+  "riego": "1–2 veces por semana"
+ },
+ "PL-ALOCASIA-GIGANTE-VARIEGADA": {
+  "descripcion": "Oreja de elefante variegada (Alocasia macrorrhiza 'Variegata'), hojas gigantes salpicadas de blanco: una pieza de colección. Luz indirecta brillante, humedad y riego regular sin encharcar.",
+  "dificultad": "Media",
+  "luz": "Luz indirecta brillante",
+  "riego": "1–2 veces por semana"
+ },
+ "PL-ANTHURIO-FLOR": {
+  "descripcion": "Anturio (Anthurium andraeanum), con sus flores acharoladas que duran semanas. En interior quiere luz indirecta y algo de humedad; riega cuando la capa superior de tierra seque. Elegante y sorprendentemente fácil.",
+  "dificultad": "Media",
+  "luz": "Luz indirecta brillante",
+  "riego": "1–2 veces por semana"
+ },
+ "PL-APIO": {
+  "descripcion": "Apio (Apium graveolens) para cosechar tallos y hojas frescas en casa. Necesita semisombra, tierra rica y riego constante. Corta los tallos externos y la planta sigue produciendo.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Diario o interdiario"
+ },
+ "PL-ARALIAS": {
+  "descripcion": "Aralia (Polyscias sp.), arbusto de interior de follaje fino y elegante, ideal para dar altura en esquinas luminosas. Luz indirecta y riego moderado. Le gusta la estabilidad: no la muevas mucho.",
+  "dificultad": "Media",
+  "luz": "Sol o luz indirecta brillante",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-ARAUCARIA": {
+  "descripcion": "Pino de Norfolk (Araucaria heterophylla), de silueta simétrica y elegante, muy usado también como pino navideño natural. Crece a sol o semisombra con riego moderado. En maceta mantiene un tamaño manejable por años.",
+  "dificultad": "Media",
+  "luz": "Luz indirecta",
+  "riego": "2 veces por semana"
+ },
+ "PL-ARBOL-CITRONELA": {
+  "descripcion": "Eucalipto limón (Corymbia citriodora), un árbol de crecimiento rápido cuyas hojas desprenden un intenso aroma cítrico. Para jardines amplios y a pleno sol. Su fragancia ayuda a mantener alejados a los mosquitos.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Diario o interdiario"
+ },
+ "PL-BAMBU-ENTRENZAS": {
+  "descripcion": "Bambú de la suerte trenzado (Dracaena sanderiana), símbolo de buena fortuna. Vive feliz en interior con luz indirecta, en agua o en tierra ligeramente húmeda. Un detalle verde ideal para escritorios y regalos.",
+  "dificultad": "Media",
+  "luz": "Sol o luz indirecta brillante",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-BIJAO-TRICOLOR": {
+  "descripcion": "Stromanthe triostar (Stromanthe thalia 'Triostar'), hojas pintadas en verde, crema y rosa que parecen hechas a mano. Luz indirecta y humedad constante. Sus hojas se mueven siguiendo el día.",
+  "dificultad": "Exigente",
+  "luz": "Luz indirecta brillante",
+  "riego": "Riego frecuente, sustrato húmedo"
+ },
+ "PL-CACTUS-GRANDE": {
+  "descripcion": "Cactus de porte grande, listo para dar carácter a espacios soleados. Sol directo y riego muy escaso: mejor olvidarlo que ahogarlo. Una pieza de presencia inmediata.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Cada 10–15 días"
+ },
+ "PL-CACTUS-HUESO-DE-DRAGON": {
+  "descripcion": "Hueso de dragón (Euphorbia lactea), de tallos crestados esculturales. Mucha luz y muy poco riego. Su savia es irritante: se manipula con guantes.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Cada 10–15 días"
+ },
+ "PL-CACTUS-MEDIANO": {
+  "descripcion": "Cactus en tamaño mediano, variedad según disponibilidad. Sol directo y riego muy escaso. El toque desértico que no pide casi nada a cambio.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Cada 10–15 días"
+ },
+ "PL-CACTUS-PEQUENO": {
+  "descripcion": "Cactus pequeño, ideal para escritorios, ventanas y detalles. Mucha luz y riego mínimo. Perfecto para quienes empiezan con plantas.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Cada 10–15 días"
+ },
+ "PL-CALATHEA-CEBRINA": {
+  "descripcion": "Calathea cebra (Goeppertia zebrina), hojas aterciopeladas con rayas verdes que se cierran de noche. Luz indirecta, humedad y riego con agua reposada. Para amantes del follaje.",
+  "dificultad": "Exigente",
+  "luz": "Luz indirecta brillante",
+  "riego": "Riego frecuente, sustrato húmedo"
+ },
+ "PL-CELOCIA": {
+  "descripcion": "Celosía (Celosia argentea), con plumas de flores en colores encendidos. Anual de sol pleno y riego regular, perfecta para macetas y borduras llenas de color.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "3 veces por semana"
+ },
+ "PL-CHAVELITAS-01": {
+  "descripcion": "Chavelita (Catharanthus roseus), florecedora incansable todo el año en el clima panameño. Sol pleno, riego moderado y nada más: es de las flores más nobles que hay.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "3 veces por semana"
+ },
+ "PL-CHILE-POP": {
+  "descripcion": "Ají ornamental (Capsicum annuum) compacto, con frutitos de colores vivos que resaltan en macetas y jardineras. Sol directo y riego regular. Aguanta bien el calor de Panamá.",
+  "dificultad": "Media",
+  "luz": "Luz indirecta",
+  "riego": "2 veces por semana"
+ },
+ "PL-CIELITO-AZUL": {
+  "descripcion": "Cielito azul (Evolvulus glomeratus), de florecitas azul intenso que abren con el sol. Ideal para colgantes, bordes y jardineras. Sol pleno y riego regular para verlo siempre florecido.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "3 veces por semana"
+ },
+ "PL-CINTA": {
+  "descripcion": "Cinta o mala madre (Chlorophytum comosum), la colgante clásica que produce hijuelos en cascada. Casi indestructible: luz indirecta y riego moderado.",
+  "dificultad": "Facil",
+  "luz": "Luz baja o indirecta",
+  "riego": "1–2 veces por semana"
+ },
+ "PL-CINTA-MALA-MADRE": {
+  "descripcion": "Cinta mala madre (Chlorophytum comosum), con sus varas llenas de hijuelos listos para colgar o trasplantar. Luz indirecta y riego moderado. Perfecta para canastas colgantes.",
+  "dificultad": "Facil",
+  "luz": "Luz baja o indirecta",
+  "riego": "1–2 veces por semana"
+ },
+ "PL-CLAVEL-CHINO": {
+  "descripcion": "Clavel chino, de flores compactas y coloridas para macetas y borduras. Sol pleno y riego moderado. Retira las flores secas para que siga floreciendo.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "3 veces por semana"
+ },
+ "PL-CLAVELITO": {
+  "descripcion": "Clavelina (Dianthus chinensis), de flores pequeñas con bordes dentados y colores alegres. Sol y riego moderado. Quita las flores marchitas y florecerá sin descanso.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "3 veces por semana"
+ },
+ "PL-COLEOS": {
+  "descripcion": "Coleo (Coleus scutellarioides), follaje de colores intensos que no necesita flores para lucirse. En semisombra sus tonos se ven más vivos; riego frecuente. Pellizca las puntas para que se ramifique.",
+  "dificultad": "Facil",
+  "luz": "Sol o media sombra",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-COQUETA-BLANCA": {
+  "descripcion": "Coqueta (Alternanthera ficoidea 'Variegata'), tapizante de follaje matizado en verde y crema. Excelente para bordes y contrastes en el jardín. Sol o semisombra con riego regular.",
+  "dificultad": "Media",
+  "luz": "Luz indirecta",
+  "riego": "2 veces por semana"
+ },
+ "PL-CORDILINIA": {
+  "descripcion": "Cordilina (Cordyline fruticosa), follaje en tonos vino y rosa que aporta color sin necesidad de flores. Luz brillante para mantener el color y riego regular.",
+  "dificultad": "Facil",
+  "luz": "Luz baja o indirecta",
+  "riego": "1 vez por semana"
+ },
+ "PL-CORONITA": {
+  "descripcion": "Corona de Cristo (Euphorbia milii), suculenta espinosa de flores pequeñas y constantes. Aguanta sol fuerte y sequía; riego escaso. Florece casi todo el año con mínimo cuidado.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "3 veces por semana"
+ },
+ "PL-CRINUM-ASIATICO-VARIEGADO": {
+  "descripcion": "Lirio de playa variegado (Crinum asiaticum 'Variegatum'), de hojas largas rayadas en crema. Aguanta sol y brisa: ideal para jardines costeros o macetones grandes. Riego regular.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "3 veces por semana"
+ },
+ "PL-CRISANTEMOS-01": {
+  "descripcion": "Crisantemo (Chrysanthemum morifolium), flores densas y coloridas de larga duración. En maceta quiere buena luz y riego regular. Retira lo marchito para alargar la floración.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "3 veces por semana"
+ },
+ "PL-CROTO-MAMY-AMARILLO": {
+  "descripcion": "Croto (Codiaeum variegatum 'Mammy') de hojas onduladas en amarillo, verde y toques rojizos. Cuanto más sol recibe, más intenso su color. Riego regular y listo: es de los arbustos más agradecidos del trópico.",
+  "dificultad": "Facil",
+  "luz": "Sol o media sombra",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-CUNA-DE-MOISES": {
+  "descripcion": "La cuna de Moisés (Spathiphyllum) florece incluso en interiores con poca luz, con sus espatas blancas elegantes. Avisa cuando tiene sed bajando un poco las hojas y se recupera con un buen riego. Ideal para dormitorios y oficinas.",
+  "dificultad": "Media",
+  "luz": "Luz indirecta",
+  "riego": "2 veces por semana"
+ },
+ "PL-DALIA": {
+  "descripcion": "Dalia (Dahlia pinnata), flores generosas en formas y colores variados. Sol pleno y riego regular sin mojar el follaje. Cuanto más cortas sus flores, más produce.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "3 veces por semana"
+ },
+ "PL-DRACAENA-COMPACTA": {
+  "descripcion": "Dracaena compacta, de rosetas densas de hojas verde oscuro sobre tallos firmes. Crece lento y ordenado, ideal para interiores modernos. Luz indirecta y riego moderado.",
+  "dificultad": "Media",
+  "luz": "Luz indirecta",
+  "riego": "2 veces por semana"
+ },
+ "PL-DRACAENA-REFLEXA": {
+  "descripcion": "Dracena reflexa (Dracaena reflexa), de hojas dispuestas en espiral y porte elegante. Muy noble en interior con luz indirecta. Riega cuando la tierra seque en la superficie.",
+  "dificultad": "Facil",
+  "luz": "Luz baja o indirecta",
+  "riego": "1 vez por semana"
+ },
+ "PL-DRACAENA-ROJA": {
+  "descripcion": "Cordilina roja (Cordyline fruticosa 'Rubra'), follaje granate intenso para dar contraste. Luz brillante y riego regular. Con buena iluminación su color se luce aún más.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-DRACONTIUM": {
+  "descripcion": "Dracontium, un aroide poco común de aspecto exótico, para coleccionistas. Semisombra, humedad y sustrato rico. Una rareza que llama la atención de cualquier visitante.",
+  "dificultad": "Exigente",
+  "luz": "Luz indirecta brillante",
+  "riego": "Riego frecuente, sustrato húmedo"
+ },
+ "PL-DURANTA-LIMON": {
+  "descripcion": "Duranta limón (Duranta erecta 'Gold Mound') formada como arbolito, con follaje amarillo limón que ilumina el jardín. A pleno sol logra su color más intenso. Riego regular y poda de forma para mantener la copa.",
+  "dificultad": "Facil",
+  "luz": "Sol o media sombra",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-DURANTA-MATIZADA": {
+  "descripcion": "Duranta variegada (Duranta erecta 'Variegata') formada como arbolito, con hojas verdes bordeadas de crema. Aporta luz y contraste al jardín a pleno sol o semisombra. Riego regular y podas suaves de forma.",
+  "dificultad": "Facil",
+  "luz": "Sol o media sombra",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-DURANTA-VERDE": {
+  "descripcion": "Duranta (Duranta erecta) de follaje verde intenso, noble para setos, borduras y topiarios. Crece rápido a pleno sol. Riego regular y poda cuando quieras darle forma.",
+  "dificultad": "Media",
+  "luz": "Luz indirecta",
+  "riego": "2 veces por semana"
+ },
+ "PL-EPISCIAS-VR": {
+  "descripcion": "Episcia (Episcia cupreata), follaje cobrizo brillante y florecitas naranjas. Perfecta para colgantes en interior con luz indirecta. Riego regular sin mojar las hojas.",
+  "dificultad": "Exigente",
+  "luz": "Luz indirecta brillante",
+  "riego": "Riego frecuente, sustrato húmedo"
+ },
+ "PL-ESCUDO-PERSA": {
+  "descripcion": "Escudo persa (Strobilanthes dyerianus), hojas metalizadas en púrpura y plata que parecen joyería. Luz indirecta brillante y riego regular. Pellizca las puntas para mantenerlo compacto.",
+  "dificultad": "Exigente",
+  "luz": "Luz indirecta brillante",
+  "riego": "Riego frecuente, sustrato húmedo"
+ },
+ "PL-ESPARRAGO-MEYERI": {
+  "descripcion": "Cola de zorro (Asparagus densiflorus 'Meyeri'), plumones verdes densos que suavizan cualquier rincón. Luz indirecta o semisombra y riego moderado. Muy resistente.",
+  "dificultad": "Facil",
+  "luz": "Luz baja o indirecta",
+  "riego": "1–2 veces por semana"
+ },
+ "PL-FICUS-ELASTICA": {
+  "descripcion": "Árbol del caucho (Ficus elastica), de hojas grandes, gruesas y brillantes. Fácil y de crecimiento noble en interior luminoso. Riega cuando la tierra seque arriba y limpia sus hojas para que luzcan.",
+  "dificultad": "Media",
+  "luz": "Luz indirecta brillante",
+  "riego": "1 vez por semana"
+ },
+ "PL-FICUS-LYRATA": {
+  "descripcion": "El ficus lira (Ficus lyrata) es la planta de interior de hojas grandes en forma de violín que domina en decoración. Ubícalo cerca de una ventana con luz indirecta brillante y evita moverlo con frecuencia. Riega cuando la capa superior de tierra esté seca.",
+  "dificultad": "Media",
+  "luz": "Luz indirecta brillante",
+  "riego": "1 vez por semana"
+ },
+ "PL-FICUS-LYRATA-3-RAMAS": {
+  "descripcion": "Ficus lira (Ficus lyrata) de tres ramas, con porte de arbolito listo para ser protagonista. Luz indirecta brillante, riego moderado y poco movimiento: así se mantiene perfecto.",
+  "dificultad": "Media",
+  "luz": "Luz indirecta brillante",
+  "riego": "1 vez por semana"
+ },
+ "PL-FICUS-TRIANGULAR-GRANDE": {
+  "descripcion": "Ficus triangular (Ficus triangularis), de hojitas en forma de triángulo, fresco y distinto. Este ejemplar grande ya viene formado. Luz indirecta brillante y riego moderado.",
+  "dificultad": "Media",
+  "luz": "Luz indirecta brillante",
+  "riego": "1 vez por semana"
+ },
+ "PL-FICUS-VARIEGADO": {
+  "descripcion": "Ficus benjamina variegado (Ficus benjamina 'Variegata'), follaje fino salpicado de crema. Luz abundante para conservar el variegado. Riego moderado y lejos de corrientes de aire.",
+  "dificultad": "Media",
+  "luz": "Luz indirecta",
+  "riego": "2 veces por semana"
+ },
+ "PL-FITONIA-ROJA": {
+  "descripcion": "Fitonia (Fittonia albivenis), hojas con nervaduras rojas dibujadas al detalle. Ideal para terrarios, escritorios y rincones con luz indirecta. Avisa que tiene sed desmayándose y revive con el riego.",
+  "dificultad": "Exigente",
+  "luz": "Luz indirecta brillante",
+  "riego": "Riego frecuente, sustrato húmedo"
+ },
+ "PL-FLOR-DE-SAN-JUAN": {
+  "descripcion": "Flor de San Juan, arbusto florecedor tradicional de los jardines panameños, de flores perfumadas. Sol o semisombra y riego regular. Un clásico que siempre cumple.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "3 veces por semana"
+ },
+ "PL-GINGER": {
+  "descripcion": "Ginger variegado (Alpinia zerumbet 'Variegata'), de hojas rayadas en verde y amarillo con aroma a jengibre. Da volumen tropical a jardines y macetones. Semisombra y riego generoso.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "3 veces por semana"
+ },
+ "PL-GRONFENA": {
+  "descripcion": "Siempreviva (Gomphrena globosa), de pompones morados que duran muchísimo, incluso secos. Sol y riego moderado. Alegre, resistente y de floración constante.",
+  "dificultad": "Facil",
+  "luz": "Luz indirecta brillante",
+  "riego": "1–2 veces por semana"
+ },
+ "PL-HELECHO-MEYERI": {
+  "descripcion": "Cola de zorro (Asparagus densiflorus 'Meyeri'), plumas verdes tupidas de aspecto suave. Semisombra o luz indirecta y riego moderado. Aporta textura fina a macetas y jardineras.",
+  "dificultad": "Media",
+  "luz": "Luz indirecta",
+  "riego": "2 veces por semana"
+ },
+ "PL-HELECHOS": {
+  "descripcion": "Helecho espada (Nephrolepis exaltata), frondas verdes en cascada para colgantes y repisas. Semisombra, humedad y riego frecuente. El clásico que refresca cualquier espacio.",
+  "dificultad": "Exigente",
+  "luz": "Luz indirecta brillante",
+  "riego": "Riego frecuente, sustrato húmedo"
+ },
+ "PL-HELICONIA-ANTORCHA": {
+  "descripcion": "Heliconia antorcha, con inflorescencias erguidas de colores encendidos que le dan sello tropical al jardín. Quiere calor, de semisombra a sol suave y riego generoso. Sus flores cortadas duran mucho en florero.",
+  "dificultad": "Media",
+  "luz": "Luz indirecta brillante",
+  "riego": "1–2 veces por semana"
+ },
+ "PL-HIERBA-CITRONELA": {
+  "descripcion": "Citronela (Cymbopogon nardus), la hierba clásica para ahuyentar mosquitos con su aroma alimonado. Forma matas densas a pleno sol con riego regular. Ideal cerca de terrazas y ventanas.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Diario o interdiario"
+ },
+ "PL-HIERBA-DE-LIMON": {
+  "descripcion": "Hierba limón (Cymbopogon citratus), perfecta para tés e infusiones. Forma matas vigorosas a pleno sol y agradece riegos frecuentes. Corta los tallos desde la base para usarla en la cocina.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Diario o interdiario"
+ },
+ "PL-HIERBABUENA-01": {
+  "descripcion": "Hierbabuena (Mentha spicata) fresca para tés, jugos y cocina. Crece rápido en semisombra con tierra siempre ligeramente húmeda. Mejor en maceta propia: es expansiva y puede invadir a sus vecinas.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Diario o interdiario"
+ },
+ "PL-HYPOESTES": {
+  "descripcion": "Hypoestes, follaje salpicado de rosa, blanco o rojo como a pinceladas. Luz indirecta y riego regular. Ideal para mesas, terrarios y arreglos.",
+  "dificultad": "Facil",
+  "luz": "Luz indirecta brillante",
+  "riego": "1–2 veces por semana"
+ },
+ "PL-IXORA": {
+  "descripcion": "Ixora (Ixora coccinea), arbusto de ramilletes encendidos casi todo el año. El clásico de los setos floridos en el trópico. Sol pleno y riego regular.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "3 veces por semana"
+ },
+ "PL-JADE-01": {
+  "descripcion": "El árbol de jade (Crassula ovata) es una suculenta de tallos gruesos asociada a la buena fortuna. Quiere mucha luz y poco riego: deja secar la tierra por completo entre riegos. Perfecta para balcones y ventanas soleadas.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Cada 10–15 días"
+ },
+ "PL-JAZMIN-BLANCO-ENANO": {
+  "descripcion": "Jazmín enano (Wrightia antidysenterica), cubierto de estrellitas blancas casi sin descanso. Compacto, para macetas y bordes. De sol suave a semisombra y riego regular.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "3 veces por semana"
+ },
+ "PL-KALANCHOE": {
+  "descripcion": "Kalanchoe (Kalanchoe blossfeldiana), suculenta de ramilletes coloridos que duran semanas. Poca agua y buena luz: florece con muy poco esfuerzo. Ideal para interiores luminosos y balcones.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Cada 10–15 días"
+ },
+ "PL-LENGUA-DE-SUEGRA-ENANA": {
+  "descripcion": "Versión compacta de la sansevieria (Dracaena trifasciata 'Hahnii'), con rosetas bajas de hojas firmes. Prácticamente indestructible: tolera poca luz y riegos olvidados, ideal para escritorios y repisas. Riega solo cuando la tierra esté completamente seca.",
+  "dificultad": "Facil",
+  "luz": "Luz baja o indirecta",
+  "riego": "Cada 10–15 días"
+ },
+ "PL-LENGUA-DE-SUEGRA-MINI": {
+  "descripcion": "Sansevieria (Dracaena trifasciata) en formato mini, con toda la resistencia de la grande. Tolera poca luz y semanas sin riego. El detalle verde perfecto para escritorios.",
+  "dificultad": "Facil",
+  "luz": "Luz baja o indirecta",
+  "riego": "Cada 10–15 días"
+ },
+ "PL-LIRIO-CAMINANTE": {
+  "descripcion": "Lirio caminante, de follaje en abanico y flores delicadas. Se multiplica \"caminando\": sus brotes tocan el suelo y enraízan alrededor. Semisombra y riego regular.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "3 veces por semana"
+ },
+ "PL-LIRIO-GIGANTE-MORADO": {
+  "descripcion": "Crinum gigante (Crinum × amabile), un lirio imponente de flores perfumadas en rosa y vino. Para puntos focales del jardín, a sol o semisombra. Riego regular.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "3 veces por semana"
+ },
+ "PL-LORITO-GRANDE": {
+  "descripcion": "Lorito, arbusto tropical de follaje vistoso muy usado en los jardines panameños. Este tamaño grande da presencia inmediata. Sol o semisombra con riego regular.",
+  "dificultad": "Media",
+  "luz": "Luz indirecta",
+  "riego": "2 veces por semana"
+ },
+ "PL-LORITO-MEDIANO": {
+  "descripcion": "Lorito, arbusto tropical de follaje vistoso muy usado en los jardines panameños. Tamaño mediano, listo para seguir creciendo contigo. Sol o semisombra con riego regular.",
+  "dificultad": "Media",
+  "luz": "Luz indirecta",
+  "riego": "2 veces por semana"
+ },
+ "PL-LORITOS-CHICO": {
+  "descripcion": "Lorito en tamaño chico, perfecto para empezar setos y borduras a tu ritmo. Sol o semisombra con riego regular. Crece parejo y aguanta bien la poda.",
+  "dificultad": "Media",
+  "luz": "Luz indirecta",
+  "riego": "2 veces por semana"
+ },
+ "PL-MARGINATA": {
+  "descripcion": "Dracena marginata (Dracaena marginata), de hojas finas con bordes rojizos y silueta escultural. Muy fácil: luz indirecta y riego moderado. Crece lento y siempre elegante.",
+  "dificultad": "Facil",
+  "luz": "Luz baja o indirecta",
+  "riego": "1 vez por semana"
+ },
+ "PL-MARIGOLD-VR": {
+  "descripcion": "Clavelón (Tagetes erecta), flores pompón naranjas y amarillas que alegran cualquier rincón. Sol pleno y riego moderado. Además de linda, ayuda a repeler plagas del huerto.",
+  "dificultad": "Media",
+  "luz": "Luz indirecta",
+  "riego": "2 veces por semana"
+ },
+ "PL-MENTA-01": {
+  "descripcion": "Menta (Mentha × piperita) de aroma intenso para tés, postres y bebidas. Crece rápido en semisombra con tierra siempre húmeda. Mantenla en maceta propia porque tiende a expandirse.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Diario o interdiario"
+ },
+ "PL-MILLONARIA-ZAMIOCULCA": {
+  "descripcion": "Zamioculca (Zamioculcas zamiifolia), la famosa millonaria: brillante, moderna y casi imposible de matar. Tolera poca luz y riegos espaciados. Riega solo cuando la tierra esté seca.",
+  "dificultad": "Facil",
+  "luz": "Luz baja o indirecta",
+  "riego": "Cada 10–15 días"
+ },
+ "PL-MILLONARIA-ZAMIOCULCA-BLANCA": {
+  "descripcion": "Zamioculca variegada (Zamioculcas zamiifolia 'Variegata'), una rareza con hojas salpicadas de crema. Luz indirecta brillante para mantener el variegado y riego escaso. Pieza de colección.",
+  "dificultad": "Facil",
+  "luz": "Luz baja o indirecta",
+  "riego": "Cada 10–15 días"
+ },
+ "PL-MILLONARIA-ZAMIOCULCA-NEGRA": {
+  "descripcion": "Zamioculca negra (Zamioculcas zamiifolia 'Raven'), de follaje casi negro y aspecto sofisticado. Igual de resistente que la millonaria clásica: poca luz y poco riego.",
+  "dificultad": "Facil",
+  "luz": "Luz baja o indirecta",
+  "riego": "Cada 10–15 días"
+ },
+ "PL-MINI-ARBUSTO": {
+  "descripcion": "Mini arbusto compacto para bordes, macetas y arreglos de jardín. Fácil de mantener con sol o semisombra y riego regular. Ideal para llenar espacios de verde sin complicarse.",
+  "dificultad": "Facil",
+  "luz": "Luz indirecta brillante",
+  "riego": "1–2 veces por semana"
+ },
+ "PL-MINI-CALATHEA": {
+  "descripcion": "Calathea (Goeppertia sp.) en formato compacto, con hojas dibujadas que se cierran de noche. Luz indirecta, humedad y riego con agua reposada. Un detalle vivo para la mesa o el escritorio.",
+  "dificultad": "Exigente",
+  "luz": "Luz indirecta brillante",
+  "riego": "Riego frecuente, sustrato húmedo"
+ },
+ "PL-MINI-JADE": {
+  "descripcion": "Arbusto elefante (Portulacaria afra), suculenta de hojitas redondas y tallos rojizos, muy usada como bonsái. Mucha luz y poco riego. Compacta y de crecimiento noble.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Cada 10–15 días"
+ },
+ "PL-MOLLEJA": {
+  "descripcion": "Molleja (Crassula ovata), suculenta de hojas carnosas de la familia del jade. Mucha luz y riego escaso, dejando secar la tierra por completo. Fácil y longeva.",
+  "dificultad": "Facil",
+  "luz": "Luz indirecta brillante",
+  "riego": "1–2 veces por semana"
+ },
+ "PL-MONSTERA-ADANSONII": {
+  "descripcion": "Monstera adansonii en canasta colgante, con sus hojas perforadas cayendo en cascada. Luz indirecta y riego cuando la tierra seque arriba. Crece rápido y llena de selva cualquier pared.",
+  "dificultad": "Media",
+  "luz": "Luz indirecta brillante",
+  "riego": "1–2 veces por semana"
+ },
+ "PL-MONSTERA-DELICIOSA": {
+  "descripcion": "La costilla de Adán (Monstera deliciosa) es la planta tropical de hojas partidas que transforma cualquier sala. Crece bien en interior con luz indirecta brillante y agradece un tutor cuando empieza a trepar. Deja secar los primeros centímetros de tierra entre riegos.",
+  "dificultad": "Media",
+  "luz": "Luz indirecta brillante",
+  "riego": "1–2 veces por semana"
+ },
+ "PL-NOVIO-CHINO": {
+  "descripcion": "Impatiens de Nueva Guinea (Impatiens hawkeri), flores grandes y follaje oscuro brillante. Florece en semisombra, donde otras no pueden. Riego frecuente sin encharcar.",
+  "dificultad": "Facil",
+  "luz": "Sol o media sombra",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-OREGANO": {
+  "descripcion": "Orégano (Origanum vulgare) fresco o seco para darle sabor a tus comidas. Quiere sol, tierra ligera y riegos moderados. Cuanto más lo cosechas, más tupido crece.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Diario o interdiario"
+ },
+ "PL-ORTENCIA": {
+  "descripcion": "Hortensia (Hydrangea macrophylla), con sus globos de flores azules, rosadas o blancas. Prefiere semisombra fresca y riego abundante. Una clásica romántica para macetas y jardines.",
+  "dificultad": "Media",
+  "luz": "Sol o media sombra",
+  "riego": "3 veces por semana"
+ },
+ "PL-PALMA-ABANICO": {
+  "descripcion": "Palma abanico (Pritchardia pacifica), de hojas amplias y plisadas como abanicos. Elegante en jardines y patios tropicales, a sol o semisombra. Riego regular sin encharcar.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-PALMA-BISMARKIA-GRANDE": {
+  "descripcion": "La palma bismarck (Bismarckia nobilis) impone con su abanico gris azulado; es de las palmas más llamativas para jardines amplios. A pleno sol crece lenta pero segura. Riego regular el primer año; después tolera bien la sequía.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-PALMA-BISMARKIA-MEDIANA": {
+  "descripcion": "Palma bismarck (Bismarckia nobilis) en tamaño mediano, con su inconfundible abanico gris azulado. A pleno sol y con espacio se convierte en la protagonista del jardín. Riego regular mientras se establece.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-PALMA-BISMARKIA-PEQUENA": {
+  "descripcion": "Palma bismarck (Bismarckia nobilis) joven, para sembrarla y verla convertirse en la reina del jardín. Sol pleno y riego regular sus primeros años. Una inversión que crece contigo.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-PALMA-FENIX": {
+  "descripcion": "Palma fénix enana (Phoenix roebelenii), de copa fina y elegante, perfecta para jardines pequeños y macetones. Crece lento y se mantiene manejable. Sol o semisombra con riego regular.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-PALMA-MADAGASCAR": {
+  "descripcion": "Palma de Madagascar (Pachypodium lamerei): en realidad una suculenta de tronco espinoso coronado por hojas, con todo el aire de una palmera. Quiere mucho sol y muy poco riego. Una pieza escultural para jardines secos y colecciones.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-PALMA-MAJESTIC": {
+  "descripcion": "Palma majestad (Ravenea rivularis), de frondas arqueadas que dan un aire elegante a patios e interiores luminosos. Le gusta la humedad más que a otras palmas: riego regular. Crece recta y ordenada.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-PALMA-MULTIPLE": {
+  "descripcion": "Palma areca (Dypsis lutescens) de múltiples cañas, la clásica para dar privacidad y verdor tropical. Se siembran dobles para un efecto más tupido. Sol suave o semisombra y riego regular.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-PALMA-NAVIDAD": {
+  "descripcion": "Palma de Navidad (Adonidia merrillii), esbelta y de crecimiento ordenado, con frutos rojos en diciembre que le dan su nombre. Excelente para jardines y entradas. Sol pleno y riego regular.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-PALMA-PINANGO": {
+  "descripcion": "Pinanga (Pinanga coronata), palma de tallos anillados y frondas suaves con aire de selva. Prefiere semisombra y ambientes húmedos. Una palma distinta para coleccionistas y jardines sombreados.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-PALMA-REAL-ENANA": {
+  "descripcion": "Palma real enana, de porte compacto y elegante para jardines y macetones. Sol o semisombra con riego regular. Toda la presencia de una palma real en formato manejable.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-PALMA-ROJA": {
+  "descripcion": "Palma de labios rojos (Cyrtostachys renda), famosa por sus tallos de un rojo intenso único entre las palmas. Quiere calor, humedad y de semisombra a sol suave. Una joya tropical para destacar el jardín.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-PALMA-ROJA-GRANDE": {
+  "descripcion": "Palma de labios rojos (Cyrtostachys renda) en tamaño grande, con sus tallos escarlata ya bien formados. Calor, humedad y de semisombra a sol suave. El punto focal tropical por excelencia.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-PALMA-WASHINTONIA": {
+  "descripcion": "Palma washingtonia (Washingtonia robusta), de crecimiento rápido y silueta clásica de avenida. Muy resistente: sol pleno y riegos moderados una vez establecida.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-PALMA-ZICA": {
+  "descripcion": "Cica (Cycas revoluta), una planta prehistórica de corona simétrica y hojas firmes. Crece lento y vive muchísimos años, a sol o semisombra. Riego moderado dejando secar entre riegos.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-PALO-DE-BRASIL": {
+  "descripcion": "Palo de Brasil (Dracaena fragrans 'Massangeana'), tronco robusto con penachos verdes de franja amarilla. Muy noble en interior: luz indirecta y riego moderado. Dicen que atrae buena energía.",
+  "dificultad": "Facil",
+  "luz": "Luz baja o indirecta",
+  "riego": "1 vez por semana"
+ },
+ "PL-PALO-DE-BRAZIL-MEDIANO": {
+  "descripcion": "Palo de Brasil (Dracaena fragrans 'Massangeana') en tamaño mediano, ideal para esquinas y recibidores. Luz indirecta y riego cuando la tierra seque. Resistente y de crecimiento ordenado.",
+  "dificultad": "Facil",
+  "luz": "Luz baja o indirecta",
+  "riego": "1 vez por semana"
+ },
+ "PL-PAPIRO": {
+  "descripcion": "Papiro paraguas (Cyperus alternifolius), tallos coronados por abanicos verdes con aire zen. Le encanta el agua: mantén la tierra siempre húmeda. Para patios, fuentes y macetas sin miedo al riego.",
+  "dificultad": "Media",
+  "luz": "Sol o luz indirecta brillante",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-PAPO": {
+  "descripcion": "Papo o hibisco (Hibiscus rosa-sinensis), la flor tropical por excelencia. Florece a pleno sol con riego regular. Cada flor dura un día, pero produce sin parar.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-PAPO-MATIZADO": {
+  "descripcion": "Papo de follaje matizado, que combina la flor tropical clásica con hojas variegadas en verde y crema. Sol pleno y riego regular. Doble atractivo: follaje y flor.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-PEPEROMIA-SANDIA": {
+  "descripcion": "Peperomia sandía (Peperomia argyreia), de hojas que imitan la cáscara de una sandía. Compacta, para escritorios y repisas con luz indirecta. Riego moderado cuando la tierra seque.",
+  "dificultad": "Media",
+  "luz": "Luz indirecta",
+  "riego": "2 veces por semana"
+ },
+ "PL-PETUNIN": {
+  "descripcion": "Petunia (Petunia × hybrida), cascadas de flores de colores para macetas y jardineras. Sol pleno y riego regular sin mojar las flores. Retira lo marchito y no para de florecer.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "3 veces por semana"
+ },
+ "PL-PHILODENDRO-NEON": {
+  "descripcion": "Filodendro neón (Philodendron hederaceum 'Neon'), colgante de hojas verde lima vibrante. Luz indirecta y riego moderado. Crece rápido e ilumina cualquier rincón.",
+  "dificultad": "Media",
+  "luz": "Luz indirecta brillante",
+  "riego": "1–2 veces por semana"
+ },
+ "PL-PHILOMENDRO-PINK-PRINCESS": {
+  "descripcion": "Filodendro pink princess (Philodendron erubescens 'Pink Princess'), follaje oscuro con pinceladas rosadas: una de las plantas más buscadas. Luz indirecta brillante para mantener el rosa y riego moderado.",
+  "dificultad": "Media",
+  "luz": "Luz indirecta brillante",
+  "riego": "1–2 veces por semana"
+ },
+ "PL-PIE-DE-NINO-TRADICIONAL": {
+  "descripcion": "Pie de niño tradicional, el arbusto de hojas carnosas que no falta en los jardines panameños. Muy fácil de cuidar: sol o semisombra y riego moderado. Se multiplica fácil por esquejes.",
+  "dificultad": "Facil",
+  "luz": "Sol o media sombra",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-PIE-DE-NINO-VERDE": {
+  "descripcion": "Pie de niño verde, variante de follaje verde uniforme del clásico de los jardines panameños. Sol o semisombra y riego moderado. Noble, resistente y fácil de multiplicar.",
+  "dificultad": "Facil",
+  "luz": "Sol o media sombra",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-PINO-ENANO": {
+  "descripcion": "Junípero bonsái (Juniperus procumbens), conífera de porte compacto trabajada como bonsái. Quiere sol y riego moderado, dejando orear la tierra entre riegos. Una pieza viva para cultivar la paciencia.",
+  "dificultad": "Media",
+  "luz": "Sol pleno",
+  "riego": "2 veces por semana"
+ },
+ "PL-PINO-ESTRELLA": {
+  "descripcion": "Pino estrella, conífera ornamental de follaje en capas que aporta estructura y elegancia al jardín. Sol pleno o semisombra y riego regular mientras se establece.",
+  "dificultad": "Media",
+  "luz": "Sol pleno",
+  "riego": "2 veces por semana"
+ },
+ "PL-PINO-HINDU": {
+  "descripcion": "Árbol mástil (Polyalthia longifolia), columnar y de hojas colgantes onduladas, ideal para marcar entradas y avenidas. Crece recto sin podas complicadas. Sol pleno y riego regular.",
+  "dificultad": "Media",
+  "luz": "Sol pleno",
+  "riego": "2 veces por semana"
+ },
+ "PL-PINO-MONTESUMA": {
+  "descripcion": "Pino de Moctezuma (Pinus montezumae), de agujas largas y caídas que le dan un aire suave y elegante. Para jardines amplios a pleno sol. Riego regular los primeros años.",
+  "dificultad": "Media",
+  "luz": "Sol pleno",
+  "riego": "2 veces por semana"
+ },
+ "PL-PINO-RASTRERO": {
+  "descripcion": "Junípero rastrero (Juniperus procumbens), conífera baja que se extiende como una alfombra verde azulada. Ideal para taludes, bordes y rocallas a pleno sol. Riego moderado; tolera sequía una vez establecido.",
+  "dificultad": "Media",
+  "luz": "Sol pleno",
+  "riego": "2 veces por semana"
+ },
+ "PL-PINO-ROMANO": {
+  "descripcion": "Tuya (Thuja occidentalis), conífera de follaje denso ideal para setos y para dar estructura al jardín. Sol pleno o semisombra y riego regular mientras se establece. Se puede podar para mantener la forma.",
+  "dificultad": "Media",
+  "luz": "Sol pleno",
+  "riego": "2 veces por semana"
+ },
+ "PL-POTHOS": {
+  "descripcion": "Potos (Epipremnum aureum), la trepadora de interior más noble: crece en casi cualquier luz. Riega cuando la tierra seque arriba. Ideal para repisas, canastas o guiarla por la pared.",
+  "dificultad": "Facil",
+  "luz": "Luz baja o indirecta",
+  "riego": "1 vez por semana"
+ },
+ "PL-POTHOS-MULTI-RAMA": {
+  "descripcion": "Potos (Epipremnum aureum) multi rama en canasta, más tupido desde el primer día. Luz indirecta y riego cuando la tierra seque arriba. La colgante más confiable.",
+  "dificultad": "Facil",
+  "luz": "Luz baja o indirecta",
+  "riego": "1 vez por semana"
+ },
+ "PL-ROMERO": {
+  "descripcion": "Romero (Salvia rosmarinus), la aromática clásica para cocinar y para el jardín. Quiere sol directo y tierra que drene bien; en maceta, riega cuando la superficie esté seca. Una poda ligera cada tanto lo mantiene tupido.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Diario o interdiario"
+ },
+ "PL-ROSA": {
+  "descripcion": "Rosal (Rosa sp.) en maceta, listo para trasplantar o mantener en tiesto. Necesita al menos 6 horas de sol y riego constante sin encharcar. Retira las flores marchitas para estimular nuevas floraciones.",
+  "dificultad": "Media",
+  "luz": "Sol pleno",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-ROSITA-MINIATURA": {
+  "descripcion": "Rosa mini (Rosa chinensis 'Minima'), un rosal en miniatura para macetas y detalles. Necesita buen sol y riego regular. Poda ligera después de cada floración.",
+  "dificultad": "Media",
+  "luz": "Sol pleno",
+  "riego": "2–3 veces por semana"
+ },
+ "PL-ROSSETTA": {
+  "descripcion": "Rossetta, planta ornamental de roseta vistosa que aporta textura y orden al jardín. Sol o semisombra con riego moderado.",
+  "dificultad": "Facil",
+  "luz": "Luz indirecta brillante",
+  "riego": "1–2 veces por semana"
+ },
+ "PL-RUDA-01": {
+  "descripcion": "Ruda (Ruta graveolens), la aromática tradicional de follaje azul verdoso. Rústica y de poco cuidado: sol directo y riego escaso. Lo único que no perdona es el exceso de agua.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Diario o interdiario"
+ },
+ "PL-SABILA-ALOE-MEDIANA": {
+  "descripcion": "Sábila (Aloe vera) en tamaño mediano, la suculenta medicinal de siempre, con gel fresco en sus hojas. Mucha luz o sol directo y riego escaso. Útil, decorativa y casi eterna.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Cada 10–15 días"
+ },
+ "PL-SABILA-ALOE-PEQUENA": {
+  "descripcion": "Sábila (Aloe vera) pequeña, lista para crecer en tu ventana más soleada. Riego escaso dejando secar bien la tierra. La planta útil que todo hogar agradece.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Cada 10–15 días"
+ },
+ "PL-SUCULENTA-PEQUENA": {
+  "descripcion": "Suculentas variadas en formato pequeño: formas y tonos distintos según disponibilidad. Mucha luz y muy poco riego. Perfectas para detalles, recuerdos y colecciones.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Cada 10–15 días"
+ },
+ "PL-SUCULENTAS-GRANDE": {
+  "descripcion": "Suculentas variadas en tamaño grande, ya bien formadas, según disponibilidad. Mucha luz y riego escaso. Piezas llamativas de mínimo cuidado.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Cada 10–15 días"
+ },
+ "PL-SUCULENTAS-MEDIANAS": {
+  "descripcion": "Suculentas variadas en tamaño mediano, con formas y colores según disponibilidad. Mucha luz y muy poco riego. Fáciles, decorativas y coleccionables.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Cada 10–15 días"
+ },
+ "PL-TOMILLO": {
+  "descripcion": "Tomillo (Thymus vulgaris), aromática mediterránea de hoja fina para carnes, sopas y guisos. Pide sol pleno y tierra con buen drenaje. Riega solo cuando la tierra esté seca.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "Diario o interdiario"
+ },
+ "PL-TORENIA-01": {
+  "descripcion": "Torenia (Torenia fournieri), flores como campanitas bicolores que aguantan la semisombra. Ideal para jardineras y colgantes. Riego frecuente para verla siempre fresca.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "3 veces por semana"
+ },
+ "PL-TRASDESCANTIA": {
+  "descripcion": "Tradescantia (Tradescantia spathacea), hojas verdes por arriba y moradas por debajo. Muy resistente, para interior luminoso o semisombra en exterior. Riego moderado.",
+  "dificultad": "Facil",
+  "luz": "Luz indirecta brillante",
+  "riego": "1–2 veces por semana"
+ }
+}

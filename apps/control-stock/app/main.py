@@ -1,8 +1,9 @@
 """Rutas de la app de control de stock (server-rendered con Jinja2).
 
-Una sola pantalla con tres pestañas (Inicio, Stock, Inventario), como el
-prototipo aprobado: el servidor arma los datos y la pestañas se mueven con
-el JS del prototipo. Las acciones (ajustar stock, atender alertas, conteos)
+Una sola pantalla con pestañas (Inicio, Stock y, para los editores, Fichas;
+Inventario sigue vivo en /?tab=inv pero fuera del menú), como el prototipo
+aprobado: el servidor arma los datos y las pestañas se mueven con el JS del
+prototipo. Las acciones (ajustar stock, atender alertas, conteos, fichas)
 son POSTs de vuelta a este mismo servidor; la app nunca toca Odoo directo.
 """
 
@@ -17,7 +18,7 @@ from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import calculos, conteos, datos, fotos, seguridad, ventas
+from . import calculos, conteos, datos, fichas, fotos, seguridad, ventas
 
 app = FastAPI(title="Control de Stock")
 
@@ -185,8 +186,12 @@ def inicio(request: Request, refrescar: int = 0):
         for p in inventario
     ]
     alertas = datos.alertas_pendientes()
+    # La pestaña Fichas solo existe para los editores (FICHAS_EDITORES): al
+    # resto no se le manda ni el botón ni los textos del catálogo.
+    puede_fichas = fichas.es_editora(request.state.empleada["id"])
     return plantillas.TemplateResponse(request, "app.html", {
         "empleada": request.state.empleada,
+        "puede_fichas": puede_fichas,
         "puntos": puntos,
         # El anillo del score: circunferencia 402, se descubre según el score.
         "anillo": round(402 * (1 - puntos / 100)),
@@ -210,6 +215,9 @@ def inicio(request: Request, refrescar: int = 0):
             # Sin credenciales de Cloudinary el pincel del modal de foto no
             # se ofrece (el zoom y la descarga siguen funcionando).
             "puedeSubir": fotos.subida_configurada(),
+            "puedeFichas": puede_fichas,
+            "fichas": fichas.todas() if puede_fichas else {},
+            "referencias": fichas.referencias() if puede_fichas else {},
         }, ensure_ascii=False),
     })
 
@@ -722,6 +730,35 @@ async def cambiar_foto(request: Request, sku: str, archivo: UploadFile):
     datos.fijar_foto_subida(sku, hash_foto, request.state.empleada["id"])
     info = fotos.info_foto(sku, hash_foto)
     return {"resultado": "aplicada", **info}
+
+
+@app.post("/fichas/{sku}")
+async def guardar_ficha(request: Request, sku: str):
+    """Guardar de la pestaña Fichas: descripción y guía de cuidado curadas.
+
+    Escribe en la tabla fichas_producto de la base tienda (el sitio las toma
+    de ahí cuando el dueño regenera el catálogo). No toca Odoo ni cambia el
+    sitio al instante."""
+    def error(codigo, clave, mensaje):
+        return Response(json.dumps({"error": clave, "mensaje": mensaje}),
+                        status_code=codigo, media_type="application/json")
+
+    if not fichas.es_editora(request.state.empleada["id"]):
+        return error(403, "sin_permiso", "Tu usuario no puede editar fichas.")
+    if not re.fullmatch(r"[A-Za-z0-9-]{1,80}", sku):
+        return error(400, "sku_invalido", "SKU inválido.")
+    campos = fichas.limpiar(await request.json())
+    mensaje = fichas.validar(campos)
+    if mensaje:
+        return error(400, "ficha_invalida", mensaje)
+    try:
+        fichas.guardar(sku, campos, request.state.empleada["id"])
+    except Exception as excepcion:
+        # A la pantalla va un mensaje simple; el detalle queda en el log.
+        print(f"fichas: error guardando {sku}: {excepcion!r}", flush=True)
+        return error(502, "sin_guardar",
+                      "No se pudo guardar en la base. Intenta de nuevo.")
+    return {"resultado": "guardada", "ficha": fichas.todas().get(sku)}
 
 
 @app.get("/venta/foto/{producto_id}")
