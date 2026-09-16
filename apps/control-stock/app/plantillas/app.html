@@ -185,6 +185,86 @@
     <div id="lista-fichas"></div>
   </section>
   {% endif %}
+
+  <!-- ================= AJUSTES ================= -->
+  {# Mi cuenta (email de Google) la ve cualquiera; las invitaciones y los
+     accesos, solo los admins (AJUSTES_ADMINS). Las rutas /ajustes/* de
+     admin también lo verifican en el servidor. #}
+  <section class="tab" id="tab-ajustes">
+    <div class="aviso">
+      <span class="ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+      <div><b>Ajustes</b><span>Tu cuenta y el acceso a la app</span></div>
+    </div>
+
+    {% if aviso_ajustes == 'email-guardado' %}<div class="aviso-ok">Email guardado. Cuando entres con esa cuenta de Google quedará confirmado.</div>
+    {% elif aviso_ajustes == 'email-ocupado' %}<div class="aviso-error">Ese email ya está en uso por otra cuenta de la app.</div>
+    {% elif aviso_ajustes == 'email' %}<div class="aviso-error">Ese email no se ve válido. Revísalo e intenta de nuevo.</div>{% endif %}
+
+    <div class="seccion-titulo">Mi cuenta</div>
+    <div class="historial-item acceso-item">
+      <div><b>{{ empleada.nombre }}</b><small>usuario: {{ empleada.id }}{% if empleada.email and empleada.email_verificado %} · Google conectado{% endif %}</small></div>
+    </div>
+    <form class="form-invitar" method="post" action="/ajustes/mi-email">
+      <label class="campo">
+        <span>Tu email de Google (por si acaso: así entras con Google sin perder tu cuenta)</span>
+        <input name="email" type="email" value="{{ empleada.email or '' }}" placeholder="tunombre@gmail.com"
+               autocapitalize="none" autocorrect="off">
+      </label>
+      <button class="boton" type="submit">Guardar email</button>
+    </form>
+
+    {% if es_admin %}
+    {% if aviso_ajustes == 'invitada' %}
+    <div class="aviso-ok">Invitación creada. Comparte el link (por WhatsApp, por ejemplo): quien lo abra entra con su cuenta de Google.
+      {% if inv_nueva %}<button class="btn btn-dorado btn-chico btn-copiar" type="button" data-link="{{ base_publica }}/invitacion/{{ inv_nueva }}" onclick="copiarLink(this)">Copiar link</button>{% endif %}
+    </div>
+    {% elif aviso_ajustes == 'ya-activa' %}<div class="aviso-ok">Ese email ya tiene acceso a la app.</div>{% endif %}
+
+    <div class="seccion-titulo">Invitar a alguien</div>
+    <form class="form-invitar" method="post" action="/ajustes/invitar">
+      <label class="campo">
+        <span>Nombre (opcional)</span>
+        <input name="nombre" type="text" maxlength="60" placeholder="Ej: Génesis">
+      </label>
+      <label class="campo">
+        <span>Email de Google (opcional: el link basta)</span>
+        <input name="email" type="email" placeholder="nombre@gmail.com"
+               autocapitalize="none" autocorrect="off">
+      </label>
+      <button class="boton" type="submit">Crear invitación</button>
+    </form>
+
+    <div class="seccion-titulo">Invitaciones pendientes</div>
+    {% for inv in invitaciones %}
+    <div class="historial-item acceso-item">
+      <div><b>{{ inv.nombre or inv.email or 'Solo con link' }}</b><small>{{ inv.email or 'sin email' }} · invitó {{ inv.invitada_por }} · {{ inv.creada_en | fecha_bonita }}</small></div>
+      <div class="acciones-acceso">
+        <button class="btn btn-linea btn-chico btn-copiar" type="button" data-link="{{ base_publica }}/invitacion/{{ inv.token }}" onclick="copiarLink(this)">Copiar link</button>
+        <form method="post" action="/ajustes/invitacion/cancelar">
+          <input type="hidden" name="token" value="{{ inv.token }}">
+          <button class="btn btn-linea btn-chico" type="submit">Cancelar</button>
+        </form>
+      </div>
+    </div>
+    {% else %}
+    <p class="sin-filas">No hay invitaciones pendientes.</p>
+    {% endfor %}
+
+    <div class="seccion-titulo">Con acceso</div>
+    {% for e in empleadas if e.activa %}
+    <div class="historial-item acceso-item">
+      <div><b>{{ e.nombre }}</b><small>{{ e.email or e.usuario }}</small></div>
+      {% if e.usuario != empleada.id %}
+      <form method="post" action="/ajustes/revocar"
+            onsubmit="return confirm('¿Quitarle el acceso a {{ e.nombre }}? Ya no podrá entrar a la app (ni con Google ni con contraseña) hasta que se le vuelva a invitar.')">
+        <input type="hidden" name="usuario" value="{{ e.usuario }}">
+        <button class="btn btn-linea btn-chico" type="submit">Revocar</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% endif %}
+  </section>
 </main>
 
 <!-- panel de alertas -->
@@ -351,6 +431,7 @@
   {% if puede_fichas %}
   <button data-tab="fichas" onclick="tab('fichas',this)"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>Fichas</button>
   {% endif %}
+  <button data-tab="ajustes" onclick="tab('ajustes',this)"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>Ajustes</button>
 </nav>
 {% endblock %}
 

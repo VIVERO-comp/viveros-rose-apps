@@ -606,3 +606,88 @@ button.enlace-sub{
 .ficha-form .campo select:focus{border-color:var(--dorado)}
 .ficha-form .campo .ayuda{display:block;font-size:11px;color:var(--texto-suave);margin-top:5px}
 .ficha-form .campo span small{color:var(--dorado-suave);font-weight:600}
+
+/* ---------- login con Google y pestaña Ajustes ---------- */
+.login .aviso-error{width:100%;max-width:300px;margin-bottom:0}
+.boton-google{
+  width:100%;max-width:300px;display:flex;align-items:center;justify-content:center;
+  gap:10px;background:#fff;color:#3c4043;border-radius:14px;
+  font-size:14px;font-weight:700;padding:13px;text-decoration:none;
+}
+.separador-login{
+  width:100%;max-width:300px;display:flex;align-items:center;gap:10px;
+  color:var(--texto-suave);font-size:11px;
+}
+.separador-login::before,.separador-login::after{
+  content:"";flex:1;height:1px;background:var(--noche-3);
+}
+.form-invitar{display:flex;flex-direction:column;gap:11px;margin-bottom:18px}
+.aviso-ok{
+  background:rgba(140,196,151,.12);border:1px solid rgba(140,196,151,.4);
+  color:var(--ok);border-radius:16px;padding:13px 15px;
+  font-size:12.5px;line-height:1.5;margin-bottom:12px;
+}
+.acceso-item form{display:flex}
+.btn-chico{font-size:11.5px;padding:8px 12px;border-radius:11px}
+.sin-filas{font-size:12px;color:var(--texto-suave);margin:2px 2px 16px}
+.acciones-acceso{display:flex;gap:7px;align-items:center;flex-shrink:0}
+.aviso-ok .btn-copiar{margin-top:9px}
+.login .aviso-ok{width:100%;max-width:300px;margin-bottom:0}
+
+/* ---------- escritorio: tema claro y ancho (pedido del dueño 16/09/2026).
+   El diseño oscuro móvil (el prototipo aprobado) no se toca: en pantallas
+   de computadora se redefinen las variables a una paleta blanca/crema y la
+   "tarjeta de teléfono" se convierte en un lienzo ancho con sombra. ---------- */
+@media (min-width: 900px){
+  :root{
+    --noche:#faf8f3;        /* fondo principal claro */
+    --noche-2:#f1ece1;      /* tarjetas claras */
+    --noche-3:#e7e0d1;      /* elementos elevados */
+    --dorado:#c9924f;       /* el dorado se oscurece para contrastar en blanco */
+    --dorado-suave:#b9823f;
+    --texto:#2b2a33;
+    --texto-suave:#6f6a5e;
+    --ok:#2e7d44;
+    --bajo:#a87f1b;
+    --critico:#c05b46;
+  }
+  body{background:#edeae2}
+  .phone{
+    max-width:960px;
+    height:calc(100vh - 56px);
+    margin:28px auto;
+    background:#ffffff;
+    border-radius:26px;
+    border:1px solid #e6dfcf;
+    box-shadow:0 18px 50px rgba(60,50,30,.14);
+  }
+  .stars{display:none}
+  .intro{background:#ffffff}
+  header{padding:26px 34px 14px}
+  main{padding:6px 34px 110px}
+  nav{
+    background:rgba(255,255,255,.94);
+    border-top:1px solid #eae3d3;
+    border-radius:0 0 26px 26px;
+  }
+  /* Aprovechar el ancho: categorías en 4 columnas y el stock a 2 columnas. */
+  .cats{grid-template-columns:repeat(4,1fr)}
+  #lista{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start}
+  #lista .planta{margin-bottom:0}
+  /* Ajustes puntuales de piezas que estaban pensadas para fondo oscuro. */
+  .score-card{border-color:#eee7d6}
+  .b-agotado{background:#efe5e1;color:#a4432f}
+  .boton-google{border:1px solid #dadce0}
+  .panel{background:rgba(58,50,36,.35)}
+  .campo input{background:#ffffff;border-color:#e2dbca}
+  .buscador{border:1px solid #e2dbca;background:#ffffff}
+  .separador-login{color:#8a8477}
+}
+@media (min-width: 900px){
+  /* La franja pegajosa del buscador era azul noche fijo; en claro va blanca
+     (y compensa el padding ancho de main en escritorio). */
+  .stock-top{
+    background:rgba(255,255,255,.94);
+    margin:-6px -34px 0;padding:12px 34px 0;
+  }
+}

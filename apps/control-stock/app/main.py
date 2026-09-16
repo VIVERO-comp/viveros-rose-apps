@@ -10,6 +10,7 @@ son POSTs de vuelta a este mismo servidor; la app nunca toca Odoo directo.
 import json
 import os
 import re
+import secrets
 from datetime import datetime
 from urllib.parse import quote
 
@@ -18,7 +19,7 @@ from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import calculos, conteos, datos, fichas, fotos, seguridad, ventas
+from . import acceso_google, calculos, conteos, datos, fichas, fotos, seguridad, ventas
 
 app = FastAPI(title="Control de Stock")
 
@@ -69,12 +70,39 @@ def _cookie_segura():
     return os.environ.get("COOKIE_SEGURA") == "1"
 
 
+def _admins():
+    """Emails (o usuarios) que ven la pestaña Ajustes e invitan gente
+    (AJUSTES_ADMINS, separados por coma)."""
+    return {a.strip().lower() for a in os.environ.get("AJUSTES_ADMINS", "").split(",")
+            if a.strip()}
+
+
+def _es_admin(empleada):
+    admins = _admins()
+    # El email cuenta solo VERIFICADO (confirmado entrando con Google): el
+    # que la empleada anota a mano en Mi cuenta no da privilegios, si no
+    # cualquiera se anotaría el email de una admin.
+    return (empleada["id"].lower() in admins
+            or ((empleada.get("email") or "").lower() in admins
+                and bool(empleada.get("email_verificado"))))
+
+
+def _redirect_uri(request):
+    """El callback de Google. En producción PUBLIC_BASE_URL (detrás de nginx
+    la URL que ve la app es la interna http); en desarrollo, la del request."""
+    base = os.environ.get("PUBLIC_BASE_URL") or str(request.base_url)
+    return base.rstrip("/") + "/auth/google/callback"
+
+
 @app.middleware("http")
 async def exigir_sesion(request: Request, call_next):
     ruta = request.url.path
     # /f/ es el enlace público de la factura (con token): lo abre el cliente
-    # desde WhatsApp, sin sesión.
-    if ruta == "/login" or ruta.startswith("/static") or ruta.startswith("/f/"):
+    # desde WhatsApp, sin sesión. /auth/google es el ida y vuelta del login
+    # con Google e /invitacion/ el link compartible, ambos antes de que
+    # exista la sesión.
+    if (ruta == "/login" or ruta.startswith("/static") or ruta.startswith("/f/")
+            or ruta.startswith("/auth/google") or ruta.startswith("/invitacion/")):
         return await call_next(request)
     empleada = seguridad.empleada_de_sesion(request.cookies.get("sesion"))
     if empleada is None:
@@ -83,11 +111,83 @@ async def exigir_sesion(request: Request, call_next):
     return await call_next(request)
 
 
+def _pagina_login(request, error=None, usuario="", status=200):
+    # Si llegó por un link de invitación vigente, la pantalla lo saluda y
+    # empuja al botón de Google (el link solo sirve para ese camino).
+    invitacion = seguridad.invitacion_pendiente(request.cookies.get("invitacion"))
+    respuesta = plantillas.TemplateResponse(request, "login.html", {
+        "error": error, "usuario": usuario, "google": acceso_google.configurado(),
+        "invitacion": invitacion,
+    })
+    respuesta.status_code = status
+    return respuesta
+
+
+def _abrir_sesion(empleada):
+    respuesta = RedirectResponse("/", status_code=303)
+    respuesta.set_cookie(
+        "sesion", seguridad.crear_sesion(empleada["id"]),
+        max_age=seguridad.DIAS_SESION * 24 * 3600,
+        httponly=True, samesite="lax", secure=_cookie_segura(),
+    )
+    return respuesta
+
+
 @app.get("/login")
 def login(request: Request):
     if seguridad.empleada_de_sesion(request.cookies.get("sesion")):
         return RedirectResponse("/", status_code=303)
-    return plantillas.TemplateResponse(request, "login.html", {"error": None, "usuario": ""})
+    return _pagina_login(request)
+
+
+@app.get("/invitacion/{token}")
+def invitacion_abrir(request: Request, token: str):
+    """El link compartible: deja el token en una cookie corta y manda al
+    login, donde el botón de Google completa la entrada."""
+    if seguridad.invitacion_pendiente(token) is None:
+        return _pagina_login(request, "Ese link de invitación ya se usó o se "
+                             "canceló. Pide uno nuevo al encargado.", status=410)
+    respuesta = RedirectResponse("/login", status_code=303)
+    respuesta.set_cookie("invitacion", token, max_age=2 * 3600,
+                         httponly=True, samesite="lax", secure=_cookie_segura())
+    return respuesta
+
+
+@app.get("/auth/google")
+def google_entrar(request: Request):
+    """Manda a la pantalla de cuentas de Google, con un state anti-CSRF en
+    cookie de corta vida."""
+    if not acceso_google.configurado():
+        return RedirectResponse("/login", status_code=303)
+    estado = secrets.token_urlsafe(24)
+    respuesta = RedirectResponse(
+        acceso_google.url_entrada(_redirect_uri(request), estado), status_code=303)
+    respuesta.set_cookie("oauth_estado", estado, max_age=600,
+                         httponly=True, samesite="lax", secure=_cookie_segura())
+    return respuesta
+
+
+@app.get("/auth/google/callback")
+def google_callback(request: Request, code: str = "", state: str = ""):
+    if (not acceso_google.configurado() or not code or not state
+            or state != request.cookies.get("oauth_estado")):
+        return _pagina_login(request, "La entrada con Google no se pudo "
+                             "completar. Prueba de nuevo.", status=400)
+    try:
+        cuenta = acceso_google.canjear_codigo(code, _redirect_uri(request))
+    except acceso_google.FalloGoogle:
+        return _pagina_login(request, "No se pudo verificar la cuenta con "
+                             "Google. Prueba de nuevo.", status=502)
+    empleada = seguridad.entrar_con_google(
+        cuenta["email"], cuenta["nombre"], es_admin=cuenta["email"] in _admins(),
+        token=request.cookies.get("invitacion"))
+    if empleada is None:
+        return _pagina_login(request, f"{cuenta['email']} no tiene invitación. "
+                             "Pide una al encargado.", status=401)
+    respuesta = _abrir_sesion(empleada)
+    respuesta.delete_cookie("oauth_estado")
+    respuesta.delete_cookie("invitacion")
+    return respuesta
 
 
 @app.post("/login")
@@ -96,18 +196,9 @@ async def entrar(request: Request):
     usuario = (form.get("usuario") or "").strip().lower()
     empleada = seguridad.verificar(usuario, form.get("contrasena") or "")
     if empleada is None:
-        respuesta = plantillas.TemplateResponse(request, "login.html", {
-            "error": "Usuario o contraseña incorrectos.", "usuario": usuario,
-        })
-        respuesta.status_code = 401
-        return respuesta
-    respuesta = RedirectResponse("/", status_code=303)
-    respuesta.set_cookie(
-        "sesion", seguridad.crear_sesion(empleada["id"]),
-        max_age=seguridad.DIAS_SESION * 24 * 3600,
-        httponly=True, samesite="lax", secure=_cookie_segura(),
-    )
-    return respuesta
+        return _pagina_login(request, "Usuario o contraseña incorrectos.",
+                             usuario=usuario, status=401)
+    return _abrir_sesion(empleada)
 
 
 @app.post("/logout")
@@ -189,9 +280,20 @@ def inicio(request: Request, refrescar: int = 0):
     # La pestaña Fichas solo existe para los editores (FICHAS_EDITORES): al
     # resto no se le manda ni el botón ni los textos del catálogo.
     puede_fichas = fichas.es_editora(request.state.empleada["id"])
+    # La pestaña Ajustes la ven todos (cada quien guarda su email en Mi
+    # cuenta); las invitaciones y accesos, solo los admins (AJUSTES_ADMINS).
+    es_admin = _es_admin(request.state.empleada)
     return plantillas.TemplateResponse(request, "app.html", {
         "empleada": request.state.empleada,
         "puede_fichas": puede_fichas,
+        "es_admin": es_admin,
+        "empleadas": seguridad.listar() if es_admin else [],
+        "invitaciones": seguridad.invitaciones_pendientes() if es_admin else [],
+        "aviso_ajustes": request.query_params.get("aviso"),
+        "inv_nueva": request.query_params.get("inv") if es_admin else None,
+        # Para armar los links /invitacion/{token} que se comparten.
+        "base_publica": (os.environ.get("PUBLIC_BASE_URL")
+                         or str(request.base_url)).rstrip("/"),
         "puntos": puntos,
         # El anillo del score: circunferencia 402, se descubre según el score.
         "anillo": round(402 * (1 - puntos / 100)),
@@ -273,6 +375,73 @@ async def cambiar_umbral(request: Request):
     if 1 <= valor <= 50:
         datos.fijar_umbral(valor)
     return RedirectResponse("/", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Ajustes: invitaciones y accesos del login con Google (solo admins)
+# ---------------------------------------------------------------------------
+
+EMAIL_VALIDO = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _solo_admin(request):
+    """403 si quien llama no es admin; None si puede seguir."""
+    if not _es_admin(request.state.empleada):
+        return Response("Solo para administradores.", status_code=403)
+    return None
+
+
+@app.post("/ajustes/mi-email")
+async def ajustes_mi_email(request: Request):
+    """Mi cuenta: cualquier empleada guarda (o quita) su email de Google.
+    Queda sin verificar hasta que entre con Google con esa cuenta."""
+    form = await request.form()
+    email = (form.get("email") or "").strip().lower()
+    if email and not EMAIL_VALIDO.match(email):
+        return RedirectResponse("/?tab=ajustes&aviso=email", status_code=303)
+    resultado = seguridad.fijar_email(request.state.empleada["id"], email)
+    aviso = "email-ocupado" if resultado == "ocupado" else "email-guardado"
+    return RedirectResponse(f"/?tab=ajustes&aviso={aviso}", status_code=303)
+
+
+@app.post("/ajustes/invitar")
+async def ajustes_invitar(request: Request):
+    if (rechazo := _solo_admin(request)) is not None:
+        return rechazo
+    form = await request.form()
+    # El email es opcional: sin él la invitación vive solo en su link.
+    email = (form.get("email") or "").strip().lower()
+    if email and not EMAIL_VALIDO.match(email):
+        return RedirectResponse("/?tab=ajustes&aviso=email", status_code=303)
+    resultado, token = seguridad.invitar(email, form.get("nombre") or "",
+                                         request.state.empleada["id"])
+    if resultado == "ya_activa":
+        return RedirectResponse("/?tab=ajustes&aviso=ya-activa", status_code=303)
+    # El aviso trae el token para mostrar el link listo para copiar.
+    return RedirectResponse(f"/?tab=ajustes&aviso=invitada&inv={token}",
+                            status_code=303)
+
+
+@app.post("/ajustes/invitacion/cancelar")
+async def ajustes_cancelar_invitacion(request: Request):
+    if (rechazo := _solo_admin(request)) is not None:
+        return rechazo
+    form = await request.form()
+    seguridad.cancelar_invitacion(form.get("token") or "")
+    return RedirectResponse("/?tab=ajustes", status_code=303)
+
+
+@app.post("/ajustes/revocar")
+async def ajustes_revocar(request: Request):
+    if (rechazo := _solo_admin(request)) is not None:
+        return rechazo
+    form = await request.form()
+    usuario = (form.get("usuario") or "").strip()
+    # Nadie se revoca a sí misma: siempre queda al menos una admin adentro.
+    if not usuario or usuario == request.state.empleada["id"]:
+        return RedirectResponse("/?tab=ajustes", status_code=303)
+    seguridad.desactivar(usuario)
+    return RedirectResponse("/?tab=ajustes", status_code=303)
 
 
 # ---------------------------------------------------------------------------
@@ -452,6 +621,8 @@ def venta(request: Request, error: str = ""):
         except Exception:
             pass
     return plantillas.TemplateResponse(request, "venta.html", {
+        # El menu de abajo muestra Fichas con la misma regla del principal.
+        "puede_fichas": fichas.es_editora(request.state.empleada["id"]),
         "ventas_activo": ventas.configurado(),
         "error_venta": error or None,
         "en_curso": en_curso,

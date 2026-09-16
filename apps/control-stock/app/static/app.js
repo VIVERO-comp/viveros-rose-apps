@@ -566,7 +566,7 @@ if (toastPendiente) {
 // donde estaba el empleado (las pestañas son 100% del navegador).
 const parametros = new URLSearchParams(location.search);
 const tabPedida = parametros.get("tab");
-if (tabPedida === "stock" || tabPedida === "inv" || tabPedida === "fichas") {
+if (tabPedida === "stock" || tabPedida === "inv" || tabPedida === "fichas" || tabPedida === "ajustes") {
   tab(tabPedida); // tab() encuentra el botón por data-tab (inv ya no tiene)
 }
 const catPedida = parametros.get("cat");
@@ -579,3 +579,24 @@ const buscaPedida = parametros.get("q");
 if (buscaPedida) document.getElementById("busca").value = buscaPedida;
 
 pintar();
+
+// Ajustes: copiar el link de una invitación (para mandarlo por WhatsApp).
+function copiarLink(btn) {
+  const link = btn.dataset.link;
+  const listo = () => toast("Link copiado");
+  // http local, navegador viejo o permiso denegado: el truco del textarea.
+  const respaldo = () => {
+    const caja = document.createElement("textarea");
+    caja.value = link;
+    document.body.appendChild(caja);
+    caja.select();
+    document.execCommand("copy");
+    caja.remove();
+    listo();
+  };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(link).then(listo).catch(respaldo);
+  } else {
+    respaldo();
+  }
+}

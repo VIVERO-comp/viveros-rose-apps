@@ -210,6 +210,21 @@ def iniciar_db():
             clave TEXT PRIMARY KEY,
             valor TEXT NOT NULL
         );
+        -- Invitaciones del login con Google, gestionadas desde la pestaña
+        -- Ajustes. Cada una tiene un link compartible (/invitacion/{token},
+        -- de un solo uso) y opcionalmente un email: con email, esa cuenta
+        -- también entra directo sin abrir el link. aceptada_en marca cuándo
+        -- se usó (la pendiente se puede cancelar; la aceptada se revoca
+        -- desactivando a la empleada).
+        CREATE TABLE IF NOT EXISTS invitaciones (
+            token TEXT PRIMARY KEY,
+            email TEXT,
+            nombre TEXT NOT NULL DEFAULT '',
+            invitada_por TEXT NOT NULL,
+            creada_en TEXT NOT NULL,
+            aceptada_en TEXT,
+            aceptada_email TEXT
+        );
         -- Fotos cambiadas desde la propia app (el pincel del modal de foto):
         -- puntero sku -> hash de Cloudinary bajo apps/{sku}/. Gana sobre los
         -- json empaquetados y vive en el volumen /datos, así sobrevive a los
@@ -221,6 +236,17 @@ def iniciar_db():
             subida_por TEXT NOT NULL
         );
         """)
+        # Migración: las empleadas que entran con Google se identifican por
+        # email; las de contraseña quedan con email NULL. email_verificado
+        # distingue el email confirmado entrando con Google (1) del que la
+        # empleada anotó a mano en Mi cuenta (0): solo el verificado cuenta
+        # para privilegios de admin (AJUSTES_ADMINS).
+        columnas = {c["name"] for c in con.execute("PRAGMA table_info(empleadas)")}
+        if "email" not in columnas:
+            con.execute("ALTER TABLE empleadas ADD COLUMN email TEXT")
+        if "email_verificado" not in columnas:
+            con.execute("ALTER TABLE empleadas ADD COLUMN email_verificado "
+                        "INTEGER NOT NULL DEFAULT 0")
 
 
 def ahora_iso():
