@@ -359,7 +359,7 @@
   "luz": "Sol pleno",
   "riego": "Diario o interdiario"
  },
- "PL-HIERBABUENA-01": {
+ "PL-HIERBABUENA": {
   "descripcion": "Hierbabuena (Mentha spicata) fresca para tés, jugos y cocina. Crece rápido en semisombra con tierra siempre ligeramente húmeda. Mejor en maceta propia: es expansiva y puede invadir a sus vecinas.",
   "dificultad": "Facil",
   "luz": "Sol pleno",
@@ -443,13 +443,13 @@
   "luz": "Luz baja o indirecta",
   "riego": "1 vez por semana"
  },
- "PL-MARIGOLD-VR": {
+ "PL-MARIGOLD": {
   "descripcion": "Clavelón (Tagetes erecta), flores pompón naranjas y amarillas que alegran cualquier rincón. Sol pleno y riego moderado. Además de linda, ayuda a repeler plagas del huerto.",
   "dificultad": "Media",
   "luz": "Luz indirecta",
   "riego": "2 veces por semana"
  },
- "PL-MENTA-01": {
+ "PL-MENTA": {
   "descripcion": "Menta (Mentha × piperita) de aroma intenso para tés, postres y bebidas. Crece rápido en semisombra con tierra siempre húmeda. Mantenla en maceta propia porque tiende a expandirse.",
   "dificultad": "Facil",
   "luz": "Sol pleno",
@@ -551,6 +551,12 @@
   "luz": "Sol pleno",
   "riego": "2–3 veces por semana"
  },
+ "PL-PALMA-CICA": {
+  "descripcion": "Cica (Cycas revoluta), una planta prehistórica de corona simétrica y hojas firmes. Crece lento y vive muchísimos años, a sol o semisombra. Riego moderado dejando secar entre riegos.",
+  "dificultad": "Facil",
+  "luz": "Sol pleno",
+  "riego": "2–3 veces por semana"
+ },
  "PL-PALMA-FENIX": {
   "descripcion": "Palma fénix enana (Phoenix roebelenii), de copa fina y elegante, perfecta para jardines pequeños y macetones. Crece lento y se mantiene manejable. Sol o semisombra con riego regular.",
   "dificultad": "Facil",
@@ -607,12 +613,6 @@
  },
  "PL-PALMA-WASHINTONIA": {
   "descripcion": "Palma washingtonia (Washingtonia robusta), de crecimiento rápido y silueta clásica de avenida. Muy resistente: sol pleno y riegos moderados una vez establecida.",
-  "dificultad": "Facil",
-  "luz": "Sol pleno",
-  "riego": "2–3 veces por semana"
- },
- "PL-PALMA-ZICA": {
-  "descripcion": "Cica (Cycas revoluta), una planta prehistórica de corona simétrica y hojas firmes. Crece lento y vive muchísimos años, a sol o semisombra. Riego moderado dejando secar entre riegos.",
   "dificultad": "Facil",
   "luz": "Sol pleno",
   "riego": "2–3 veces por semana"
@@ -755,7 +755,7 @@
   "luz": "Luz indirecta brillante",
   "riego": "1–2 veces por semana"
  },
- "PL-RUDA-01": {
+ "PL-RUDA": {
   "descripcion": "Ruda (Ruta graveolens), la aromática tradicional de follaje azul verdoso. Rústica y de poco cuidado: sol directo y riego escaso. Lo único que no perdona es el exceso de agua.",
   "dificultad": "Facil",
   "luz": "Sol pleno",

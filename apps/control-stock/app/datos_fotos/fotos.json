@@ -12,13 +12,13 @@
     "PL-HELECHOS": "024ad5db9ce0",
     "PL-LENGUA-DE-SUEGRA-ENANA": "83c3925ae31d",
     "PL-LENGUA-DE-SUEGRA-MINI": "3ef1e03b84f1",
-    "PL-MENTA-01": "220026b0bdec",
+    "PL-MENTA": "220026b0bdec",
     "PL-MINI-JADE": "e32e9708ad99",
     "PL-OREGANO": "6ced31823982",
     "PL-PALMA-ABANICO": "3e9b9379a399",
     "PL-ROMERO": "b9ded11b46d4",
     "PL-ROSITA-MINIATURA": "32caba1ca20b",
-    "PL-RUDA-01": "6d4f6fd5d5e9",
+    "PL-RUDA": "6d4f6fd5d5e9",
     "PL-SUCULENTA-PEQUENA": "73408df239fc",
     "PL-SUCULENTAS-GRANDE": "578042c1228b",
     "PL-TRASDESCANTIA": "7db61b458983"
@@ -109,6 +109,10 @@
     "PL-CRINUM-ASIATICO-VARIEGADO": [
       "a163d864940e"
     ],
+    "PL-CRISANTEMOS-01": [
+      "00dd2b6edcb7",
+      "1bdf77b32b9c"
+    ],
     "PL-CROTO-MAMY-AMARILLO": [
       "bc93bd32129e"
     ],
@@ -140,8 +144,14 @@
     "PL-HELECHOS": [
       "024ad5db9ce0"
     ],
+    "PL-HIERBABUENA": [
+      "0a1431e20aee"
+    ],
     "PL-HYPOESTES": [
       "072454db7feb"
+    ],
+    "PL-JADE-01": [
+      "253c22f0869f"
     ],
     "PL-JAZMIN-BLANCO-ENANO": [
       "18f7ae9f65e4"
@@ -165,7 +175,7 @@
     "PL-MARGINATA": [
       "bcc3c11b235d"
     ],
-    "PL-MENTA-01": [
+    "PL-MENTA": [
       "220026b0bdec"
     ],
     "PL-MINI-JADE": [
@@ -182,7 +192,10 @@
       "3cd7e4b43d15"
     ],
     "PL-NOVIO-CHINO": [
-      "1fb5a5bf79c3"
+      "c5b24e46b005",
+      "29528ce8e8f5",
+      "1fb5a5bf79c3",
+      "97ad4b661a21"
     ],
     "PL-OREGANO": [
       "6ced31823982"
@@ -222,7 +235,7 @@
     "PL-PALMA-WASHINTONIA": [
       "ee1151b25c40"
     ],
-    "PL-PALMA-ZICA": [
+    "PL-PALMA-CICA": [
       "582fecd58698"
     ],
     "PL-PINO-ENANO": [
@@ -258,7 +271,7 @@
       "9c42a839db3b",
       "32caba1ca20b"
     ],
-    "PL-RUDA-01": [
+    "PL-RUDA": [
       "6d4f6fd5d5e9"
     ],
     "PL-SUCULENTA-PEQUENA": [
@@ -270,6 +283,10 @@
       "89dc602d74f7",
       "a1a5b40bea66",
       "578042c1228b"
+    ],
+    "PL-TORENIA-01": [
+      "39c891fbb968",
+      "68a1b947b197"
     ],
     "PL-TRASDESCANTIA": [
       "7db61b458983"
@@ -287,6 +304,18 @@
       0.0056,
       0.8027,
       0.8064
+    ],
+    "68a1b947b197": [
+      0.18,
+      0.13,
+      0.64,
+      0.8
+    ],
+    "c5b24e46b005": [
+      0.18,
+      0.09,
+      0.6,
+      0.76
     ],
     "e3128ed07d26": [
       0.0726,
