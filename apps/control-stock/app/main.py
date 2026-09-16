@@ -277,8 +277,8 @@ def inicio(request: Request, refrescar: int = 0):
         for p in inventario
     ]
     alertas = datos.alertas_pendientes()
-    # La pestaña Fichas solo existe para los editores (FICHAS_EDITORES): al
-    # resto no se le manda ni el botón ni los textos del catálogo.
+    # La vista de detalle muestra la ficha a todos; editarla sigue limitado
+    # a FICHAS_EDITORES (y el POST /fichas lo verifica en el servidor).
     puede_fichas = fichas.es_editora(request.state.empleada["id"])
     # La pestaña Ajustes la ven todos (cada quien guarda su email en Mi
     # cuenta); las invitaciones y accesos, solo los admins (AJUSTES_ADMINS).
@@ -318,8 +318,8 @@ def inicio(request: Request, refrescar: int = 0):
             # se ofrece (el zoom y la descarga siguen funcionando).
             "puedeSubir": fotos.subida_configurada(),
             "puedeFichas": puede_fichas,
-            "fichas": fichas.todas() if puede_fichas else {},
-            "referencias": fichas.referencias() if puede_fichas else {},
+            "fichas": fichas.todas(),
+            "referencias": fichas.referencias(),
         }, ensure_ascii=False),
     })
 

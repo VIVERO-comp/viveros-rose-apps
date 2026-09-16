@@ -404,6 +404,8 @@ nav button.on, nav a.on{color:var(--dorado);background:rgba(227,181,127,.1)}
   transition:transform .12s ease;
 }
 .fab:active{transform:scale(.95)}
+/* hidden pierde contra display:flex sin esto (se oculta en el detalle). */
+.fab[hidden]{display:none}
 
 /* ---------- modal agregar planta ---------- */
 .form-agregar{display:flex;flex-direction:column;gap:11px;margin-bottom:14px}
@@ -652,27 +654,66 @@ button.enlace-sub{
     --critico:#c05b46;
   }
   body{background:#edeae2}
+  /* Que llene la pantalla (pedido del dueño, 16/09/2026): el lienzo ocupa
+     todo el ancho, y el menú de abajo se vuelve un sidebar izquierdo de
+     píldoras (referencia NanoAI que mandó el dueño). El DOM no cambia:
+     header y main van a la columna derecha, nav a la izquierda. */
   .phone{
-    max-width:960px;
-    height:calc(100vh - 56px);
-    margin:28px auto;
+    max-width:none;
+    height:calc(100vh - 36px);
+    margin:18px 22px;
     background:#ffffff;
     border-radius:26px;
     border:1px solid #e6dfcf;
     box-shadow:0 18px 50px rgba(60,50,30,.14);
+    display:grid;
+    grid-template-columns:236px 1fr;
+    grid-template-rows:auto 1fr;
+    grid-template-areas:"lado cabecera" "lado principal";
   }
+  header{grid-area:cabecera}
+  main{grid-area:principal;width:100%}
+  main.angosto{max-width:940px;justify-self:center}
   .stars{display:none}
   .intro{background:#ffffff}
   header{padding:26px 34px 14px}
   main{padding:6px 34px 110px}
+  /* Sidebar: los botones pasan de columnitas con icono arriba a píldoras
+     horizontales; el activo va en dorado pleno. */
   nav{
-    background:rgba(255,255,255,.94);
-    border-top:1px solid #eae3d3;
-    border-radius:0 0 26px 26px;
+    grid-area:lado;
+    position:static;
+    flex-direction:column;
+    justify-content:flex-start;
+    gap:9px;
+    padding:22px 16px;
+    background:var(--noche);
+    border-top:none;
+    border-right:1px solid #eae3d3;
+    border-radius:26px 0 0 26px;
+    backdrop-filter:none;
   }
-  /* Aprovechar el ancho: categorías en 4 columnas y el stock a 2 columnas. */
+  nav button, nav a{
+    flex:0 0 auto;
+    flex-direction:row;
+    justify-content:flex-start;
+    gap:11px;
+    background:#ffffff;
+    border:1px solid #e6dfcf;
+    border-radius:14px;
+    padding:13px 15px;
+    font-size:13px;
+    color:var(--texto);
+  }
+  nav button.on, nav a.on{
+    background:var(--dorado);
+    border-color:var(--dorado);
+    color:#ffffff;
+  }
+  /* Aprovechar el ancho: categorías en 4 columnas y el stock en tantas
+     tarjetas como quepan (3–4 en un monitor normal). */
   .cats{grid-template-columns:repeat(4,1fr)}
-  #lista{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start}
+  #lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;align-items:start}
   #lista .planta{margin-bottom:0}
   /* Ajustes puntuales de piezas que estaban pensadas para fondo oscuro. */
   .score-card{border-color:#eee7d6}
@@ -690,4 +731,97 @@ button.enlace-sub{
     background:rgba(255,255,255,.94);
     margin:-6px -34px 0;padding:12px 34px 0;
   }
+}
+
+/* ---------- vista de detalle de producto (reemplaza a la pestaña Fichas).
+   En el teléfono es una columna; en computadora, dos columnas estilo panel
+   claro (foto y datos de Odoo a la izquierda, ficha editable a la derecha).
+   Los extras .solo-pc de las tarjetas del Stock solo existen en pantallas
+   grandes: la lista móvil aprobada no cambia. ---------- */
+.solo-pc{display:none}
+/* Con la especificidad de .planta .info .extracto, que en el teléfono
+   ganaba y mostraba el extracto igual. */
+.planta .info .extracto.solo-pc{display:none}
+.det-top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:16px}
+.det-top-izq{display:flex;align-items:center;gap:12px;min-width:0}
+.det-miga{display:none} /* la miga de pan solo aporta en computadora */
+.det-btn-foto{width:100%;justify-content:center;margin:10px 0 4px}
+.det-cols{display:flex;flex-direction:column;gap:20px}
+.det-foto{
+  position:relative;height:230px;border-radius:18px;overflow:hidden;
+  background:var(--noche-2);display:flex;align-items:center;justify-content:center;
+  font-size:64px;cursor:zoom-in;
+}
+.det-foto img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+#det-nombre{font-size:20px;font-weight:800;margin:14px 0 3px}
+.det-sub{font-size:12.5px;color:var(--texto-suave);margin-bottom:12px}
+.det-datos{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px}
+.det-dato{background:var(--noche-2);border-radius:14px;padding:11px 13px}
+.det-dato span{
+  display:block;font-size:10.5px;color:var(--texto-suave);
+  text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;
+}
+.det-dato b{font-size:15px}
+.det-dato .badge{margin-top:0}
+#det-ajustar{width:100%;justify-content:center;margin-bottom:10px}
+.ficha-solo-lectura p{font-size:13px;line-height:1.6;margin-bottom:14px}
+
+@media (min-width: 900px){
+  /* Tarjeta de producto estilo panel claro: extracto de la descripción y
+     pie con − / + para el físico. Nada se escribe en Odoo hasta apretar
+     "Guardar en Odoo" (el pie aparece al cambiar la cantidad). */
+  /* -webkit-box y no block: el recorte a 2 líneas lo necesita. */
+  .planta .info .extracto.solo-pc{display:-webkit-box}
+  .card-pie.solo-pc{display:flex}
+  .planta{flex-wrap:wrap;background:#ffffff;border:1px solid #e6dfcf}
+  .planta.agotada{background:#f5f2ea}
+  .planta .foto{width:62px;height:62px;font-size:28px}
+  .card-pie{
+    align-items:center;gap:9px;width:100%;
+    border-top:1px solid #eee7d6;padding-top:10px;margin-top:4px;
+  }
+  .pie-etiqueta{font-size:11px;color:var(--texto-suave)}
+  .pie-btn{width:30px;height:30px;border-radius:9px;font-size:15px;background:#f1ece1}
+  .pie-valor{font-size:14px;min-width:24px;text-align:center}
+  .pie-acciones{display:flex;gap:7px;margin-left:auto}
+  .pie-acciones[hidden]{display:none}
+
+  /* Detalle a dos columnas dentro del lienzo blanco. Con el lienzo a
+     pantalla completa, el formulario se acota para que los campos no
+     queden kilométricos. */
+  .det-cols{display:grid;grid-template-columns:380px 1fr;gap:26px;align-items:start}
+  .det-der .ficha-form{max-width:760px}
+  .det-izq,.det-der{background:#ffffff;border:1px solid #e6dfcf;border-radius:18px;padding:20px}
+  .det-foto{height:280px;background:#f5f2ea}
+  .det-foto img{object-fit:contain}
+  .det-miga{display:block;font-size:12.5px;color:var(--texto-suave);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .det-miga b{color:var(--texto)}
+  .ficha-form .campo textarea,
+  .ficha-form .campo select{background:#ffffff;border:1px solid #e2dbca}
+
+  /* ---- Inicio como hero (referencia NanoAI): anillo centrado, fila de
+     totales como tarjetitas blancas y categorías en 4 tarjetas. ---- */
+  #tab-home{max-width:1080px;margin:0 auto}
+  .score-card{background:transparent;border:none;margin-bottom:8px;padding:8px 0 0}
+  .totales{max-width:720px;margin:0 auto 30px;gap:14px}
+  .tot{background:#ffffff;border:1px solid #e6dfcf;border-radius:18px;padding:24px 10px}
+  .tot b{font-size:26px}
+  .cats{grid-template-columns:repeat(4,1fr);gap:14px}
+  .cat{background:#ffffff;border:1px solid #e6dfcf}
+
+  /* ---- Ajustes e Inventario: columna centrada tipo página de ajustes,
+     nada estirado a todo el ancho. ---- */
+  #tab-ajustes,#tab-inv{max-width:640px;margin:0 auto}
+
+  /* El banner dorado de sección gritaba a pantalla completa: en claro es
+     una tarjeta blanca con el icono dorado. */
+  .aviso{background:#ffffff;border:1px solid #e6dfcf;color:var(--texto)}
+  .aviso .ic{color:var(--dorado)}
+  .aviso span{opacity:1;color:var(--texto-suave)}
+
+  /* Vender: tarjetas blancas; el fab baja a la esquina porque ya no hay
+     menú inferior que esquivar. */
+  .venta-item{background:#ffffff;border:1px solid #e6dfcf}
+  .fab{bottom:26px;right:28px}
 }

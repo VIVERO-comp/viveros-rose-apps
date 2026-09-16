@@ -106,14 +106,20 @@ def test_sin_catalogo_no_rompe(monkeypatch, tmp_path):
     assert fichas.referencias() == {}
 
 
-def test_pantalla_manda_fichas_solo_a_editoras(cliente, editora, catalogo):
-    pagina = cliente.get("/").text
-    assert "tab-fichas" in pagina
-    assert "Romero del sitio." in pagina
-
-
-def test_pantalla_sin_fichas_para_el_resto(cliente, monkeypatch):
-    monkeypatch.delenv("FICHAS_EDITORES", raising=False)
+def test_pantalla_editoras_ven_el_formulario_de_ficha(cliente, editora, catalogo):
+    # La pestaña Fichas ya no existe: la ficha se edita en la vista de
+    # detalle del producto (tocar una tarjeta del Stock en computadora).
     pagina = cliente.get("/").text
     assert "tab-fichas" not in pagina
-    assert "/fichas/" not in pagina
+    assert "tab-detalle" in pagina
+    assert "ficha-descripcion" in pagina  # el formulario editable
+    assert "Romero del sitio." in pagina  # la referencia precargada
+
+
+def test_pantalla_sin_permiso_ve_la_ficha_solo_lectura(cliente, monkeypatch, catalogo):
+    monkeypatch.delenv("FICHAS_EDITORES", raising=False)
+    pagina = cliente.get("/").text
+    assert "tab-detalle" in pagina
+    assert "ficha-descripcion" not in pagina  # sin formulario de edición
+    # Los textos sí viajan: el detalle los muestra en solo lectura.
+    assert "Romero del sitio." in pagina

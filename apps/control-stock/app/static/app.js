@@ -64,10 +64,25 @@ function pintar() {
       // la de Odoo y recien despues queda el emoji; el layout no se mueve.
       const foto = p.img ? `<img src="${p.img}" alt="" loading="lazy" onerror="fotoRespaldo(this,'${p.sku}')">` : "";
       const precio = lineaPrecio(p);
+      // Extras de la tarjeta de computadora (.solo-pc, ocultos en el
+      // telefono para no tocar la lista movil aprobada): el extracto de la
+      // descripcion y el pie con − / + para ajustar el fisico sin salir de
+      // la lista. Nada se escribe hasta apretar "Guardar en Odoo".
+      const extracto = descripcionDe(p.sku);
       return `<div class="planta ${!negativo && p.q <= 0 ? "agotada" : ""}" id="planta-${p.sku}" data-planta="${p.sku}">
         <div class="foto">${p.e}${foto}</div>
-        <div class="info"><b>${p.n}</b><span>${p.c}</span><span class="precio">${precio}</span></div>
+        <div class="info"><b>${p.n}</b><span>${p.c}</span>${extracto ? `<span class="extracto solo-pc">${extracto}</span>` : ""}<span class="precio">${precio}</span></div>
         <div class="qty"><b>${negativo ? p.f : p.q}</b><span class="badge ${cl}">${et}</span></div>
+        <div class="card-pie solo-pc">
+          <span class="pie-etiqueta">Físico</span>
+          <button class="qty-btn pie-btn" data-paso="-1" aria-label="Restar">−</button>
+          <b class="pie-valor">${p.f}</b>
+          <button class="qty-btn pie-btn" data-paso="1" aria-label="Sumar">+</button>
+          <span class="pie-acciones" hidden>
+            <button class="btn btn-dorado btn-chico" data-accion="guardar">Guardar en Odoo</button>
+            <button class="btn btn-linea btn-chico" data-accion="cancelar">Cancelar</button>
+          </span>
+        </div>
       </div>`;
     }).join("") || '<p style="color:var(--texto-suave);font-size:13px;text-align:center;padding:30px 0">Sin resultados</p>';
 }
@@ -86,6 +101,8 @@ function tab(id, btn) {
   if (!seccion) return;
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("activa"));
   seccion.classList.add("activa");
+  // El botón flotante de sugerir planta estorba encima del detalle.
+  document.getElementById("fab-agregar").hidden = id === "detalle";
   document.querySelectorAll("nav button").forEach(b => b.classList.remove("on"));
   // Inventario ya no tiene botón en el menú pero su pestaña sigue viva
   // (?tab=inv): en ese caso el menú queda sin selección y ya.
@@ -216,13 +233,7 @@ async function guardarStock() {
     // categoría y búsqueda para volver exactamente donde estaba el empleado.
     sessionStorage.setItem("toast-pendiente",
       "✓ " + editando.n + " ajustado a " + nueva + " en Odoo");
-    const destino = new URLSearchParams({ refrescar: "1" });
-    const tabActiva = document.querySelector(".tab.activa");
-    if (tabActiva) destino.set("tab", tabActiva.id.replace("tab-", ""));
-    if (catActiva !== "Todas") destino.set("cat", catActiva);
-    const busqueda = document.getElementById("busca").value.trim();
-    if (busqueda) destino.set("q", busqueda);
-    location.href = "/?" + destino.toString();
+    location.href = "/?" + parametrosDeEstado().toString();
   } catch (e) {
     mostrarErrorEdicion("Sin conexión. Intenta de nuevo.");
   } finally {
@@ -376,51 +387,27 @@ function enviarAgregar() {
   }, 1650 + letras.length * 50 + 800);
 })();
 
-/* ---------- pestaña fichas: descripción y guía curadas (solo editores) ----------
-   Guardar escribe en la base de la tienda vía POST /fichas/{sku}; el sitio
-   público toma la ficha cuando el dueño regenera el catálogo. La referencia
-   precargada es lo que hoy dice el sitio (DATOS.referencias). */
-let fichaSku = null;
-let fcatActiva = "Todas";
+/* ---------- vista de detalle de producto ----------
+   Reemplaza a la pestaña Fichas (pedido del dueño, 16/09/2026): en
+   computadora, apretar una tarjeta del Stock abre esta vista con los datos
+   de Odoo en solo lectura y la descripción + guía de cuidado editables
+   (POST /fichas/{sku}, misma tabla de siempre). La URL lleva ?producto=SKU
+   para que atrás/recargar vuelvan a donde estaba el empleado. */
+let detalleSku = null;
 
 function fichaDe(sku) { return (DATOS.fichas || {})[sku] || null; }
 function referenciaDe(sku) { return (DATOS.referencias || {})[sku] || null; }
 
-function pintarFichas() {
-  const l = document.getElementById("lista-fichas");
-  if (!l) return;
-  const t = normalizar(document.getElementById("busca-fichas").value);
-  l.innerHTML = plantas
-    .filter(p => {
-      const con = Boolean(fichaDe(p.sku));
-      const pasa = fcatActiva === "Todas" ? true :
-        fcatActiva === "__con__" ? con : !con;
-      return pasa && normalizar(p.n).includes(t);
-    })
-    .sort((a, b) => a.n.localeCompare(b.n, "es"))
-    .map(p => {
-      const ficha = fichaDe(p.sku);
-      const ref = referenciaDe(p.sku);
-      const texto = (ficha && ficha.descripcion) || (ref && ref.descripcion) || "";
-      const foto = p.img ? `<img src="${p.img}" alt="" loading="lazy" onerror="fotoRespaldo(this,'${p.sku}')">` : "";
-      // "Curada ✓" = ya la editó alguien aquí; "Del sitio" = solo existe la
-      // referencia del catálogo; "Sin texto" = ni una ni otra.
-      const sello = ficha ? '<span class="badge b-ok">Curada ✓</span>'
-        : texto ? '<span class="badge b-bajo">Del sitio</span>'
-        : '<span class="badge b-critico">Sin texto</span>';
-      return `<div class="planta" data-ficha="${p.sku}">
-        <div class="foto">${p.e}${foto}</div>
-        <div class="info"><b>${p.n}</b><span class="extracto">${texto || "Sin descripción todavía"}</span></div>
-        <div class="qty">${sello}</div>
-      </div>`;
-    }).join("") || '<p style="color:var(--texto-suave);font-size:13px;text-align:center;padding:30px 0">Sin resultados</p>';
+function escaparHtml(texto) {
+  return String(texto).replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-function chipFicha(el, c) {
-  document.querySelectorAll("#tab-fichas .chip").forEach(x => x.classList.remove("on"));
-  el.classList.add("on");
-  fcatActiva = c;
-  pintarFichas();
+// El extracto que se ve en la tarjeta: la ficha curada manda; si no hay,
+// la referencia del sitio. Escapado porque viene de texto libre.
+function descripcionDe(sku) {
+  const f = fichaDe(sku) || referenciaDe(sku);
+  return f && f.descripcion ? escaparHtml(f.descripcion) : "";
 }
 
 function contarDescripcion() {
@@ -428,40 +415,97 @@ function contarDescripcion() {
   document.getElementById("ficha-desc-largo").textContent = "· " + largo + " caracteres";
 }
 
-function abrirFicha(sku) {
-  const p = plantas.find(x => x.sku === sku);
-  if (!p) return;
-  fichaSku = sku;
-  const ficha = fichaDe(sku) || referenciaDe(sku) ||
-    { descripcion: "", luz: "", riego: "", dificultad: "", nota: "" };
-  document.getElementById("ficha-nombre").textContent = p.n;
-  document.getElementById("ficha-sku").textContent = sku + " · " + p.c;
-  const foto = document.getElementById("ficha-foto");
-  foto.textContent = p.e;
+function pintarFotoDetalle(p) {
+  const caja = document.getElementById("det-foto");
+  caja.textContent = p.e;
   if (p.img) {
     const img = document.createElement("img");
-    img.src = p.img;
-    img.alt = "";
-    img.onerror = () => fotoRespaldo(img, p.sku);
-    foto.appendChild(img);
+    img.src = p.imgG || p.img;
+    img.alt = p.n;
+    img.onerror = () => {
+      if (p.img && img.src !== p.img) { img.src = p.img; } else { img.remove(); }
+    };
+    caja.appendChild(img);
   }
-  document.getElementById("ficha-descripcion").value = ficha.descripcion || "";
-  document.getElementById("ficha-luz").value = ficha.luz || "";
-  document.getElementById("ficha-riego").value = ficha.riego || "";
-  document.getElementById("ficha-dificultad").value = ficha.dificultad || "Media";
-  document.getElementById("ficha-nota").value = ficha.nota || "";
-  contarDescripcion();
-  mostrarErrorFicha("");
+}
+
+function abrirDetalle(sku, empujarHistoria = true) {
+  const p = plantas.find(x => x.sku === sku);
+  if (!p) return;
+  detalleSku = sku;
+  document.getElementById("det-nombre").textContent = p.n;
+  document.getElementById("det-miga-nombre").textContent = p.n;
+  document.getElementById("det-sub").textContent = sku + " · " + p.c;
+  // Sin Cloudinary configurado el modal no ofrece el pincel: el botón
+  // promete solo lo que puede cumplir.
+  document.getElementById("det-btn-foto-texto").textContent =
+    DATOS.puedeSubir ? "Cambiar foto" : "Ver foto";
+  document.getElementById("det-precio").textContent = p.po || "Pendiente";
+  document.getElementById("det-disponible").textContent = p.q;
+  document.getElementById("det-fisico").textContent = p.f;
+  const [et, cl] = estado(p);
+  document.getElementById("det-estado").innerHTML = `<span class="badge ${cl}">${et}</span>`;
+  pintarFotoDetalle(p);
+
+  const ficha = fichaDe(sku) || referenciaDe(sku) ||
+    { descripcion: "", luz: "", riego: "", dificultad: "", nota: "" };
+  const form = document.getElementById("ficha-descripcion");
+  if (form) {
+    // Editores: el formulario de la ficha.
+    form.value = ficha.descripcion || "";
+    document.getElementById("ficha-luz").value = ficha.luz || "";
+    document.getElementById("ficha-riego").value = ficha.riego || "";
+    document.getElementById("ficha-dificultad").value = ficha.dificultad || "Media";
+    document.getElementById("ficha-nota").value = ficha.nota || "";
+    contarDescripcion();
+    mostrarErrorFicha("");
+    pintarEstadoFicha(sku);
+  } else {
+    // Sin permiso de edición: la ficha en solo lectura.
+    document.getElementById("det-descripcion").textContent =
+      ficha.descripcion || "Sin descripción todavía.";
+    const partes = [];
+    if (ficha.luz) partes.push("Luz: " + ficha.luz);
+    if (ficha.riego) partes.push("Riego: " + ficha.riego);
+    if (ficha.dificultad) partes.push("Dificultad: " + ficha.dificultad);
+    if (ficha.nota) partes.push(ficha.nota);
+    document.getElementById("det-guia").textContent =
+      partes.join(" · ") || "Sin guía de cuidado todavía.";
+  }
+
+  tab("detalle");
+  if (empujarHistoria) {
+    history.pushState({ producto: sku }, "", "/?producto=" + encodeURIComponent(sku));
+  }
+  // El scroll vive en <main> (la .phone es de altura fija), no en window.
+  document.querySelector("main").scrollTo(0, 0);
+}
+
+function cerrarDetalle() {
+  if (history.state && history.state.producto) {
+    history.back(); // el popstate hace el resto
+  } else {
+    detalleSku = null;
+    history.replaceState(null, "", "/?tab=stock");
+    tab("stock");
+  }
+}
+
+window.addEventListener("popstate", () => {
+  const sku = new URLSearchParams(location.search).get("producto");
+  if (sku) {
+    abrirDetalle(sku, false);
+  } else if (detalleSku) {
+    detalleSku = null;
+    tab("stock");
+  }
+});
+
+function pintarEstadoFicha(sku) {
   const guardada = fichaDe(sku);
   document.getElementById("ficha-estado").textContent = guardada
     ? "Última edición: " + (guardada.actualizado_por || "") + " · " + (guardada.actualizado_en || "").slice(0, 10)
     : (referenciaDe(sku) ? "Precargada con lo que hoy dice el sitio." : "Producto sin textos todavía.");
-  document.getElementById("modal-ficha").classList.add("abierto");
-}
-
-function cerrarFicha() {
-  document.getElementById("modal-ficha").classList.remove("abierto");
-  fichaSku = null;
 }
 
 function mostrarErrorFicha(mensaje) {
@@ -471,13 +515,13 @@ function mostrarErrorFicha(mensaje) {
 }
 
 async function guardarFicha() {
-  if (!fichaSku) return;
-  const boton = document.getElementById("ficha-guardar");
+  if (!detalleSku) return;
+  const boton = document.getElementById("det-guardar");
   boton.disabled = true;
   boton.textContent = "Guardando…";
   mostrarErrorFicha("");
   try {
-    const respuesta = await fetch("/fichas/" + encodeURIComponent(fichaSku), {
+    const respuesta = await fetch("/fichas/" + encodeURIComponent(detalleSku), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -493,10 +537,10 @@ async function guardarFicha() {
       mostrarErrorFicha(cuerpo.mensaje || "No se pudo guardar. Intenta de nuevo.");
       return;
     }
-    DATOS.fichas[fichaSku] = cuerpo.ficha;
+    DATOS.fichas[detalleSku] = cuerpo.ficha;
     toast("Ficha guardada 🌿");
-    cerrarFicha();
-    pintarFichas();
+    pintarEstadoFicha(detalleSku);
+    pintar(); // refresca el extracto de la tarjeta
   } catch {
     mostrarErrorFicha("Sin conexión con el servidor. Intenta de nuevo.");
   } finally {
@@ -505,17 +549,103 @@ async function guardarFicha() {
   }
 }
 
+/* ---------- pie de tarjeta: − / + y Guardar en Odoo (solo computadora) ----------
+   Los botones cambian solo el número en pantalla; nada se escribe en Odoo
+   hasta apretar "Guardar en Odoo" (misma regla del modal: revisar y
+   confirmar). Usa el mismo POST /ajustar con el candado `esperada`. */
+async function guardarPie(fila, p, nueva) {
+  const boton = fila.querySelector('[data-accion="guardar"]');
+  boton.disabled = true;
+  boton.textContent = "Guardando…";
+  try {
+    const respuesta = await fetch("/ajustar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sku: p.sku, cantidad: nueva, esperada: p.f }),
+    });
+    const r = await respuesta.json();
+    if (!respuesta.ok) {
+      toast(r.mensaje || "No se pudo guardar. Intenta de nuevo.");
+      return;
+    }
+    if (r.resultado === "conflicto") {
+      p.f = r.anterior;
+      toast("El stock cambió en Odoo: ahora hay " + r.anterior + " físicas. Revisa y guarda de nuevo.");
+      pintar();
+      return;
+    }
+    if (r.resultado !== "aplicado" && r.resultado !== "sin_cambio") {
+      toast("Odoo rechazó el ajuste" + (r.detalle ? ": " + r.detalle : ". Intenta de nuevo."));
+      pintar();
+      return;
+    }
+    // Igual que el modal: recargar trae el stock fresco y recalcula score y
+    // alertas en el servidor, conservando pestaña, filtro y búsqueda.
+    sessionStorage.setItem("toast-pendiente", "✓ " + p.n + " ajustado a " + nueva + " en Odoo");
+    location.href = "/?" + parametrosDeEstado().toString();
+  } catch {
+    toast("Sin conexión. Intenta de nuevo.");
+    boton.disabled = false;
+    boton.textContent = "Guardar en Odoo";
+  }
+}
+
+// La URL con la que se recarga tras un ajuste: pestaña, filtro y búsqueda
+// (y el producto abierto, si el ajuste salió desde el detalle).
+function parametrosDeEstado() {
+  const destino = new URLSearchParams({ refrescar: "1" });
+  if (detalleSku) {
+    destino.set("producto", detalleSku);
+  } else {
+    const tabActiva = document.querySelector(".tab.activa");
+    if (tabActiva) destino.set("tab", tabActiva.id.replace("tab-", ""));
+  }
+  if (catActiva !== "Todas") destino.set("cat", catActiva);
+  const busqueda = document.getElementById("busca").value.trim();
+  if (busqueda) destino.set("q", busqueda);
+  return destino;
+}
+
+function manejarPie(e, fila, p) {
+  const paso = e.target.closest("[data-paso]");
+  const valor = fila.querySelector(".pie-valor");
+  const acciones = fila.querySelector(".pie-acciones");
+  if (paso) {
+    const nueva = Math.max(0, (parseInt(valor.textContent) || 0) + parseInt(paso.dataset.paso));
+    valor.textContent = nueva;
+    acciones.hidden = nueva === p.f;
+    return;
+  }
+  const accion = e.target.closest("[data-accion]");
+  if (!accion) return;
+  if (accion.dataset.accion === "cancelar") {
+    valor.textContent = p.f;
+    acciones.hidden = true;
+  } else {
+    guardarPie(fila, p, parseInt(valor.textContent) || 0);
+  }
+}
+
 /* ---------- eventos por delegación (más confiable en móvil) ---------- */
 document.getElementById("lista").addEventListener("click", e => {
   const fila = e.target.closest(".planta");
   if (!fila) return;
-  // Tocar la FOTO abre el modal de foto (ver en grande / cambiar con el
-  // pincel); tocar el resto de la fila sigue abriendo el ajuste de stock.
-  if (e.target.closest(".foto")) {
-    abrirFoto(fila.dataset.planta);
-  } else {
-    abrirEditar(fila.dataset.planta);
+  const p = plantas.find(x => x.sku === fila.dataset.planta);
+  if (!p) return;
+  // El pie − / + (solo computadora) se maneja aparte y no abre nada.
+  if (e.target.closest(".card-pie")) {
+    manejarPie(e, fila, p);
+    return;
   }
+  // Tocar la FOTO abre el modal de foto (ver en grande / cambiar con el
+  // pincel), igual que siempre.
+  if (e.target.closest(".foto")) {
+    abrirFoto(p.sku);
+    return;
+  }
+  // La tarjeta (o la fila, en el teléfono) abre la vista de detalle; el
+  // ajuste rápido vive adentro, en el botón Modificar stock.
+  abrirDetalle(p.sku);
 });
 document.getElementById("alertas-lista").addEventListener("click", e => {
   if (e.target.closest("form")) return; // el botón Atendida hace su POST
@@ -534,26 +664,20 @@ document.getElementById("modal-foto").addEventListener("click", e => {
 document.getElementById("modal-agregar").addEventListener("click", e => {
   if (e.target.id === "modal-agregar") cerrarAgregar();
 });
-// Fichas: sus nodos solo existen para los editores.
-if (document.getElementById("tab-fichas")) {
-  document.getElementById("lista-fichas").addEventListener("click", e => {
-    const fila = e.target.closest("[data-ficha]");
-    if (!fila) return;
-    if (e.target.closest(".foto")) {
-      abrirFoto(fila.dataset.ficha); // ver en grande / pincel, como en Stock
-    } else {
-      abrirFicha(fila.dataset.ficha);
-    }
-  });
-  document.getElementById("modal-ficha").addEventListener("click", e => {
-    if (e.target.id === "modal-ficha") cerrarFicha();
-  });
-  document.getElementById("ficha-btn-foto").addEventListener("click", () => {
-    if (fichaSku) abrirFoto(fichaSku);
-  });
-  document.getElementById("ficha-descripcion").addEventListener("input", contarDescripcion);
-  pintarFichas();
-}
+// Detalle: la foto grande abre el modal de foto de siempre; el botón
+// Modificar stock abre el modal de ajuste de siempre. El contador de la
+// descripción solo existe para los editores.
+document.getElementById("det-foto").addEventListener("click", () => {
+  if (detalleSku) abrirFoto(detalleSku);
+});
+document.getElementById("det-btn-foto").addEventListener("click", () => {
+  if (detalleSku) abrirFoto(detalleSku);
+});
+document.getElementById("det-ajustar").addEventListener("click", () => {
+  if (detalleSku) abrirEditar(detalleSku);
+});
+const campoDescripcion = document.getElementById("ficha-descripcion");
+if (campoDescripcion) campoDescripcion.addEventListener("input", contarDescripcion);
 
 const toastPendiente = sessionStorage.getItem("toast-pendiente");
 if (toastPendiente) {
@@ -566,7 +690,7 @@ if (toastPendiente) {
 // donde estaba el empleado (las pestañas son 100% del navegador).
 const parametros = new URLSearchParams(location.search);
 const tabPedida = parametros.get("tab");
-if (tabPedida === "stock" || tabPedida === "inv" || tabPedida === "fichas" || tabPedida === "ajustes") {
+if (tabPedida === "stock" || tabPedida === "inv" || tabPedida === "ajustes") {
   tab(tabPedida); // tab() encuentra el botón por data-tab (inv ya no tiene)
 }
 const catPedida = parametros.get("cat");
@@ -579,6 +703,14 @@ const buscaPedida = parametros.get("q");
 if (buscaPedida) document.getElementById("busca").value = buscaPedida;
 
 pintar();
+
+// ?producto=SKU (recarga tras un ajuste desde el detalle, o un link
+// compartido): reabrir el detalle sin apilar otra entrada en el historial.
+const productoPedido = parametros.get("producto");
+if (productoPedido) {
+  history.replaceState({ producto: productoPedido }, "", location.href);
+  abrirDetalle(productoPedido, false);
+}
 
 // Ajustes: copiar el link de una invitación (para mandarlo por WhatsApp).
 function copiarLink(btn) {

@@ -37,25 +37,35 @@ En producción: `docker compose exec control-stock python -m app.usuarias …`
 
 - **Inicio**: score (100 − 6 por crítico − 2 por bajo − 15 si el conteo
   quincenal está vencido, >15 días), totales y tarjetas por categoría.
-- **Stock**: buscador + filtros por categoría, lista de menor a mayor. Tocar
-  un producto abre el modal de ajuste con −/+ y cantidad editable.
+- **Stock**: buscador + filtros, lista de menor a mayor. Tocar un producto
+  abre su **vista de detalle** (`/?producto=SKU`); tocar la foto abre el
+  modal de foto. En computadora la lista es un grid de tarjetas a pantalla
+  completa con −/+ de físico en cada tarjeta: el número solo cambia en
+  pantalla y aparece "Guardar en Odoo" para confirmar (mismo candado
+  `esperada` del modal).
+- **Detalle de producto** (16/09/2026, reemplaza a la pestaña Fichas):
+  foto grande (abre el modal de foto), datos de Odoo en solo lectura
+  (precio, disponible, físico, estado), botón Modificar stock (el modal de
+  siempre) y la ficha editable — descripción y guía de cuidado. En
+  computadora va a dos columnas; en el teléfono, una. Volver/atrás regresa
+  a la lista con filtro y búsqueda intactos.
 - **Alertas**: campanita con contador; cada alerta lleva al producto y se
   marca atendida (o se cierra sola si el stock se recupera). El umbral se
   cambia desde el mismo panel. Historial en SQLite.
 - **Inventario**: hoja PDF, plantilla/import de Excel con pantalla de
   diferencias y confirmación, historial de conteos. Desde el 11/09/2026
   está fuera del menú (pedido del dueño); todo sigue vivo en `/?tab=inv`.
-- **Fichas** (`FICHAS_EDITORES=*`: todos los usuarios; una lista por coma
-  la limita): descripción y guía de
-  cuidado (luz, riego, dificultad, nota) por producto, precargadas con lo
-  que hoy dice el sitio (`app/datos_fichas/catalogo.json`, copia que
-  refresca `scripts/actualizar_catalogo.py` antes de cada deploy). Tocar un
-  producto abre la mini ficha; Guardar escribe en la tabla
-  `fichas_producto` de la base `tienda` (Postgres del droplet, `TIENDA_DSN`,
-  migración 015 del order-api; sin la variable cae al SQLite local, solo
-  desarrollo). El sitio público toma las fichas cuando el dueño corre
-  `scripts/traer_fichas.py` + `generar_catalogo.py` en el frontend: guardar
-  aquí NO cambia la tienda al instante. Estreno: correr una vez
+- **Fichas** (dentro del detalle; `FICHAS_EDITORES=*`: todos los usuarios;
+  una lista por coma la limita, y sin permiso la ficha se ve en solo
+  lectura): descripción y guía de cuidado (luz, riego, dificultad, nota)
+  por producto, precargadas con lo que hoy dice el sitio
+  (`app/datos_fichas/catalogo.json`, copia que refresca
+  `scripts/actualizar_catalogo.py` antes de cada deploy). Guardar escribe
+  en la tabla `fichas_producto` de la base `tienda` (Postgres del droplet,
+  `TIENDA_DSN`, migración 015 del order-api; sin la variable cae al SQLite
+  local, solo desarrollo). El sitio público toma las fichas cuando el dueño
+  corre `scripts/traer_fichas.py` + `generar_catalogo.py` en el frontend:
+  guardar aquí NO cambia la tienda al instante. Estreno: correr una vez
   `docker compose exec control-stock python -m app.sembrar_fichas` para
   sembrar la tabla con los textos actuales del sitio (idempotente; sin eso,
   una regeneración del catálogo con la tabla vacía dejaría placeholders).
