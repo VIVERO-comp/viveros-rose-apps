@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block titulo %}Proyectos — Control de Stock{% endblock %}
+
+{% block contenido %}
+{# El CSS del tablero vive aquí y no en styles.css a propósito: es lo único
+   de la app con scroll horizontal por columnas y no lo usa ninguna otra
+   pantalla. #}
+<style>
+.tablero { display:flex; gap:12px; overflow-x:auto; padding:4px 2px 14px;
+           scroll-snap-type:x proximity; -webkit-overflow-scrolling:touch }
+.columna { flex:0 0 78%; max-width:320px; scroll-snap-align:start }
+.columna-titulo { display:flex; justify-content:space-between; align-items:center;
+                  font-weight:700; font-size:.82rem; letter-spacing:.04em;
+                  text-transform:uppercase; opacity:.75; margin:0 2px 8px }
+.columna-titulo span { opacity:.6; font-weight:600 }
+.tarjeta-proyecto { display:block; text-decoration:none; color:inherit;
+                    background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1);
+                    border-radius:14px; padding:12px; margin-bottom:8px }
+.tarjeta-proyecto:active { background:rgba(255,255,255,.12) }
+.tarjeta-proyecto .ref { font-size:.72rem; letter-spacing:.06em; opacity:.6 }
+.tarjeta-proyecto .cliente { font-weight:700; margin:2px 0 6px }
+.tarjeta-proyecto .pie { display:flex; justify-content:space-between;
+                         align-items:baseline; margin-top:8px }
+.tarjeta-proyecto .monto { font-weight:800 }
+.tarjeta-proyecto .fecha { font-size:.76rem; opacity:.6 }
+.chips-tipo { display:flex; flex-wrap:wrap; gap:4px }
+.chip-tipo { font-size:.66rem; letter-spacing:.05em; padding:2px 8px;
+             border-radius:999px; background:rgba(212,175,55,.18);
+             border:1px solid rgba(212,175,55,.35) }
+.columna-vacia { font-size:.8rem; opacity:.45; padding:10px 2px }
+</style>
+
+<header>
+  <div class="brand">
+    <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
+    <div>
+      <h1>Proyectos</h1>
+      <small>Cada proyecto con sus cotizaciones y sus compras</small>
+    </div>
+  </div>
+</header>
+
+<main>
+  {% if error %}
+  <div class="aviso-error">{{ error }}</div>
+  {% endif %}
+
+  {% if not ventas_activo %}
+  <div class="aviso-error">La conexión con Odoo no está configurada en este
+    servidor, así que Proyectos está apagado. Avísale a Abraham.</div>
+  {% else %}
+  <a class="btn btn-dorado btn-grande" href="/proyecto/nuevo">+ CREAR PROYECTO</a>
+
+  <div class="tablero">
+    {% for columna in columnas %}
+    <div class="columna">
+      <div class="columna-titulo">
+        <b>{{ columna.titulo }}</b>
+        <span>{{ columna.tarjetas|length }}</span>
+      </div>
+      {% for t in columna.tarjetas %}
+      <a class="tarjeta-proyecto" href="/proyecto/{{ t.ref }}">
+        <div class="ref">{{ t.ref }}</div>
+        <div class="cliente">{{ t.nombre }}</div>
+        <div class="chips-tipo">
+          {% for e in t.etiquetas %}<span class="chip-tipo">{{ e }}</span>{% endfor %}
+        </div>
+        <div class="pie">
+          <span class="monto">{{ t.cotizado | dinero }}</span>
+          <span class="fecha">{{ t.fecha }}</span>
+        </div>
+      </a>
+      {% else %}
+      <div class="columna-vacia">Sin proyectos aquí.</div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <p style="text-align:center;margin-top:10px">
+    <a class="enlace-sub" href="/venta">← Volver a Vender</a>
+  </p>
+</main>
+{% endblock %}

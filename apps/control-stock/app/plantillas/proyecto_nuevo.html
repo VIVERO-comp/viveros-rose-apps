@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block titulo %}Crear proyecto — Control de Stock{% endblock %}
+
+{% block contenido %}
+<header>
+  <div class="brand">
+    <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
+    <div>
+      <h1>Crear proyecto</h1>
+      <small>El contenedor de las cotizaciones de un cliente</small>
+    </div>
+  </div>
+</header>
+
+<main class="angosto">
+  {% if error %}
+  <div class="aviso-error">{{ error }}</div>
+  {% endif %}
+
+  <form method="post" action="/proyecto/nuevo">
+    <label class="campo">
+      <span>Nombre del proyecto <small>(opcional)</small></span>
+      <input name="nombre_proyecto" autocomplete="off" placeholder="Morris"
+             value="{{ nombre_proyecto or '' }}">
+    </label>
+
+    <label class="campo">
+      <span>Cliente</span>
+      <input name="nombre" required autocomplete="off" placeholder="Nombre y apellido"
+             value="{{ nombre or '' }}">
+    </label>
+
+    <label class="campo">
+      <span>Celular <small>(opcional)</small></span>
+      <input name="celular" inputmode="tel" autocomplete="off" placeholder="6000-0000"
+             value="{{ celular or '' }}">
+    </label>
+
+    <label class="campo">
+      <span>Tipo de proyecto</span>
+      <select name="tipo">
+        {% for tipo, etiqueta in tipos %}
+        <option value="{{ tipo }}" {{ 'selected' if tipo == 'paisajismo' else '' }}>{{ etiqueta }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label class="campo">
+      <span>Nota <small>(opcional)</small></span>
+      <textarea name="nota" rows="2" placeholder="Jardín de la entrada, dos jardineras…">{{ nota or '' }}</textarea>
+    </label>
+
+    <button class="btn btn-dorado btn-grande" type="submit">CREAR PROYECTO</button>
+  </form>
+
+  <p class="nada-venta" style="text-align:center;margin-top:10px">
+    Se llama "Proyecto Morris". Si lo dejas vacío, toma el apellido del
+    cliente. Aparece de una vez en la app Proyectos de Odoo.
+  </p>
+  <p style="text-align:center">
+    <a class="enlace-sub" href="/proyecto">← Volver a Proyectos</a>
+  </p>
+</main>
+{% endblock %}

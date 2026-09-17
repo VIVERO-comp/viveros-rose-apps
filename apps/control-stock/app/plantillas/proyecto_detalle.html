@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block titulo %}{{ p.ref }} — Control de Stock{% endblock %}
+
+{% block contenido %}
+<style>
+.resumen-plata { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:4px 0 14px }
+.dato-plata { background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1);
+              border-radius:14px; padding:10px 12px }
+.dato-plata span { display:block; font-size:.72rem; letter-spacing:.05em;
+                   text-transform:uppercase; opacity:.6 }
+.dato-plata b { font-size:1.15rem }
+.dato-plata.ganancia { grid-column:1 / -1 }
+.dato-plata.ganancia b { font-size:1.4rem }
+.en-rojo { color:#ff8b7a }
+.chips-tipo { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px }
+.chip-tipo { font-size:.66rem; letter-spacing:.05em; padding:2px 8px;
+             border-radius:999px; background:rgba(212,175,55,.18);
+             border:1px solid rgba(212,175,55,.35) }
+.form-compra { display:grid; grid-template-columns:1fr auto auto; gap:6px;
+               align-items:end; margin-top:8px }
+.form-compra input[name="monto"] { width:92px }
+</style>
+
+<header>
+  <div class="brand">
+    <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
+    <div>
+      <h1>{{ p.nombre }}</h1>
+      <small>{{ p.ref }} · {{ p.cliente }} · {{ p.etapa }}</small>
+    </div>
+  </div>
+</header>
+
+<main class="angosto">
+  {% if error %}
+  <div class="aviso-error">{{ error }}</div>
+  {% endif %}
+
+  {% if p.etiquetas %}
+  <div class="chips-tipo">
+    {% for e in p.etiquetas %}<span class="chip-tipo">{{ e }}</span>{% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="resumen-plata">
+    <div class="dato-plata"><span>Cotizado</span><b>{{ p.totales.cotizado | dinero }}</b></div>
+    <div class="dato-plata"><span>Vendido</span><b>{{ p.totales.vendido | dinero }}</b></div>
+    <div class="dato-plata"><span>Gastado</span><b>{{ p.totales.gastado | dinero }}</b></div>
+    <div class="dato-plata ganancia">
+      <span>Ganancia</span>
+      <b class="{{ 'en-rojo' if p.totales.ganancia < 0 else '' }}">{{ p.totales.ganancia | dinero }}</b>
+    </div>
+  </div>
+
+  {# "Vendido" es lo que el cliente ya aceptó: la ganancia se mide contra eso
+     y no contra lo cotizado, para no contar plata que nadie aprobó. #}
+  <p class="nada-venta" style="margin-top:-8px">Vendido es lo que el cliente ya
+    aceptó. Las plantas del proyecto no salen del inventario.</p>
+
+  <div class="seccion-titulo" style="margin-top:16px">
+    Cotizaciones{% if p.cuantas %} ({{ p.cuantas }}){% endif %}
+  </div>
+  {% if not p.cotizaciones %}
+  <p class="nada-venta">Todavía no hay cotizaciones en este proyecto.</p>
+  {% endif %}
+  {% for c in p.cotizaciones %}
+  <div class="venta-item {{ 'cancelada' if c.cancelada else 'cotizacion' }}">
+    <div class="fila1">
+      <div>
+        <b class="titulo">{{ c.orden }}</b>
+        <small>{{ c.tipo }} · {{ c.fecha }}</small>
+      </div>
+      <span class="badge {{ 'b-neutro' if c.cancelada else 'b-bajo' }}">{{ c.estado }}</span>
+    </div>
+    <div class="venta-acciones"><span><b>{{ c.total | dinero }}</b></span></div>
+  </div>
+  {% endfor %}
+
+  <div class="filtros" style="margin-top:8px">
+    {% for tipo, etiqueta in tipos %}
+    <a class="chip" href="/venta/servicio/{{ tipo }}?proyecto={{ p.ref }}">+ {{ etiqueta }}</a>
+    {% endfor %}
+  </div>
+
+  <div class="seccion-titulo" style="margin-top:18px">Compras del proyecto</div>
+  {% if not p.compras %}
+  <p class="nada-venta">Sin compras registradas. Aquí va el contenedor, los
+    materiales y el transporte.</p>
+  {% endif %}
+  {% for c in p.compras %}
+  <div class="venta-item">
+    <div class="fila1">
+      <div>
+        <b class="titulo">{{ c.concepto }}</b>
+        <small>{{ c.fecha_bonita }}{% if c.nota %} · {{ c.nota }}{% endif %}</small>
+      </div>
+      <b>{{ c.monto | dinero }}</b>
+    </div>
+    <div class="venta-acciones">
+      <span>
+        <form class="forma-cancelar" method="post"
+              action="/proyecto/{{ p.ref }}/compra/{{ c.n }}/quitar"
+              onsubmit="return confirm('Se borra la compra «{{ c.concepto }}» de este proyecto y la ganancia vuelve a subir. No se puede deshacer. ¿Borrarla?')">
+          <button type="submit" class="enlace-sub">Quitar</button>
+        </form>
+      </span>
+    </div>
+  </div>
+  {% endfor %}
+
+  <form class="form-compra" method="post" action="/proyecto/{{ p.ref }}/compra">
+    <label class="campo" style="margin:0">
+      <span>Qué se compró</span>
+      <input name="concepto" required autocomplete="off" placeholder="Contenedor de plantas">
+    </label>
+    <label class="campo" style="margin:0">
+      <span>Monto</span>
+      <input name="monto" required inputmode="decimal" placeholder="0.00">
+    </label>
+    <button class="btn btn-chico btn-dorado" type="submit">Agregar</button>
+  </form>
+
+  <p style="text-align:center;margin-top:14px">
+    <a class="enlace-sub" href="/proyecto">← Volver a Proyectos</a>
+  </p>
+</main>
+{% endblock %}
