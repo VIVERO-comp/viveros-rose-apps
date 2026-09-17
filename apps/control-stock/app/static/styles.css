@@ -498,7 +498,14 @@ nav button.on, nav a.on{color:var(--dorado);background:rgba(227,181,127,.1)}
 
 /* ---------- Crear venta (/venta) ---------- */
 .sin-margen{margin:0}
-.campos-cliente{display:grid;gap:11px}
+/* El bloque Cliente va a dos columnas y con campos más chicos (pedido del
+   dueño 17/09/2026): son 7 datos (nombre, celular, empresa, RUC, cédula,
+   correo y dirección) y en una sola columna la pantalla se hacía eterna. */
+.campos-cliente{display:grid;grid-template-columns:1fr 1fr;gap:8px 9px}
+.campos-cliente .campo-ancho{grid-column:1/-1}
+.campos-cliente .campo span{font-size:10.5px;margin-bottom:3px}
+.campos-cliente .campo input{font-size:13px;padding:9px 11px;border-radius:12px}
+.nota-cliente{font-size:11px;color:var(--texto-suave);margin:7px 2px 0}
 .planta-boton{width:100%;border:none;font-family:inherit;text-align:left}
 .agregar-venta{
   width:38px;height:38px;border-radius:12px;flex-shrink:0;
@@ -538,7 +545,7 @@ nav button.on, nav a.on{color:var(--dorado);background:rgba(227,181,127,.1)}
 .servicio-texto{
   width:100%;display:block;background:none;border:none;resize:none;
   color:var(--texto);font-family:inherit;font-size:14px;line-height:1.55;
-  padding:0;outline:none;overflow:hidden;min-height:44px;
+  padding:0;outline:none;overflow:hidden;min-height:22px;
 }
 .servicio-texto::placeholder{color:var(--texto-suave)}
 .servicio-pie{
@@ -556,6 +563,8 @@ nav button.on, nav a.on{color:var(--dorado);background:rgba(227,181,127,.1)}
   font-variant-numeric:tabular-nums;
 }
 .servicio-monto input:focus{border-color:var(--dorado)}
+.servicio-monto input.servicio-cantidad{width:64px}
+.quitar-servicio[hidden]{display:none}
 .quitar-servicio{
   margin-left:auto;border:none;background:none;color:var(--critico);
   font-family:inherit;font-size:11.5px;font-weight:700;padding:4px;

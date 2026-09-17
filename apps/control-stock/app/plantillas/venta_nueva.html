@@ -25,19 +25,7 @@
   {% else %}
 
   {# ---- Cliente ---- #}
-  <div class="seccion-titulo">Cliente</div>
-  <div class="campos-cliente">
-    <div class="campo">
-      <span>Nombre (opcional)</span>
-      <input id="cliente-nombre" name="cliente" value="{{ borrador.nombre }}"
-             autocomplete="off" placeholder="Si lo dejas vacío: Cliente Local">
-    </div>
-    <div class="campo">
-      <span>Celular (opcional)</span>
-      <input id="cliente-celular" name="celular" value="{{ borrador.celular }}"
-             autocomplete="off" inputmode="tel" placeholder="Ej: 6567-3062">
-    </div>
-  </div>
+  {% with form_cliente="form-acciones", nombre_opcional=True %}{% include "_cliente.html" %}{% endwith %}
 
   {# ---- Añadir plantas ---- #}
   <div class="seccion-titulo" style="margin-top:16px">Añadir plantas</div>
@@ -110,8 +98,6 @@
     </div>
 
     <form method="post" action="/venta/cotizar" id="form-acciones">
-      <input type="hidden" name="cliente" id="post-cliente" value="{{ borrador.nombre }}">
-      <input type="hidden" name="celular" id="post-celular" value="{{ borrador.celular }}">
       <div class="botones-venta">
         <button class="btn btn-dorado btn-grande" formaction="/venta/pagar" type="submit">PAGADO Y CONFIRMAR PEDIDO</button>
         <button class="btn btn-linea btn-grande" type="submit">GENERAR COTIZACIÓN</button>

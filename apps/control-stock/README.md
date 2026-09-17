@@ -137,6 +137,44 @@ XML-RPC). Como los productos facturan por cantidad entregada, validar la
 salida es obligatorio antes de facturar — y además deja el stock correcto:
 la venta local se lleva las plantas en el momento.
 
+## Cotizaciones de servicio (Alquiler, Boda, Evento, Mantenimiento,
+Paisajismo, Proyecto, Instalación)
+
+Botones por tipo junto a "+ NUEVA VENTA", cada uno con su mini-formulario
+(`app/cotizaciones.py`): cliente (nombre y celular), las plantas y
+materiales del catálogo cuando el tipo los lleva, y **Servicios** —
+renglones repetibles donde la empleada describe el trabajo en sus palabras
+(un párrafo que crece al escribir) y le pone su monto, con "+ Añadir otro
+servicio" para sumar los que haga falta. Reemplaza a los campos de monto
+con etiqueta fija que había hasta el 17/09/2026 (la etiqueta enlatada no
+describía el trabajo real). Cada renglón sale como una línea del producto
+de servicio del tipo (SV-ALQUILER, SV-INSTALACION…) con el párrafo como
+descripción; un renglón sin párrafo hereda el nombre del producto y un
+monto en 0 escrito a mano crea igual su línea (servicio incluido sin
+cargo). **Sin mínimo de plantas**: una cotización puede ir solo de
+servicio, con 0 plantas. Lo digitado se guarda en el borrador del servidor
+(`venta_borrador.servicios`), así que agregar o quitar una planta —que
+recarga la página— no borra los párrafos, y un error de validación vuelve
+a pintar el formulario en vez de redirigir.
+
+**Personalizado** (`/venta/servicio-personalizada`) es todo a mano: los
+renglones se escriben con su descripción, cantidad y precio
+(`renglon_texto[]`, `renglon_cantidad[]`, `renglon_precio[]`) y salen con
+el producto de servicio **SV-PERSONALIZADO**, que no viene del addon: se
+resuelve por su código y se crea la primera vez que hace falta
+(`_id_producto_personalizado`), así funciona igual en el Odoo real y en
+odoo-pruebas. El buscador del catálogo sigue disponible para las plantas
+reales, que van con el precio de Odoo.
+
+**Datos del cliente** (17/09/2026): las tres pantallas comparten el bloque
+`app/plantillas/_cliente.html` — nombre, celular, empresa, RUC, cédula,
+correo y dirección, en dos columnas compactas y todo opcional menos el
+nombre. El RUC va al Tax ID (`vat`) y, si no hay RUC, ahí va la cédula (en
+Panamá es el mismo dato); la cédula queda además en `ref`, la empresa en
+`company_name`, el correo en `email` y la dirección en `street`. A un
+cliente que ya existe solo se le llenan los campos vacíos: Odoo es la
+fuente de verdad.
+
 ## Despliegue
 
 `inventario.plantaspanama.com` → nginx del droplet → `127.0.0.1:8092`.

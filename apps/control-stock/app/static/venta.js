@@ -77,28 +77,53 @@ const entradaCelular = document.getElementById("cliente-celular");
 let temporizadorBorrador = null;
 
 const contenedorServicios = document.getElementById("servicios");
+const contenedorRenglones = document.getElementById("renglones");
+const camposCliente = document.getElementById("campos-cliente");
+
+function renglonesDe(contenedor, nombres) {
+  // [{texto, ...}] con lo escrito en cada renglón repetible del contenedor.
+  return [...contenedor.querySelectorAll(".servicio")].map(renglon => {
+    const datos = {};
+    for (const [clave, nombre] of Object.entries(nombres)) {
+      const campo = renglon.querySelector(`[name="${nombre}"]`);
+      datos[clave] = campo ? campo.value : "";
+    }
+    return datos;
+  });
+}
 
 function sincronizarCliente() {
   const nombre = entradaNombre ? entradaNombre.value : "";
   const celular = entradaCelular ? entradaCelular.value : "";
-  const ocultoNombre = document.getElementById("post-cliente");
-  const ocultoCelular = document.getElementById("post-celular");
-  if (ocultoNombre) ocultoNombre.value = nombre;
-  if (ocultoCelular) ocultoCelular.value = celular;
   clearTimeout(temporizadorBorrador);
   temporizadorBorrador = setTimeout(() => {
     const datos = new FormData();
     datos.append("cliente", nombre);
     datos.append("celular", celular);
-    // En las cotizaciones de servicio viajan también los renglones ya
-    // escritos: agregar o quitar una planta recarga la página y sin esto
-    // se perderían los párrafos.
+    // Los datos opcionales del cliente (empresa, RUC, cédula, correo,
+    // dirección) y los renglones ya escritos viajan también: agregar o
+    // quitar una planta recarga la página y sin esto se perderían.
+    if (camposCliente) {
+      for (const campo of camposCliente.querySelectorAll(".dato-cliente")) {
+        datos.append(campo.name, campo.value);
+      }
+    }
     if (contenedorServicios) {
       datos.append("servicios", "1");
-      for (const renglon of contenedorServicios.querySelectorAll(".servicio")) {
-        datos.append("servicio_texto", renglon.querySelector("textarea").value);
-        datos.append("servicio_monto",
-                     renglon.querySelector('input[name="servicio_monto"]').value);
+      for (const s of renglonesDe(contenedorServicios,
+                                  {texto: "servicio_texto", monto: "servicio_monto"})) {
+        datos.append("servicio_texto", s.texto);
+        datos.append("servicio_monto", s.monto);
+      }
+    }
+    if (contenedorRenglones) {
+      datos.append("renglones", "1");
+      for (const r of renglonesDe(contenedorRenglones,
+                                  {texto: "renglon_texto", cantidad: "renglon_cantidad",
+                                   precio: "renglon_precio"})) {
+        datos.append("renglon_texto", r.texto);
+        datos.append("renglon_cantidad", r.cantidad);
+        datos.append("renglon_precio", r.precio);
       }
     }
     fetch("/venta/borrador", { method: "POST", body: datos }).catch(() => {});
@@ -108,68 +133,94 @@ function sincronizarCliente() {
 for (const entrada of [entradaNombre, entradaCelular]) {
   if (entrada) entrada.addEventListener("input", sincronizarCliente);
 }
+if (camposCliente) {
+  for (const campo of camposCliente.querySelectorAll(".dato-cliente")) {
+    campo.addEventListener("input", sincronizarCliente);
+  }
+}
 
-/* Renglones de servicio (cotizaciones de servicio): el párrafo crece con
-   lo que se escribe, "+ Añadir otro servicio" clona un renglón vacío y el
-   subtotal se recalcula en vivo. Todo lo digitado se guarda en el
-   borrador del servidor con el mismo sincronizarCliente() de arriba. */
+/* Renglones repetibles: los servicios de una cotización de servicio
+   (párrafo + monto) y los renglones libres de la personalizada (párrafo +
+   cantidad + precio). En los dos el párrafo crece con lo que se escribe,
+   el botón "+ Añadir" clona un renglón vacío y el subtotal se recalcula en
+   vivo; todo se guarda en el borrador del servidor con sincronizarCliente. */
 
 function crecerTexto(area) {
   area.style.height = "auto";
   area.style.height = area.scrollHeight + "px";
 }
 
-function pintarSubtotalServicios() {
-  const salida = document.getElementById("subtotal-servicios");
-  if (!salida || !contenedorServicios) return;
-  let total = 0;
-  for (const campo of contenedorServicios.querySelectorAll('input[name="servicio_monto"]')) {
-    const monto = parseFloat(campo.value.replace(",", ""));
-    if (!isNaN(monto) && monto > 0) total += monto;
-  }
-  salida.textContent = "$" + total.toFixed(2);
+function numeroDe(campo, defecto) {
+  if (!campo) return defecto;
+  const valor = parseFloat(campo.value.replace(",", "."));
+  return isNaN(valor) ? defecto : valor;
 }
 
-function nuevoRenglonServicio() {
-  const primero = contenedorServicios.querySelector(".servicio");
-  const copia = primero.cloneNode(true);
-  copia.querySelector("textarea").value = "";
-  copia.querySelector("textarea").removeAttribute("style");
-  copia.querySelector('input[name="servicio_monto"]').value = "";
-  contenedorServicios.appendChild(copia);
-  const area = copia.querySelector("textarea");
-  crecerTexto(area);
-  area.focus();
+function activarRenglones(contenedor, idBoton, idSubtotal, importeDe) {
+  function alternarQuitar() {
+    // Con un solo renglón no hay nada que quitar: el botón sobra.
+    const renglones = contenedor.querySelectorAll(".servicio");
+    for (const renglon of renglones) {
+      renglon.querySelector(".quitar-servicio").hidden = renglones.length === 1;
+    }
+  }
+
+  function pintarSubtotal() {
+    const salida = document.getElementById(idSubtotal);
+    if (!salida) return;
+    let total = 0;
+    for (const renglon of contenedor.querySelectorAll(".servicio")) {
+      total += importeDe(renglon);
+    }
+    salida.textContent = "$" + total.toFixed(2);
+  }
+
+  function nuevoRenglon() {
+    const copia = contenedor.querySelector(".servicio").cloneNode(true);
+    for (const campo of copia.querySelectorAll("textarea, input")) campo.value = "";
+    copia.querySelector("textarea").removeAttribute("style");
+    contenedor.appendChild(copia);
+    alternarQuitar();
+    const area = copia.querySelector("textarea");
+    crecerTexto(area);
+    area.focus();
+  }
+
+  for (const area of contenedor.querySelectorAll("textarea")) crecerTexto(area);
+  pintarSubtotal();
+  alternarQuitar();
+
+  contenedor.addEventListener("input", evento => {
+    if (evento.target.tagName === "TEXTAREA") crecerTexto(evento.target);
+    if (evento.target.tagName === "INPUT") pintarSubtotal();
+    sincronizarCliente();
+  });
+
+  contenedor.addEventListener("click", evento => {
+    const boton = evento.target.closest(".quitar-servicio");
+    // El último renglón no se quita (su botón está oculto): siempre queda
+    // dónde escribir.
+    if (!boton || contenedor.querySelectorAll(".servicio").length === 1) return;
+    boton.closest(".servicio").remove();
+    alternarQuitar();
+    pintarSubtotal();
+    sincronizarCliente();
+  });
+
+  const boton = document.getElementById(idBoton);
+  if (boton) boton.addEventListener("click", nuevoRenglon);
 }
 
 if (contenedorServicios) {
-  for (const area of contenedorServicios.querySelectorAll("textarea")) crecerTexto(area);
-  pintarSubtotalServicios();
+  activarRenglones(contenedorServicios, "anadir-servicio", "subtotal-servicios",
+                   renglon => Math.max(
+                     numeroDe(renglon.querySelector('[name="servicio_monto"]'), 0), 0));
+}
 
-  contenedorServicios.addEventListener("input", evento => {
-    if (evento.target.tagName === "TEXTAREA") crecerTexto(evento.target);
-    if (evento.target.name === "servicio_monto") pintarSubtotalServicios();
-    sincronizarCliente();
-  });
-
-  contenedorServicios.addEventListener("click", evento => {
-    const boton = evento.target.closest(".quitar-servicio");
-    if (!boton) return;
-    const renglones = contenedorServicios.querySelectorAll(".servicio");
-    if (renglones.length === 1) {
-      // El último no se quita: se vacía, para que siempre haya dónde
-      // escribir.
-      const area = renglones[0].querySelector("textarea");
-      area.value = "";
-      crecerTexto(area);
-      renglones[0].querySelector('input[name="servicio_monto"]').value = "";
-    } else {
-      boton.closest(".servicio").remove();
-    }
-    pintarSubtotalServicios();
-    sincronizarCliente();
-  });
-
-  const botonAnadir = document.getElementById("anadir-servicio");
-  if (botonAnadir) botonAnadir.addEventListener("click", nuevoRenglonServicio);
+if (contenedorRenglones) {
+  activarRenglones(contenedorRenglones, "anadir-renglon", "subtotal-renglones",
+                   renglon => Math.max(
+                     numeroDe(renglon.querySelector('[name="renglon_cantidad"]'), 1), 0) *
+                     Math.max(
+                       numeroDe(renglon.querySelector('[name="renglon_precio"]'), 0), 0));
 }

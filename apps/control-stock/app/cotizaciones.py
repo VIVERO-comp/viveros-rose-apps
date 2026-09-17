@@ -180,6 +180,33 @@ def reiniciar_cache():
     _cache_referencias.clear()
 
 
+# El producto de los renglones libres de la cotización personalizada. No
+# viene del addon (no tiene referencia XML): se resuelve por su código y se
+# crea la primera vez que hace falta, así funciona igual en el Odoo real y
+# en odoo-pruebas sin depender de un -u del addon.
+CODIGO_PERSONALIZADO = "SV-PERSONALIZADO"
+
+
+def _id_producto_personalizado():
+    if CODIGO_PERSONALIZADO in _cache_referencias:
+        return _cache_referencias[CODIGO_PERSONALIZADO]
+    ids = ventas._ejecutar(
+        "product.product", "search", [[["default_code", "=", CODIGO_PERSONALIZADO]]],
+        {"limit": 1, "context": {"active_test": False}})
+    producto_id = ids[0] if ids else ventas._ejecutar("product.product", "create", [{
+        "name": "Servicio o concepto personalizado",
+        "default_code": CODIGO_PERSONALIZADO,
+        "type": "service",
+        "list_price": 0.0,
+        "taxes_id": [[6, 0, []]],
+        "invoice_policy": "order",
+    }])
+    if isinstance(producto_id, list):
+        producto_id = producto_id[0]
+    _cache_referencias[CODIGO_PERSONALIZADO] = producto_id
+    return producto_id
+
+
 # ---------------------------------------------------------------------------
 # Cliente: a diferencia de Nueva Venta (que solo busca por nombre exacto),
 # aquí se busca primero por teléfono (últimos 8 dígitos) y luego por
@@ -212,20 +239,24 @@ def _dominio_telefono(digitos):
     return ["|"] * (len(condiciones) - 1) + condiciones
 
 
-def _cliente_id(nombre, celular):
+def _cliente_id(nombre, celular, datos=None):
     nombre = (nombre or "").strip()
+    valores_extra = ventas.valores_de_cliente(datos)
     digitos = re.sub(r"\D", "", celular or "")
     if digitos:
         ids = ventas._ejecutar(
             "res.partner", "search", [_dominio_telefono(digitos)], {"limit": 1})
         if ids:
+            ventas.completar_cliente(ids[0], valores_extra)
             return ids[0]
     if nombre:
         ids = ventas._ejecutar(
             "res.partner", "search", [[["name", "=ilike", nombre]]], {"limit": 1})
         if ids:
+            ventas.completar_cliente(ids[0], valores_extra)
             return ids[0]
-    valores = {"name": nombre, "customer_rank": 1, "company_type": "person"}
+    valores = {"name": nombre, "customer_rank": 1, "company_type": "person",
+               **valores_extra}
     if digitos:
         # Solo dígitos (a diferencia de Nueva Venta, que guarda tal cual lo
         # digitó la empleada): así un buscar_clientes posterior por
@@ -341,6 +372,59 @@ def servicios_del_formulario(textos, montos):
             for i in range(total)]
 
 
+def renglones_del_formulario(textos, cantidades, precios):
+    """Los renglones libres de la cotización personalizada
+    (renglon_texto[] + renglon_cantidad[] + renglon_precio[]) emparejados
+    en el orden en que se muestran."""
+    textos, cantidades, precios = list(textos or []), list(cantidades or []), list(precios or [])
+    total = max(len(textos), len(cantidades), len(precios))
+
+    def dato(lista, i):
+        return lista[i] if i < len(lista) else ""
+
+    return [{"texto": dato(textos, i), "cantidad": dato(cantidades, i),
+             "precio": dato(precios, i)} for i in range(total)]
+
+
+def _cantidad(valor):
+    """La cantidad de un renglón libre: 1 si viene vacía, y nunca 0 o
+    negativa (una línea de 0 unidades no cobra nada)."""
+    texto = (valor or "").strip().replace(",", ".")
+    if not texto:
+        return 1.0
+    try:
+        numero = float(texto)
+    except ValueError:
+        return None
+    return numero if numero > 0 else None
+
+
+def _renglones_limpios(renglones):
+    """Descarta los renglones libres en blanco y avisa de los que tienen
+    descripción sin precio, precio ilegible o cantidad inválida."""
+    limpios = []
+    for renglon in renglones or []:
+        texto = (renglon.get("texto") or "").strip()
+        crudo_precio = (renglon.get("precio") or "").strip()
+        crudo_cantidad = (renglon.get("cantidad") or "").strip()
+        if not texto and not crudo_precio and not crudo_cantidad:
+            continue
+        if not texto:
+            raise ValueError("Falta la descripción de un renglón.")
+        precio = _monto_servicio(crudo_precio)
+        if precio is None:
+            raise ValueError(f"Falta el precio del renglón: «{_resumen(texto)}».")
+        cantidad = _cantidad(crudo_cantidad)
+        if cantidad is None:
+            raise ValueError(f"Cantidad inválida en el renglón: «{_resumen(texto)}».")
+        limpios.append({"texto": texto, "cantidad": cantidad, "precio": precio})
+    return limpios
+
+
+def _resumen(texto):
+    return texto if len(texto) <= 40 else texto[:40].rstrip() + "…"
+
+
 def _servicios_limpios(servicios):
     """Descarta los renglones que quedaron totalmente en blanco (la
     empleada añadió uno y no lo llenó) y avisa de los que tienen párrafo
@@ -353,8 +437,7 @@ def _servicios_limpios(servicios):
         if not texto and monto is None:
             continue
         if monto is None:
-            resumen = texto if len(texto) <= 40 else texto[:40].rstrip() + "…"
-            raise ValueError(f"Falta el monto del servicio: «{resumen}».")
+            raise ValueError(f"Falta el monto del servicio: «{_resumen(texto)}».")
         limpios.append({"texto": texto, "monto": monto})
     return limpios
 
@@ -381,8 +464,8 @@ def _lineas_por_tipo(tipo, servicios, lineas_catalogo):
                     linea["name"] = renglon["texto"]
                 cuerpo.append(linea)
         if seccion.get("catalogo"):
-            if not lineas_catalogo and seccion["catalogo"] == "precio":
-                raise ValueError("Agrega al menos una planta o material.")
+            # Sin mínimo de plantas (pedido del dueño 17/09/2026): una
+            # cotización puede ser solo de servicio, con 0 plantas.
             for linea in lineas_catalogo or []:
                 cuerpo.append({"product_id": linea["producto_id"],
                                "product_uom_qty": linea["cantidad"]})
@@ -399,7 +482,8 @@ def _lineas_por_tipo(tipo, servicios, lineas_catalogo):
     return lineas
 
 
-def crear_cotizacion(empleada, tipo, nombre, celular, servicios, lineas_catalogo=None):
+def crear_cotizacion(empleada, tipo, nombre, celular, servicios,
+                     lineas_catalogo=None, datos_cliente=None):
     """Crea la cotización de servicio en Odoo: cliente (por teléfono o
     nombre; se crea si no existe), sale.order con la plantilla del tipo y
     las líneas armadas con los servicios que la empleada describió (cada
@@ -413,7 +497,7 @@ def crear_cotizacion(empleada, tipo, nombre, celular, servicios, lineas_catalogo
     meta = TIPOS[tipo]
     lineas = _lineas_por_tipo(tipo, servicios, lineas_catalogo)
 
-    partner = _cliente_id(nombre, celular)
+    partner = _cliente_id(nombre, celular, datos_cliente)
     oportunidad_id = _crear_oportunidad(partner, nombre, meta["etiqueta_orden"])
     plantilla_id = _id_ref(meta["plantilla"])
     plantilla = ventas._ejecutar(
@@ -499,21 +583,53 @@ def etiqueta_de(tipo):
 # buscador de catálogo con precio normal — mismo mecanismo de cliente.
 # ---------------------------------------------------------------------------
 
-def crear_personalizada(empleada, nombre, celular, lineas_catalogo):
+def crear_personalizada(empleada, nombre, celular, lineas_catalogo=None,
+                        renglones=None, datos_cliente=None, servicios=None):
+    """La cotización personalizada: todo lo escribe la empleada. Va en tres
+    secciones separadas, como las plantillas de los otros tipos (pedido del
+    dueño 17/09/2026): las plantas y materiales del catálogo (con el precio
+    de Odoo), los servicios (párrafo + monto) y los renglones libres
+    (descripción + cantidad + precio). Los servicios y los renglones libres
+    usan el producto SV-PERSONALIZADO con su texto como descripción. Sin
+    plantilla (tipo_servicio='general')."""
     nombre = (nombre or "").strip()
     if not nombre:
         raise ValueError("El nombre del cliente es obligatorio.")
-    if not lineas_catalogo:
-        raise ValueError("Agrega al menos una planta o material.")
-    partner = _cliente_id(nombre, celular)
+    cuerpos = [
+        ("Plantas y materiales",
+         [{"product_id": linea["producto_id"], "product_uom_qty": linea["cantidad"]}
+          for linea in lineas_catalogo or []]),
+        ("Servicios",
+         [{"product_id": _id_producto_personalizado(), "product_uom_qty": 1,
+           "price_unit": servicio["monto"],
+           **({"name": servicio["texto"]} if servicio["texto"] else {})}
+          for servicio in _servicios_limpios(servicios)]),
+        ("Renglones",
+         [{"product_id": _id_producto_personalizado(),
+           "product_uom_qty": renglon["cantidad"], "price_unit": renglon["precio"],
+           "name": renglon["texto"]}
+          for renglon in _renglones_limpios(renglones)]),
+    ]
+    lineas = []
+    secuencia = 1
+    for titulo, cuerpo in cuerpos:
+        if not cuerpo:
+            continue
+        lineas.append({"display_type": "line_section", "name": titulo,
+                       "sequence": secuencia})
+        secuencia += 1
+        for item in cuerpo:
+            lineas.append({**item, "sequence": secuencia})
+            secuencia += 1
+    if not lineas:
+        raise ValueError("Agrega al menos un renglón, un servicio o una planta.")
+    partner = _cliente_id(nombre, celular, datos_cliente)
     oportunidad_id = _crear_oportunidad(partner, nombre, "SERVICIO")
     orden_id = ventas._ejecutar("sale.order", "create", [{
         "partner_id": partner,
         "tipo_servicio": "general",
         "opportunity_id": oportunidad_id,
-        "order_line": [[0, 0, {"product_id": l["producto_id"],
-                               "product_uom_qty": l["cantidad"]}]
-                       for l in lineas_catalogo],
+        "order_line": [[0, 0, linea] for linea in lineas],
     }])
     if isinstance(orden_id, list):
         orden_id = orden_id[0]
@@ -523,3 +639,114 @@ def crear_personalizada(empleada, nombre, celular, lineas_catalogo):
                      [[oportunidad_id], {"expected_revenue": leido["amount_total"]}])
     return _guardar_local(empleada, "general", nombre, celular, orden_id,
                           leido["name"], leido["amount_total"])
+
+
+# ---------------------------------------------------------------------------
+# Propuesta de ejemplo: para revisar cómo sale el PDF sin tener que crear
+# una cotización de verdad (pedido del dueño 17/09/2026, para no depender
+# de la instancia de pruebas). Arma la cotización en Odoo, renderiza el
+# reporte y la borra en el mismo paso.
+# ---------------------------------------------------------------------------
+
+RENGLONES_DE_MUESTRA = (
+    ("Plantas y materiales", (
+        ("12 Palma Areca en maceta #12", 12, 15.00),
+        ("8 Ixora Roja en maceta #10", 8, 6.50),
+    )),
+    ("Servicio de instalación", (
+        ("Instalación en sitio: preparación del suelo, siembra y abono "
+         "inicial. Incluye la primera visita de mantenimiento a los 15 días.",
+         1, 250.00),
+        ("Transporte, montaje y retiro de escombros", 1, 50.00),
+    )),
+    ("Otros renglones", (
+        ("50 sacos de tierra negra cernida", 50, 4.00),
+    )),
+)
+
+
+def _cliente_de_muestra():
+    """El cliente para la propuesta de ejemplo: el "Cliente Local" que ya
+    usa Nueva Venta si está configurado y, si no, el que aparezca con ese
+    nombre en Odoo. Nunca crea un contacto nuevo — la muestra no debe
+    ensuciar la libreta de clientes."""
+    try:
+        return ventas._id_config("VENTA_CLIENTE_LOCAL")
+    except (KeyError, ValueError):
+        ids = ventas._ejecutar("res.partner", "search",
+                               [[["name", "ilike", "Cliente Local"]]], {"limit": 1})
+        if not ids:
+            ids = ventas._ejecutar("res.partner", "search",
+                                   [[["customer_rank", ">", 0]]], {"limit": 1})
+        if not ids:
+            raise RuntimeError(
+                "No hay ningún cliente en Odoo para armar la propuesta de ejemplo.")
+        return ids[0]
+
+
+REF_MUESTRA = "MUESTRA-PDF"
+
+
+def _lineas_de_muestra():
+    producto = _id_producto_personalizado()
+    lineas = []
+    secuencia = 1
+    for titulo, renglones in RENGLONES_DE_MUESTRA:
+        lineas.append({"display_type": "line_section", "name": titulo,
+                       "sequence": secuencia})
+        secuencia += 1
+        for texto, cantidad, precio in renglones:
+            lineas.append({"product_id": producto, "name": texto,
+                           "product_uom_qty": cantidad, "price_unit": precio,
+                           "sequence": secuencia})
+            secuencia += 1
+    return lineas
+
+
+def _orden_de_muestra():
+    """La cotización de ejemplo en Odoo: UNA sola, reutilizada siempre. Se
+    reconoce por su referencia MUESTRA-PDF y solo se crea la primera vez.
+
+    El primer diseño la creaba y la borraba en cada clic, pero el usuario
+    de la app no tiene permiso para borrar pedidos en Odoo (eso es de
+    Sales/Administrator) y cada descarga dejaba una cotización suelta.
+    Reutilizar una sola no necesita permisos de borrado y nada se acumula.
+    """
+    lineas = _lineas_de_muestra()
+    ids = ventas._ejecutar(
+        "sale.order", "search",
+        [[["client_order_ref", "=", REF_MUESTRA], ["state", "=", "draft"]]],
+        {"limit": 1})
+    if ids:
+        try:
+            # Refrescar las líneas, para que el ejemplo siga al día si se
+            # cambian aquí; si Odoo no deja, sirve igual como está.
+            ventas._ejecutar("sale.order", "write", [[ids[0]], {
+                "order_line": [[5, 0, 0]] + [[0, 0, linea] for linea in lineas]}])
+        except Exception:
+            pass
+        return ids[0]
+    plantilla_id = _id_ref(TIPOS["instalacion"]["plantilla"])
+    plantilla = ventas._ejecutar(
+        "sale.order.template", "read", [[plantilla_id]],
+        {"fields": ["note", "number_of_days"]})[0]
+    dias = plantilla.get("number_of_days") or DIAS_VALIDEZ_DEFECTO
+    orden_id = ventas._ejecutar("sale.order", "create", [{
+        "partner_id": _cliente_de_muestra(),
+        "sale_order_template_id": plantilla_id,
+        "tipo_servicio": "instalacion",
+        "client_order_ref": REF_MUESTRA,
+        "note": plantilla.get("note") or "",
+        "validity_date": (date.today() + timedelta(days=dias)).isoformat(),
+        "order_line": [[0, 0, linea] for linea in lineas],
+    }])
+    return orden_id[0] if isinstance(orden_id, list) else orden_id
+
+
+def pdf_de_muestra():
+    """El PDF de la propuesta de ejemplo, para revisar cómo sale el
+    documento sin cotizarle a nadie. No crea clientes, no abre oportunidad
+    en el CRM, no toca el historial local y no acumula cotizaciones: en
+    Odoo vive una sola, marcada MUESTRA-PDF, que se reutiliza."""
+    return ventas.descargar_pdf("vivero_rose_pedidos.reporte_propuesta_venta",
+                                _orden_de_muestra())

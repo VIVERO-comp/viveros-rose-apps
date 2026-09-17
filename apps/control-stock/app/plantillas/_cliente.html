@@ -1,0 +1,52 @@
+{# Bloque Cliente compartido por Nueva Venta, las cotizaciones de servicio y
+   la personalizada: nombre y celular más los datos opcionales de
+   facturación (empresa, RUC, cédula, correo y dirección), en dos columnas
+   compactas (pedido del dueño 17/09/2026). `form_cliente` es el id del
+   <form> al que pertenecen los campos y `nombre_opcional` afloja el
+   nombre en Nueva Venta, donde vacío significa "Cliente Local". #}
+<div class="seccion-titulo">Cliente</div>
+<div class="campos-cliente" id="campos-cliente">
+  <div class="campo">
+    <span>Nombre{% if nombre_opcional %} (opcional){% endif %}</span>
+    <input id="cliente-nombre" name="cliente" form="{{ form_cliente }}"
+           value="{{ borrador.nombre }}" autocomplete="off"
+           placeholder="{% if nombre_opcional %}Si lo dejas vacío: Cliente Local{% else %}Nombre del cliente{% endif %}">
+  </div>
+  <div class="campo">
+    <span>Celular</span>
+    <input id="cliente-celular" name="celular" form="{{ form_cliente }}"
+           value="{{ borrador.celular }}" autocomplete="off" inputmode="tel"
+           placeholder="Ej: 6567-3062">
+  </div>
+  <div class="campo">
+    <span>Empresa</span>
+    <input class="dato-cliente" name="empresa" form="{{ form_cliente }}"
+           value="{{ borrador.empresa }}" autocomplete="off"
+           placeholder="Si factura a nombre de una empresa">
+  </div>
+  <div class="campo">
+    <span>RUC</span>
+    <input class="dato-cliente" name="ruc" form="{{ form_cliente }}"
+           value="{{ borrador.ruc }}" autocomplete="off"
+           placeholder="Ej: 155712345-2-2021">
+  </div>
+  <div class="campo">
+    <span>Cédula</span>
+    <input class="dato-cliente" name="cedula" form="{{ form_cliente }}"
+           value="{{ borrador.cedula }}" autocomplete="off"
+           placeholder="Ej: 8-123-4567">
+  </div>
+  <div class="campo">
+    <span>Correo</span>
+    <input class="dato-cliente" name="correo" form="{{ form_cliente }}"
+           value="{{ borrador.correo }}" autocomplete="off" inputmode="email"
+           placeholder="Para enviarle la cotización">
+  </div>
+  <div class="campo campo-ancho">
+    <span>Dirección</span>
+    <input class="dato-cliente" name="direccion" form="{{ form_cliente }}"
+           value="{{ borrador.direccion }}" autocomplete="off"
+           placeholder="Dónde se entrega o instala">
+  </div>
+</div>
+<p class="nota-cliente">Todo menos el nombre es opcional.</p>

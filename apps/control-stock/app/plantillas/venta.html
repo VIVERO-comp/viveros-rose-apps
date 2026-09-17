@@ -34,6 +34,15 @@
     {% endfor %}
     <a class="servicio-boton" href="/venta/servicio-personalizada">+ Personalizado</a>
   </div>
+
+  {# Para revisar el documento sin cotizarle a nadie: en Odoo vive UNA
+     cotización de ejemplo (referencia MUESTRA-PDF) que se reutiliza. #}
+  <a class="btn btn-linea" href="/venta/propuesta-de-muestra.pdf"
+     style="margin-top:12px;justify-content:center">VER PDF DE EJEMPLO</a>
+  <p class="nada-venta" style="text-align:center">Una propuesta de muestra
+    para ver cómo sale el documento. No le cotiza a nadie ni crea clientes:
+    en Odoo se reutiliza siempre la misma cotización de ejemplo, marcada
+    MUESTRA-PDF.</p>
   {% endif %}
 
   <div class="seccion-titulo" style="margin-top:16px">Ventas y cotizaciones locales</div>

@@ -31,21 +31,7 @@
   <form id="form-servicio" method="post" action="/venta/servicio/{{ tipo }}" style="display:none"></form>
 
   {# ---- Cliente ---- #}
-  <div class="seccion-titulo">Cliente</div>
-  <div class="campos-cliente">
-    <div class="campo">
-      <span>Nombre</span>
-      <input id="cliente-nombre" name="cliente" form="form-servicio"
-             value="{{ borrador.nombre }}" autocomplete="off"
-             placeholder="Nombre del cliente">
-    </div>
-    <div class="campo">
-      <span>Celular</span>
-      <input id="cliente-celular" name="celular" form="form-servicio"
-             value="{{ borrador.celular }}" autocomplete="off" inputmode="tel"
-             placeholder="Ej: 6567-3062">
-    </div>
-  </div>
+  {% with form_cliente="form-servicio" %}{% include "_cliente.html" %}{% endwith %}
 
   {% for seccion in meta.secciones %}
     {# Renglones de servicio repetibles: el párrafo crece al escribir y
@@ -57,7 +43,7 @@
       {% for s in servicios %}
       <div class="servicio">
         <textarea class="servicio-texto" name="servicio_texto" form="form-servicio"
-                  rows="2" placeholder="Ej: {{ seccion.servicios.ejemplo }}"
+                  rows="1" placeholder="Ej: {{ seccion.servicios.ejemplo }}"
                   >{{ s.texto }}</textarea>
         <div class="servicio-pie">
           <label class="servicio-monto">Monto

@@ -417,9 +417,42 @@ def test_celular_va_al_contacto_y_al_registro(cliente_venta, odoo):
                            data={"cliente": "María", "celular": "6567-3062"},
                            follow_redirects=False)
     assert r.status_code == 303
+    # "phone" y no "mobile": este Odoo no tiene el campo mobile en res.partner.
     assert odoo.partners_vals[0] == {"name": "María", "customer_rank": 1,
-                                     "company_type": "person", "mobile": "6567-3062"}
+                                     "company_type": "person", "phone": "6567-3062"}
     assert ventas.ventas_todas()[0]["celular"] == "6567-3062"
+
+
+def test_datos_opcionales_del_cliente_van_al_contacto(cliente_venta, odoo):
+    _agregar(cliente_venta, 501)
+    r = cliente_venta.post("/venta/cotizar",
+                           data={"cliente": "Ana", "celular": "", "empresa": "Jardines SA",
+                                 "ruc": "155712345-2-2021", "cedula": "8-123-4567",
+                                 "correo": "ana@jardines.com", "direccion": "Vía España"})
+    assert "Cotización creada" in r.text
+    # El RUC manda en el Tax ID y la cédula queda además en la referencia.
+    assert odoo.partners_vals[0] == {
+        "name": "Ana", "customer_rank": 1, "company_type": "person",
+        "vat": "155712345-2-2021", "ref": "8-123-4567",
+        "company_name": "Jardines SA", "email": "ana@jardines.com",
+        "street": "Vía España"}
+
+
+def test_sin_ruc_la_cedula_va_al_tax_id(cliente_venta, odoo):
+    _agregar(cliente_venta, 501)
+    cliente_venta.post("/venta/cotizar",
+                       data={"cliente": "Beto", "cedula": "8-999-1111"})
+    assert odoo.partners_vals[0]["vat"] == "8-999-1111"
+
+
+def test_borrador_guarda_los_datos_opcionales(cliente_venta):
+    cliente_venta.post("/venta/borrador",
+                       data={"cliente": "Ana", "celular": "", "empresa": "Jardines SA",
+                             "ruc": "155712345-2-2021", "cedula": "", "correo": "",
+                             "direccion": ""})
+    pagina = cliente_venta.get("/venta/nueva")
+    assert 'value="Jardines SA"' in pagina.text
+    assert 'value="155712345-2-2021"' in pagina.text
 
 
 def test_borrador_sobrevive_los_reloads(cliente_venta):
@@ -431,8 +464,9 @@ def test_borrador_sobrevive_los_reloads(cliente_venta):
     # Y se limpia al crear la venta.
     _agregar(cliente_venta, 501)
     cliente_venta.post("/venta/cotizar", data={"cliente": "María", "celular": "6567-3062"})
-    assert ventas.borrador_de("genesis") == {"nombre": "", "celular": "",
-                                             "servicios": []}
+    assert ventas.borrador_de("genesis") == {
+        "nombre": "", "celular": "", "servicios": [], "renglones": [],
+        "empresa": "", "ruc": "", "cedula": "", "correo": "", "direccion": ""}
 
 
 def test_cancelar_cotizacion(cliente_venta, odoo):
@@ -513,3 +547,33 @@ def test_cotizacion_publica_por_whatsapp(cliente_venta, odoo):
     assert documento.status_code == 200
     assert "COTIZACI\u00d3N" in documento.text and "ROMERO" in documento.text
     assert "Pendiente" in documento.text and "FACTURA" not in documento.text
+
+
+def test_el_pdf_usa_el_nombre_de_la_plantilla_no_el_xml_id(monkeypatch):
+    """La URL /report/pdf/... lleva el report_name, no el xml_id de la
+    acción: la propuesta de servicio devolvía 404 por eso."""
+    llamadas = []
+
+    def falso(modelo, metodo, args, kw=None):
+        llamadas.append(modelo)
+        if modelo == "ir.model.data":
+            return [{"res_id": 566}]
+        if modelo == "ir.actions.report":
+            return [{"report_name": "vivero_rose_pedidos.plantilla_propuesta_venta"}]
+        raise AssertionError(modelo)
+
+    monkeypatch.setattr(ventas, "_ejecutar", falso)
+    ventas._cache_plantillas.clear()
+    referencia = "vivero_rose_pedidos.reporte_propuesta_venta"
+    assert ventas._plantilla_de_reporte(referencia) == \
+        "vivero_rose_pedidos.plantilla_propuesta_venta"
+    # Queda en caché: no vuelve a preguntarle a Odoo.
+    ventas._plantilla_de_reporte(referencia)
+    assert llamadas.count("ir.model.data") == 1
+
+
+def test_un_reporte_que_no_existe_se_usa_tal_cual(monkeypatch):
+    monkeypatch.setattr(ventas, "_ejecutar",
+                        lambda *a, **k: [])  # sin coincidencia en ir.model.data
+    ventas._cache_plantillas.clear()
+    assert ventas._plantilla_de_reporte("sale.report_saleorder") == "sale.report_saleorder"

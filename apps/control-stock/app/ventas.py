@@ -240,7 +240,9 @@ def iniciar_tablas():
                 usuario TEXT PRIMARY KEY,   -- cliente del formulario en curso
                 nombre TEXT NOT NULL DEFAULT '',
                 celular TEXT NOT NULL DEFAULT '',
-                servicios TEXT              -- JSON de los renglones de servicio
+                servicios TEXT,             -- JSON de los renglones de servicio
+                renglones TEXT,             -- JSON de los renglones libres (personalizada)
+                extra TEXT                  -- JSON de los datos opcionales del cliente
             );
             CREATE TABLE IF NOT EXISTS ventas_locales (
                 n INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -265,6 +267,10 @@ def iniciar_tablas():
             "PRAGMA table_info(venta_borrador)")]
         if "servicios" not in columnas_borrador:
             con.execute("ALTER TABLE venta_borrador ADD COLUMN servicios TEXT")
+        if "renglones" not in columnas_borrador:
+            con.execute("ALTER TABLE venta_borrador ADD COLUMN renglones TEXT")
+        if "extra" not in columnas_borrador:
+            con.execute("ALTER TABLE venta_borrador ADD COLUMN extra TEXT")
         # Migración suave: la tabla pudo nacer sin la columna celular.
         columnas = [fila[1] for fila in con.execute("PRAGMA table_info(ventas_locales)")]
         if "celular" not in columnas:
@@ -277,34 +283,51 @@ def iniciar_tablas():
             con.execute("ALTER TABLE ventas_locales ADD COLUMN resumen TEXT")
 
 
-def guardar_borrador(usuario, nombre, celular, servicios=None):
-    """El formulario en curso (nombre, celular y los renglones de servicio
-    que ya escribió): sobrevive a los reloads de agregar/quitar plantas
-    (venta.js lo manda mientras se escribe). servicios=None deja los
-    renglones como estaban — Nueva Venta no los tiene y no debe borrarlos."""
+def guardar_borrador(usuario, nombre, celular, servicios=None, datos=None,
+                     renglones=None):
+    """El formulario en curso (nombre, celular, los datos opcionales del
+    cliente y los renglones que ya escribió): sobrevive a los reloads de
+    agregar/quitar plantas (venta.js lo manda mientras se escribe). Los
+    argumentos en None dejan lo guardado como estaba."""
     crudo = None if servicios is None else json.dumps(servicios, ensure_ascii=False)
+    libres = None if renglones is None else json.dumps(renglones, ensure_ascii=False)
+    extra = None if datos is None else json.dumps(
+        {campo: (datos.get(campo) or "") for campo in CAMPOS_CLIENTE},
+        ensure_ascii=False)
     with _db() as con:
         con.execute(
-            "INSERT INTO venta_borrador (usuario, nombre, celular, servicios)"
-            " VALUES (?,?,?,?)"
+            "INSERT INTO venta_borrador (usuario, nombre, celular, servicios,"
+            " renglones, extra) VALUES (?,?,?,?,?,?)"
             " ON CONFLICT (usuario) DO UPDATE SET nombre=?, celular=?,"
-            " servicios=COALESCE(?, servicios)",
-            (usuario, nombre, celular, crudo, nombre, celular, crudo))
+            " servicios=COALESCE(?, servicios), renglones=COALESCE(?, renglones),"
+            " extra=COALESCE(?, extra)",
+            (usuario, nombre, celular, crudo, libres, extra,
+             nombre, celular, crudo, libres, extra))
+
+
+def _json_o_defecto(crudo, defecto):
+    if not crudo:
+        return defecto
+    try:
+        valor = json.loads(crudo)
+    except ValueError:
+        return defecto
+    return valor if isinstance(valor, type(defecto)) else defecto
 
 
 def borrador_de(usuario):
     with _db() as con:
         fila = con.execute(
-            "SELECT nombre, celular, servicios FROM venta_borrador WHERE usuario=?",
-            (usuario,)).fetchone()
+            "SELECT nombre, celular, servicios, renglones, extra FROM venta_borrador"
+            " WHERE usuario=?", (usuario,)).fetchone()
+    vacio = {campo: "" for campo in CAMPOS_CLIENTE}
     if not fila:
-        return {"nombre": "", "celular": "", "servicios": []}
-    try:
-        servicios = json.loads(fila["servicios"]) if fila["servicios"] else []
-    except ValueError:
-        servicios = []
+        return {"nombre": "", "celular": "", "servicios": [], "renglones": [], **vacio}
+    extra = _json_o_defecto(fila["extra"], {})
     return {"nombre": fila["nombre"], "celular": fila["celular"],
-            "servicios": servicios if isinstance(servicios, list) else []}
+            "servicios": _json_o_defecto(fila["servicios"], []),
+            "renglones": _json_o_defecto(fila["renglones"], []),
+            **vacio, **{campo: (extra.get(campo) or "") for campo in CAMPOS_CLIENTE}}
 
 
 def _limpiar_borrador(usuario):
@@ -419,23 +442,69 @@ def venta_por_token(token):
 # Flujo contra Odoo
 # ---------------------------------------------------------------------------
 
-def _cliente_id(nombre, celular=""):
+# Los datos opcionales del bloque Cliente, iguales en Nueva Venta y en las
+# cotizaciones de servicio (pedido del dueño 17/09/2026: que se puedan
+# tomar RUC, cédula, empresa, correo y dirección, todos opcionales).
+CAMPOS_CLIENTE = ("empresa", "ruc", "cedula", "correo", "direccion")
+
+
+def valores_de_cliente(datos):
+    """Los datos opcionales del formulario -> campos de res.partner. El RUC
+    y la cédula van los dos al Tax ID (vat) porque en Panamá es el mismo
+    dato para la empresa y para la persona: si hay RUC manda el RUC, y la
+    cédula queda además en la referencia (ref) para poder buscarla."""
+    datos = datos or {}
+    limpio = {campo: (datos.get(campo) or "").strip() for campo in CAMPOS_CLIENTE}
+    valores = {}
+    if limpio["ruc"] or limpio["cedula"]:
+        valores["vat"] = limpio["ruc"] or limpio["cedula"]
+    if limpio["cedula"]:
+        valores["ref"] = limpio["cedula"]
+    if limpio["empresa"]:
+        valores["company_name"] = limpio["empresa"]
+    if limpio["correo"]:
+        valores["email"] = limpio["correo"]
+    if limpio["direccion"]:
+        valores["street"] = limpio["direccion"]
+    return valores
+
+
+def completar_cliente(partner_id, valores):
+    """Rellena en Odoo SOLO los campos que estén vacíos: lo que Odoo ya
+    tiene manda (es la fuente de verdad) y nunca se sobreescribe con lo que
+    se digitó en la app."""
+    if not valores:
+        return
+    actual = _ejecutar("res.partner", "read", [[partner_id]],
+                       {"fields": list(valores)})[0]
+    faltantes = {campo: valor for campo, valor in valores.items()
+                 if not actual.get(campo)}
+    if faltantes:
+        _ejecutar("res.partner", "write", [[partner_id], faltantes])
+
+
+def _cliente_id(nombre, celular="", datos=None):
     """El partner para la orden: el genérico "Cliente Local" si no dieron
     nombre; si lo dieron, se busca por nombre exacto y se crea si no existe
-    (con el celular como móvil del contacto)."""
+    (con el celular y los datos opcionales que hayan llenado)."""
     nombre = (nombre or "").strip()
+    valores_extra = valores_de_cliente(datos)
     if not nombre:
         return _id_config("VENTA_CLIENTE_LOCAL")
     ids = _ejecutar("res.partner", "search", [[["name", "=ilike", nombre]]], {"limit": 1})
     if ids:
+        completar_cliente(ids[0], valores_extra)
         return ids[0]
-    valores = {"name": nombre, "customer_rank": 1, "company_type": "person"}
+    valores = {"name": nombre, "customer_rank": 1, "company_type": "person",
+               **valores_extra}
     if (celular or "").strip():
-        valores["mobile"] = celular.strip()
+        # "phone" y no "mobile": este Odoo no tiene el campo mobile en
+        # res.partner (crear con mobile reventaba la venta con cliente nuevo).
+        valores["phone"] = celular.strip()
     return _ejecutar("res.partner", "create", [valores])
 
 
-def crear_cotizacion(empleada, nombre_cliente, celular=""):
+def crear_cotizacion(empleada, nombre_cliente, celular="", datos=None):
     """Crea el sale.order borrador (etiqueta LOCAL, diario de ventas normal)
     y el registro local. Devuelve el registro. El carrito y el borrador se
     limpian solo si Odoo aceptó la orden."""
@@ -443,7 +512,7 @@ def crear_cotizacion(empleada, nombre_cliente, celular=""):
     lineas, _total_visto = carrito_de(usuario)
     if not lineas:
         raise ValueError("Agrega al menos una planta a la venta.")
-    partner = _cliente_id(nombre_cliente, celular)
+    partner = _cliente_id(nombre_cliente, celular, datos)
     orden_id = _ejecutar("sale.order", "create", [{
         "partner_id": partner,
         "tag_ids": [[6, 0, [_id_config("VENTA_TAG_LOCAL")]]],
@@ -660,12 +729,42 @@ def _autenticar_web():
     _sesion_web["abridor"] = abridor
 
 
+_cache_plantillas = {}
+
+
+def _plantilla_de_reporte(referencia):
+    """El report_name (la plantilla QWeb) de un reporte a partir de la
+    referencia XML de su acción: /report/pdf/... usa ese nombre, NO el
+    xml_id de la acción. En los reportes estándar de Odoo los dos coinciden
+    (sale.report_saleorder), pero en los del addon no: la acción se llama
+    reporte_propuesta_venta y su plantilla plantilla_propuesta_venta, y por
+    eso la propuesta de servicio devolvía 404."""
+    if referencia in _cache_plantillas:
+        return _cache_plantillas[referencia]
+    plantilla = referencia
+    try:
+        modulo, nombre = referencia.split(".", 1)
+        filas = _ejecutar("ir.model.data", "search_read",
+                          [[["module", "=", modulo], ["name", "=", nombre],
+                            ["model", "=", "ir.actions.report"]]],
+                          {"fields": ["res_id"], "limit": 1})
+        if filas:
+            accion = _ejecutar("ir.actions.report", "read", [[filas[0]["res_id"]]],
+                               {"fields": ["report_name"]})
+            plantilla = accion[0]["report_name"] or referencia
+    except Exception:
+        pass  # sin Odoo a mano, se prueba con la referencia tal cual
+    _cache_plantillas[referencia] = plantilla
+    return plantilla
+
+
 def descargar_pdf(reporte, registro_id):
-    """El PDF nativo de Odoo (sale.report_saleorder / account.report_invoice).
-    Reautentica una vez si la sesión web venció."""
+    """El PDF nativo de Odoo (la propuesta del addon, la cotización o la
+    factura estándar). Reautentica una vez si la sesión web venció."""
     import urllib.error
 
-    url = os.environ["ODOO_URL"].rstrip("/") + f"/report/pdf/{reporte}/{int(registro_id)}"
+    plantilla = _plantilla_de_reporte(reporte)
+    url = os.environ["ODOO_URL"].rstrip("/") + f"/report/pdf/{plantilla}/{int(registro_id)}"
     for _intento in (1, 2):
         if _sesion_web["abridor"] is None:
             _autenticar_web()

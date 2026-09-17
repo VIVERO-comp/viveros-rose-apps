@@ -680,19 +680,16 @@ def venta_nueva(request: Request, q: str = "", error: str = ""):
 
 @app.post("/venta/borrador")
 async def venta_borrador(request: Request):
-    # venta.js guarda nombre/celular (y, en las cotizaciones de servicio,
-    # los renglones de servicio ya escritos) mientras se escriben, para que
-    # sobrevivan a los reloads de agregar/quitar plantas.
+    # venta.js guarda lo que se va escribiendo (cliente, sus datos
+    # opcionales y los renglones de servicio o libres) para que sobreviva a
+    # los reloads de agregar/quitar plantas.
     form = await request.form()
-    servicios = None
-    if "servicios" in form:
-        servicios = cotizaciones.servicios_del_formulario(
-            [t[:2000] for t in form.getlist("servicio_texto")],
-            [m[:20] for m in form.getlist("servicio_monto")])
     ventas.guardar_borrador(request.state.empleada["id"],
                             (form.get("cliente") or "").strip()[:120],
                             (form.get("celular") or "").strip()[:30],
-                            servicios)
+                            _servicios_del_form(form),
+                            _datos_cliente_del_form(form),
+                            _renglones_del_form(form))
     return Response(status_code=204)
 
 
@@ -705,6 +702,33 @@ def venta_buscar(request: Request, q: str = ""):
     except Exception:
         return {"error": "Sin conexión con Odoo en este momento."}
     return {"resultados": [{**p, "precio": dinero_venta(p["precio"])} for p in resultados]}
+
+
+def _datos_cliente_del_form(form):
+    """Los datos opcionales del cliente (empresa, RUC, cédula, correo,
+    dirección) si el formulario los trae; None si no, para no borrar lo ya
+    guardado en el borrador."""
+    if not any(campo in form for campo in ventas.CAMPOS_CLIENTE):
+        return None
+    return {campo: (form.get(campo) or "").strip()[:120]
+            for campo in ventas.CAMPOS_CLIENTE}
+
+
+def _servicios_del_form(form):
+    if "servicios" not in form and "servicio_texto" not in form:
+        return None
+    return cotizaciones.servicios_del_formulario(
+        [t[:2000] for t in form.getlist("servicio_texto")],
+        [m[:20] for m in form.getlist("servicio_monto")])
+
+
+def _renglones_del_form(form):
+    if "renglones" not in form and "renglon_texto" not in form:
+        return None
+    return cotizaciones.renglones_del_formulario(
+        [t[:2000] for t in form.getlist("renglon_texto")],
+        [c[:20] for c in form.getlist("renglon_cantidad")],
+        [p[:20] for p in form.getlist("renglon_precio")])
 
 
 def _volver_del_carrito(form):
@@ -761,8 +785,9 @@ async def venta_quitar(request: Request):
 async def venta_cotizar(request: Request):
     form = await request.form()
     try:
-        registro = ventas.crear_cotizacion(request.state.empleada,
-                                           form.get("cliente", ""), form.get("celular", ""))
+        registro = ventas.crear_cotizacion(
+            request.state.empleada, form.get("cliente", ""), form.get("celular", ""),
+            _datos_cliente_del_form(form))
     except ValueError as error:
         return _redirigir_venta(str(error), nueva=True)
     except Exception as error:
@@ -829,13 +854,14 @@ async def venta_servicio_crear(request: Request, tipo: str):
     usuario = request.state.empleada["id"]
     servicios = cotizaciones.servicios_del_formulario(
         form.getlist("servicio_texto"), form.getlist("servicio_monto"))
+    datos_cliente = _datos_cliente_del_form(form)
     carrito, _total = ventas.carrito_de(usuario)
     lineas_catalogo = [{"producto_id": l["producto_id"], "cantidad": l["cantidad"]}
                        for l in carrito]
     try:
         registro = cotizaciones.crear_cotizacion(
             request.state.empleada, tipo, form.get("cliente", ""),
-            form.get("celular", ""), servicios, lineas_catalogo)
+            form.get("celular", ""), servicios, lineas_catalogo, datos_cliente)
     except ValueError as error:
         return plantillas.TemplateResponse(
             request, "venta_servicio.html",
@@ -862,13 +888,23 @@ async def venta_servicio_crear(request: Request, tipo: str):
     })
 
 
-@app.get("/venta/servicio-personalizada")
-def venta_personalizada_form(request: Request, q: str = "", error: str = ""):
+def _contexto_personalizada(request, q="", error=None, renglones=None,
+                            servicios=None):
+    """El contexto de la cotización personalizada, compartido por el GET y
+    el POST que no pudo crearla: así un error no borra los renglones que la
+    empleada ya escribió."""
     usuario = request.state.empleada["id"]
+    borrador = ventas.borrador_de(usuario)
+    if renglones is None:
+        renglones = borrador["renglones"]
+    if servicios is None:
+        servicios = borrador["servicios"]
     contexto = {
-        "ventas_activo": ventas.configurado(), "q": q.strip(),
+        "ventas_activo": ventas.configurado(), "q": (q or "").strip(),
         "resultados": None, "carrito": [], "total_carrito": 0.0,
-        "borrador": ventas.borrador_de(usuario), "error_venta": error or None,
+        "borrador": borrador, "error_venta": error or None,
+        "renglones": renglones or [{"texto": "", "cantidad": "", "precio": ""}],
+        "servicios": servicios or [{"texto": "", "monto": ""}],
     }
     if contexto["ventas_activo"]:
         try:
@@ -878,28 +914,45 @@ def venta_personalizada_form(request: Request, q: str = "", error: str = ""):
         except Exception:
             contexto["error_venta"] = ("Sin conexión con Odoo en este momento. "
                                        "Vuelve a intentar en un rato.")
-    return plantillas.TemplateResponse(request, "venta_personalizada.html", contexto)
+    return contexto
+
+
+@app.get("/venta/servicio-personalizada")
+def venta_personalizada_form(request: Request, q: str = "", error: str = ""):
+    return plantillas.TemplateResponse(
+        request, "venta_personalizada.html",
+        _contexto_personalizada(request, q, error))
 
 
 @app.post("/venta/servicio-personalizada")
 async def venta_personalizada_crear(request: Request):
     form = await request.form()
     usuario = request.state.empleada["id"]
+    renglones = cotizaciones.renglones_del_formulario(
+        form.getlist("renglon_texto"), form.getlist("renglon_cantidad"),
+        form.getlist("renglon_precio"))
+    servicios = cotizaciones.servicios_del_formulario(
+        form.getlist("servicio_texto"), form.getlist("servicio_monto"))
     carrito, _total = ventas.carrito_de(usuario)
     lineas_catalogo = [{"producto_id": l["producto_id"], "cantidad": l["cantidad"]}
                        for l in carrito]
     try:
         registro = cotizaciones.crear_personalizada(
             request.state.empleada, form.get("cliente", ""),
-            form.get("celular", ""), lineas_catalogo)
+            form.get("celular", ""), lineas_catalogo, renglones,
+            _datos_cliente_del_form(form), servicios)
     except ValueError as error:
-        return RedirectResponse(
-            f"/venta/servicio-personalizada?error={quote(str(error))}", status_code=303)
+        return plantillas.TemplateResponse(
+            request, "venta_personalizada.html",
+            _contexto_personalizada(request, error=str(error), renglones=renglones,
+                                    servicios=servicios))
     except Exception as error:
-        return RedirectResponse(
-            "/venta/servicio-personalizada?error="
-            f"{quote(f'Odoo no aceptó la cotización: {ventas._mensaje_de_error(error)}')}",
-            status_code=303)
+        return plantillas.TemplateResponse(
+            request, "venta_personalizada.html",
+            _contexto_personalizada(
+                request,
+                error=f"Odoo no aceptó la cotización: {ventas._mensaje_de_error(error)}",
+                renglones=renglones, servicios=servicios))
     ventas.vaciar_carrito(usuario)
     ventas._limpiar_borrador(usuario)
     return plantillas.TemplateResponse(request, "venta_exito.html", {
@@ -911,6 +964,20 @@ async def venta_personalizada_crear(request: Request):
         "pdf_href": f"/venta/servicio/{registro['n']}/propuesta.pdf",
         "pdf_texto": "Descargar propuesta (PDF)",
     })
+
+
+@app.get("/venta/propuesta-de-muestra.pdf")
+def venta_propuesta_muestra(request: Request):
+    # El botón "Ver PDF de ejemplo" de Vender: la propuesta de una
+    # cotización de muestra, que se borra de Odoo en el mismo paso.
+    try:
+        contenido = cotizaciones.pdf_de_muestra()
+    except Exception as error:
+        return _redirigir_venta(
+            f"No se pudo armar el PDF de ejemplo: {ventas._mensaje_de_error(error)}")
+    return Response(contenido, media_type="application/pdf",
+                    headers={"Content-Disposition":
+                             'attachment; filename="propuesta-de-ejemplo.pdf"'})
 
 
 @app.get("/venta/servicio/{n}/propuesta.pdf")
@@ -929,8 +996,9 @@ async def venta_pagar(request: Request):
     # carrito y pasa a elegir el método de pago (el cobro corre después).
     form = await request.form()
     try:
-        registro = ventas.crear_cotizacion(request.state.empleada,
-                                           form.get("cliente", ""), form.get("celular", ""))
+        registro = ventas.crear_cotizacion(
+            request.state.empleada, form.get("cliente", ""), form.get("celular", ""),
+            _datos_cliente_del_form(form))
     except ValueError as error:
         return _redirigir_venta(str(error), nueva=True)
     except Exception as error:

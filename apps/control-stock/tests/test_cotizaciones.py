@@ -83,6 +83,17 @@ class OdooServicios:
     def product_product_read(self, args, kw):
         return [{"id": i, **self.productos[i]} for i in args[0] if i in self.productos]
 
+    def product_product_search(self, args, kw):
+        # Solo por default_code: es como cotizaciones.py busca el producto
+        # de los renglones libres (SV-PERSONALIZADO).
+        codigo = next(c[2] for c in args[0] if c[0] == "default_code")
+        return [i for i, p in self.productos.items() if p.get("default_code") == codigo]
+
+    def product_product_create(self, args, kw):
+        nuevo = self._nuevo()
+        self.productos[nuevo] = {"list_price": 0.0, **args[0]}
+        return nuevo
+
     # ---- partners: un evaluador de dominio simplificado (solo lo que
     # cotizaciones.py arma: 0, 1 o 2 "|" seguidos de condiciones ilike o
     # =ilike, siempre en OR) ----
@@ -110,6 +121,11 @@ class OdooServicios:
         filas = [{"id": i, **{c: p.get(c) for c in campos}} for i, p in self.partners.items()
                  if self._coincide(p, args[0])]
         return filas[:limite] if limite else filas
+
+    def res_partner_read(self, args, kw):
+        campos = kw.get("fields", [])
+        return [{"id": i, **{c: self.partners[i].get(c) for c in campos}}
+                for i in args[0] if i in self.partners]
 
     def res_partner_create(self, args, kw):
         nuevo = self._nuevo()
@@ -186,10 +202,27 @@ class OdooServicios:
     def sale_order_read(self, args, kw):
         return [{"id": i, **{c: self.ordenes[i][c] for c in kw["fields"]}} for i in args[0]]
 
+    def sale_order_search(self, args, kw):
+        # Solo por client_order_ref + state: es como se busca la cotización
+        # de muestra.
+        ref = next((c[2] for c in args[0] if c[0] == "client_order_ref"), None)
+        return [i for i, o in self.ordenes.items()
+                if o["vals"].get("client_order_ref") == ref]
+
+    def sale_order_unlink(self, args, kw):
+        for oid in args[0]:
+            self.borradas = getattr(self, "borradas", [])
+            self.borradas.append(oid)
+            del self.ordenes[oid]
+        return True
+
     def sale_order_write(self, args, kw):
         for oid in args[0]:
             for campo, valor in args[1].items():
-                if campo == "tag_ids":
+                if campo == "order_line":
+                    lineas = [c[2] for c in valor if c[0] == 0]
+                    self.ordenes[oid]["lineas"] = lineas
+                elif campo == "tag_ids":
                     for comando in valor:
                         if comando[0] == 4:
                             self.ordenes[oid]["tag_ids"].append(comando[1])
@@ -281,11 +314,15 @@ def test_servicio_sin_parrafo_hereda_el_nombre_del_producto(odoo):
     assert linea["price_unit"] == 300.0
 
 
-def test_paisajismo_exige_al_menos_una_planta(odoo):
-    with pytest.raises(ValueError, match="planta o material"):
-        cotizaciones.crear_cotizacion(
-            {"id": "g", "nombre": "Génesis"}, "paisajismo", "María", "",
-            [{"texto": "Diseño e instalación", "monto": "500"}], [])
+def test_paisajismo_puede_ir_sin_plantas(odoo):
+    # Sin mínimo de plantas (pedido del dueño 17/09/2026): una cotización
+    # puede ser solo de servicio.
+    registro = cotizaciones.crear_cotizacion(
+        {"id": "g", "nombre": "Génesis"}, "paisajismo", "María", "",
+        [{"texto": "Diseño e instalación", "monto": "500"}], [])
+    orden = odoo.ordenes[registro["orden_id"]]
+    assert orden["amount_total"] == 500.0
+    assert not any(l.get("product_id") == 601 for l in orden["lineas"])
 
 
 def test_paisajismo_cobra_las_plantas_a_precio_de_catalogo(odoo):
@@ -303,6 +340,34 @@ def test_servicios_del_formulario_empareja_los_renglones(odoo):
     assert cotizaciones.servicios_del_formulario(
         ["Uno", "Dos"], ["10"]) == [
             {"texto": "Uno", "monto": "10"}, {"texto": "Dos", "monto": ""}]
+
+
+def test_datos_opcionales_del_cliente_en_una_cotizacion(odoo):
+    registro = cotizaciones.crear_cotizacion(
+        {"id": "g", "nombre": "Génesis"}, "instalacion", "Ana", "", 
+        [{"texto": "Instalación", "monto": "300"}], [],
+        {"empresa": "Jardines SA", "ruc": "155712345-2-2021",
+         "cedula": "8-123-4567", "correo": "ana@jardines.com",
+         "direccion": "Vía España"})
+    orden = odoo.ordenes[registro["orden_id"]]
+    partner = odoo.partners[orden["vals"]["partner_id"]]
+    assert partner["vat"] == "155712345-2-2021"
+    assert partner["ref"] == "8-123-4567"
+    assert partner["company_name"] == "Jardines SA"
+    assert partner["email"] == "ana@jardines.com"
+    assert partner["street"] == "Vía España"
+
+
+def test_a_un_cliente_existente_solo_se_le_llenan_los_huecos(odoo):
+    odoo.partners[77] = {"name": "Ana", "phone": "6567-3062", "vat": "RUC-VIEJO",
+                         "category_id": []}
+    cotizaciones.crear_cotizacion(
+        {"id": "g", "nombre": "Génesis"}, "instalacion", "Ana", "6567-3062",
+        [{"texto": "Instalación", "monto": "300"}], [],
+        {"ruc": "RUC-NUEVO", "correo": "ana@jardines.com"})
+    # Odoo es la fuente de verdad: el RUC que ya estaba no se toca.
+    assert odoo.partners[77]["vat"] == "RUC-VIEJO"
+    assert odoo.partners[77]["email"] == "ana@jardines.com"
 
 
 def test_cliente_se_busca_primero_por_telefono(odoo):
@@ -352,11 +417,75 @@ def test_tipo_desconocido(odoo):
             {"id": "g", "nombre": "Génesis"}, "no-existe", "Ana", "", [], [])
 
 
-def test_personalizada_exige_nombre_y_carrito(odoo):
+def test_personalizada_exige_nombre_y_algo_que_cotizar(odoo):
     with pytest.raises(ValueError, match="nombre"):
         cotizaciones.crear_personalizada({"id": "g", "nombre": "Génesis"}, "", "", [])
-    with pytest.raises(ValueError, match="planta o material"):
+    with pytest.raises(ValueError, match="al menos un renglón, un servicio o una planta"):
         cotizaciones.crear_personalizada({"id": "g", "nombre": "Génesis"}, "Ana", "", [])
+
+
+def test_personalizada_renglones_libres_con_cantidad_y_precio(odoo):
+    registro = cotizaciones.crear_personalizada(
+        {"id": "g", "nombre": "Génesis"}, "Ana", "", [],
+        [{"texto": "50 sacos de tierra negra", "cantidad": "50", "precio": "4"},
+         {"texto": "Mano de obra de la siembra", "cantidad": "", "precio": "120"}])
+    orden = odoo.ordenes[registro["orden_id"]]
+    # La sección primero (aquí solo hay renglones libres) y luego las líneas.
+    assert orden["lineas"][0] == {"display_type": "line_section",
+                                 "name": "Renglones", "sequence": 1}
+    lineas = [l for l in orden["lineas"] if not l.get("display_type")]
+    assert lineas[0]["name"] == "50 sacos de tierra negra"
+    assert lineas[0]["product_uom_qty"] == 50.0
+    assert lineas[0]["price_unit"] == 4.0
+    # Cantidad en blanco = 1.
+    assert lineas[1]["product_uom_qty"] == 1.0
+    assert orden["amount_total"] == 320.0
+    # Todos con el producto SV-PERSONALIZADO, creado al vuelo si no existía.
+    codigos = {odoo.productos[l["product_id"]]["default_code"] for l in lineas}
+    assert codigos == {"SV-PERSONALIZADO"}
+
+
+def test_personalizada_separa_plantas_servicios_y_renglones(odoo):
+    registro = cotizaciones.crear_personalizada(
+        {"id": "g", "nombre": "Génesis"}, "Ana", "",
+        [{"producto_id": 601, "cantidad": 2}],
+        [{"texto": "Macetas de barro #12", "cantidad": "4", "precio": "9"}],
+        None,
+        [{"texto": "Instalación y transporte", "monto": "150"}])
+    orden = odoo.ordenes[registro["orden_id"]]
+    secciones = [l["name"] for l in orden["lineas"] if l.get("display_type")]
+    assert secciones == ["Plantas y materiales", "Servicios", "Renglones"]
+    assert orden["amount_total"] == pytest.approx(2 * 45.0 + 150 + 4 * 9)
+
+
+def test_personalizada_omite_las_secciones_vacias(odoo):
+    registro = cotizaciones.crear_personalizada(
+        {"id": "g", "nombre": "Génesis"}, "Ana", "", [], None, None,
+        [{"texto": "Solo el servicio", "monto": "80"}])
+    orden = odoo.ordenes[registro["orden_id"]]
+    secciones = [l["name"] for l in orden["lineas"] if l.get("display_type")]
+    assert secciones == ["Servicios"]
+
+
+def test_personalizada_avisa_del_precio_o_la_descripcion_que_falta(odoo):
+    with pytest.raises(ValueError, match="Falta el precio del renglón"):
+        cotizaciones.crear_personalizada(
+            {"id": "g", "nombre": "Génesis"}, "Ana", "", [],
+            [{"texto": "Mano de obra", "cantidad": "1", "precio": ""}])
+    with pytest.raises(ValueError, match="Falta la descripción"):
+        cotizaciones.crear_personalizada(
+            {"id": "g", "nombre": "Génesis"}, "Ana", "", [],
+            [{"texto": "", "cantidad": "", "precio": "80"}])
+    assert not odoo.ordenes
+
+
+def test_personalizada_mezcla_renglones_libres_y_catalogo(odoo):
+    registro = cotizaciones.crear_personalizada(
+        {"id": "g", "nombre": "Génesis"}, "Ana", "",
+        [{"producto_id": 601, "cantidad": 2}],
+        [{"texto": "Instalación", "cantidad": "1", "precio": "80"}])
+    orden = odoo.ordenes[registro["orden_id"]]
+    assert orden["amount_total"] == pytest.approx(80 + 2 * 45.0)
 
 
 def test_personalizada_sin_plantilla(odoo):
@@ -446,3 +575,27 @@ def test_personalizada_por_http(cliente, odoo):
                  follow_redirects=False)
     r = cliente.post("/venta/servicio-personalizada", data={"cliente": "Ana"})
     assert "Cotización creada" in r.text
+
+
+def test_pdf_de_muestra_reutiliza_una_sola_cotizacion(odoo, monkeypatch):
+    monkeypatch.setenv("VENTA_CLIENTE_LOCAL", "77")
+    odoo.partners[77] = {"name": "Cliente Local", "category_id": []}
+    vistas = []
+
+    def descargar(reporte, orden_id):
+        vistas.append((reporte, orden_id, odoo.ordenes[orden_id]["lineas"]))
+        return b"%PDF-falso"
+
+    monkeypatch.setattr(ventas, "descargar_pdf", descargar)
+    assert cotizaciones.pdf_de_muestra() == b"%PDF-falso"
+    secciones = [l["name"] for l in vistas[0][2] if l.get("display_type")]
+    assert secciones == ["Plantas y materiales", "Servicio de instalación",
+                         "Otros renglones"]
+    assert odoo.ordenes[vistas[0][1]]["vals"]["client_order_ref"] == "MUESTRA-PDF"
+    # Un segundo clic no crea otra cotización: reusa la misma.
+    cotizaciones.pdf_de_muestra()
+    assert vistas[1][1] == vistas[0][1]
+    assert len(odoo.ordenes) == 1
+    # Y no deja nada más: ni oportunidad en el CRM ni fila en el historial.
+    assert odoo.oportunidades == {}
+    assert not cotizaciones.cotizaciones_todas()

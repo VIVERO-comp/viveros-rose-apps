@@ -7,7 +7,7 @@
     <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
     <div>
       <h1>Cotización personalizada</h1>
-      <small>Sin plantilla: cliente, plantas y materiales, a precio de catálogo</small>
+      <small>Todo a tu medida: los renglones los escribes tú</small>
     </div>
   </div>
 </header>
@@ -27,24 +27,11 @@
   <form id="form-servicio" method="post" action="/venta/servicio-personalizada" style="display:none"></form>
 
   {# ---- Cliente ---- #}
-  <div class="seccion-titulo">Cliente</div>
-  <div class="campos-cliente">
-    <div class="campo">
-      <span>Nombre</span>
-      <input id="cliente-nombre" name="cliente" form="form-servicio"
-             value="{{ borrador.nombre }}" autocomplete="off"
-             placeholder="Nombre del cliente">
-    </div>
-    <div class="campo">
-      <span>Celular</span>
-      <input id="cliente-celular" name="celular" form="form-servicio"
-             value="{{ borrador.celular }}" autocomplete="off" inputmode="tel"
-             placeholder="Ej: 6567-3062">
-    </div>
-  </div>
+  {% with form_cliente="form-servicio" %}{% include "_cliente.html" %}{% endwith %}
 
-  {# ---- Añadir plantas ---- #}
-  <div class="seccion-titulo" style="margin-top:16px">Añadir plantas o materiales</div>
+  {# ---- Plantas del catálogo (opcional): con el precio de Odoo ---- #}
+  <div class="seccion-titulo" style="margin-top:16px">Plantas y materiales</div>
+  <p class="nada-venta">Del catálogo, con el precio de Odoo.</p>
   <form class="buscador" method="get" action="/venta/servicio-personalizada">
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9aa3bd" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
     <input id="busca-venta" name="q" value="{{ q }}" placeholder="Buscar planta por nombre o SKU…"
@@ -73,11 +60,8 @@
   {% endif %}
   </div>
 
+  {% if carrito %}
   <div class="seccion-titulo" style="margin-top:14px">Plantas de la cotización · {{ carrito | length }}</div>
-  {% if not carrito %}
-  <p class="nada-venta">Todavía no has añadido plantas: búscalas arriba y
-    tócalas para sumarlas.</p>
-  {% else %}
     {% for l in carrito %}
     <div class="planta" style="cursor:default">
       <div class="foto">🪴<img src="/venta/foto/{{ l.producto_id }}" alt="" loading="lazy" onerror="this.remove()"></div>
@@ -110,10 +94,69 @@
     {% endfor %}
 
     <div class="total-venta">
-      <span>Total (precios de Odoo)</span>
+      <span>Subtotal plantas y materiales</span>
       <b>{{ total_carrito | dinero }}</b>
     </div>
   {% endif %}
+
+  {# ---- Servicios: párrafo + monto, igual que las cotizaciones por tipo ---- #}
+  <div class="seccion-titulo" style="margin-top:16px">Servicios</div>
+  <div id="servicios">
+    {% for sv in servicios %}
+    <div class="servicio">
+      <textarea class="servicio-texto" name="servicio_texto" form="form-servicio"
+                rows="1" placeholder="Ej: Instalación, transporte y mantenimiento inicial"
+                >{{ sv.texto }}</textarea>
+      <div class="servicio-pie">
+        <label class="servicio-monto">Monto
+          <input name="servicio_monto" form="form-servicio" type="number"
+                 step="0.01" min="0" inputmode="decimal" placeholder="0.00"
+                 value="{{ sv.monto }}">
+        </label>
+        <button class="quitar-servicio" type="button">Quitar</button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <button class="anadir-servicio" type="button" id="anadir-servicio">
+    + Añadir otro servicio</button>
+  <div class="total-venta">
+    <span>Subtotal servicios</span>
+    <b id="subtotal-servicios">$0.00</b>
+  </div>
+
+  {# ---- Renglones libres: descripción, cantidad y precio a mano ---- #}
+  <div class="seccion-titulo" style="margin-top:16px">Otros renglones</div>
+  <p class="nada-venta">Lo que no está en el catálogo: materiales, macetas,
+    transporte… con su cantidad y precio.</p>
+  <div id="renglones" data-tipo="renglon">
+    {% for r in renglones %}
+    <div class="servicio">
+      <textarea class="servicio-texto" name="renglon_texto" form="form-servicio"
+                rows="1" placeholder="Ej: 50 sacos de tierra negra"
+                >{{ r.texto }}</textarea>
+      <div class="servicio-pie">
+        <label class="servicio-monto">Cant
+          <input class="servicio-cantidad" name="renglon_cantidad" form="form-servicio"
+                 type="number" step="1" min="1" inputmode="numeric"
+                 placeholder="1" value="{{ r.cantidad }}">
+        </label>
+        <label class="servicio-monto">Precio
+          <input name="renglon_precio" form="form-servicio" type="number"
+                 step="0.01" min="0" inputmode="decimal" placeholder="0.00"
+                 value="{{ r.precio }}">
+        </label>
+        <button class="quitar-servicio" type="button">Quitar</button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <button class="anadir-servicio" type="button" id="anadir-renglon">
+    + Añadir otro renglón</button>
+  <div class="total-venta">
+    <span>Subtotal renglones</span>
+    <b id="subtotal-renglones">$0.00</b>
+  </div>
 
   <button class="btn btn-dorado btn-grande" style="margin-top:16px"
           form="form-servicio" type="submit">CREAR COTIZACIÓN</button>
