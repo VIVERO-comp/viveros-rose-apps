@@ -26,6 +26,14 @@
   </a>
   <p class="nada-venta" style="text-align:center">Abre el formulario: cliente,
     plantas y total, para cotizar o cobrar.</p>
+
+  <div class="seccion-titulo" style="margin-top:16px">Cotizar un servicio</div>
+  <div class="grid-servicios">
+    {% for tipo, etiqueta in tipos_servicio %}
+    <a class="servicio-boton" href="/venta/servicio/{{ tipo }}">+ {{ etiqueta }}</a>
+    {% endfor %}
+    <a class="servicio-boton" href="/venta/servicio-personalizada">+ Personalizado</a>
+  </div>
   {% endif %}
 
   <div class="seccion-titulo" style="margin-top:16px">Ventas y cotizaciones locales</div>
@@ -72,6 +80,25 @@
     </div>
   </div>
   {% endfor %}
+
+  {% if cotizaciones_servicio %}
+  <div class="seccion-titulo" style="margin-top:16px">Cotizaciones de servicios</div>
+  {% for c in cotizaciones_servicio %}
+  <div class="venta-item cotizacion">
+    <div class="fila1">
+      <div>
+        <b class="titulo">{{ c.orden }} · {{ c.cliente }}</b>
+        <small>{{ c.fecha_texto }}{% if c.celular %} · {{ c.celular }}{% endif %} · {{ c.etiqueta_tipo }}</small>
+      </div>
+      <span class="badge b-bajo">Cotización</span>
+    </div>
+    <div class="venta-acciones">
+      <span><a href="/venta/servicio/{{ c.n }}/propuesta.pdf">Descargar propuesta (PDF)</a></span>
+      <span class="venta-monto">{{ c.total | dinero }}</span>
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
 </main>
 
 <nav>

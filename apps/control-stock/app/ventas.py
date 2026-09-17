@@ -239,7 +239,8 @@ def iniciar_tablas():
             CREATE TABLE IF NOT EXISTS venta_borrador (
                 usuario TEXT PRIMARY KEY,   -- cliente del formulario en curso
                 nombre TEXT NOT NULL DEFAULT '',
-                celular TEXT NOT NULL DEFAULT ''
+                celular TEXT NOT NULL DEFAULT '',
+                servicios TEXT              -- JSON de los renglones de servicio
             );
             CREATE TABLE IF NOT EXISTS ventas_locales (
                 n INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -258,6 +259,12 @@ def iniciar_tablas():
             );
             """
         )
+        # Migración suave: el borrador pudo nacer sin los renglones de
+        # servicio (cotizaciones de servicio, 17/09/2026).
+        columnas_borrador = [fila[1] for fila in con.execute(
+            "PRAGMA table_info(venta_borrador)")]
+        if "servicios" not in columnas_borrador:
+            con.execute("ALTER TABLE venta_borrador ADD COLUMN servicios TEXT")
         # Migración suave: la tabla pudo nacer sin la columna celular.
         columnas = [fila[1] for fila in con.execute("PRAGMA table_info(ventas_locales)")]
         if "celular" not in columnas:
@@ -270,22 +277,34 @@ def iniciar_tablas():
             con.execute("ALTER TABLE ventas_locales ADD COLUMN resumen TEXT")
 
 
-def guardar_borrador(usuario, nombre, celular):
-    """El nombre/celular del formulario en curso: sobrevive a los reloads de
-    agregar/quitar plantas (venta.js lo manda mientras se escribe)."""
+def guardar_borrador(usuario, nombre, celular, servicios=None):
+    """El formulario en curso (nombre, celular y los renglones de servicio
+    que ya escribió): sobrevive a los reloads de agregar/quitar plantas
+    (venta.js lo manda mientras se escribe). servicios=None deja los
+    renglones como estaban — Nueva Venta no los tiene y no debe borrarlos."""
+    crudo = None if servicios is None else json.dumps(servicios, ensure_ascii=False)
     with _db() as con:
         con.execute(
-            "INSERT INTO venta_borrador (usuario, nombre, celular) VALUES (?,?,?)"
-            " ON CONFLICT (usuario) DO UPDATE SET nombre=?, celular=?",
-            (usuario, nombre, celular, nombre, celular))
+            "INSERT INTO venta_borrador (usuario, nombre, celular, servicios)"
+            " VALUES (?,?,?,?)"
+            " ON CONFLICT (usuario) DO UPDATE SET nombre=?, celular=?,"
+            " servicios=COALESCE(?, servicios)",
+            (usuario, nombre, celular, crudo, nombre, celular, crudo))
 
 
 def borrador_de(usuario):
     with _db() as con:
-        fila = con.execute("SELECT nombre, celular FROM venta_borrador WHERE usuario=?",
-                           (usuario,)).fetchone()
-    return {"nombre": fila["nombre"], "celular": fila["celular"]} if fila \
-        else {"nombre": "", "celular": ""}
+        fila = con.execute(
+            "SELECT nombre, celular, servicios FROM venta_borrador WHERE usuario=?",
+            (usuario,)).fetchone()
+    if not fila:
+        return {"nombre": "", "celular": "", "servicios": []}
+    try:
+        servicios = json.loads(fila["servicios"]) if fila["servicios"] else []
+    except ValueError:
+        servicios = []
+    return {"nombre": fila["nombre"], "celular": fila["celular"],
+            "servicios": servicios if isinstance(servicios, list) else []}
 
 
 def _limpiar_borrador(usuario):

@@ -191,9 +191,9 @@ main{position:relative;z-index:1;flex:1;overflow-y:auto;padding:6px 20px 110px}
 .filtros{display:flex;gap:8px;overflow-x:auto;padding-bottom:12px;scrollbar-width:none}
 .filtros::-webkit-scrollbar{display:none}
 .chip{
-  flex-shrink:0;border:1px solid var(--noche-3);background:none;
+  flex-shrink:0;display:inline-block;border:1px solid var(--noche-3);background:none;
   color:var(--texto-suave);font-family:inherit;font-size:12px;font-weight:500;
-  border-radius:20px;padding:7px 14px;cursor:pointer;
+  border-radius:20px;padding:7px 14px;cursor:pointer;text-decoration:none;
 }
 .chip.on{background:var(--dorado);border-color:var(--dorado);color:#3a2c14;font-weight:700}
 .sync{font-size:11px;color:var(--texto-suave);margin:2px 2px 12px}
@@ -268,6 +268,17 @@ main{position:relative;z-index:1;flex:1;overflow-y:auto;padding:6px 20px 110px}
 .btn-dorado{background:var(--dorado);color:#3a2c14}
 .btn-linea{background:none;border:1.5px solid var(--noche-3);color:var(--texto)}
 .btn-crema{background:var(--crema);color:#2c2416}
+
+/* Botones de "Cotizar un servicio": grilla de 4×2 (7 tipos + Personalizado
+   = 8), mismo alto que "+ NUEVA VENTA" (.btn-grande), ancho de la columna. */
+.grid-servicios{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+.servicio-boton{
+  height:52px;display:flex;align-items:center;justify-content:center;
+  text-align:center;background:var(--dorado);color:#3a2c14;
+  border-radius:15px;font-family:inherit;font-size:12.5px;font-weight:700;
+  line-height:1.2;padding:6px;text-decoration:none;transition:transform .12s ease;
+}
+.servicio-boton:active{transform:scale(.96)}
 
 .historial-item{
   display:flex;align-items:center;justify-content:space-between;
@@ -516,6 +527,46 @@ nav button.on, nav a.on{color:var(--dorado);background:rgba(227,181,127,.1)}
   font-size:14px;color:var(--texto);margin:14px 2px;
 }
 .total-venta b{font-size:19px;color:var(--dorado-suave)}
+
+/* ---------- renglones de servicio de una cotización (17/09/2026): en vez
+   de campos de monto con etiqueta fija, cada servicio se describe en un
+   párrafo que crece al escribir y lleva su propio monto. ---------- */
+.servicio{
+  background:var(--noche-2);border:1px solid var(--noche-3);
+  border-radius:16px;padding:12px 13px;margin-bottom:10px;
+}
+.servicio-texto{
+  width:100%;display:block;background:none;border:none;resize:none;
+  color:var(--texto);font-family:inherit;font-size:14px;line-height:1.55;
+  padding:0;outline:none;overflow:hidden;min-height:44px;
+}
+.servicio-texto::placeholder{color:var(--texto-suave)}
+.servicio-pie{
+  display:flex;align-items:center;gap:10px;
+  border-top:1px solid var(--noche-3);margin-top:10px;padding-top:9px;
+}
+.servicio-monto{
+  display:flex;align-items:center;gap:7px;
+  font-size:11.5px;color:var(--texto-suave);
+}
+.servicio-monto input{
+  width:104px;background:var(--noche-3);border:1px solid transparent;
+  border-radius:11px;color:var(--texto);font-family:inherit;font-size:14px;
+  font-weight:700;padding:9px 11px;outline:none;
+  font-variant-numeric:tabular-nums;
+}
+.servicio-monto input:focus{border-color:var(--dorado)}
+.quitar-servicio{
+  margin-left:auto;border:none;background:none;color:var(--critico);
+  font-family:inherit;font-size:11.5px;font-weight:700;padding:4px;
+  cursor:pointer;
+}
+.anadir-servicio{
+  width:100%;background:none;border:1.5px dashed var(--noche-3);
+  border-radius:14px;color:var(--dorado);font-family:inherit;
+  font-size:13px;font-weight:700;padding:12px;cursor:pointer;
+}
+.anadir-servicio:hover{border-color:var(--dorado)}
 .botones-venta{display:grid;gap:10px;margin:4px 0 8px}
 .btn-grande{width:100%;justify-content:center;padding:16px;font-size:14.5px}
 .venta-item{
@@ -739,6 +790,11 @@ button.enlace-sub{
   .campo input{background:#ffffff;border-color:#e2dbca}
   .buscador{border:1px solid #e2dbca;background:#ffffff}
   .separador-login{color:#8a8477}
+  /* El login no tiene header/nav/main (no hay sesión todavía), así que sin
+     área propia el grid del .phone lo encajaba en la primera celda
+     (la columna angosta del sidebar) y dejaba el resto del lienzo vacío.
+     Que ocupe todo el .phone y se centre ahí, como en el teléfono. */
+  .login{grid-column:1/-1;grid-row:1/-1}
 }
 @media (min-width: 900px){
   /* La franja pegajosa del buscador era azul noche fijo; en claro va blanca
@@ -839,5 +895,9 @@ button.enlace-sub{
   /* Vender: tarjetas blancas; el fab baja a la esquina porque ya no hay
      menú inferior que esquivar. */
   .venta-item{background:#ffffff;border:1px solid #e6dfcf}
+  .servicio{background:#ffffff;border:1px solid #e6dfcf}
+  .servicio-pie{border-top-color:#eee7d6}
+  .servicio-monto input{background:#f5f2ea;border-color:#e2dbca}
+  .anadir-servicio{border-color:#e0d7c3}
   .fab{bottom:26px;right:28px}
 }

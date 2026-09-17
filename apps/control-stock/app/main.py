@@ -19,7 +19,8 @@ from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import acceso_google, calculos, conteos, datos, fichas, fotos, seguridad, ventas
+from . import (acceso_google, calculos, conteos, cotizaciones, datos, fichas,
+               fotos, proyectos, seguridad, ventas)
 
 app = FastAPI(title="Control de Stock")
 
@@ -60,6 +61,8 @@ plantillas.env.filters["dinero"] = dinero_venta
 # tests) nunca corren contra una base sin esquema.
 datos.iniciar_db()
 ventas.iniciar_tablas()
+cotizaciones.iniciar_tablas()
+proyectos.iniciar_tablas()
 
 
 # ---------------------------------------------------------------------------
@@ -629,10 +632,16 @@ def venta(request: Request, error: str = ""):
         "ventas_activo": ventas.configurado(),
         "error_venta": error or None,
         "en_curso": en_curso,
+        "tipos_servicio": [(t, cotizaciones.TIPOS[t]["etiqueta"])
+                          for t in cotizaciones.ORDEN_TIPOS],
         "ventas": [{**v, "fecha_texto": _fecha_venta(v["creado_en"]),
                     "etiqueta_estado": ventas.ETIQUETAS_ESTADO[v["estado"]],
                     "whatsapp": _enlace_whatsapp(request, v)}
                    for v in ventas.ventas_todas()],
+        "cotizaciones_servicio": [
+            {**c, "fecha_texto": _fecha_venta(c["creado_en"]),
+             "etiqueta_tipo": cotizaciones.etiqueta_de(c["tipo"])}
+            for c in cotizaciones.cotizaciones_todas()],
     })
 
 
@@ -671,12 +680,19 @@ def venta_nueva(request: Request, q: str = "", error: str = ""):
 
 @app.post("/venta/borrador")
 async def venta_borrador(request: Request):
-    # venta.js guarda nombre/celular mientras se escriben, para que
+    # venta.js guarda nombre/celular (y, en las cotizaciones de servicio,
+    # los renglones de servicio ya escritos) mientras se escriben, para que
     # sobrevivan a los reloads de agregar/quitar plantas.
     form = await request.form()
+    servicios = None
+    if "servicios" in form:
+        servicios = cotizaciones.servicios_del_formulario(
+            [t[:2000] for t in form.getlist("servicio_texto")],
+            [m[:20] for m in form.getlist("servicio_monto")])
     ventas.guardar_borrador(request.state.empleada["id"],
                             (form.get("cliente") or "").strip()[:120],
-                            (form.get("celular") or "").strip()[:30])
+                            (form.get("celular") or "").strip()[:30],
+                            servicios)
     return Response(status_code=204)
 
 
@@ -691,6 +707,17 @@ def venta_buscar(request: Request, q: str = ""):
     return {"resultados": [{**p, "precio": dinero_venta(p["precio"])} for p in resultados]}
 
 
+def _volver_del_carrito(form):
+    """El carrito (app/ventas.py) es el mismo para Nueva Venta y para los
+    mini-formularios de cotización de servicio (una sola en curso por
+    empleada, igual que hoy): cada pantalla manda de vuelta a sí misma con
+    un campo oculto "volver", limitado a rutas propias de Vender."""
+    destino = (form.get("volver") or "").strip()
+    if destino == "/venta/servicio-personalizada" or destino.startswith("/venta/servicio/"):
+        return destino
+    return "/venta/nueva"
+
+
 @app.post("/venta/carrito/agregar")
 async def venta_agregar(request: Request):
     form = await request.form()
@@ -703,7 +730,8 @@ async def venta_agregar(request: Request):
     # Conservar la búsqueda activa: así se pueden agregar varias plantas
     # seguidas sin volver a escribir.
     q = (form.get("q") or "").strip()
-    return RedirectResponse("/venta/nueva" + (f"?q={quote(q)}" if q else ""), status_code=303)
+    return RedirectResponse(_volver_del_carrito(form) + (f"?q={quote(q)}" if q else ""),
+                            status_code=303)
 
 
 @app.post("/venta/carrito/cantidad")
@@ -715,7 +743,7 @@ async def venta_cantidad(request: Request):
                                 int(form.get("cantidad", "")))
     except (TypeError, ValueError):
         pass
-    return RedirectResponse("/venta/nueva", status_code=303)
+    return RedirectResponse(_volver_del_carrito(form), status_code=303)
 
 
 @app.post("/venta/carrito/quitar")
@@ -726,7 +754,7 @@ async def venta_quitar(request: Request):
                                   int(form.get("producto_id", "")))
     except (TypeError, ValueError):
         pass
-    return RedirectResponse("/venta/nueva", status_code=303)
+    return RedirectResponse(_volver_del_carrito(form), status_code=303)
 
 
 @app.post("/venta/cotizar")
@@ -748,6 +776,151 @@ async def venta_cotizar(request: Request):
         "pdf_href": f"/venta/{registro['n']}/cotizacion.pdf",
         "pdf_texto": "Descargar cotización (PDF)",
     })
+
+
+# ---------------------------------------------------------------------------
+# Cotizaciones de servicio (Alquiler, Boda, Mantenimiento…): botones por
+# tipo junto a "+ NUEVA VENTA", cada uno con su mini-formulario. Reusan el
+# mismo carrito de plantas de Nueva Venta (app/ventas.py) para los tipos
+# que llevan catálogo — es el mismo carrito por empleada, así que solo debe
+# haber un formulario en curso a la vez (igual que hoy con Nueva Venta).
+# ---------------------------------------------------------------------------
+
+def _contexto_servicio(request, tipo, q="", error=None, servicios=None):
+    """El contexto del mini-formulario de un tipo. Lo comparten el GET y el
+    POST que no pudo crear la cotización: así un error no borra los
+    párrafos de servicio que la empleada ya escribió."""
+    usuario = request.state.empleada["id"]
+    borrador = ventas.borrador_de(usuario)
+    if servicios is None:
+        servicios = borrador["servicios"]
+    contexto = {
+        "ventas_activo": ventas.configurado(), "tipo": tipo,
+        "meta": cotizaciones.TIPOS[tipo], "q": (q or "").strip(),
+        "resultados": None, "carrito": [], "total_carrito": 0.0,
+        "borrador": borrador, "servicios": servicios or [{"texto": "", "monto": ""}],
+        "error_venta": error or None,
+    }
+    if contexto["ventas_activo"]:
+        try:
+            if contexto["q"]:
+                contexto["resultados"] = ventas.buscar_productos(contexto["q"])
+            contexto["carrito"], contexto["total_carrito"] = ventas.carrito_de(usuario)
+        except Exception:
+            contexto["error_venta"] = ("Sin conexión con Odoo en este momento. "
+                                       "Vuelve a intentar en un rato.")
+    return contexto
+
+
+@app.get("/venta/servicio/{tipo}")
+def venta_servicio(request: Request, tipo: str, q: str = "", error: str = ""):
+    if tipo not in cotizaciones.TIPOS:
+        return RedirectResponse("/venta", status_code=303)
+    return plantillas.TemplateResponse(
+        request, "venta_servicio.html",
+        _contexto_servicio(request, tipo, q, error))
+
+
+@app.post("/venta/servicio/{tipo}")
+async def venta_servicio_crear(request: Request, tipo: str):
+    if tipo not in cotizaciones.TIPOS:
+        return RedirectResponse("/venta", status_code=303)
+    form = await request.form()
+    usuario = request.state.empleada["id"]
+    servicios = cotizaciones.servicios_del_formulario(
+        form.getlist("servicio_texto"), form.getlist("servicio_monto"))
+    carrito, _total = ventas.carrito_de(usuario)
+    lineas_catalogo = [{"producto_id": l["producto_id"], "cantidad": l["cantidad"]}
+                       for l in carrito]
+    try:
+        registro = cotizaciones.crear_cotizacion(
+            request.state.empleada, tipo, form.get("cliente", ""),
+            form.get("celular", ""), servicios, lineas_catalogo)
+    except ValueError as error:
+        return plantillas.TemplateResponse(
+            request, "venta_servicio.html",
+            _contexto_servicio(request, tipo, error=str(error), servicios=servicios),
+            status_code=200)
+    except Exception as error:
+        return plantillas.TemplateResponse(
+            request, "venta_servicio.html",
+            _contexto_servicio(
+                request, tipo,
+                error=f"Odoo no aceptó la cotización: {ventas._mensaje_de_error(error)}",
+                servicios=servicios),
+            status_code=200)
+    ventas.vaciar_carrito(usuario)
+    ventas._limpiar_borrador(usuario)
+    return plantillas.TemplateResponse(request, "venta_exito.html", {
+        "titulo": "Cotización de servicio creada",
+        "sub": f"{registro['orden']} · {registro['cliente']}",
+        "filas": [("Tipo", cotizaciones.etiqueta_de(tipo), None),
+                  ("Total", dinero_venta(registro["total"]), None),
+                  ("Estado", "Cotización (borrador en Odoo)", "dorado")],
+        "pdf_href": f"/venta/servicio/{registro['n']}/propuesta.pdf",
+        "pdf_texto": "Descargar propuesta (PDF)",
+    })
+
+
+@app.get("/venta/servicio-personalizada")
+def venta_personalizada_form(request: Request, q: str = "", error: str = ""):
+    usuario = request.state.empleada["id"]
+    contexto = {
+        "ventas_activo": ventas.configurado(), "q": q.strip(),
+        "resultados": None, "carrito": [], "total_carrito": 0.0,
+        "borrador": ventas.borrador_de(usuario), "error_venta": error or None,
+    }
+    if contexto["ventas_activo"]:
+        try:
+            if contexto["q"]:
+                contexto["resultados"] = ventas.buscar_productos(contexto["q"])
+            contexto["carrito"], contexto["total_carrito"] = ventas.carrito_de(usuario)
+        except Exception:
+            contexto["error_venta"] = ("Sin conexión con Odoo en este momento. "
+                                       "Vuelve a intentar en un rato.")
+    return plantillas.TemplateResponse(request, "venta_personalizada.html", contexto)
+
+
+@app.post("/venta/servicio-personalizada")
+async def venta_personalizada_crear(request: Request):
+    form = await request.form()
+    usuario = request.state.empleada["id"]
+    carrito, _total = ventas.carrito_de(usuario)
+    lineas_catalogo = [{"producto_id": l["producto_id"], "cantidad": l["cantidad"]}
+                       for l in carrito]
+    try:
+        registro = cotizaciones.crear_personalizada(
+            request.state.empleada, form.get("cliente", ""),
+            form.get("celular", ""), lineas_catalogo)
+    except ValueError as error:
+        return RedirectResponse(
+            f"/venta/servicio-personalizada?error={quote(str(error))}", status_code=303)
+    except Exception as error:
+        return RedirectResponse(
+            "/venta/servicio-personalizada?error="
+            f"{quote(f'Odoo no aceptó la cotización: {ventas._mensaje_de_error(error)}')}",
+            status_code=303)
+    ventas.vaciar_carrito(usuario)
+    ventas._limpiar_borrador(usuario)
+    return plantillas.TemplateResponse(request, "venta_exito.html", {
+        "titulo": "Cotización creada",
+        "sub": f"{registro['orden']} · {registro['cliente']}",
+        "filas": [("Tipo", "Personalizado", None),
+                  ("Total", dinero_venta(registro["total"]), None),
+                  ("Estado", "Cotización (borrador en Odoo)", "dorado")],
+        "pdf_href": f"/venta/servicio/{registro['n']}/propuesta.pdf",
+        "pdf_texto": "Descargar propuesta (PDF)",
+    })
+
+
+@app.get("/venta/servicio/{n}/propuesta.pdf")
+def venta_servicio_pdf(request: Request, n: int):
+    registro = cotizaciones.obtener(n)
+    if registro is None:
+        return RedirectResponse("/venta", status_code=303)
+    return _respuesta_pdf("vivero_rose_pedidos.reporte_propuesta_venta",
+                          registro["orden_id"],
+                          f"propuesta-{registro['orden'].replace('/', '-')}.pdf")
 
 
 @app.post("/venta/pagar")
@@ -961,3 +1134,97 @@ def venta_foto(request: Request, producto_id: int):
     contenido, tipo = foto
     return Response(contenido, media_type=tipo,
                     headers={"Cache-Control": "private, max-age=86400"})
+
+
+# ---------------------------------------------------------------------------
+# Proyectos: el contenedor de las varias cotizaciones de un mismo cliente.
+# El tablero calca las cuatro columnas del Flujo del CRM de Odoo, porque el
+# proyecto ES la oportunidad de ese Flujo (ver app/proyectos.py).
+# ---------------------------------------------------------------------------
+
+def _tipos_de_proyecto():
+    return [(t, cotizaciones.TIPOS[t]["etiqueta"]) for t in cotizaciones.ORDEN_TIPOS]
+
+
+@app.get("/proyecto")
+def proyecto_tablero(request: Request, error: str = ""):
+    columnas = []
+    if ventas.configurado():
+        try:
+            columnas = proyectos.kanban()
+        except Exception as excepcion:
+            print(f"proyectos: error armando el tablero: {excepcion!r}", flush=True)
+            error = error or "No se pudo leer los proyectos desde Odoo."
+    return plantillas.TemplateResponse(request, "proyectos.html", {
+        "ventas_activo": ventas.configurado(),
+        "columnas": columnas,
+        "error": error or None,
+    })
+
+
+@app.get("/proyecto/nuevo")
+def proyecto_nuevo(request: Request, error: str = "", nombre: str = "",
+                   celular: str = "", nota: str = "", nombre_proyecto: str = ""):
+    return plantillas.TemplateResponse(request, "proyecto_nuevo.html", {
+        "tipos": _tipos_de_proyecto(),
+        "error": error or None,
+        "nombre": nombre, "celular": celular, "nota": nota,
+        "nombre_proyecto": nombre_proyecto,
+    })
+
+
+@app.post("/proyecto/nuevo")
+async def proyecto_crear(request: Request):
+    form = await request.form()
+    nombre = form.get("nombre", "")
+    celular = form.get("celular", "")
+    nota = form.get("nota", "")
+    nombre_proyecto = form.get("nombre_proyecto", "")
+    try:
+        ref = proyectos.crear(request.state.empleada, nombre, celular,
+                              form.get("tipo", ""), nota, nombre_proyecto)
+    except ValueError as excepcion:
+        # Los datos vuelven a la pantalla para no hacerla escribir de nuevo.
+        return RedirectResponse(
+            "/proyecto/nuevo?error=" + quote(str(excepcion))
+            + f"&nombre={quote(nombre)}&celular={quote(celular)}&nota={quote(nota)}"
+            + f"&nombre_proyecto={quote(nombre_proyecto)}",
+            status_code=303)
+    except Exception as excepcion:
+        print(f"proyectos: error creando el proyecto: {excepcion!r}", flush=True)
+        return RedirectResponse(
+            "/proyecto/nuevo?error="
+            + quote("No se pudo crear el proyecto en Odoo. Intenta de nuevo."),
+            status_code=303)
+    return RedirectResponse(f"/proyecto/{ref}", status_code=303)
+
+
+@app.get("/proyecto/{ref}")
+def proyecto_ficha(request: Request, ref: str, error: str = ""):
+    ficha = proyectos.detalle(ref)
+    if not ficha:
+        return RedirectResponse(
+            "/proyecto?error=" + quote(f"No existe el proyecto {ref}."),
+            status_code=303)
+    return plantillas.TemplateResponse(request, "proyecto_detalle.html", {
+        "p": ficha, "tipos": _tipos_de_proyecto(), "error": error or None,
+    })
+
+
+@app.post("/proyecto/{ref}/compra")
+async def proyecto_compra(request: Request, ref: str):
+    form = await request.form()
+    try:
+        proyectos.agregar_compra(request.state.empleada, ref,
+                                 form.get("concepto", ""), form.get("monto", ""),
+                                 form.get("fecha", ""), form.get("nota", ""))
+    except ValueError as excepcion:
+        return RedirectResponse(f"/proyecto/{ref}?error=" + quote(str(excepcion)),
+                                status_code=303)
+    return RedirectResponse(f"/proyecto/{ref}", status_code=303)
+
+
+@app.post("/proyecto/{ref}/compra/{n}/quitar")
+def proyecto_compra_quitar(request: Request, ref: str, n: int):
+    proyectos.quitar_compra(ref, n)
+    return RedirectResponse(f"/proyecto/{ref}", status_code=303)

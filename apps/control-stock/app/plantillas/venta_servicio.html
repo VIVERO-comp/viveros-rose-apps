@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block titulo %}{{ meta.etiqueta }} — Control de Stock{% endblock %}
+
+{% block contenido %}
+<header>
+  <div class="brand">
+    <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
+    <div>
+      <h1>Cotizar {{ meta.etiqueta }}</h1>
+      <small>Cliente y los datos de esta cotización</small>
+    </div>
+  </div>
+</header>
+
+<main class="angosto">
+  <a class="volver" href="/venta">← Volver a Vender</a>
+
+  {% if error_venta %}
+  <div class="aviso-error">{{ error_venta }}</div>
+  {% endif %}
+
+  {% if not ventas_activo %}
+  <div class="aviso-error">La conexión con Odoo no está configurada en este
+    servidor. Avísale a Abraham.</div>
+  {% else %}
+
+  {# El envío completo va por este form, aunque los campos vivan repartidos
+     por la página (atributo form=): así el buscador y el carrito de abajo
+     pueden tener sus propios <form> sin anidar (HTML no permite forms
+     dentro de forms). #}
+  <form id="form-servicio" method="post" action="/venta/servicio/{{ tipo }}" style="display:none"></form>
+
+  {# ---- Cliente ---- #}
+  <div class="seccion-titulo">Cliente</div>
+  <div class="campos-cliente">
+    <div class="campo">
+      <span>Nombre</span>
+      <input id="cliente-nombre" name="cliente" form="form-servicio"
+             value="{{ borrador.nombre }}" autocomplete="off"
+             placeholder="Nombre del cliente">
+    </div>
+    <div class="campo">
+      <span>Celular</span>
+      <input id="cliente-celular" name="celular" form="form-servicio"
+             value="{{ borrador.celular }}" autocomplete="off" inputmode="tel"
+             placeholder="Ej: 6567-3062">
+    </div>
+  </div>
+
+  {% for seccion in meta.secciones %}
+    {# Renglones de servicio repetibles: el párrafo crece al escribir y
+       "+ Añadir otro servicio" clona el renglón (venta.js). Cada uno sale
+       como una línea del producto de servicio del tipo. #}
+    {% if seccion.servicios %}
+    <div class="seccion-titulo" style="margin-top:16px">{{ seccion.titulo }}</div>
+    <div id="servicios" data-ejemplo="{{ seccion.servicios.ejemplo }}">
+      {% for s in servicios %}
+      <div class="servicio">
+        <textarea class="servicio-texto" name="servicio_texto" form="form-servicio"
+                  rows="2" placeholder="Ej: {{ seccion.servicios.ejemplo }}"
+                  >{{ s.texto }}</textarea>
+        <div class="servicio-pie">
+          <label class="servicio-monto">Monto
+            <input name="servicio_monto" form="form-servicio" type="number"
+                   step="0.01" min="0" inputmode="decimal" placeholder="0.00"
+                   value="{{ s.monto }}">
+          </label>
+          <button class="quitar-servicio" type="button">Quitar</button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <button class="anadir-servicio" type="button" id="anadir-servicio">
+      + Añadir otro servicio</button>
+    <div class="total-venta">
+      <span>Subtotal servicios</span>
+      <b id="subtotal-servicios">$0.00</b>
+    </div>
+    {% endif %}
+
+    {% if seccion.catalogo %}
+    <div class="seccion-titulo" style="margin-top:16px">{{ seccion.titulo }}</div>
+    {% if seccion.catalogo == "informativo" %}
+    <p class="nada-venta">Se listan en la propuesta sin precio: lo que se
+      cobra son los montos de arriba.</p>
+    {% endif %}
+    <form class="buscador" method="get" action="/venta/servicio/{{ tipo }}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9aa3bd" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+      <input id="busca-venta" name="q" value="{{ q }}" placeholder="Buscar planta por nombre o SKU…"
+             autocomplete="off" enterkeyhint="search">
+    </form>
+
+    <div id="resultados-venta" data-volver="/venta/servicio/{{ tipo }}">
+    {% if resultados is not none %}
+      {% if not resultados %}
+      <p class="nada-venta">Nada con "{{ q }}". Prueba otro nombre o el SKU.</p>
+      {% endif %}
+      {% for p in resultados %}
+      <form method="post" action="/venta/carrito/agregar" class="sin-margen">
+        <input type="hidden" name="producto_id" value="{{ p.id }}">
+        <input type="hidden" name="cantidad" value="1">
+        <input type="hidden" name="q" value="{{ q }}">
+        <input type="hidden" name="volver" value="/venta/servicio/{{ tipo }}">
+        <button class="planta planta-boton" type="submit">
+          <div class="foto">🪴<img src="/venta/foto/{{ p.id }}" alt="" loading="lazy" onerror="this.remove()"></div>
+          <div class="info"><b>{{ p.nombre }}</b><span>{{ p.sku }}</span>
+            <span class="precio"><b>{{ p.precio | dinero }}</b></span></div>
+          <div class="agregar-venta">+</div>
+        </button>
+      </form>
+      {% endfor %}
+    {% endif %}
+    </div>
+
+    <div class="seccion-titulo" style="margin-top:14px">Plantas · {{ carrito | length }}</div>
+    {% if not carrito %}
+    <p class="nada-venta">Todavía no has añadido plantas: búscalas arriba y
+      tócalas para sumarlas.</p>
+    {% else %}
+      {% for l in carrito %}
+      <div class="planta" style="cursor:default">
+        <div class="foto">🪴<img src="/venta/foto/{{ l.producto_id }}" alt="" loading="lazy" onerror="this.remove()"></div>
+        <div class="info">
+          <b>{{ l.nombre }}</b>
+          <span>{{ l.sku }}{% if seccion.catalogo == "precio" %} · {{ l.precio | dinero }} c/u{% endif %}</span>
+          {% if seccion.catalogo == "precio" %}<span class="precio"><b>{{ l.importe | dinero }}</b></span>{% endif %}
+          <form method="post" action="/venta/carrito/quitar" class="sin-margen">
+            <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
+            <input type="hidden" name="volver" value="/venta/servicio/{{ tipo }}">
+            <button class="quitar-venta" type="submit">Quitar</button>
+          </form>
+        </div>
+        <div class="qty-mini">
+          <form method="post" action="/venta/carrito/cantidad">
+            <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
+            <input type="hidden" name="cantidad" value="{{ l.cantidad - 1 }}">
+            <input type="hidden" name="volver" value="/venta/servicio/{{ tipo }}">
+            <button type="submit" aria-label="Menos">−</button>
+          </form>
+          <span class="valor">{{ l.cantidad }}</span>
+          <form method="post" action="/venta/carrito/cantidad">
+            <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
+            <input type="hidden" name="cantidad" value="{{ l.cantidad + 1 }}">
+            <input type="hidden" name="volver" value="/venta/servicio/{{ tipo }}">
+            <button type="submit" aria-label="Más">+</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+      {% if seccion.catalogo == "precio" %}
+      <div class="total-venta">
+        <span>Subtotal plantas y materiales</span>
+        <b>{{ total_carrito | dinero }}</b>
+      </div>
+      {% endif %}
+    {% endif %}
+    {% endif %}
+  {% endfor %}
+
+  <button class="btn btn-dorado btn-grande" style="margin-top:16px"
+          form="form-servicio" type="submit">CREAR COTIZACIÓN</button>
+
+  {% endif %}{# ventas_activo #}
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/venta.js?v={{ v_estaticos }}"></script>
+{% endblock %}

@@ -1,0 +1,448 @@
+"""Pruebas de las cotizaciones de servicio (Alquiler, Boda, Mantenimiento…)
+de la pestaña Vender, con un Odoo simulado.
+
+El simulado reproduce lo que importa de vivero_rose_pedidos: las
+referencias XML de plantillas y productos SV- (ir.model.data), la nota y
+validez de cada plantilla, y el etiquetado de cliente/orden — NO reproduce
+las reglas de negocio del addon en sí (como forzar a $0 las plantas
+informativas de renta/mantenimiento): esas ya están probadas del lado de
+Odoo. Aquí se prueba que cotizaciones.py arma el pedido correcto.
+"""
+
+import pytest
+
+from app import cotizaciones, ventas
+
+XML_IDS = {
+    "vivero_rose_pedidos.plantilla_servicio_renta": 9001,
+    "vivero_rose_pedidos.plantilla_servicio_boda": 9002,
+    "vivero_rose_pedidos.plantilla_servicio_evento": 9003,
+    "vivero_rose_pedidos.plantilla_servicio_mantenimiento": 9004,
+    "vivero_rose_pedidos.plantilla_servicio_paisajismo": 9005,
+    "vivero_rose_pedidos.plantilla_servicio_proyecto": 9006,
+    "vivero_rose_pedidos.plantilla_servicio_instalacion": 9007,
+    "vivero_rose_pedidos.producto_sv_alquiler_evento": 8001,
+    "vivero_rose_pedidos.producto_sv_instalacion": 8002,
+    "vivero_rose_pedidos.producto_sv_boda": 8003,
+    "vivero_rose_pedidos.producto_sv_renta": 8004,
+    "vivero_rose_pedidos.producto_sv_transporte": 8005,
+    "vivero_rose_pedidos.producto_sv_evento": 8006,
+    "vivero_rose_pedidos.producto_sv_mantenimiento_total": 8007,
+    "vivero_rose_pedidos.etapa_flujo_cotizado": 7001,
+}
+
+PLANTILLAS = {
+    9001: {"note": "Nota renta", "number_of_days": 15},
+    9002: {"note": "Nota boda", "number_of_days": 15},
+    9003: {"note": "Nota evento", "number_of_days": 15},
+    9004: {"note": "Nota mantenimiento", "number_of_days": 30},
+    9005: {"note": "Nota paisajismo", "number_of_days": 15},
+    9006: {"note": "Nota proyecto", "number_of_days": 15},
+    9007: {"note": "Nota instalación", "number_of_days": 15},
+}
+
+
+class OdooServicios:
+    def __init__(self):
+        self.productos = {601: {"default_code": "PL-CROTO", "name": "CROTO", "list_price": 45.0}}
+        self.partners = {}
+        self.categorias = {}
+        self.tags = {}
+        self.ordenes = {}
+        self.oportunidades = {}
+        self.siguiente = 2000
+
+    def _nuevo(self):
+        self.siguiente += 1
+        return self.siguiente
+
+    def ejecutar(self, modelo, metodo, args, kw=None):
+        kw = kw or {}
+        manejador = getattr(self, (modelo + "_" + metodo).replace(".", "_"))
+        return manejador(args, kw)
+
+    # ---- referencias XML y plantillas ----
+    def ir_model_data_search_read(self, args, kw):
+        dominio = args[0]
+        modulo = next(c[2] for c in dominio if c[0] == "module")
+        nombre = next(c[2] for c in dominio if c[0] == "name")
+        res_id = XML_IDS.get(f"{modulo}.{nombre}")
+        return [{"res_id": res_id}] if res_id else []
+
+    def sale_order_template_read(self, args, kw):
+        tid = args[0][0]
+        return [{"id": tid, **PLANTILLAS[tid]}]
+
+    # ---- productos (buscador de plantas y carrito) ----
+    def product_product_search_read(self, args, kw):
+        texto = next(c[2].lower() for c in args[0]
+                     if isinstance(c, list) and c[0] == "name")
+        return [{"id": i, **p} for i, p in self.productos.items()
+                if texto in p["name"].lower()]
+
+    def product_product_read(self, args, kw):
+        return [{"id": i, **self.productos[i]} for i in args[0] if i in self.productos]
+
+    # ---- partners: un evaluador de dominio simplificado (solo lo que
+    # cotizaciones.py arma: 0, 1 o 2 "|" seguidos de condiciones ilike o
+    # =ilike, siempre en OR) ----
+    def _condicion(self, p, c):
+        campo, op, valor = c
+        val = str(p.get(campo) or "")
+        if op == "=ilike":
+            return val.lower() == str(valor).lower()
+        if op == "ilike":
+            return str(valor).lower() in val.lower()
+        return False
+
+    def _coincide(self, p, dominio):
+        condiciones = [c for c in dominio if isinstance(c, list)]
+        return any(self._condicion(p, c) for c in condiciones)
+
+    def res_partner_search(self, args, kw):
+        ids = [i for i, p in self.partners.items() if self._coincide(p, args[0])]
+        limite = kw.get("limit")
+        return ids[:limite] if limite else ids
+
+    def res_partner_search_read(self, args, kw):
+        campos = kw.get("fields", [])
+        limite = kw.get("limit")
+        filas = [{"id": i, **{c: p.get(c) for c in campos}} for i, p in self.partners.items()
+                 if self._coincide(p, args[0])]
+        return filas[:limite] if limite else filas
+
+    def res_partner_create(self, args, kw):
+        nuevo = self._nuevo()
+        self.partners[nuevo] = {**args[0], "category_id": []}
+        return nuevo
+
+    def res_partner_write(self, args, kw):
+        for pid in args[0]:
+            for campo, valor in args[1].items():
+                if campo == "category_id":
+                    for comando in valor:
+                        if comando[0] == 4:
+                            self.partners[pid].setdefault("category_id", []).append(comando[1])
+                else:
+                    self.partners[pid][campo] = valor
+        return True
+
+    # ---- categorías y etiquetas ----
+    def res_partner_category_search(self, args, kw):
+        nombre = args[0][0][2]
+        return [i for i, n in self.categorias.items() if n == nombre]
+
+    def res_partner_category_create(self, args, kw):
+        nuevo = self._nuevo()
+        self.categorias[nuevo] = args[0]["name"]
+        return nuevo
+
+    def crm_tag_search(self, args, kw):
+        nombre = args[0][0][2].lower()
+        return [i for i, n in self.tags.items() if n.lower() == nombre]
+
+    def crm_tag_create(self, args, kw):
+        nuevo = self._nuevo()
+        self.tags[nuevo] = args[0]["name"]
+        return nuevo
+
+    # ---- oportunidades del Flujo CRM ----
+    def crm_lead_create(self, args, kw):
+        vals = args[0]
+        nuevo = self._nuevo()
+        self.oportunidades[nuevo] = {**vals, "tag_ids": [], "expected_revenue": 0.0}
+        return nuevo
+
+    def crm_lead_write(self, args, kw):
+        for oid in args[0]:
+            for campo, valor in args[1].items():
+                if campo == "tag_ids":
+                    for comando in valor:
+                        if comando[0] == 4:
+                            self.oportunidades[oid]["tag_ids"].append(comando[1])
+                else:
+                    self.oportunidades[oid][campo] = valor
+        return True
+
+    # ---- órdenes ----
+    def sale_order_create(self, args, kw):
+        vals = args[0]
+        nuevo = self._nuevo()
+        lineas = [l[2] for l in vals["order_line"]]
+        total = 0.0
+        for l in lineas:
+            if l.get("display_type"):
+                continue
+            precio = l.get("price_unit")
+            if precio is None:
+                precio = self.productos.get(l.get("product_id"), {}).get("list_price", 0.0)
+            total += precio * l.get("product_uom_qty", 1)
+        self.ordenes[nuevo] = {
+            "name": f"S{nuevo}", "amount_total": round(total, 2),
+            "vals": vals, "lineas": lineas, "tag_ids": [],
+        }
+        return nuevo
+
+    def sale_order_read(self, args, kw):
+        return [{"id": i, **{c: self.ordenes[i][c] for c in kw["fields"]}} for i in args[0]]
+
+    def sale_order_write(self, args, kw):
+        for oid in args[0]:
+            for campo, valor in args[1].items():
+                if campo == "tag_ids":
+                    for comando in valor:
+                        if comando[0] == 4:
+                            self.ordenes[oid]["tag_ids"].append(comando[1])
+                else:
+                    self.ordenes[oid][campo] = valor
+        return True
+
+
+@pytest.fixture
+def odoo(monkeypatch, tmp_path, db_limpia):
+    falso = OdooServicios()
+    for variable, valor in {
+        "ODOO_URL": "http://odoo-de-prueba:8069", "ODOO_DB": "pruebas",
+        "ODOO_USER": "prueba", "ODOO_PASSWORD": "prueba",
+        "VENTA_FOTOS_DIR": str(tmp_path / "fotos"),
+    }.items():
+        monkeypatch.setenv(variable, valor)
+    monkeypatch.setattr(ventas, "_ejecutar", falso.ejecutar)
+    return falso
+
+
+def test_renta_exige_al_menos_un_servicio(odoo):
+    with pytest.raises(ValueError, match="al menos un servicio"):
+        cotizaciones.crear_cotizacion(
+            {"id": "g", "nombre": "Génesis"}, "renta", "María", "", [], [])
+
+
+def test_un_parrafo_sin_monto_avisa_y_no_crea_nada(odoo):
+    with pytest.raises(ValueError, match="Falta el monto del servicio"):
+        cotizaciones.crear_cotizacion(
+            {"id": "g", "nombre": "Génesis"}, "instalacion", "María", "",
+            [{"texto": "Instalación de 12 palmas", "monto": ""}],
+            [{"producto_id": 601, "cantidad": 3}])
+    assert not odoo.ordenes
+
+
+def test_renglon_vacio_se_ignora(odoo):
+    registro = cotizaciones.crear_cotizacion(
+        {"id": "g", "nombre": "Génesis"}, "renta", "María", "",
+        [{"texto": "Alquiler de 20 plantas", "monto": "850"},
+         {"texto": "", "monto": ""}], [])
+    orden = odoo.ordenes[registro["orden_id"]]
+    servicios = [l for l in orden["lineas"] if l.get("product_id") == 8001]
+    assert len(servicios) == 1
+    assert orden["amount_total"] == 850.0
+
+
+def test_renta_arma_seccion_y_el_parrafo_va_como_descripcion(odoo):
+    registro = cotizaciones.crear_cotizacion(
+        {"id": "g", "nombre": "Génesis"}, "renta", "María", "6567-3062",
+        [{"texto": "Alquiler de 20 plantas para el evento del sábado",
+          "monto": "850"}], [{"producto_id": 601, "cantidad": 10}])
+    orden = odoo.ordenes[registro["orden_id"]]
+    tipos = [l.get("display_type") for l in orden["lineas"]]
+    assert tipos[0] == "line_section"  # "Alquiler del evento"
+    assert orden["lineas"][1]["price_unit"] == 850.0
+    assert orden["lineas"][1]["product_id"] == 8001  # SV-ALQUILER
+    assert orden["lineas"][1]["name"].startswith("Alquiler de 20 plantas")
+    assert tipos[-2] == "line_section"  # "Plantas alquiladas..."
+    assert orden["lineas"][-1]["product_id"] == 601  # la planta del carrito
+    assert orden["vals"]["tipo_servicio"] == "renta"
+    assert orden["vals"]["sale_order_template_id"] == 9001
+    assert orden["vals"]["note"] == "Nota renta"
+    assert registro["orden"] == orden["name"]
+
+
+def test_varios_servicios_suman_sus_montos(odoo):
+    registro = cotizaciones.crear_cotizacion(
+        {"id": "g", "nombre": "Génesis"}, "instalacion", "María", "",
+        [{"texto": "Instalación de 12 palmas en el jardín frontal", "monto": "250"},
+         {"texto": "Transporte y montaje", "monto": "50"},
+         {"texto": "Primera visita de mantenimiento incluida", "monto": "0"}],
+        [{"producto_id": 601, "cantidad": 1}])
+    orden = odoo.ordenes[registro["orden_id"]]
+    servicios = [l for l in orden["lineas"] if l.get("product_id") == 8002]
+    assert [l["price_unit"] for l in servicios] == [250.0, 50.0, 0.0]
+    assert [l["name"] for l in servicios][1] == "Transporte y montaje"
+    # El 0 escrito a mano sí crea su renglón (servicio incluido sin cargo).
+    assert orden["amount_total"] == pytest.approx(300 + 45.0)
+
+
+def test_servicio_sin_parrafo_hereda_el_nombre_del_producto(odoo):
+    registro = cotizaciones.crear_cotizacion(
+        {"id": "g", "nombre": "Génesis"}, "boda", "Ana", "",
+        [{"texto": "", "monto": "300"}], [])
+    orden = odoo.ordenes[registro["orden_id"]]
+    linea = next(l for l in orden["lineas"] if l.get("product_id") == 8003)
+    assert "name" not in linea
+    assert linea["price_unit"] == 300.0
+
+
+def test_paisajismo_exige_al_menos_una_planta(odoo):
+    with pytest.raises(ValueError, match="planta o material"):
+        cotizaciones.crear_cotizacion(
+            {"id": "g", "nombre": "Génesis"}, "paisajismo", "María", "",
+            [{"texto": "Diseño e instalación", "monto": "500"}], [])
+
+
+def test_paisajismo_cobra_las_plantas_a_precio_de_catalogo(odoo):
+    registro = cotizaciones.crear_cotizacion(
+        {"id": "g", "nombre": "Génesis"}, "paisajismo", "María", "",
+        [{"texto": "Diseño e instalación", "monto": "500"}],
+        [{"producto_id": 601, "cantidad": 17}])
+    orden = odoo.ordenes[registro["orden_id"]]
+    planta = next(l for l in orden["lineas"] if l.get("product_id") == 601)
+    assert "price_unit" not in planta  # Odoo pone el precio de catálogo
+    assert orden["amount_total"] == pytest.approx(500 + 17 * 45.0)
+
+
+def test_servicios_del_formulario_empareja_los_renglones(odoo):
+    assert cotizaciones.servicios_del_formulario(
+        ["Uno", "Dos"], ["10"]) == [
+            {"texto": "Uno", "monto": "10"}, {"texto": "Dos", "monto": ""}]
+
+
+def test_cliente_se_busca_primero_por_telefono(odoo):
+    odoo.partners[55] = {"name": "Nombre viejo", "phone": "6567-3062", "category_id": []}
+    registro = cotizaciones.crear_cotizacion(
+        {"id": "g", "nombre": "Génesis"}, "mantenimiento", "Otro nombre",
+        "6567-3062", [{"texto": "Contrato mensual", "monto": "250"}], [])
+    orden = odoo.ordenes[registro["orden_id"]]
+    assert orden["vals"]["partner_id"] == 55
+    assert len(odoo.partners) == 1  # no creó un cliente nuevo
+
+
+def test_cliente_nuevo_se_etiqueta_por_tipo(odoo):
+    registro = cotizaciones.crear_cotizacion(
+        {"id": "g", "nombre": "Génesis"}, "boda", "Ana", "",
+        [{"texto": "Ambientación de la ceremonia", "monto": "300"}], [])
+    orden = odoo.ordenes[registro["orden_id"]]
+    partner = odoo.partners[orden["vals"]["partner_id"]]
+    assert odoo.categorias[partner["category_id"][0]] == "Boda"
+    assert odoo.tags[orden["tag_ids"][0]] == "BODA"
+
+
+def test_crea_oportunidad_en_el_crm_ya_cotizada(odoo):
+    registro = cotizaciones.crear_cotizacion(
+        {"id": "g", "nombre": "Génesis"}, "boda", "Ana", "",
+        [{"texto": "Ambientación de la ceremonia", "monto": "300"}], [])
+    orden = odoo.ordenes[registro["orden_id"]]
+    oportunidad_id = orden["vals"]["opportunity_id"]
+    oportunidad = odoo.oportunidades[oportunidad_id]
+    assert oportunidad["name"] == "Ana"
+    assert oportunidad["type"] == "opportunity"
+    assert oportunidad["stage_id"] == 7001  # etapa_flujo_cotizado
+    assert oportunidad["expected_revenue"] == 300.0
+    assert odoo.tags[oportunidad["tag_ids"][0]] == "BODA"
+
+
+def test_nombre_obligatorio(odoo):
+    with pytest.raises(ValueError, match="nombre"):
+        cotizaciones.crear_cotizacion(
+            {"id": "g", "nombre": "Génesis"}, "mantenimiento", "", "",
+            [{"texto": "Contrato", "monto": "100"}], [])
+
+
+def test_tipo_desconocido(odoo):
+    with pytest.raises(ValueError, match="desconocido"):
+        cotizaciones.crear_cotizacion(
+            {"id": "g", "nombre": "Génesis"}, "no-existe", "Ana", "", [], [])
+
+
+def test_personalizada_exige_nombre_y_carrito(odoo):
+    with pytest.raises(ValueError, match="nombre"):
+        cotizaciones.crear_personalizada({"id": "g", "nombre": "Génesis"}, "", "", [])
+    with pytest.raises(ValueError, match="planta o material"):
+        cotizaciones.crear_personalizada({"id": "g", "nombre": "Génesis"}, "Ana", "", [])
+
+
+def test_personalizada_sin_plantilla(odoo):
+    registro = cotizaciones.crear_personalizada(
+        {"id": "g", "nombre": "Génesis"}, "Ana", "",
+        [{"producto_id": 601, "cantidad": 2}])
+    orden = odoo.ordenes[registro["orden_id"]]
+    assert orden["vals"]["tipo_servicio"] == "general"
+    assert "sale_order_template_id" not in orden["vals"]
+    assert registro["total"] == 90.0
+    oportunidad = odoo.oportunidades[orden["vals"]["opportunity_id"]]
+    assert oportunidad["expected_revenue"] == 90.0
+    assert odoo.tags[oportunidad["tag_ids"][0]] == "SERVICIO"
+
+
+# ---------------------------------------------------------------------------
+# Rutas (FastAPI)
+# ---------------------------------------------------------------------------
+
+def test_venta_muestra_los_botones_por_tipo(cliente, odoo):
+    pagina = cliente.get("/venta")
+    assert "/venta/servicio/renta" in pagina.text
+    assert "/venta/servicio-personalizada" in pagina.text
+    assert "Alquiler" in pagina.text
+
+
+def test_formulario_de_tipo_desconocido_redirige(cliente, odoo):
+    r = cliente.get("/venta/servicio/no-existe", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/venta"
+
+
+def test_crear_cotizacion_de_renta_por_http(cliente, odoo):
+    r = cliente.post("/venta/servicio/renta",
+                     data={"cliente": "María", "celular": "",
+                           "servicio_texto": "Alquiler de 20 plantas",
+                           "servicio_monto": "850"})
+    assert "Cotización de servicio creada" in r.text
+    assert "S" in r.text
+    pagina = cliente.get("/venta")
+    assert "Cotizaciones de servicios" in pagina.text
+    assert "María" in pagina.text
+
+
+def test_sin_monto_reaparece_el_formulario_con_lo_escrito(cliente, odoo):
+    # No redirige: vuelve a pintar el formulario con el párrafo intacto,
+    # que es lo que se perdería en un redirect.
+    r = cliente.post("/venta/servicio/renta",
+                     data={"cliente": "María", "celular": "",
+                           "servicio_texto": "Alquiler de 20 plantas y montaje",
+                           "servicio_monto": ""})
+    assert r.status_code == 200
+    assert "Falta el monto del servicio" in r.text
+    assert "Alquiler de 20 plantas y montaje" in r.text
+    assert not odoo.ordenes
+
+
+def test_servicios_escritos_sobreviven_a_agregar_una_planta(cliente, odoo):
+    # venta.js guarda los renglones en el borrador del servidor: al volver
+    # del POST de agregar al carrito, el párrafo sigue ahí.
+    cliente.post("/venta/borrador",
+                 data={"cliente": "Ana", "celular": "", "servicios": "1",
+                       "servicio_texto": "Instalación de 12 palmas",
+                       "servicio_monto": "250"})
+    pagina = cliente.get("/venta/servicio/instalacion")
+    assert "Instalación de 12 palmas" in pagina.text
+    assert "250" in pagina.text
+
+
+def test_carrito_de_servicio_reusa_el_de_nueva_venta(cliente, odoo):
+    cliente.post("/venta/carrito/agregar",
+                 data={"producto_id": 601, "cantidad": 1, "volver": "/venta/servicio/paisajismo"},
+                 follow_redirects=False)
+    pagina = cliente.get("/venta/servicio/paisajismo")
+    assert "CROTO" in pagina.text
+    r = cliente.post("/venta/servicio/paisajismo",
+                     data={"cliente": "Ana", "servicio_texto": "Diseño e instalación",
+                           "servicio_monto": "500"})
+    assert "Cotización de servicio creada" in r.text
+    # El carrito se vació al crear la cotización.
+    assert ventas.carrito_de("genesis") == ([], 0.0)
+
+
+def test_personalizada_por_http(cliente, odoo):
+    cliente.post("/venta/carrito/agregar",
+                 data={"producto_id": 601, "cantidad": 3,
+                       "volver": "/venta/servicio-personalizada"},
+                 follow_redirects=False)
+    r = cliente.post("/venta/servicio-personalizada", data={"cliente": "Ana"})
+    assert "Cotización creada" in r.text
