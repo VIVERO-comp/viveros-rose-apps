@@ -4,8 +4,10 @@ La pestaña Fichas es la casa de verdad del contenido editorial del catálogo
 (descripción y guía de cuidado por producto): lo que se guarda aquí lo lee
 el generador del catálogo (viveros-rose-frontend, scripts/generar_catalogo.py)
 la próxima vez que el dueño regenera el sitio. Odoo sigue mandando en nombre,
-precio y stock; aquí vive solo la prosa. Guardar una ficha NO cambia el sitio
-al instante.
+precio, stock y ALTURA; aquí vive solo la prosa. La altura se edita en la
+misma pantalla pero se guarda en Odoo (por el order-api, ver
+datos.fijar_altura_en_odoo): este módulo solo la valida. Guardar una ficha NO
+cambia el sitio al instante.
 
 Las fichas viven en la base `tienda` (Postgres del droplet, TIENDA_DSN, tabla
 fichas_producto — migración 015 del order-api). Sin TIENDA_DSN (desarrollo y
@@ -165,3 +167,42 @@ def todas():
     for f in fichas:
         f["actualizado_en"] = str(f["actualizado_en"])
     return {f.pop("sku"): f for f in fichas}
+
+
+# ---------------------------------------------------------------------------
+# Altura de la planta (vive en Odoo; aquí solo se limpia y se valida)
+# ---------------------------------------------------------------------------
+
+# Tope de cordura, el mismo del order-api: la planta más alta del vivero no
+# llega a 10 metros y un número mayor casi siempre es un dedo pegado a una
+# tecla.
+ALTURA_MAXIMA_CM = 1000
+
+
+def limpiar_altura(crudo):
+    """{altura_min, altura_max} en enteros; lo que no sea número queda en 0.
+
+    Cero es "sin altura": el producto no muestra la línea en la tienda, que
+    es también la forma de borrar una altura cargada por error.
+    """
+    def entero(valor):
+        try:
+            return max(0, int(float(str(valor).strip() or 0)))
+        except (TypeError, ValueError):
+            return 0
+
+    return {"altura_min": entero(crudo.get("altura_min")),
+            "altura_max": entero(crudo.get("altura_max"))}
+
+
+def validar_altura(altura):
+    """Mensaje de error o None. Mismas reglas que Odoo y el order-api."""
+    minima, maxima = altura["altura_min"], altura["altura_max"]
+    if minima > ALTURA_MAXIMA_CM or maxima > ALTURA_MAXIMA_CM:
+        return f"La altura máxima son {ALTURA_MAXIMA_CM} cm."
+    if maxima and not minima:
+        return ("Falta la altura mínima. Si la planta tiene una sola medida, "
+                "va en la primera casilla.")
+    if maxima and maxima < minima:
+        return "La altura máxima no puede ser menor que la mínima."
+    return None

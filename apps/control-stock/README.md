@@ -46,7 +46,10 @@ En producción: `docker compose exec control-stock python -m app.usuarias …`
 - **Detalle de producto** (16/09/2026, reemplaza a la pestaña Fichas):
   foto grande (abre el modal de foto), datos de Odoo en solo lectura
   (precio, disponible, físico, estado), botón Modificar stock (el modal de
-  siempre) y la ficha editable — descripción y guía de cuidado. En
+  siempre) y la ficha editable — altura, descripción y guía de cuidado. La
+  **altura** (de ⬚ a ⬚ cm, 17/09/2026) se guarda en Odoo por el order-api,
+  no en la base de la tienda: con una sola medida se llena la primera casilla
+  y con las dos vacías el producto no muestra altura en la tienda. En
   computadora va a dos columnas; en el teléfono, una. Volver/atrás regresa
   a la lista con filtro y búsqueda intactos.
 - **Alertas**: campanita con contador; cada alerta lleva al producto y se
@@ -104,7 +107,10 @@ Ver [.env.example](.env.example): `STOCK_PROXY_URL` + `STOCK_API_KEY`
 
 - **stock-proxy** `GET /v1/inventario` — inventario completo con categoría
   de Odoo, disponible y físico. Exige `X-API-Key`.
-- **order-api** `POST /api/stock/ajustes` — la única escritura: ajustes de
+- **order-api** `PUT /api/productos/{sku}/altura` — la altura de la planta
+  (en cm) que se edita en la ficha; vive en Odoo, no en la base de la tienda,
+  porque es un dato del producto. Exige `X-API-Key`.
+- **order-api** `POST /api/stock/ajustes` — la otra escritura: ajustes de
   inventario absolutos en Odoo (`stock.quant` + `action_apply_inventory`),
   con candado de cantidad esperada y auditoría en la base tienda
   (migración 012). Exige `X-API-Key`.

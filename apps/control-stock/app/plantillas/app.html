@@ -203,6 +203,20 @@
       <div class="det-der">
         {% if puede_fichas %}
         <div class="ficha-form">
+          {# La altura NO se guarda con la prosa: va a Odoo por el order-api
+             (es un dato del producto). Se edita aquí porque es donde el
+             dueño mira la planta. Vacío o 0 = la tienda no muestra altura. #}
+          <div class="campo campo-altura">
+            <span>Altura</span>
+            <div class="altura-fila">
+              <span>de</span>
+              <input id="ficha-altura-min" type="number" min="0" max="1000" step="1" inputmode="numeric" placeholder="70">
+              <span>a</span>
+              <input id="ficha-altura-max" type="number" min="0" max="1000" step="1" inputmode="numeric" placeholder="110">
+              <span>cm</span>
+            </div>
+            <small class="ayuda">Se guarda en Odoo. Una sola medida: llena la primera y deja la otra vacía. Sin altura, la tienda no muestra la línea.</small>
+          </div>
           <div class="campo campo-area">
             <span>Descripción <small id="ficha-desc-largo"></small></span>
             <textarea id="ficha-descripcion" rows="5" maxlength="600"></textarea>
@@ -227,10 +241,12 @@
         <p class="edit-sub" id="ficha-estado"></p>
         <p class="edit-nota">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          Se guarda en la base de la tienda; el sitio público la toma cuando se regenera el catálogo, no al instante.
+          Los textos se guardan en la base de la tienda y la altura en Odoo; el sitio público los toma cuando se regenera el catálogo, no al instante.
         </p>
         {% else %}
         <div class="ficha-solo-lectura">
+          <div class="seccion-titulo">Altura</div>
+          <p id="det-altura"></p>
           <div class="seccion-titulo">Descripción</div>
           <p id="det-descripcion"></p>
           <div class="seccion-titulo">Guía de cuidado</div>

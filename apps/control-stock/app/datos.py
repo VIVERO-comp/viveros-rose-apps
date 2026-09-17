@@ -1,8 +1,9 @@
 """Capa de datos: SQLite local, inventario del stock-proxy y ajustes vía order-api.
 
 La app nunca toca Odoo directo (regla fija): lee el inventario del
-stock-proxy (`GET /v1/inventario`) y escribe ajustes por el order-api
-(`POST /api/stock/ajustes`). El SQLite guarda lo que es de la app: usuarios,
+stock-proxy (`GET /v1/inventario`) y escribe por el order-api: los ajustes
+(`POST /api/stock/ajustes`) y la altura de la planta de la ficha
+(`PUT /api/productos/{sku}/altura`). El SQLite guarda lo que es de la app: usuarios,
 sesiones, alertas atendidas, historial de conteos y configuración.
 
 Degradación de lecturas, igual que Recepción: caché en memoria; si el proxy
@@ -39,7 +40,7 @@ INVENTARIO_DE_PRUEBA = [
     {"sku": "PL-PAPAYA", "nombre": "Papaya", "categoria": "Exterior", "disponible": 11, "fisico": 11, "precio_centavos": 800},
     {"sku": "PL-VERANERA-FUCSIA", "nombre": "Veranera Fucsia", "categoria": "Florales", "disponible": 14, "fisico": 14, "precio_centavos": 750},
     {"sku": "PL-CULANTRO", "nombre": "Culantro", "categoria": "Exterior", "disponible": 26, "fisico": 26, "precio_centavos": 250},
-    {"sku": "PL-PALMA-ARECA", "nombre": "Palma Areca", "categoria": "Exterior", "disponible": 41, "fisico": 41, "precio_centavos": 1500},
+    {"sku": "PL-PALMA-ARECA", "nombre": "Palma Areca", "categoria": "Exterior", "disponible": 41, "fisico": 41, "precio_centavos": 1500, "altura_min": 70, "altura_max": 110},
 ]
 
 
@@ -102,6 +103,10 @@ def obtener_inventario(refrescar=False):
             # list_price de Odoo en centavos; .get por si el proxy en
             # producción aún no expone el campo (0 = precio pendiente).
             "precio_centavos": item.get("price_cents", 0),
+            # Altura en cm tal como esta en Odoo (0 = sin dato). .get por si
+            # el proxy en produccion aun no expone el campo.
+            "altura_min": item.get("height_min_cm", 0),
+            "altura_max": item.get("height_max_cm", 0),
         }
         for item in crudo["items"]
     ]
@@ -147,6 +152,40 @@ def ajustar_en_odoo(ajustes, empleado, motivo):
     if any(r["resultado"] == "aplicado" for r in datos.get("resultados", [])):
         reiniciar_cache_proxy()
     return datos
+
+
+def fijar_altura_en_odoo(sku, altura_min, altura_max):
+    """PUT /api/productos/{sku}/altura. Alturas en centimetros; 0 = sin dato.
+
+    Devuelve la respuesta del order-api o la simula cuando no esta
+    configurado (modo datos de prueba). Un rechazo del order-api sube como
+    SinConexion con su mensaje: la altura se edita a mano y quien la guarda
+    tiene que enterarse de que no quedo.
+    """
+    url = os.environ.get("ORDER_API_URL")
+    clave = os.environ.get("ORDER_API_KEY")
+    if not url or not clave:
+        return {"ok": True, "sku": sku, "altura_min": altura_min,
+                "altura_max": altura_max, "resultado": "aplicado"}
+    try:
+        respuesta = httpx.put(
+            f"{url.rstrip('/')}/api/productos/{sku}/altura",
+            headers={"X-API-Key": clave},
+            json={"alturaMin": altura_min, "alturaMax": altura_max},
+            timeout=30,
+        )
+    except Exception:
+        raise SinConexion("No hay conexión con el servidor de pedidos")
+    if respuesta.status_code != 200:
+        try:
+            detalle = respuesta.json().get("mensaje")
+        except Exception:
+            detalle = None
+        raise SinConexion(detalle or
+                          f"El servidor de pedidos respondió {respuesta.status_code}")
+    # La altura cambió en Odoo: la próxima lectura del inventario va fresca.
+    reiniciar_cache_proxy()
+    return respuesta.json()
 
 
 # ---------------------------------------------------------------------------

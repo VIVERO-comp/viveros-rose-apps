@@ -415,6 +415,14 @@ function contarDescripcion() {
   document.getElementById("ficha-desc-largo").textContent = "· " + largo + " caracteres";
 }
 
+// "Altura 70 cm – 110 cm", o una sola medida, o vacío si la planta no tiene
+// altura en Odoo: la misma regla que usa la ficha pública de la tienda.
+function textoAltura(p) {
+  if (!p.hmin) return "";
+  if (p.hmax && p.hmax > p.hmin) return `Altura ${p.hmin} cm – ${p.hmax} cm`;
+  return `Altura ${p.hmin} cm`;
+}
+
 function pintarFotoDetalle(p) {
   const caja = document.getElementById("det-foto");
   caja.textContent = p.e;
@@ -457,11 +465,16 @@ function abrirDetalle(sku, empujarHistoria = true) {
     document.getElementById("ficha-riego").value = ficha.riego || "";
     document.getElementById("ficha-dificultad").value = ficha.dificultad || "Media";
     document.getElementById("ficha-nota").value = ficha.nota || "";
+    // La altura viene de Odoo (no de la ficha curada); 0 se muestra vacío.
+    document.getElementById("ficha-altura-min").value = p.hmin || "";
+    document.getElementById("ficha-altura-max").value = p.hmax || "";
     contarDescripcion();
     mostrarErrorFicha("");
     pintarEstadoFicha(sku);
   } else {
     // Sin permiso de edición: la ficha en solo lectura.
+    document.getElementById("det-altura").textContent =
+      textoAltura(p) || "Sin altura todavía.";
     document.getElementById("det-descripcion").textContent =
       ficha.descripcion || "Sin descripción todavía.";
     const partes = [];
@@ -530,6 +543,8 @@ async function guardarFicha() {
         riego: document.getElementById("ficha-riego").value,
         dificultad: document.getElementById("ficha-dificultad").value,
         nota: document.getElementById("ficha-nota").value,
+        altura_min: document.getElementById("ficha-altura-min").value,
+        altura_max: document.getElementById("ficha-altura-max").value,
       }),
     });
     const cuerpo = await respuesta.json();
@@ -538,6 +553,13 @@ async function guardarFicha() {
       return;
     }
     DATOS.fichas[detalleSku] = cuerpo.ficha;
+    // La altura vive en Odoo: se refleja en la planta que tenemos en
+    // memoria para que la pantalla no muestre el valor viejo hasta recargar.
+    const planta = plantas.find(x => x.sku === detalleSku);
+    if (planta) {
+      planta.hmin = cuerpo.altura_min;
+      planta.hmax = cuerpo.altura_max;
+    }
     toast("Ficha guardada 🌿");
     pintarEstadoFicha(detalleSku);
     pintar(); // refresca el extracto de la tarjeta

@@ -272,6 +272,9 @@ def inicio(request: Request, refrescar: int = 0):
             # Precio ya formateado en el servidor: el list_price de Odoo tal
             # cual, igual que en la tienda (null = precio pendiente en Odoo).
             "po": calculos.precio_online(p.get("precio_centavos", 0)),
+            # Altura en cm desde Odoo (0 = sin dato): la ficha la muestra y
+            # la deja editar; el sitio publico la toma al regenerar.
+            "hmin": p.get("altura_min", 0), "hmax": p.get("altura_max", 0),
             **_fotos_de(p),
         }
         for p in inventario
@@ -905,11 +908,13 @@ async def cambiar_foto(request: Request, sku: str, archivo: UploadFile):
 
 @app.post("/fichas/{sku}")
 async def guardar_ficha(request: Request, sku: str):
-    """Guardar de la pestaña Fichas: descripción y guía de cuidado curadas.
+    """Guardar de la ficha: descripción, guía de cuidado y altura.
 
-    Escribe en la tabla fichas_producto de la base tienda (el sitio las toma
-    de ahí cuando el dueño regenera el catálogo). No toca Odoo ni cambia el
-    sitio al instante."""
+    La prosa va a la tabla fichas_producto de la base tienda; la ALTURA va a
+    Odoo por el order-api, porque es un dato del producto y Odoo es su fuente
+    de verdad. Se escribe primero la altura: si Odoo falla, no se guarda nada
+    y quien edita ve el error. Ni una ni otra cambian el sitio al instante
+    (el sitio las toma cuando se regenera el catálogo)."""
     def error(codigo, clave, mensaje):
         return Response(json.dumps({"error": clave, "mensaje": mensaje}),
                         status_code=codigo, media_type="application/json")
@@ -918,10 +923,25 @@ async def guardar_ficha(request: Request, sku: str):
         return error(403, "sin_permiso", "Tu usuario no puede editar fichas.")
     if not re.fullmatch(r"[A-Za-z0-9-]{1,80}", sku):
         return error(400, "sku_invalido", "SKU inválido.")
-    campos = fichas.limpiar(await request.json())
+    crudo = await request.json()
+    campos = fichas.limpiar(crudo)
     mensaje = fichas.validar(campos)
     if mensaje:
         return error(400, "ficha_invalida", mensaje)
+    altura = fichas.limpiar_altura(crudo)
+    mensaje = fichas.validar_altura(altura)
+    if mensaje:
+        return error(400, "altura_invalida", mensaje)
+    # Primero Odoo (lo que puede fallar por red o por permisos); recién
+    # después la prosa, para no dejar la ficha guardada a medias.
+    try:
+        datos.fijar_altura_en_odoo(sku, altura["altura_min"], altura["altura_max"])
+    except datos.SinConexion as fallo:
+        return error(502, "sin_guardar", str(fallo))
+    except Exception as excepcion:
+        print(f"fichas: error guardando la altura de {sku}: {excepcion!r}", flush=True)
+        return error(502, "sin_guardar",
+                     "No se pudo guardar la altura en Odoo. Intenta de nuevo.")
     try:
         fichas.guardar(sku, campos, request.state.empleada["id"])
     except Exception as excepcion:
@@ -929,7 +949,8 @@ async def guardar_ficha(request: Request, sku: str):
         print(f"fichas: error guardando {sku}: {excepcion!r}", flush=True)
         return error(502, "sin_guardar",
                       "No se pudo guardar en la base. Intenta de nuevo.")
-    return {"resultado": "guardada", "ficha": fichas.todas().get(sku)}
+    return {"resultado": "guardada", "ficha": fichas.todas().get(sku),
+            "altura_min": altura["altura_min"], "altura_max": altura["altura_max"]}
 
 
 @app.get("/venta/foto/{producto_id}")
