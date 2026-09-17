@@ -731,15 +731,26 @@ def _renglones_del_form(form):
         [p[:20] for p in form.getlist("renglon_precio")])
 
 
-def _volver_del_carrito(form):
+def _volver_del_carrito(form, q=""):
     """El carrito (app/ventas.py) es el mismo para Nueva Venta y para los
     mini-formularios de cotización de servicio (una sola en curso por
     empleada, igual que hoy): cada pantalla manda de vuelta a sí misma con
-    un campo oculto "volver", limitado a rutas propias de Vender."""
+    un campo oculto "volver", limitado a rutas propias de Vender.
+
+    La búsqueda activa y el proyecto de la cotización viajan en la URL de
+    vuelta: sin el proyecto, agregar una planta al carrito sacaría a la
+    cotización de su proyecto sin que nadie lo note."""
     destino = (form.get("volver") or "").strip()
-    if destino == "/venta/servicio-personalizada" or destino.startswith("/venta/servicio/"):
-        return destino
-    return "/venta/nueva"
+    if destino != "/venta/servicio-personalizada" \
+            and not destino.startswith("/venta/servicio/"):
+        destino = "/venta/nueva"
+    partes = []
+    proyecto = (form.get("proyecto") or "").strip()
+    if proyecto:
+        partes.append(f"proyecto={quote(proyecto)}")
+    if (q or "").strip():
+        partes.append(f"q={quote(q.strip())}")
+    return destino + ("?" + "&".join(partes) if partes else "")
 
 
 @app.post("/venta/carrito/agregar")
@@ -753,8 +764,7 @@ async def venta_agregar(request: Request):
         pass
     # Conservar la búsqueda activa: así se pueden agregar varias plantas
     # seguidas sin volver a escribir.
-    q = (form.get("q") or "").strip()
-    return RedirectResponse(_volver_del_carrito(form) + (f"?q={quote(q)}" if q else ""),
+    return RedirectResponse(_volver_del_carrito(form, form.get("q") or ""),
                             status_code=303)
 
 
@@ -811,10 +821,17 @@ async def venta_cotizar(request: Request):
 # haber un formulario en curso a la vez (igual que hoy con Nueva Venta).
 # ---------------------------------------------------------------------------
 
-def _contexto_servicio(request, tipo, q="", error=None, servicios=None):
+def _contexto_servicio(request, tipo, q="", error=None, servicios=None,
+                       proyecto=""):
     """El contexto del mini-formulario de un tipo. Lo comparten el GET y el
     POST que no pudo crear la cotización: así un error no borra los
-    párrafos de servicio que la empleada ya escribió."""
+    párrafos de servicio que la empleada ya escribió.
+
+    El proyecto llega de dos formas: ya puesto en la URL (los botones de la
+    ficha de un proyecto, `?proyecto=PROYECTO-01`), y entonces se muestra
+    fijo; o a elegir de una lista, que solo ofrece "Cotizar Proyecto"
+    (decisión del dueño 17/09/2026: en los demás tipos el proyecto solo
+    entra si vienes desde su ficha)."""
     usuario = request.state.empleada["id"]
     borrador = ventas.borrador_de(usuario)
     if servicios is None:
@@ -825,12 +842,32 @@ def _contexto_servicio(request, tipo, q="", error=None, servicios=None):
         "resultados": None, "carrito": [], "total_carrito": 0.0,
         "borrador": borrador, "servicios": servicios or [{"texto": "", "monto": ""}],
         "error_venta": error or None,
+        "proyecto": (proyecto or "").strip(), "proyecto_nombre": None,
+        # El selector está SIEMPRE en "Cotizar Proyecto", aunque todavía no
+        # haya ningún proyecto en Odoo: si el campo desaparece cuando la
+        # lista está vacía, parece que la pantalla no lo tuviera.
+        "elegir_proyecto": tipo == "proyecto", "proyectos": [],
     }
     if contexto["ventas_activo"]:
         try:
             if contexto["q"]:
                 contexto["resultados"] = ventas.buscar_productos(contexto["q"])
             contexto["carrito"], contexto["total_carrito"] = ventas.carrito_de(usuario)
+            if contexto["proyecto"]:
+                proyecto = proyectos.buscar(contexto["proyecto"])
+                if proyecto:
+                    contexto["proyecto_nombre"] = proyecto["name"]
+                else:
+                    contexto["proyecto"] = ""
+                    contexto["error_venta"] = contexto["error_venta"] or (
+                        "Ese proyecto ya no existe: la cotización va a quedar "
+                        "suelta.")
+            if tipo == "proyecto":
+                # En "Cotizar Proyecto" el selector está siempre, aunque se
+                # entre desde la ficha de un proyecto: así se puede cambiar
+                # de proyecto sin volver atrás. En los demás tipos el
+                # proyecto solo llega desde su ficha y se muestra fijo.
+                contexto["proyectos"] = proyectos.para_elegir()
         except Exception:
             contexto["error_venta"] = ("Sin conexión con Odoo en este momento. "
                                        "Vuelve a intentar en un rato.")
@@ -838,12 +875,13 @@ def _contexto_servicio(request, tipo, q="", error=None, servicios=None):
 
 
 @app.get("/venta/servicio/{tipo}")
-def venta_servicio(request: Request, tipo: str, q: str = "", error: str = ""):
+def venta_servicio(request: Request, tipo: str, q: str = "", error: str = "",
+                   proyecto: str = ""):
     if tipo not in cotizaciones.TIPOS:
         return RedirectResponse("/venta", status_code=303)
     return plantillas.TemplateResponse(
         request, "venta_servicio.html",
-        _contexto_servicio(request, tipo, q, error))
+        _contexto_servicio(request, tipo, q, error, proyecto=proyecto))
 
 
 @app.post("/venta/servicio/{tipo}")
@@ -855,17 +893,20 @@ async def venta_servicio_crear(request: Request, tipo: str):
     servicios = cotizaciones.servicios_del_formulario(
         form.getlist("servicio_texto"), form.getlist("servicio_monto"))
     datos_cliente = _datos_cliente_del_form(form)
+    proyecto_ref = (form.get("proyecto") or "").strip()
     carrito, _total = ventas.carrito_de(usuario)
     lineas_catalogo = [{"producto_id": l["producto_id"], "cantidad": l["cantidad"]}
                        for l in carrito]
     try:
         registro = cotizaciones.crear_cotizacion(
             request.state.empleada, tipo, form.get("cliente", ""),
-            form.get("celular", ""), servicios, lineas_catalogo, datos_cliente)
+            form.get("celular", ""), servicios, lineas_catalogo, datos_cliente,
+            proyecto_ref)
     except ValueError as error:
         return plantillas.TemplateResponse(
             request, "venta_servicio.html",
-            _contexto_servicio(request, tipo, error=str(error), servicios=servicios),
+            _contexto_servicio(request, tipo, error=str(error), servicios=servicios,
+                               proyecto=proyecto_ref),
             status_code=200)
     except Exception as error:
         return plantillas.TemplateResponse(
@@ -873,16 +914,20 @@ async def venta_servicio_crear(request: Request, tipo: str):
             _contexto_servicio(
                 request, tipo,
                 error=f"Odoo no aceptó la cotización: {ventas._mensaje_de_error(error)}",
-                servicios=servicios),
+                servicios=servicios, proyecto=proyecto_ref),
             status_code=200)
     ventas.vaciar_carrito(usuario)
     ventas._limpiar_borrador(usuario)
+    filas = [("Tipo", cotizaciones.etiqueta_de(tipo), None),
+             ("Total", dinero_venta(registro["total"]), None),
+             ("Estado", "Cotización (borrador en Odoo)", "dorado")]
+    if proyecto_ref:
+        # Que se vea que quedó dentro del proyecto y no suelta.
+        filas.insert(1, ("Proyecto", proyecto_ref, None))
     return plantillas.TemplateResponse(request, "venta_exito.html", {
         "titulo": "Cotización de servicio creada",
         "sub": f"{registro['orden']} · {registro['cliente']}",
-        "filas": [("Tipo", cotizaciones.etiqueta_de(tipo), None),
-                  ("Total", dinero_venta(registro["total"]), None),
-                  ("Estado", "Cotización (borrador en Odoo)", "dorado")],
+        "filas": filas,
         "pdf_href": f"/venta/servicio/{registro['n']}/propuesta.pdf",
         "pdf_texto": "Descargar propuesta (PDF)",
     })

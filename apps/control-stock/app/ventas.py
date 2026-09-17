@@ -444,8 +444,10 @@ def venta_por_token(token):
 
 # Los datos opcionales del bloque Cliente, iguales en Nueva Venta y en las
 # cotizaciones de servicio (pedido del dueño 17/09/2026: que se puedan
-# tomar RUC, cédula, empresa, correo y dirección, todos opcionales).
-CAMPOS_CLIENTE = ("empresa", "ruc", "cedula", "correo", "direccion")
+# tomar RUC, cédula, correo y dirección, todos opcionales). "Empresa" salió
+# de la lista ese mismo día: no se imprime en la propuesta y su lugar en el
+# bloque lo ocupa ahora el proyecto de la cotización.
+CAMPOS_CLIENTE = ("ruc", "cedula", "correo", "direccion")
 
 
 def valores_de_cliente(datos):
@@ -460,8 +462,6 @@ def valores_de_cliente(datos):
         valores["vat"] = limpio["ruc"] or limpio["cedula"]
     if limpio["cedula"]:
         valores["ref"] = limpio["cedula"]
-    if limpio["empresa"]:
-        valores["company_name"] = limpio["empresa"]
     if limpio["correo"]:
         valores["email"] = limpio["correo"]
     if limpio["direccion"]:

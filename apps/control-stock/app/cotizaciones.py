@@ -316,6 +316,26 @@ def _etiquetar_oportunidad(oportunidad_id, etiqueta):
 # paso, a diferencia del lead web que nace en "Nuevo" antes de cotizar.
 # ---------------------------------------------------------------------------
 
+def _oportunidad_para(partner_id, nombre, etiqueta_tipo, proyecto_ref):
+    """La oportunidad de la que cuelga la cotización.
+
+    Si nace dentro de un proyecto (el botón de su ficha o el selector
+    "Proyecto" del formulario) se usa la oportunidad DEL PROYECTO: así la
+    cotización sale adentro del proyecto en Odoo y el CRM sigue mostrando
+    una sola tarjeta por proyecto, nunca una por cotización (regla del
+    dueño). Sin proyecto se abre una oportunidad propia en "Cotizado", como
+    hasta ahora.
+    """
+    ref = (proyecto_ref or "").strip()
+    if not ref:
+        return _crear_oportunidad(partner_id, nombre, etiqueta_tipo)
+    from . import proyectos  # diferido: app/proyectos.py importa este módulo
+    proyecto = proyectos.buscar(ref)
+    if not proyecto:
+        raise ValueError(f"No existe el proyecto {ref}.")
+    return proyecto["id"]
+
+
 def _crear_oportunidad(partner_id, nombre, etiqueta_tipo):
     etapa_id = _id_ref("vivero_rose_pedidos.etapa_flujo_cotizado")
     oportunidad_id = ventas._ejecutar("crm.lead", "create", [{
@@ -483,12 +503,16 @@ def _lineas_por_tipo(tipo, servicios, lineas_catalogo):
 
 
 def crear_cotizacion(empleada, tipo, nombre, celular, servicios,
-                     lineas_catalogo=None, datos_cliente=None):
+                     lineas_catalogo=None, datos_cliente=None,
+                     proyecto_ref=None):
     """Crea la cotización de servicio en Odoo: cliente (por teléfono o
     nombre; se crea si no existe), sale.order con la plantilla del tipo y
     las líneas armadas con los servicios que la empleada describió (cada
     uno con su monto) más las plantas del carrito. Devuelve el registro
-    local."""
+    local.
+
+    Con `proyecto_ref` la cotización queda colgada de ese proyecto: sale
+    adentro de su ficha en Odoo y suma a sus totales."""
     if tipo not in TIPOS:
         raise ValueError("Tipo de servicio desconocido.")
     nombre = (nombre or "").strip()
@@ -498,7 +522,8 @@ def crear_cotizacion(empleada, tipo, nombre, celular, servicios,
     lineas = _lineas_por_tipo(tipo, servicios, lineas_catalogo)
 
     partner = _cliente_id(nombre, celular, datos_cliente)
-    oportunidad_id = _crear_oportunidad(partner, nombre, meta["etiqueta_orden"])
+    oportunidad_id = _oportunidad_para(partner, nombre, meta["etiqueta_orden"],
+                                       proyecto_ref)
     plantilla_id = _id_ref(meta["plantilla"])
     plantilla = ventas._ejecutar(
         "sale.order.template", "read", [[plantilla_id]],
@@ -519,8 +544,16 @@ def crear_cotizacion(empleada, tipo, nombre, celular, servicios,
     _etiquetar_orden(orden_id, meta["etiqueta_orden"])
     leido = ventas._ejecutar("sale.order", "read", [[orden_id]],
                              {"fields": ["name", "amount_total"]})[0]
-    ventas._ejecutar("crm.lead", "write",
-                     [[oportunidad_id], {"expected_revenue": leido["amount_total"]}])
+    if (proyecto_ref or "").strip():
+        # En un proyecto el ingreso esperado es la SUMA de sus cotizaciones
+        # (y la tarjeta pasa a Cotizado): eso lo hace proyectos, no este
+        # módulo, para no pisar el total del proyecto con el de esta sola.
+        from . import proyectos  # diferido: proyectos importa este módulo
+        proyectos.enlazar_cotizacion(orden_id, proyecto_ref.strip())
+    else:
+        ventas._ejecutar("crm.lead", "write",
+                         [[oportunidad_id],
+                          {"expected_revenue": leido["amount_total"]}])
     return _guardar_local(empleada, tipo, nombre, celular, orden_id,
                           leido["name"], leido["amount_total"])
 

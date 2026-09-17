@@ -426,7 +426,7 @@ def test_celular_va_al_contacto_y_al_registro(cliente_venta, odoo):
 def test_datos_opcionales_del_cliente_van_al_contacto(cliente_venta, odoo):
     _agregar(cliente_venta, 501)
     r = cliente_venta.post("/venta/cotizar",
-                           data={"cliente": "Ana", "celular": "", "empresa": "Jardines SA",
+                           data={"cliente": "Ana", "celular": "",
                                  "ruc": "155712345-2-2021", "cedula": "8-123-4567",
                                  "correo": "ana@jardines.com", "direccion": "Vía España"})
     assert "Cotización creada" in r.text
@@ -434,8 +434,7 @@ def test_datos_opcionales_del_cliente_van_al_contacto(cliente_venta, odoo):
     assert odoo.partners_vals[0] == {
         "name": "Ana", "customer_rank": 1, "company_type": "person",
         "vat": "155712345-2-2021", "ref": "8-123-4567",
-        "company_name": "Jardines SA", "email": "ana@jardines.com",
-        "street": "Vía España"}
+        "email": "ana@jardines.com", "street": "Vía España"}
 
 
 def test_sin_ruc_la_cedula_va_al_tax_id(cliente_venta, odoo):
@@ -447,11 +446,11 @@ def test_sin_ruc_la_cedula_va_al_tax_id(cliente_venta, odoo):
 
 def test_borrador_guarda_los_datos_opcionales(cliente_venta):
     cliente_venta.post("/venta/borrador",
-                       data={"cliente": "Ana", "celular": "", "empresa": "Jardines SA",
-                             "ruc": "155712345-2-2021", "cedula": "", "correo": "",
-                             "direccion": ""})
+                       data={"cliente": "Ana", "celular": "",
+                             "ruc": "155712345-2-2021", "cedula": "8-123-4567",
+                             "correo": "", "direccion": ""})
     pagina = cliente_venta.get("/venta/nueva")
-    assert 'value="Jardines SA"' in pagina.text
+    assert 'value="8-123-4567"' in pagina.text
     assert 'value="155712345-2-2021"' in pagina.text
 
 
@@ -466,7 +465,7 @@ def test_borrador_sobrevive_los_reloads(cliente_venta):
     cliente_venta.post("/venta/cotizar", data={"cliente": "María", "celular": "6567-3062"})
     assert ventas.borrador_de("genesis") == {
         "nombre": "", "celular": "", "servicios": [], "renglones": [],
-        "empresa": "", "ruc": "", "cedula": "", "correo": "", "direccion": ""}
+        "ruc": "", "cedula": "", "correo": "", "direccion": ""}
 
 
 def test_cancelar_cotizacion(cliente_venta, odoo):

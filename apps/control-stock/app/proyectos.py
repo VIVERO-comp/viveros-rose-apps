@@ -245,6 +245,25 @@ def _etapa_flujo_cotizado():
         return None
 
 
+def para_elegir():
+    """Los proyectos para el selector del formulario "Cotizar Proyecto": la
+    referencia y el nombre, el más nuevo primero. Se listan todos, incluido
+    un proyecto en Ganado: siempre se le puede cotizar algo más."""
+    filas = ventas._ejecutar(
+        "crm.lead", "search_read", [[["lead_ref", "=like", f"{PREFIJO_REF}-%"]]],
+        {"fields": ["name", "lead_ref"], "order": "id desc"})
+    return [{"ref": (f.get("lead_ref") or "").strip(),
+             "nombre": f.get("name") or (f.get("lead_ref") or "")}
+            for f in filas if (f.get("lead_ref") or "").strip()]
+
+
+def buscar(ref):
+    """El proyecto de esa referencia, o None. Lo usa el formulario de
+    cotización para colgar la cotización de la oportunidad del proyecto en
+    vez de abrir una tarjeta nueva en el CRM."""
+    return _buscar(ref)
+
+
 def _buscar(ref):
     filas = ventas._ejecutar(
         "crm.lead", "search_read", [[["lead_ref", "=ilike", (ref or "").strip()]]],

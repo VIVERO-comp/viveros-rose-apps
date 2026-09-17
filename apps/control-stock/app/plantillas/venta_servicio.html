@@ -71,12 +71,14 @@
       cobra son los montos de arriba.</p>
     {% endif %}
     <form class="buscador" method="get" action="/venta/servicio/{{ tipo }}">
+      {% if proyecto %}<input type="hidden" name="proyecto" value="{{ proyecto }}">{% endif %}
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9aa3bd" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
       <input id="busca-venta" name="q" value="{{ q }}" placeholder="Buscar planta por nombre o SKU…"
              autocomplete="off" enterkeyhint="search">
     </form>
 
-    <div id="resultados-venta" data-volver="/venta/servicio/{{ tipo }}">
+    <div id="resultados-venta" data-volver="/venta/servicio/{{ tipo }}"
+         data-proyecto="{{ proyecto or '' }}">
     {% if resultados is not none %}
       {% if not resultados %}
       <p class="nada-venta">Nada con "{{ q }}". Prueba otro nombre o el SKU.</p>
@@ -87,6 +89,7 @@
         <input type="hidden" name="cantidad" value="1">
         <input type="hidden" name="q" value="{{ q }}">
         <input type="hidden" name="volver" value="/venta/servicio/{{ tipo }}">
+        <input type="hidden" name="proyecto" value="{{ proyecto or '' }}">
         <button class="planta planta-boton" type="submit">
           <div class="foto">🪴<img src="/venta/foto/{{ p.id }}" alt="" loading="lazy" onerror="this.remove()"></div>
           <div class="info"><b>{{ p.nombre }}</b><span>{{ p.sku }}</span>
@@ -113,6 +116,7 @@
           <form method="post" action="/venta/carrito/quitar" class="sin-margen">
             <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
             <input type="hidden" name="volver" value="/venta/servicio/{{ tipo }}">
+            <input type="hidden" name="proyecto" value="{{ proyecto or '' }}">
             <button class="quitar-venta" type="submit">Quitar</button>
           </form>
         </div>
@@ -121,6 +125,7 @@
             <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
             <input type="hidden" name="cantidad" value="{{ l.cantidad - 1 }}">
             <input type="hidden" name="volver" value="/venta/servicio/{{ tipo }}">
+            <input type="hidden" name="proyecto" value="{{ proyecto or '' }}">
             <button type="submit" aria-label="Menos">−</button>
           </form>
           <span class="valor">{{ l.cantidad }}</span>
@@ -128,6 +133,7 @@
             <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
             <input type="hidden" name="cantidad" value="{{ l.cantidad + 1 }}">
             <input type="hidden" name="volver" value="/venta/servicio/{{ tipo }}">
+            <input type="hidden" name="proyecto" value="{{ proyecto or '' }}">
             <button type="submit" aria-label="Más">+</button>
           </form>
         </div>

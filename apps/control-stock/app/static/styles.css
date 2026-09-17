@@ -499,12 +499,20 @@ nav button.on, nav a.on{color:var(--dorado);background:rgba(227,181,127,.1)}
 /* ---------- Crear venta (/venta) ---------- */
 .sin-margen{margin:0}
 /* El bloque Cliente va a dos columnas y con campos más chicos (pedido del
-   dueño 17/09/2026): son 7 datos (nombre, celular, empresa, RUC, cédula,
-   correo y dirección) y en una sola columna la pantalla se hacía eterna. */
+   dueño 17/09/2026): son varios datos (nombre, celular, proyecto, RUC,
+   cédula, correo y dirección) y en una sola columna la pantalla se hacía
+   eterna. El selector de proyecto se ve igual que los campos de texto. */
 .campos-cliente{display:grid;grid-template-columns:1fr 1fr;gap:8px 9px}
 .campos-cliente .campo-ancho{grid-column:1/-1}
 .campos-cliente .campo span{font-size:10.5px;margin-bottom:3px}
-.campos-cliente .campo input{font-size:13px;padding:9px 11px;border-radius:12px}
+.campos-cliente .campo input,
+.campos-cliente .campo select{font-size:13px;padding:9px 11px;border-radius:12px}
+.campos-cliente .campo select{
+  width:100%;box-sizing:border-box;font-family:inherit;
+  border:1px solid var(--borde);background:#fff;color:inherit;
+}
+.campos-cliente .campo input[readonly]{color:var(--texto-suave)}
+.nota-campo{display:block;font-size:10.5px;color:var(--texto-suave);margin-top:4px}
 .nota-cliente{font-size:11px;color:var(--texto-suave);margin:7px 2px 0}
 .planta-boton{width:100%;border:none;font-family:inherit;text-align:left}
 .agregar-venta{

@@ -1,9 +1,15 @@
 {# Bloque Cliente compartido por Nueva Venta, las cotizaciones de servicio y
    la personalizada: nombre y celular más los datos opcionales de
-   facturación (empresa, RUC, cédula, correo y dirección), en dos columnas
+   facturación (RUC, cédula, correo y dirección), en dos columnas
    compactas (pedido del dueño 17/09/2026). `form_cliente` es el id del
    <form> al que pertenecen los campos y `nombre_opcional` afloja el
-   nombre en Nueva Venta, donde vacío significa "Cliente Local". #}
+   nombre en Nueva Venta, donde vacío significa "Cliente Local".
+
+   Donde estaba "Empresa" va el PROYECTO (el dueño la quitó el 17/09/2026:
+   no se imprime en la propuesta y el lugar rinde más para decir de qué
+   proyecto es la cotización). Sale solo si la pantalla lo pasa: fijo
+   cuando se entra desde la ficha de un proyecto, o a elegir en "Cotizar
+   Proyecto". #}
 <div class="seccion-titulo">Cliente</div>
 <div class="campos-cliente" id="campos-cliente">
   <div class="campo">
@@ -18,12 +24,29 @@
            value="{{ borrador.celular }}" autocomplete="off" inputmode="tel"
            placeholder="Ej: 6567-3062">
   </div>
+  {% if elegir_proyecto %}
   <div class="campo">
-    <span>Empresa</span>
-    <input class="dato-cliente" name="empresa" form="{{ form_cliente }}"
-           value="{{ borrador.empresa }}" autocomplete="off"
-           placeholder="Si factura a nombre de una empresa">
+    <span>Proyecto</span>
+    <select id="cliente-proyecto" name="proyecto" form="{{ form_cliente }}">
+      <option value="">Ninguno (cotización suelta)</option>
+      {% for p in proyectos %}
+      <option value="{{ p.ref }}" {% if p.ref == proyecto %}selected{% endif %}>
+        {{ p.ref }} · {{ p.nombre }}</option>
+      {% endfor %}
+    </select>
+    {% if not proyectos %}
+    <small class="nota-campo">Todavía no hay proyectos.
+      <a href="/proyecto/nuevo">Crear uno</a></small>
+    {% endif %}
   </div>
+  {% elif proyecto_nombre %}
+  <div class="campo">
+    <span>Proyecto</span>
+    <input value="{{ proyecto }} · {{ proyecto_nombre }}" readonly>
+    <input type="hidden" name="proyecto" form="{{ form_cliente }}"
+           value="{{ proyecto }}">
+  </div>
+  {% endif %}
   <div class="campo">
     <span>RUC</span>
     <input class="dato-cliente" name="ruc" form="{{ form_cliente }}"

@@ -16,6 +16,10 @@ from app import cotizaciones, proyectos, ventas
 
 XML_IDS = {
     "vivero_rose_pedidos.etapa_flujo_cotizado": 7002,
+    # Lo que hace falta para cotizar DENTRO de un proyecto (la plantilla del
+    # tipo y su renglón de servicio).
+    "vivero_rose_pedidos.plantilla_servicio_proyecto": 9006,
+    "vivero_rose_pedidos.producto_sv_instalacion": 8002,
 }
 
 SECUENCIAS_ETAPA = {7001: 0, 7002: 2, 7003: 3, 7004: 4}
@@ -158,6 +162,35 @@ class OdooProyectos:
                     [valor, "proyecto"] if campo == "opportunity_id" else valor)
         return True
 
+    def sale_order_template_read(self, args, kw):
+        return [{"id": args[0][0], "note": "Nota proyecto",
+                 "number_of_days": 15}]
+
+    def sale_order_create(self, args, kw):
+        nuevo = self._nuevo()
+        valores = dict(args[0])
+        total = 0.0
+        for linea in [l[2] for l in valores.get("order_line", [])]:
+            if linea.get("display_type"):
+                continue
+            total += (linea.get("price_unit") or 0.0) * linea.get("product_uom_qty", 1)
+        self.ordenes[nuevo] = {
+            "name": f"S{nuevo}", "amount_total": round(total, 2), "state": "draft",
+            "create_date": "2026-09-17 13:00:00", "vals": valores,
+            "tipo_servicio": valores.get("tipo_servicio"),
+            "opportunity_id": [valores.get("opportunity_id"), "proyecto"]
+            if valores.get("opportunity_id") else False,
+        }
+        return nuevo
+
+    def sale_order_read(self, args, kw):
+        return [{"id": i, **{c: self.ordenes[i].get(c) for c in kw["fields"]}}
+                for i in args[0]]
+
+    def res_partner_read(self, args, kw):
+        return [{"id": i, **{c: self.partners[i].get(c) for c in kw["fields"]}}
+                for i in args[0] if i in self.partners]
+
     # ---- gastos ----
     def vivero_rose_proyecto_gasto_create(self, args, kw):
         nuevo = self._nuevo()
@@ -194,11 +227,21 @@ class OdooProyectos:
         return [{"id": i, "name": self.tags[i]["name"]} for i in args[0] if i in self.tags]
 
     def res_partner_search(self, args, kw):
-        campo, operador, valor = args[0][0]
-        if operador == "=ilike":
-            return [i for i, p in self.partners.items()
-                    if str(p.get(campo) or "").lower() == str(valor).lower()]
-        return []
+        # El dominio llega de dos formas: una condición sola (el proyecto
+        # busca por nombre) o un OR de variantes de teléfono (la cotización
+        # de servicio, app/cotizaciones.py:_dominio_telefono).
+        condiciones = [c for c in args[0] if c != "|"]
+
+        def coincide(partner, condicion):
+            campo, operador, valor = condicion
+            actual = str(partner.get(campo) or "").lower()
+            valor = str(valor).lower()
+            return valor in actual if operador == "ilike" else actual == valor
+
+        encontrados = [i for i, p in self.partners.items()
+                       if any(coincide(p, c) for c in condiciones)]
+        limite = kw.get("limit")
+        return encontrados[:limite] if limite else encontrados
 
     def res_partner_create(self, args, kw):
         nuevo = self._nuevo()
@@ -489,3 +532,96 @@ def test_la_ficha_de_un_proyecto_inexistente_devuelve_al_tablero(odoo, cliente):
     respuesta = cliente.get("/proyecto/PROYECTO-99", follow_redirects=False)
     assert respuesta.status_code == 303
     assert respuesta.headers["location"].startswith("/proyecto?error=")
+
+
+# ---------------------------------------------------------------------------
+# Cotizar DENTRO de un proyecto (el campo "Proyecto" del formulario y los
+# botones de la ficha). Lo que se prueba es que la cotización cuelgue de la
+# oportunidad DEL PROYECTO: sin eso la cotización nace suelta, el CRM gana
+# una tarjeta de más y el proyecto no la muestra.
+# ---------------------------------------------------------------------------
+
+def test_cotizar_dentro_de_un_proyecto_no_abre_otra_tarjeta(odoo):
+    proyectos.crear(EMPLEADA, "Morris Cohen", "6567-3062", "paisajismo")
+    lead_id = _lead_de(odoo, "PROYECTO-01")
+    antes = len(odoo.leads)
+
+    registro = cotizaciones.crear_cotizacion(
+        EMPLEADA, "proyecto", "Morris Cohen", "6567-3062",
+        [{"texto": "Instalación en sitio", "monto": "1200"}], [], None,
+        "PROYECTO-01")
+
+    assert len(odoo.leads) == antes, "no debe nacer otra oportunidad"
+    orden = odoo.ordenes[registro["orden_id"]]
+    assert orden["opportunity_id"][0] == lead_id
+    assert registro["total"] == 1200.0
+
+
+def test_la_cotizacion_del_proyecto_sale_en_su_ficha(odoo):
+    proyectos.crear(EMPLEADA, "Morris Cohen", "6567-3062", "paisajismo")
+    cotizaciones.crear_cotizacion(
+        EMPLEADA, "proyecto", "Morris Cohen", "6567-3062",
+        [{"texto": "Instalación en sitio", "monto": "1200"}], [], None,
+        "PROYECTO-01")
+
+    ficha = proyectos.detalle("PROYECTO-01")
+    assert [c["total"] for c in ficha["cotizaciones"]] == [1200.0]
+    # Y el proyecto avanza a Cotizado con su ingreso esperado.
+    lead = odoo.leads[_lead_de(odoo, "PROYECTO-01")]
+    assert lead["etapa_proyecto"] == "cotizado"
+    assert lead["expected_revenue"] == 1200.0
+
+
+def test_dos_cotizaciones_suman_en_el_mismo_proyecto(odoo):
+    proyectos.crear(EMPLEADA, "Morris Cohen", "6567-3062", "paisajismo")
+    for monto in ("1200", "800"):
+        cotizaciones.crear_cotizacion(
+            EMPLEADA, "proyecto", "Morris Cohen", "6567-3062",
+            [{"texto": "Trabajo", "monto": monto}], [], None, "PROYECTO-01")
+
+    lead = odoo.leads[_lead_de(odoo, "PROYECTO-01")]
+    assert lead["expected_revenue"] == 2000.0
+    assert proyectos.detalle("PROYECTO-01")["totales"]["cotizado"] == 2000.0
+
+
+def test_un_proyecto_que_no_existe_avisa_y_no_cotiza(odoo):
+    with pytest.raises(ValueError, match="PROYECTO-99"):
+        cotizaciones.crear_cotizacion(
+            EMPLEADA, "proyecto", "Morris Cohen", "6567-3062",
+            [{"texto": "Trabajo", "monto": "100"}], [], None, "PROYECTO-99")
+    assert not odoo.ordenes
+
+
+def test_sin_proyecto_la_cotizacion_sigue_naciendo_suelta(odoo):
+    registro = cotizaciones.crear_cotizacion(
+        EMPLEADA, "proyecto", "Cliente Nuevo", "6000-0000",
+        [{"texto": "Trabajo", "monto": "300"}], [], None, "")
+    orden = odoo.ordenes[registro["orden_id"]]
+    oportunidad = odoo.leads[orden["opportunity_id"][0]]
+    assert not oportunidad.get("lead_ref")
+    assert oportunidad["expected_revenue"] == 300.0
+
+
+def test_el_formulario_del_proyecto_ofrece_elegirlo(odoo, cliente):
+    proyectos.crear(EMPLEADA, "Morris Cohen", "6567-3062", "paisajismo")
+    pagina = cliente.get("/venta/servicio/proyecto")
+    assert 'name="proyecto"' in pagina.text
+    assert "PROYECTO-01 · Proyecto Morris" in pagina.text
+    assert "Ninguno (cotización suelta)" in pagina.text
+
+
+def test_los_demas_tipos_lo_muestran_fijo_solo_si_vienen_de_la_ficha(odoo, cliente):
+    proyectos.crear(EMPLEADA, "Morris Cohen", "6567-3062", "paisajismo")
+    suelto = cliente.get("/venta/servicio/mantenimiento")
+    assert 'name="proyecto"' not in suelto.text
+    desde_ficha = cliente.get("/venta/servicio/mantenimiento?proyecto=PROYECTO-01")
+    assert "PROYECTO-01 · Proyecto Morris" in desde_ficha.text
+
+
+def test_el_campo_proyecto_esta_aunque_no_haya_ninguno(odoo, cliente):
+    # Sin proyectos en Odoo el campo NO puede desaparecer: si no, parece que
+    # la pantalla no lo tuviera (fue justo lo que pasó en producción).
+    pagina = cliente.get("/venta/servicio/proyecto")
+    assert 'name="proyecto"' in pagina.text
+    assert "Todavía no hay proyectos." in pagina.text
+    assert "/proyecto/nuevo" in pagina.text

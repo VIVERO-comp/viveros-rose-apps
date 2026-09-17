@@ -346,14 +346,12 @@ def test_datos_opcionales_del_cliente_en_una_cotizacion(odoo):
     registro = cotizaciones.crear_cotizacion(
         {"id": "g", "nombre": "Génesis"}, "instalacion", "Ana", "", 
         [{"texto": "Instalación", "monto": "300"}], [],
-        {"empresa": "Jardines SA", "ruc": "155712345-2-2021",
-         "cedula": "8-123-4567", "correo": "ana@jardines.com",
-         "direccion": "Vía España"})
+        {"ruc": "155712345-2-2021", "cedula": "8-123-4567",
+         "correo": "ana@jardines.com", "direccion": "Vía España"})
     orden = odoo.ordenes[registro["orden_id"]]
     partner = odoo.partners[orden["vals"]["partner_id"]]
     assert partner["vat"] == "155712345-2-2021"
     assert partner["ref"] == "8-123-4567"
-    assert partner["company_name"] == "Jardines SA"
     assert partner["email"] == "ana@jardines.com"
     assert partner["street"] == "Vía España"
 
