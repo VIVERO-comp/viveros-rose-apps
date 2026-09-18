@@ -2,7 +2,11 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+{# Sin maximum-scale ni user-scalable=no: en el teléfono hay que poder
+   acercar con los dedos para leer un SKU o una cantidad. Los campos
+   van a 16px en móvil (styles.css) para que el teléfono no haga el
+   zoom automático al enfocarlos. #}
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>{% block titulo %}Control de Stock — Plantas Panamá{% endblock %}</title>
 <link rel="icon" type="image/jpeg" href="/static/logo.jpg">
 <link rel="apple-touch-icon" href="/static/logo.jpg">

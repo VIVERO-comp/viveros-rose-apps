@@ -63,7 +63,7 @@
   {% if carrito %}
   <div class="seccion-titulo" style="margin-top:14px">Plantas de la cotización · {{ carrito | length }}</div>
     {% for l in carrito %}
-    <div class="planta" style="cursor:default">
+    <div class="planta fila-carrito" style="cursor:default">
       <div class="foto">🪴<img src="/venta/foto/{{ l.producto_id }}" alt="" loading="lazy" onerror="this.remove()"></div>
       <div class="info">
         <b>{{ l.nombre }}</b>

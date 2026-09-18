@@ -178,6 +178,39 @@ main{position:relative;z-index:1;flex:1;overflow-y:auto;padding:6px 20px 110px}
   margin:-6px -20px 0;padding:12px 20px 0;
   background:rgba(27,33,55,.92);backdrop-filter:blur(12px);
 }
+/* Las dos vistas del stock (Online / Global). Van dentro de .stock-top para
+   quedar pegadas arriba con el buscador y los chips. */
+.sub-tabs{
+  display:flex;gap:4px;background:var(--noche-2);border-radius:14px;
+  padding:4px;margin-bottom:9px;
+}
+.sub-tabs .sub{
+  flex:1;border:none;background:none;cursor:pointer;
+  color:var(--texto-suave);font-family:inherit;font-size:12.5px;font-weight:600;
+  border-radius:11px;padding:9px 6px;
+}
+.sub-tabs .sub.on{background:var(--dorado);color:#3a2c14;font-weight:700}
+.sub-nota{font-size:11px;color:var(--texto-suave);line-height:1.45;margin:0 2px 10px}
+/* Marca en la tarjeta de una planta que existe en Odoo pero no en la tienda:
+   solo se ve en Stock global, donde la distinción importa. */
+.fuera-linea{
+  display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.3px;
+  background:#e6ddc8;color:#7a6a45;border-radius:7px;padding:2px 7px;margin-top:3px;
+}
+/* Formulario Crear planta: los campos cortos van de a dos por fila. */
+.campos-nuevo{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.campos-nuevo .campo select{
+  width:100%;background:var(--noche-2);border:1px solid var(--noche-3);
+  border-radius:14px;color:var(--texto);font-family:inherit;font-size:14px;
+  padding:12px 14px;outline:none;
+}
+.campos-nuevo .campo select:focus{border-color:var(--dorado)}
+.casilla{
+  display:flex;align-items:center;gap:9px;
+  font-size:12.5px;color:var(--texto-suave);cursor:pointer;margin-top:2px;
+}
+.casilla input{width:17px;height:17px;accent-color:var(--dorado)}
+
 .buscador{
   display:flex;align-items:center;gap:9px;
   background:var(--noche-2);border-radius:16px;padding:12px 15px;
@@ -269,14 +302,17 @@ main{position:relative;z-index:1;flex:1;overflow-y:auto;padding:6px 20px 110px}
 .btn-linea{background:none;border:1.5px solid var(--noche-3);color:var(--texto)}
 .btn-crema{background:var(--crema);color:#2c2416}
 
-/* Botones de "Cotizar un servicio": grilla de 4×2 (7 tipos + Personalizado
-   = 8), mismo alto que "+ NUEVA VENTA" (.btn-grande), ancho de la columna. */
-.grid-servicios{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+/* Botones de "Cotizar un servicio" (7 tipos + Personalizado = 8). En el
+   teléfono van de 2 en 2: con 4 columnas, "Mantenimiento" y "Cotización de
+   proyecto" no cabían y el texto salía cortado de la caja (18/09/2026). El
+   alto es mínimo, no fijo, para que la etiqueta larga crezca en vez de
+   desbordarse; en computadora vuelven a ser 4 columnas. */
+.grid-servicios{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .servicio-boton{
-  height:52px;display:flex;align-items:center;justify-content:center;
+  min-height:56px;display:flex;align-items:center;justify-content:center;
   text-align:center;background:var(--dorado);color:#3a2c14;
-  border-radius:15px;font-family:inherit;font-size:12.5px;font-weight:700;
-  line-height:1.2;padding:6px;text-decoration:none;transition:transform .12s ease;
+  border-radius:15px;font-family:inherit;font-size:13.5px;font-weight:700;
+  line-height:1.25;padding:10px 8px;text-decoration:none;transition:transform .12s ease;
 }
 .servicio-boton:active{transform:scale(.96)}
 
@@ -797,6 +833,9 @@ button.enlace-sub{
   /* Aprovechar el ancho: categorías en 4 columnas y el stock en tantas
      tarjetas como quepan (3–4 en un monitor normal). */
   .cats{grid-template-columns:repeat(4,1fr)}
+  /* Los botones de servicio vuelven a la grilla 4×2 del escritorio. */
+  .grid-servicios{grid-template-columns:repeat(4,1fr);gap:9px}
+  .servicio-boton{min-height:52px;font-size:12.5px;padding:6px}
   #lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;align-items:start}
   #lista .planta{margin-bottom:0}
   /* Ajustes puntuales de piezas que estaban pensadas para fondo oscuro. */
@@ -851,7 +890,13 @@ button.enlace-sub{
   text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;
 }
 .det-dato b{font-size:15px}
-.det-dato .badge{margin-top:0}
+/* La etiqueta de estado va dentro de un <span>, y `.det-dato span` (la
+   etiquetita gris de arriba) lo volvía bloque en mayúsculas: la píldora
+   salía estirada a todo el ancho de la tarjeta. */
+.det-dato .badge{
+  margin-top:0;display:inline-block;width:auto;
+  text-transform:none;letter-spacing:0;
+}
 #det-ajustar{width:100%;justify-content:center;margin-bottom:10px}
 .ficha-solo-lectura p{font-size:13px;line-height:1.6;margin-bottom:14px}
 
@@ -917,4 +962,103 @@ button.enlace-sub{
   .servicio-monto input{background:#f5f2ea;border-color:#e2dbca}
   .anadir-servicio{border-color:#e0d7c3}
   .fab{bottom:26px;right:28px}
+}
+
+/* ---------- teléfono: tamaños legibles y áreas de toque (18/09/2026).
+   El diseño y los colores del prototipo no cambian: lo que cambia es que
+   los textos de 10–11px suben a 12–13px, lo que se toca con el dedo mide
+   al menos ~44px de alto, y las filas que metían tres cosas en una línea
+   ahora bajan de renglón en vez de salirse de la pantalla. Todo va dentro
+   de max-width:899px para no tocar la vista de computadora. ---------- */
+@media (max-width: 899px){
+  /* --- textos que quedaban demasiado chicos para leer de pie en el vivero --- */
+  nav button, nav a{font-size:11.5px}
+  .tot b{font-size:23px}
+  .tot span{font-size:11.5px}
+  .cat b{font-size:15px}
+  .cat span{font-size:12.5px}
+  .cat .alerta-mini{font-size:11.5px;padding:3px 9px}
+  .score-why{font-size:13.5px;line-height:1.5}
+  .seccion-titulo{font-size:15px}
+  .sync, .sync a{font-size:12.5px}
+  .planta .info b{font-size:15px}
+  .planta .info span{font-size:12px}
+  .planta .info .precio{font-size:12px}
+  .planta .info .precio b{font-size:13.5px}
+  .planta .qty b{font-size:22px}
+  .badge{font-size:11px;padding:3px 9px}
+  .venta-item .titulo{font-size:14.5px}
+  .venta-item small{font-size:12px}
+  .venta-monto{font-size:17px}
+  .nada-venta, .nota-cliente, .nota-campo{font-size:13px}
+  .historial-item b{font-size:14px}
+  .historial-item small{font-size:12px}
+  .inv-card h3{font-size:15.5px}
+  .inv-card p{font-size:13px}
+  .aviso b{font-size:15.5px}
+  .aviso span{font-size:13px}
+  .edit-nota, .edit-error, .alerta-item p{font-size:13px}
+  .campo span{font-size:12.5px}
+  .campos-cliente .campo span{font-size:12px}
+  .dif-fila{font-size:14px}
+  .dif-fila .nombre span{font-size:12px}
+  .toast{font-size:13.5px}
+
+  /* --- campos: 16px para que el teléfono no haga zoom solo al enfocarlos
+     (con menos de 16px iOS acerca la pantalla y descuadra la vista) --- */
+  .campo input, .campo select, .campo textarea,
+  .campos-cliente .campo input, .campos-cliente .campo select,
+  .ficha-form .campo textarea, .ficha-form .campo select,
+  .buscador input, .servicio-texto, .servicio-monto input,
+  .umbral-form input, .edit-qty input{font-size:16px}
+  .campos-cliente .campo input, .campos-cliente .campo select{padding:11px 12px}
+
+  /* --- lo que se toca: al menos ~44px de alto --- */
+  .quitar-venta{font-size:13px;padding:9px 0}
+  .quitar-servicio{font-size:13px;padding:10px 8px}
+  .venta-acciones a, .venta-acciones .enlace-sub, button.enlace-sub{
+    font-size:13.5px;padding:8px 0;display:inline-block;
+  }
+  .alerta-item button{font-size:13px;padding:10px 4px}
+  .alerta-item .ir{font-size:12px}
+  .umbral-form{font-size:13px}
+  .umbral-form button{font-size:13px;padding:10px 6px}
+  .btn-chico{font-size:12.5px;padding:11px 14px}
+  .qty-mini button{width:44px;height:44px;font-size:22px}
+  .qty-mini .valor{width:34px;font-size:18px}
+  .agregar-venta{width:44px;height:44px}
+  .volver{font-size:13.5px;padding:8px 0}
+
+  /* --- filas que se salían de la pantalla: ahora bajan de renglón --- */
+  .venta-acciones{flex-wrap:wrap;gap:4px 14px}
+  .venta-acciones a, .venta-acciones .enlace-sub{margin-right:0}
+  .servicio-pie{flex-wrap:wrap;gap:8px 10px}
+  .historial-item{flex-wrap:wrap;gap:8px}
+  .acciones-acceso{flex-wrap:wrap}
+  .dif-fila{flex-wrap:wrap;gap:4px 10px}
+  .form-compra{grid-template-columns:1fr!important}
+  .form-compra input[name="monto"]{width:100%!important}
+
+  /* --- filas del carrito: la foto y el nombre arriba, el − / + abajo a la
+     derecha. Con las tres cosas en una sola línea, el nombre se partía en
+     tres renglones («Monstera / Deliciosa / mediana») y la tarjeta crecía
+     a lo alto sin necesidad. --- */
+  .fila-carrito{flex-wrap:wrap}
+  .fila-carrito .qty-mini{flex:1 0 100%;justify-content:flex-end;margin-top:4px}
+
+  /* --- detalle del producto: la ficha es larga y "Guardar ficha" vivía
+     arriba del todo, así que había que subir hasta el principio para
+     guardar. En el teléfono la barra se queda pegada arriba, como el
+     buscador del Stock. --- */
+  #tab-detalle .det-top{
+    position:sticky;top:0;z-index:6;
+    margin:-6px -20px 14px;padding:10px 20px;
+    background:rgba(27,33,55,.94);backdrop-filter:blur(12px);
+  }
+
+  /* --- alertas: "Atendida" se llevaba unos 90px de la fila y el aviso
+     quedaba partido en cinco renglones. En el teléfono el texto usa todo
+     el ancho y el botón baja a su propia línea, a la derecha. --- */
+  .alerta-item{flex-wrap:wrap}
+  .alerta-item form{flex:1 0 100%;text-align:right;margin-top:2px}
 }
