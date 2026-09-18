@@ -246,6 +246,10 @@ def inicio(request: Request, refrescar: int = 0):
     except datos.SinConexion as error:
         inventario, leido_en, sin_proxy = [], None, str(error)
     datos.refrescar_alertas(inventario, umbral)
+    # Qué plantas están HOY en plantaspanama.com: la pestaña "Stock online"
+    # es un espejo del sitio (ver datos.obtener_publicados). Sin el dato no
+    # se adivina: la pestaña lo avisa y muestra el global.
+    publicados, sin_publicados = datos.obtener_publicados()
 
     cuentas = calculos.clasificar(inventario, umbral)
     ultimo = datos.ultimo_conteo_confirmado()
@@ -278,6 +282,8 @@ def inicio(request: Request, refrescar: int = 0):
             # Altura en cm desde Odoo (0 = sin dato): la ficha la muestra y
             # la deja editar; el sitio publico la toma al regenerar.
             "hmin": p.get("altura_min", 0), "hmax": p.get("altura_max", 0),
+            # on: está publicada en la tienda. None = no se pudo saber.
+            "on": (p["sku"] in publicados) if publicados is not None else None,
             **_fotos_de(p),
         }
         for p in inventario
@@ -326,6 +332,8 @@ def inicio(request: Request, refrescar: int = 0):
             "puedeFichas": puede_fichas,
             "fichas": fichas.todas(),
             "referencias": fichas.referencias(),
+            "sinPublicados": sin_publicados,
+            "categoriasPlanta": datos.CATEGORIAS_PLANTA,
         }, ensure_ascii=False),
     })
 
@@ -362,6 +370,76 @@ async def ajustar(request: Request):
         # carga la vuelve a abrir con la cantidad nueva.
         datos.atender_alerta(sku, request.state.empleada["id"])
     return resultado
+
+
+@app.post("/productos/nuevo")
+async def crear_producto(request: Request):
+    """Alta de una planta desde el formulario "Crear planta".
+
+    Dos pasos, en este orden y nunca al revés: primero el order-api crea el
+    producto en Odoo (POST /api/productos) y recién después, si el empleado
+    puso una cantidad inicial, se aplica con el ajuste de siempre
+    (esperada=0: la planta acaba de nacer sin existencias). Si el ajuste
+    falla, la planta YA quedó creada y se dice así en pantalla, con el stock
+    en cero para corregirlo a mano; crear dos veces la misma planta sería
+    peor que dejarla en cero.
+
+    La planta nace SOLO en Odoo: no entra a la tienda hasta que se regenere
+    el catálogo del sitio, así que aparece en Stock global y no en online.
+    """
+    cuerpo = await request.json()
+    nombre = (cuerpo.get("nombre") or "").strip()
+    sku = (cuerpo.get("sku") or "").strip().upper() or datos.sku_sugerido(nombre)
+    categoria = cuerpo.get("categoria")
+    precio_centavos = cuerpo.get("precioCentavos")
+    cantidad = cuerpo.get("cantidad", 0)
+    altura_min = cuerpo.get("alturaMin", 0)
+    altura_max = cuerpo.get("alturaMax", 0)
+    sin_moto = bool(cuerpo.get("sinMoto", False))
+    costo_centavos = cuerpo.get("costoCentavos", 0)
+    # Notas internas de la ficha de Odoo: el bloque "nombre segundario /
+    # nombre cientifico" que llevan las plantas del catálogo.
+    nombre_secundario = (cuerpo.get("nombreSecundario") or "").strip()
+    nombre_cientifico = (cuerpo.get("nombreCientifico") or "").strip()
+
+    def error(mensaje, codigo="peticion_invalida", estado=400):
+        return Response(json.dumps({"error": codigo, "mensaje": mensaje},
+                                   ensure_ascii=False),
+                        status_code=estado, media_type="application/json")
+
+    if not nombre:
+        return error("Escribe el nombre de la planta.")
+    if not sku.startswith("PL-") or len(sku) < 4:
+        return error("La referencia debe empezar por PL-.")
+    if categoria not in datos.CATEGORIAS_PLANTA:
+        return error("Elige la categoría de la planta.")
+    if (not isinstance(precio_centavos, int) or precio_centavos < 0
+            or not isinstance(costo_centavos, int) or costo_centavos < 0
+            or not isinstance(cantidad, int) or cantidad < 0
+            or not isinstance(altura_min, int) or not isinstance(altura_max, int)):
+        return error("Revisa el precio, el costo, la cantidad y la altura.")
+
+    try:
+        creada = datos.crear_planta_en_odoo(
+            sku, nombre, categoria, precio_centavos,
+            altura_min, altura_max, sin_moto, costo_centavos,
+            nombre_secundario, nombre_cientifico,
+        )
+    except datos.SinConexion as fallo:
+        return error(str(fallo), "no_creada", 502)
+
+    stock = "sin_stock"
+    if cantidad > 0:
+        try:
+            respuesta = datos.ajustar_en_odoo(
+                [{"sku": sku, "cantidad": cantidad, "esperada": 0}],
+                request.state.empleada["id"], "alta_de_planta",
+            )
+            stock = respuesta["resultados"][0]["resultado"]
+        except datos.SinConexion:
+            stock = "falló"
+    return {"ok": True, "sku": sku, "nombre": nombre, "id": creada.get("id"),
+            "cantidad": cantidad, "stock": stock}
 
 
 @app.post("/alertas/atender")

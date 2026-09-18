@@ -37,7 +37,43 @@ En producción: `docker compose exec control-stock python -m app.usuarias …`
 
 - **Inicio**: score (100 − 6 por crítico − 2 por bajo − 15 si el conteo
   quincenal está vencido, >15 días), totales y tarjetas por categoría.
-- **Stock**: buscador + filtros, lista de menor a mayor. Tocar un producto
+- **Stock**: dos vistas del mismo inventario (18/09/2026), con buscador,
+  filtros, detalle y modal de ajuste compartidos:
+  - **Stock online** — solo las plantas que el cliente ve hoy en
+    plantaspanama.com. Es un **espejo** del sitio, no un interruptor: cada
+    build del frontend deja en `/catalogo-publicado.json` los SKU que
+    salieron publicados y la app los lee de ahí (`datos.obtener_publicados`,
+    caché de 10 min, degradación al último valor bueno). Si el sitio no
+    responde y no hay valor previo, la pestaña lo dice y muestra el global en
+    vez de fingir que no hay nada publicado.
+  - **Stock global** — todas las plantas activas de Odoo (el
+    `GET /v1/inventario` de siempre). Las que no están en la tienda llevan la
+    marca "No está en la tienda"; es la única vista donde esa marca aparece,
+    porque es donde la distinción importa. Los insumos `IN-` y los servicios
+    `SV-` siguen fuera.
+
+  Quién está online lo decide el servidor: `main.py` le pone la marca `on` a
+  cada planta antes de mandarla a la pantalla. Desde Inicio (score, totales,
+  alertas) siempre se aterriza en el global, porque esos números se calculan
+  sobre todo el inventario.
+- **Crear planta** (botón flotante, 18/09/2026): reemplaza a la sugerencia
+  por WhatsApp, que no creaba nada. Nombre, referencia (se propone sola desde
+  el nombre, `datos.sku_sugerido`), categoría, cantidad física inicial,
+  precio de venta, **costo**, altura de/a, "no viaja en moto" y **nombre
+  secundario + nombre científico**. Los dos nombres se escriben en las notas
+  internas de la ficha (`description`) con el bloque
+  `<h3>nombre segundario: …<br>nombre cientifico: …</h3>`, que es la
+  convención del catálogo (ortografía del dueño, respetada tal cual); sin
+  ninguno de los dos no se escribe un bloque vacío. La idea es que la planta
+  quede indistinguible de una creada a mano en Odoo. La foto queda fuera a
+  propósito: la imagen de perfil la maneja el dueño desde los adjuntos, y la
+  foto de la tarjeta se sube con el modal de foto de siempre. Crea el producto en Odoo por el
+  order-api (`POST /api/productos`) y **después** aplica la cantidad con el
+  ajuste de siempre; si el ajuste falla, la planta ya creada NO se repite y
+  la pantalla avisa que el stock quedó en 0. La planta nace solo en Odoo:
+  para salir en la tienda necesita foto y regenerar el catálogo del sitio,
+  así que aparece en Stock global y no en online.
+- **Stock (lista)**: buscador + filtros, lista de menor a mayor. Tocar un producto
   abre su **vista de detalle** (`/?producto=SKU`); tocar la foto abre el
   modal de foto. En computadora la lista es un grid de tarjetas a pantalla
   completa con −/+ de físico en cada tarjeta: el número solo cambia en
@@ -110,6 +146,16 @@ Ver [.env.example](.env.example): `STOCK_PROXY_URL` + `STOCK_API_KEY`
 - **order-api** `PUT /api/productos/{sku}/altura` — la altura de la planta
   (en cm) que se edita en la ficha; vive en Odoo, no en la base de la tienda,
   porque es un dato del producto. Exige `X-API-Key`.
+- **order-api** `POST /api/productos` — el alta de una planta del formulario
+  "Crear planta": crea el `product.template` en Odoo con la forma de las
+  plantas del catálogo (consu + almacenable, categoría del sitio, factura por
+  pedido) y **sin impuestos**, porque las plantas van exentas de ITBMS. No
+  pone stock y no publica nada en la tienda. Exige `X-API-Key`.
+- **plantaspanama.com** `GET /catalogo-publicado.json` — qué SKU están
+  publicados hoy en la tienda; es lo que separa "Stock online" de "Stock
+  global". Es el único lugar del que la app lee sin clave (es público) y el
+  único que no es Odoo. Se puede apuntar a otro sitio con
+  `CATALOGO_PUBLICADO_URL`.
 - **order-api** `POST /api/stock/ajustes` — la otra escritura: ajustes de
   inventario absolutos en Odoo (`stock.quant` + `action_apply_inventory`),
   con candado de cantidad esperada y auditoría en la base tienda

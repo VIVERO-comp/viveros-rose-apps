@@ -5,6 +5,12 @@ const DATOS = window.DATOS || { plantas: [], umbral: 3, alertas: [] };
 const plantas = DATOS.plantas;
 const UMBRAL = DATOS.umbral;
 let catActiva = "Todas";
+// Vista del stock: "online" son solo las plantas publicadas hoy en
+// plantaspanama.com (p.on, espejo de /catalogo-publicado.json del sitio);
+// "global" son todas las plantas activas de Odoo. Arranca en online, que es
+// lo que ve el cliente. Si no se pudo leer el catálogo del sitio
+// (DATOS.sinPublicados), no se adivina: se muestra el global y se avisa.
+let vistaStockActiva = DATOS.sinPublicados ? "global" : "online";
 let editando = null;
 let guardando = false;
 
@@ -49,13 +55,15 @@ function pintar() {
   // campanita); deja fuera las agotadas en 0 y las que estan OK.
   const esAlerta = p => p.f < 0 || (p.q > 0 && p.q < UMBRAL * 2);
   // "En 0": las que ya no tienen nada que vender (incluye fisico negativo).
+  // En "online" solo entran las que el sitio publica hoy; en "global", todas.
+  const pasaVista = p => vistaStockActiva === "global" || p.on === true;
   const pasaCategoria = p =>
     catActiva === "Todas" ? true :
     catActiva === "__alerta__" ? esAlerta(p) :
     catActiva === "__cero__" ? p.q <= 0 :
     p.c === catActiva;
   l.innerHTML = plantas
-    .filter(p => pasaCategoria(p) && normalizar(p.n).includes(t))
+    .filter(p => pasaVista(p) && pasaCategoria(p) && normalizar(p.n).includes(t))
     .sort((a, b) => cantidad(a) - cantidad(b))
     .map(p => {
       const [et, cl] = estado(p);
@@ -69,9 +77,13 @@ function pintar() {
       // descripcion y el pie con − / + para ajustar el fisico sin salir de
       // la lista. Nada se escribe hasta apretar "Guardar en Odoo".
       const extracto = descripcionDe(p.sku);
+      // Solo en Stock global: ahí conviven las publicadas y las que no, y
+      // saber cuál es cuál es justo el motivo de tener las dos vistas.
+      const marca = (vistaStockActiva === "global" && p.on === false)
+        ? '<span class="fuera-linea">No está en la tienda</span>' : "";
       return `<div class="planta ${!negativo && p.q <= 0 ? "agotada" : ""}" id="planta-${p.sku}" data-planta="${p.sku}">
         <div class="foto">${p.e}${foto}</div>
-        <div class="info"><b>${p.n}</b><span>${p.c}</span>${extracto ? `<span class="extracto solo-pc">${extracto}</span>` : ""}<span class="precio">${precio}</span></div>
+        <div class="info"><b>${p.n}</b><span>${p.c}</span>${marca}${extracto ? `<span class="extracto solo-pc">${extracto}</span>` : ""}<span class="precio">${precio}</span></div>
         <div class="qty"><b>${negativo ? p.f : p.q}</b><span class="badge ${cl}">${et}</span></div>
         <div class="card-pie solo-pc">
           <span class="pie-etiqueta">Físico</span>
@@ -84,9 +96,34 @@ function pintar() {
           </span>
         </div>
       </div>`;
-    }).join("") || '<p style="color:var(--texto-suave);font-size:13px;text-align:center;padding:30px 0">Sin resultados</p>';
+    }).join("") || `<p style="color:var(--texto-suave);font-size:13px;text-align:center;padding:30px 0">Sin resultados${
+      vistaStockActiva === "online" ? " en la tienda. Prueba en Stock global." : ""}</p>`;
 }
 function filtrar() { pintar(); }
+
+const NOTA_VISTA = {
+  online: "Las plantas que el cliente ve hoy en plantaspanama.com.",
+  global: "Todas las plantas activas en Odoo, estén o no en la tienda.",
+};
+
+function vistaStock(v, btn) {
+  vistaStockActiva = v;
+  document.querySelectorAll("#sub-stock .sub").forEach(b => b.classList.remove("on"));
+  (btn || document.querySelector(`#sub-stock .sub[data-vista="${v}"]`)).classList.add("on");
+  pintarNotaVista();
+  pintar();
+  irArriba();
+}
+
+function pintarNotaVista() {
+  const nota = document.getElementById("sub-nota");
+  if (!nota) return;
+  // Sin el catálogo del sitio no se puede decir qué está online: se avisa
+  // en vez de pintar una lista incompleta como si fuera la buena.
+  nota.textContent = DATOS.sinPublicados
+    ? `No se pudo saber qué hay publicado en la tienda (${DATOS.sinPublicados}); esto es el stock global.`
+    : NOTA_VISTA[vistaStockActiva];
+}
 
 function chip(el, c) {
   // Solo los chips de Stock: la pestaña Fichas tiene los suyos propios.
@@ -94,11 +131,43 @@ function chip(el, c) {
   el.classList.add("on");
   catActiva = c;
   pintar();
+  // Lista distinta: se muestra desde el principio. Conservar el scroll aquí
+  // dejaría al empleado a media lista de algo que no había visto.
+  irArriba();
+}
+
+function irArriba() {
+  const actual = document.querySelector(".tab.activa");
+  if (actual) scrollPorTab[actual.id.replace("tab-", "")] = 0;
+  elMain().scrollTop = 0;
+}
+
+/* ---------- memoria de scroll por pestaña ----------
+   El scroll vive en <main> (la .phone es de altura fija), y es UNO solo
+   compartido por todas las pestañas: sin esto, abrir una planta y volver
+   —o pasar por Inicio y regresar— deja la lista arriba del todo y hay que
+   buscar a mano dónde se estaba. Con 133 plantas eso es inaceptable. Se
+   guarda la posición de la pestaña que se deja y se restaura la de la que
+   se entra. */
+const scrollPorTab = {};
+
+function elMain() { return document.querySelector("main"); }
+
+function recordarScroll() {
+  const actual = document.querySelector(".tab.activa");
+  if (actual) scrollPorTab[actual.id.replace("tab-", "")] = elMain().scrollTop;
+}
+
+function restaurarScroll(id) {
+  // En el frame siguiente: si la sección todavía no se pintó, el navegador
+  // recorta el scrollTop al alto viejo y queda arriba igual.
+  requestAnimationFrame(() => { elMain().scrollTop = scrollPorTab[id] || 0; });
 }
 
 function tab(id, btn) {
   const seccion = document.getElementById("tab-" + id);
   if (!seccion) return;
+  recordarScroll();
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("activa"));
   seccion.classList.add("activa");
   // El botón flotante de sugerir planta estorba encima del detalle.
@@ -108,10 +177,17 @@ function tab(id, btn) {
   // (?tab=inv): en ese caso el menú queda sin selección y ya.
   const boton = btn || document.querySelector(`nav button[data-tab="${id}"]`);
   if (boton) boton.classList.add("on");
+  restaurarScroll(id);
 }
 
 function irStock(cat) {
+  // Llegar desde Inicio a una categoría es empezar una lista nueva.
+  scrollPorTab.stock = 0;
   tab("stock");
+  // Desde Inicio siempre al global: el score, los totales y las alertas se
+  // calculan sobre todo el inventario, así que la planta buscada puede no
+  // estar publicada y en online no aparecería.
+  vistaStock("global");
   document.querySelectorAll("#tab-stock .chip").forEach(x => {
     x.classList.toggle("on", x.textContent === cat);
   });
@@ -327,16 +403,30 @@ async function subirFoto(input) {
   }
 }
 
-/* ---------- modal agregar planta (sugerencia por WhatsApp) ---------- */
-// Solo un link wa.me con el mensaje pre-armado: no toca Odoo ni el servidor.
-const WHATSAPP_NEGOCIO = "50765673062";
+/* ---------- modal crear planta ----------
+   Reemplaza a la sugerencia por WhatsApp, que no creaba nada. Aquí el POST
+   a /productos/nuevo crea el producto en Odoo (por el order-api) y aplica
+   el stock inicial. Toda la validación de verdad vive en Python
+   (main.crear_producto y el order-api); lo de aquí solo evita el viaje
+   obvio y arma el SKU sugerido mientras se escribe el nombre. */
+let skuTocado = false;
+let creandoPlanta = false;
 
 function abrirAgregar() {
-  document.getElementById("agregar-nombre").value = "";
-  document.getElementById("agregar-cantidad").value = "1";
-  document.getElementById("agregar-comentario").value = "";
+  ["agregar-nombre", "agregar-sku", "agregar-precio", "agregar-costo",
+   "agregar-hmin", "agregar-hmax",
+   "agregar-secundario", "agregar-cientifico"].forEach(id => {
+    document.getElementById(id).value = "";
+  });
+  document.getElementById("agregar-cantidad").value = "0";
+  document.getElementById("agregar-sinmoto").checked = false;
+  const cat = document.getElementById("agregar-categoria");
+  cat.innerHTML = (DATOS.categoriasPlanta || ["Interior", "Exterior", "Florales"])
+    .map(c => `<option value="${c}">${c}</option>`).join("");
+  skuTocado = false;
   mostrarErrorAgregar("");
   document.getElementById("modal-agregar").classList.add("abierto");
+  document.getElementById("agregar-nombre").focus();
 }
 function cerrarAgregar() {
   document.getElementById("modal-agregar").classList.remove("abierto");
@@ -346,23 +436,81 @@ function mostrarErrorAgregar(mensaje) {
   el.textContent = mensaje;
   el.classList.toggle("visible", Boolean(mensaje));
 }
-function enviarAgregar() {
+
+/* El mismo PL-NOMBRE-DE-LA-PLANTA que arma datos.sku_sugerido en el
+   servidor: aquí solo para que se vea mientras se escribe. El SKU que vale
+   es el que valida y guarda Python; si el empleado lo edita a mano
+   (skuTocado), deja de proponerse. */
+function sugerirSku() {
+  if (skuTocado) return;
+  const nombre = document.getElementById("agregar-nombre").value;
+  const limpio = nombre.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/ñ/g, "n").replace(/Ñ/g, "N").toUpperCase();
+  const partes = limpio.split(/[^A-Z0-9]+/).filter(Boolean);
+  document.getElementById("agregar-sku").value =
+    partes.length ? ("PL-" + partes.join("-")).slice(0, 79).replace(/-+$/, "") : "";
+}
+
+function centavos(valor) {
+  const n = parseFloat(String(valor).replace(",", "."));
+  return isNaN(n) ? 0 : Math.round(n * 100);
+}
+function entero(valor) {
+  const n = parseInt(valor, 10);
+  return isNaN(n) ? 0 : n;
+}
+
+async function crearPlanta() {
+  if (creandoPlanta) return;
   const nombre = document.getElementById("agregar-nombre").value.trim();
-  const cantidad = parseInt(document.getElementById("agregar-cantidad").value);
-  const comentario = document.getElementById("agregar-comentario").value.trim();
-  if (!nombre) {
-    mostrarErrorAgregar("Escribe el nombre de la planta.");
+  const sku = document.getElementById("agregar-sku").value.trim().toUpperCase();
+  if (!nombre) { mostrarErrorAgregar("Escribe el nombre de la planta."); return; }
+  if (!sku.startsWith("PL-") || sku.length < 4) {
+    mostrarErrorAgregar("La referencia debe empezar por PL-.");
     return;
   }
-  if (isNaN(cantidad) || cantidad < 1) {
-    mostrarErrorAgregar("Escribe una cantidad válida (1 o más).");
-    return;
+  const boton = document.getElementById("btn-crear-planta");
+  creandoPlanta = true;
+  boton.disabled = true;
+  boton.textContent = "Creando en Odoo…";
+  mostrarErrorAgregar("");
+  try {
+    const r = await fetch("/productos/nuevo", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        nombre, sku,
+        categoria: document.getElementById("agregar-categoria").value,
+        precioCentavos: centavos(document.getElementById("agregar-precio").value),
+        costoCentavos: centavos(document.getElementById("agregar-costo").value),
+        nombreSecundario: document.getElementById("agregar-secundario").value.trim(),
+        nombreCientifico: document.getElementById("agregar-cientifico").value.trim(),
+        cantidad: entero(document.getElementById("agregar-cantidad").value),
+        alturaMin: entero(document.getElementById("agregar-hmin").value),
+        alturaMax: entero(document.getElementById("agregar-hmax").value),
+        sinMoto: document.getElementById("agregar-sinmoto").checked,
+      }),
+    });
+    const datos = await r.json();
+    if (!r.ok) {
+      mostrarErrorAgregar(datos.mensaje || "No se pudo crear la planta.");
+      return;
+    }
+    cerrarAgregar();
+    // El stock inicial puede fallar con la planta ya creada: se dice, en vez
+    // de cantar un éxito que dejaría al empleado creyendo que hay existencias.
+    toast(datos.stock === "falló"
+      ? `✓ ${datos.nombre} creada, pero el stock quedó en 0: ajústalo a mano`
+      : `✓ ${datos.nombre} creada en Odoo`);
+    // Recargar: la planta nueva tiene que entrar a la lista con su stock.
+    setTimeout(() => location.assign("/?refrescar=1&tab=stock&vista=global"), 1400);
+  } catch (e) {
+    mostrarErrorAgregar("No hay conexión con el servidor.");
+  } finally {
+    creandoPlanta = false;
+    boton.disabled = false;
+    boton.textContent = "Crear en Odoo";
   }
-  let texto = `Nueva planta sugerida: ${nombre}, cantidad ${cantidad}.`;
-  if (comentario) texto += ` ${comentario}`;
-  window.open(`https://wa.me/${WHATSAPP_NEGOCIO}?text=${encodeURIComponent(texto)}`, "_blank");
-  cerrarAgregar();
-  toast("✓ Se abrió WhatsApp con la sugerencia");
 }
 
 /* ---------- animación de inicio (una vez por sesión) ---------- */
@@ -486,12 +634,13 @@ function abrirDetalle(sku, empujarHistoria = true) {
       partes.join(" · ") || "Sin guía de cuidado todavía.";
   }
 
+  // Un producto recién abierto se lee desde arriba, no desde donde quedó el
+  // anterior; la lista de atrás sí conserva su posición.
+  scrollPorTab.detalle = 0;
   tab("detalle");
   if (empujarHistoria) {
     history.pushState({ producto: sku }, "", "/?producto=" + encodeURIComponent(sku));
   }
-  // El scroll vive en <main> (la .phone es de altura fija), no en window.
-  document.querySelector("main").scrollTo(0, 0);
 }
 
 function cerrarDetalle() {
@@ -612,8 +761,10 @@ async function guardarPie(fila, p, nueva) {
   }
 }
 
-// La URL con la que se recarga tras un ajuste: pestaña, filtro y búsqueda
-// (y el producto abierto, si el ajuste salió desde el detalle).
+// La URL con la que se recarga tras un ajuste: pestaña, vista, filtro y
+// búsqueda (y el producto abierto, si el ajuste salió desde el detalle).
+// Guardar en Odoo recarga la página entera, así que sin esto el empleado
+// vuelve al tope de la lista después de cada ajuste.
 function parametrosDeEstado() {
   const destino = new URLSearchParams({ refrescar: "1" });
   if (detalleSku) {
@@ -622,9 +773,13 @@ function parametrosDeEstado() {
     const tabActiva = document.querySelector(".tab.activa");
     if (tabActiva) destino.set("tab", tabActiva.id.replace("tab-", ""));
   }
+  destino.set("vista", vistaStockActiva);
   if (catActiva !== "Todas") destino.set("cat", catActiva);
   const busqueda = document.getElementById("busca").value.trim();
   if (busqueda) destino.set("q", busqueda);
+  // El scroll no cabe en la URL sin ensuciarla: viaja por sessionStorage y
+  // lo consume el arranque, una sola vez.
+  sessionStorage.setItem("scroll-pendiente", String(elMain().scrollTop));
   return destino;
 }
 
@@ -724,7 +879,24 @@ if (catPedida) {
 const buscaPedida = parametros.get("q");
 if (buscaPedida) document.getElementById("busca").value = buscaPedida;
 
+// ?vista=global vuelve a la vista que el empleado tenía (la recarga tras
+// crear una planta aterriza ahí: la planta nueva todavía no está en línea).
+const vistaPedida = parametros.get("vista");
+vistaStock(vistaPedida === "online" && !DATOS.sinPublicados ? "online" :
+  vistaPedida === "global" ? "global" : vistaStockActiva);
+
 pintar();
+
+// Volver justo donde estaba tras la recarga de un ajuste (ver
+// parametrosDeEstado). Se consume una sola vez: una recarga a mano o un
+// link compartido tienen que abrir arriba.
+const scrollPendiente = sessionStorage.getItem("scroll-pendiente");
+if (scrollPendiente) {
+  sessionStorage.removeItem("scroll-pendiente");
+  const tabAhora = document.querySelector(".tab.activa");
+  if (tabAhora) scrollPorTab[tabAhora.id.replace("tab-", "")] = parseInt(scrollPendiente) || 0;
+  requestAnimationFrame(() => { elMain().scrollTop = parseInt(scrollPendiente) || 0; });
+}
 
 // ?producto=SKU (recarga tras un ajuste desde el detalle, o un link
 // compartido): reabrir el detalle sin apilar otra entrada en el historial.

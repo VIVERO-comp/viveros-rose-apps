@@ -15,8 +15,10 @@ cantidad esperada) y un error se muestra en pantalla.
 
 import json
 import os
+import re
 import sqlite3
 import time
+import unicodedata
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -177,15 +179,126 @@ def fijar_altura_en_odoo(sku, altura_min, altura_max):
     except Exception:
         raise SinConexion("No hay conexión con el servidor de pedidos")
     if respuesta.status_code != 200:
-        try:
-            detalle = respuesta.json().get("mensaje")
-        except Exception:
-            detalle = None
+        detalle = _mensaje_de_error(respuesta)
         raise SinConexion(detalle or
                           f"El servidor de pedidos respondió {respuesta.status_code}")
     # La altura cambió en Odoo: la próxima lectura del inventario va fresca.
     reiniciar_cache_proxy()
     return respuesta.json()
+
+
+def _mensaje_de_error(respuesta):
+    """El motivo que manda el order-api, o None. Su forma de error es
+    {"error": codigo, "message": texto}."""
+    try:
+        return respuesta.json().get("message")
+    except Exception:
+        return None
+
+
+# Las categorías que ofrece el formulario de alta: las del sitio (Interior,
+# Exterior, Florales) más Paquete para los combos. Son las mismas que acepta
+# el order-api; si allá cambian, aquí también.
+CATEGORIAS_PLANTA = ("Interior", "Exterior", "Florales", "Paquete")
+
+
+def sku_sugerido(nombre):
+    """PL-NOMBRE-DE-LA-PLANTA a partir del nombre escrito.
+
+    Sin tildes ni eñes (Odoo y las URLs del sitio se llevan mejor con ASCII)
+    y sin palabras vacías al final: "Palma Areca" -> PL-PALMA-ARECA.
+    """
+    limpio = unicodedata.normalize("NFD", nombre or "")
+    limpio = "".join(c for c in limpio if unicodedata.category(c) != "Mn")
+    limpio = limpio.replace("ñ", "n").replace("Ñ", "N").upper()
+    partes = [t for t in re.split(r"[^A-Z0-9]+", limpio) if t]
+    return ("PL-" + "-".join(partes))[:79].rstrip("-") if partes else ""
+
+
+def crear_planta_en_odoo(sku, nombre, categoria, precio_centavos,
+                         altura_min=0, altura_max=0, sin_moto=False,
+                         costo_centavos=0, nombre_secundario="",
+                         nombre_cientifico=""):
+    """POST /api/productos. Crea la planta en Odoo y devuelve la respuesta.
+
+    No pone stock (eso va aparte, por ajustar_en_odoo) ni publica nada en la
+    tienda. Un rechazo del order-api —SKU repetido, precio absurdo— sube como
+    SinConexion con su mensaje, que es lo que ve el empleado en el
+    formulario. Sin order-api configurado se simula, como el resto de las
+    escrituras en modo datos de prueba.
+    """
+    url = os.environ.get("ORDER_API_URL")
+    clave = os.environ.get("ORDER_API_KEY")
+    if not url or not clave:
+        return {"ok": True, "sku": sku, "id": 0, "nombre": nombre,
+                "resultado": "creado"}
+    try:
+        respuesta = httpx.post(
+            f"{url.rstrip('/')}/api/productos",
+            headers={"X-API-Key": clave},
+            json={"sku": sku, "nombre": nombre, "categoria": categoria,
+                  "precioCentavos": precio_centavos,
+                  "costoCentavos": costo_centavos, "alturaMin": altura_min,
+                  "alturaMax": altura_max, "sinMoto": sin_moto,
+                  "nombreSecundario": nombre_secundario,
+                  "nombreCientifico": nombre_cientifico},
+            timeout=30,
+        )
+    except Exception:
+        raise SinConexion("No hay conexión con el servidor de pedidos")
+    if respuesta.status_code != 200:
+        raise SinConexion(_mensaje_de_error(respuesta) or
+                          f"El servidor de pedidos respondió {respuesta.status_code}")
+    # La planta nueva tiene que aparecer en la lista al volver.
+    reiniciar_cache_proxy()
+    return respuesta.json()
+
+
+# ---------------------------------------------------------------------------
+# Catálogo publicado en plantaspanama.com (qué plantas están "online")
+# ---------------------------------------------------------------------------
+# La pestaña "Stock online" es un ESPEJO del sitio, no un interruptor: cada
+# build del frontend deja en /catalogo-publicado.json los SKU que salieron
+# publicados, y aquí se leen tal cual. Así "online" significa lo que el
+# cliente ve de verdad, sin un campo nuevo en Odoo que se pueda desincronizar.
+#
+# Una planta creada desde esta app NO aparece online por existir: para llegar
+# al sitio necesita su foto y una regeneración del catálogo. Por eso vive en
+# Stock global hasta que el sitio la publique.
+
+URL_CATALOGO_PUBLICADO = "https://www.plantaspanama.com/catalogo-publicado.json"
+TTL_PUBLICADOS = 600  # 10 min: el sitio se reconstruye como mucho cada hora
+
+_cache_publicados = {}
+
+
+def reiniciar_cache_publicados():
+    """Solo para pruebas."""
+    _cache_publicados.clear()
+
+
+def obtener_publicados():
+    """SKU publicados hoy en plantaspanama.com. Devuelve (skus, error).
+
+    skus es un set; error es None cuando el dato es bueno. Si el sitio no
+    responde se sirve el último valor conocido; si nunca hubo uno, se
+    devuelve (None, motivo) y la pestaña lo dice en pantalla en vez de
+    mostrar una lista incompleta como si fuera la verdad.
+    """
+    url = os.environ.get("CATALOGO_PUBLICADO_URL", URL_CATALOGO_PUBLICADO)
+    entrada = _cache_publicados.get("skus")
+    if entrada and time.time() - entrada["en"] < TTL_PUBLICADOS:
+        return entrada["valor"], None
+    try:
+        respuesta = httpx.get(url, timeout=6)
+        respuesta.raise_for_status()
+        publicados = set(respuesta.json()["publicados"])
+    except Exception as error:
+        if entrada:
+            return entrada["valor"], None
+        return None, f"no se pudo leer el catálogo del sitio ({error})"
+    _cache_publicados["skus"] = {"valor": publicados, "en": time.time()}
+    return publicados, None
 
 
 # ---------------------------------------------------------------------------

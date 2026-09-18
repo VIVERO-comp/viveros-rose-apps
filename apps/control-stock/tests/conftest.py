@@ -36,6 +36,19 @@ def db_limpia(tmp_path, monkeypatch):
     datos.reiniciar_cache_proxy()
 
 
+@pytest.fixture(autouse=True)
+def sin_red_catalogo(monkeypatch):
+    """Ninguna prueba sale a plantaspanama.com a leer el catálogo publicado.
+
+    Por defecto está publicado todo el inventario falso MENOS la Ixora: así
+    "Stock online" y "Stock global" se distinguen de verdad en las pruebas.
+    """
+    datos.reiniciar_cache_publicados()
+    monkeypatch.setattr(
+        datos, "obtener_publicados",
+        lambda: ({"PL-ROMERO", "PL-ALBAHACA", "PL-PALMA"}, None))
+
+
 @pytest.fixture
 def con_inventario(monkeypatch, db_limpia):
     """El inventario falso de siempre, como si viniera del stock-proxy."""

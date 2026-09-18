@@ -89,7 +89,16 @@
 
   <!-- ================= STOCK ================= -->
   <section class="tab" id="tab-stock">
+    {# Dos vistas del mismo stock (pedido del dueño): "Online" son solo las
+       plantas que hoy ve el cliente en plantaspanama.com y "Global", todas
+       las plantas activas de Odoo. Comparten buscador, chips, detalle y el
+       modal de Modificar stock: es la misma lista filtrada distinto. #}
     <div class="stock-top">
+      <div class="sub-tabs" id="sub-stock">
+        <button class="sub on" data-vista="online" onclick="vistaStock('online',this)">Stock online</button>
+        <button class="sub" data-vista="global" onclick="vistaStock('global',this)">Stock global</button>
+      </div>
+      <p class="sub-nota" id="sub-nota"></p>
       <div class="buscador"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9aa3bd" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg><input id="busca" placeholder="Buscar planta…" oninput="filtrar()"></div>
       <div class="filtros" id="filtros">
         <button class="chip on" data-cat="Todas" onclick="chip(this,'Todas')">Todas</button>
@@ -199,6 +208,7 @@
         </div>
         <button class="btn btn-linea" id="det-ajustar">Modificar stock</button>
         <p class="edit-nota">Nombre, precio y stock vienen de Odoo; se cambian allá (o con Modificar stock).</p>
+
       </div>
       <div class="det-der">
         {% if puede_fichas %}
@@ -432,21 +442,67 @@
 </div>
 
 <!-- modal agregar planta (sugerencia por WhatsApp, no escribe en Odoo) -->
+{# Crear planta: escribe de verdad en Odoo (order-api POST /api/productos)
+   y, si se pone cantidad, aplica el stock inicial con el ajuste de siempre.
+   Reemplaza a la sugerencia por WhatsApp, que no creaba nada. La planta
+   nace en Odoo, no en la tienda: para salir online necesita foto y una
+   regeneración del catálogo. #}
 <div class="panel centrado" id="modal-agregar">
   <div class="panel-hoja">
-    <h3>Agregar planta</h3>
-    <p class="edit-sub">La sugerencia se envía por WhatsApp al encargado; no cambia nada en Odoo.</p>
+    <h3>Crear planta</h3>
+    <p class="edit-sub">Se crea en Odoo al momento. No sale en la tienda hasta que se regenere el catálogo del sitio.</p>
     <div class="form-agregar">
-      <div class="campo"><span>Nombre de la planta</span><input id="agregar-nombre" autocomplete="off" placeholder="Ej: Lavanda"></div>
-      <div class="campo"><span>Cantidad</span><input id="agregar-cantidad" type="number" inputmode="numeric" min="1" value="1"></div>
-      <div class="campo"><span>Comentario (opcional)</span><input id="agregar-comentario" autocomplete="off" placeholder="Ej: la piden mucho en el local"></div>
+      <div class="campo">
+        <span>Nombre de la planta</span>
+        <input id="agregar-nombre" autocomplete="off" placeholder="Ej: Palma Areca" oninput="sugerirSku()">
+      </div>
+      <div class="campo">
+        <span>Referencia en Odoo</span>
+        <input id="agregar-sku" autocomplete="off" placeholder="PL-PALMA-ARECA" oninput="skuTocado=true">
+        <span class="nota-campo">Se propone sola desde el nombre. Empieza siempre por PL-.</span>
+      </div>
+      <div class="campos-nuevo">
+        <div class="campo">
+          <span>Categoría</span>
+          <select id="agregar-categoria"></select>
+        </div>
+        <div class="campo">
+          <span>Cantidad física</span>
+          <input id="agregar-cantidad" type="number" inputmode="numeric" min="0" value="0">
+        </div>
+        <div class="campo">
+          <span>Precio de venta ($)</span>
+          <input id="agregar-precio" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
+        </div>
+        <div class="campo">
+          <span>Costo ($)</span>
+          <input id="agregar-costo" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
+        </div>
+        <div class="campo">
+          <span>Altura de (cm)</span>
+          <input id="agregar-hmin" type="number" inputmode="numeric" min="0" placeholder="opcional">
+        </div>
+        <div class="campo">
+          <span>Altura a (cm)</span>
+          <input id="agregar-hmax" type="number" inputmode="numeric" min="0" placeholder="opcional">
+        </div>
+      </div>
+      {# Las notas internas de la ficha de Odoo: el bloque "nombre segundario
+         / nombre cientifico" que llevan todas las plantas del catálogo. #}
+      <div class="campo">
+        <span>Nombre secundario</span>
+        <input id="agregar-secundario" autocomplete="off" placeholder="Ej: Espliego">
+      </div>
+      <div class="campo">
+        <span>Nombre científico</span>
+        <input id="agregar-cientifico" autocomplete="off" placeholder="Ej: Lavandula angustifolia">
+        <span class="nota-campo">Los dos van a las notas internas de la ficha en Odoo, como en el resto del catálogo.</span>
+      </div>
+      <label class="casilla"><input type="checkbox" id="agregar-sinmoto"> No viaja en moto (solo camioneta)</label>
     </div>
     <p class="edit-error" id="agregar-error"></p>
     <div class="botones">
-      <button class="btn btn-dorado" style="flex:1;justify-content:center" onclick="enviarAgregar()">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5.1-1.3A10 10 0 1 0 12 2zm5.4 14.1c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .2-3.4-.7-2.9-1.2-4.7-4.1-4.9-4.3-.1-.2-1.1-1.5-1.1-2.9s.7-2 1-2.3c.2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.5s.8 1.9.8 2c.1.1.1.3 0 .5l-.4.6c-.1.2-.3.3-.1.6.2.3.8 1.3 1.8 2.1 1.2 1.1 2.2 1.4 2.6 1.6.3.1.5.1.7-.1l1-1.2c.2-.3.4-.2.7-.1l2 1c.3.1.5.2.6.3 0 .2 0 .8-.3 1.5z"/></svg>
-        Enviar por WhatsApp
-      </button>
+      <button class="btn btn-dorado" style="flex:1;justify-content:center" id="btn-crear-planta" onclick="crearPlanta()">Crear en Odoo</button>
       <button class="btn btn-linea" onclick="cerrarAgregar()">Cancelar</button>
     </div>
   </div>
@@ -454,7 +510,7 @@
 
 <button class="fab" id="fab-agregar" onclick="abrirAgregar()">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-  Agregar planta
+  Crear planta
 </button>
 
 <div class="toast" id="toast"></div>
