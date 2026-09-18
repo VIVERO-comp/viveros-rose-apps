@@ -160,10 +160,17 @@ Ver [.env.example](.env.example): `STOCK_PROXY_URL` + `STOCK_API_KEY`
 ## Integraciones
 
 - **stock-proxy** `GET /v1/inventario` — inventario completo con categoría
-  de Odoo, disponible y físico. Exige `X-API-Key`.
+  de Odoo, disponible, físico, altura y `published` (la casilla "Publicada en
+  la tienda", que la ficha pinta como interruptor). Exige `X-API-Key`. Una
+  planta despublicada sigue viniendo aquí con todo su stock: solo queda fuera
+  del sitio público.
 - **order-api** `PUT /api/productos/{sku}/altura` — la altura de la planta
   (en cm) que se edita en la ficha; vive en Odoo, no en la base de la tienda,
   porque es un dato del producto. Exige `X-API-Key`.
+- **order-api** `PUT /api/productos/{sku}/publicacion` — el interruptor de la
+  tienda desde la ficha. Escribe ESA casilla en Odoo y nada más: no archiva,
+  no toca el stock y no borra ni desasocia una sola foto, así que reponer la
+  planta en el sitio es marcarla otra vez. Exige `X-API-Key`.
 - **order-api** `POST /api/productos` — el alta de una planta del formulario
   "Crear planta": crea el `product.template` en Odoo con la forma de las
   plantas del catálogo (consu + almacenable, categoría del sitio, factura por
