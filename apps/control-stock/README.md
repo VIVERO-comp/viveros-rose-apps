@@ -88,6 +88,24 @@ En producción: `docker compose exec control-stock python -m app.usuarias …`
   y con las dos vacías el producto no muestra altura en la tienda. En
   computadora va a dos columnas; en el teléfono, una. Volver/atrás regresa
   a la lista con filtro y búsqueda intactos.
+- **Publicar / no publicar** (18/09/2026, dentro del detalle): el interruptor
+  de la tienda. Marca o desmarca la casilla "Publicada en la tienda" del
+  producto en Odoo (campo `publicado` del módulo, escrito por el order-api
+  con `PUT /api/productos/{sku}/publicacion`), y el build del frontend deja
+  fuera del sitio lo que esté desmarcado.
+  **Desmarcarlo no borra ni archiva NADA**: la planta sigue en el inventario,
+  en Crear Venta, en las cotizaciones, con su ficha y con todas sus fotos —
+  las del catálogo en Cloudinary y las internas de las apps—, así que volver
+  a publicarla es un toque. Es a propósito lo contrario de archivar en Odoo,
+  que sí se la lleva de todas partes.
+  El renglón bajo el interruptor cuenta lo que pasa **de verdad**, que no
+  siempre es lo que dice la casilla: `pub` es la casilla de Odoo (la
+  intención) y `on` es el espejo del sitio (lo que el cliente ve hoy). Con la
+  casilla marcada y `on` en falso, la planta todavía no sale porque le falta
+  su foto y su entrada en el catálogo del frontend, que es un paso aparte y a
+  mano; la pantalla lo dice en vez de fingir que ya está publicada. Ni
+  publicar ni despublicar cambian el sitio al instante: hace falta la
+  siguiente reconstrucción del frontend.
 - **Alertas**: campanita con contador; cada alerta lleva al producto y se
   marca atendida (o se cierra sola si el stock se recupera). El umbral se
   cambia desde el mismo panel. Historial en SQLite.

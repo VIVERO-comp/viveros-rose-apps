@@ -908,6 +908,41 @@ button.enlace-sub{
 #det-ajustar{width:100%;justify-content:center;margin-bottom:10px}
 .ficha-solo-lectura p{font-size:13px;line-height:1.6;margin-bottom:14px}
 
+/* ---------- interruptor "Publicada en la tienda" (18/09/2026) ----------
+   Vive en la ficha de la planta, debajo de Modificar stock. Es una casilla
+   de verdad (input checkbox) pintada como palanca: asi el teclado y los
+   lectores de pantalla la entienden sin JavaScript de por medio. */
+.publicacion{
+  border-top:1px solid rgba(227,181,127,.14);
+  margin-top:16px;padding-top:14px;
+}
+.interruptor{display:flex;align-items:flex-start;gap:12px;cursor:pointer}
+/* La casilla real se esconde sin sacarla del arbol: sigue recibiendo foco
+   y el teclado (espacio) la cambia igual. */
+.interruptor input{position:absolute;opacity:0;width:0;height:0}
+.palanca{
+  position:relative;flex-shrink:0;width:52px;height:30px;border-radius:15px;
+  background:var(--noche-3);transition:background .18s ease;margin-top:1px;
+}
+.palanca::after{
+  content:"";position:absolute;top:3px;left:3px;
+  width:24px;height:24px;border-radius:50%;background:var(--texto-suave);
+  transition:transform .18s ease, background .18s ease;
+}
+.interruptor input:checked + .palanca{background:rgba(227,181,127,.35)}
+.interruptor input:checked + .palanca::after{
+  transform:translateX(22px);background:var(--dorado);
+}
+.interruptor input:focus-visible + .palanca{outline:2px solid var(--dorado-suave);outline-offset:2px}
+.interruptor input:disabled + .palanca{opacity:.5}
+.interruptor-texto b{display:block;font-size:14px;font-weight:700}
+.interruptor-texto small{
+  display:block;font-size:12px;color:var(--texto-suave);
+  line-height:1.45;margin-top:3px;
+}
+.publicacion .edit-nota{margin:12px 0 0}
+.publicacion .edit-error{margin:10px 0 0}
+
 @media (min-width: 900px){
   /* Tarjeta de producto estilo panel claro: extracto de la descripción y
      pie con − / + para el físico. Nada se escribe en Odoo hasta apretar
@@ -952,6 +987,9 @@ button.enlace-sub{
   .det-miga b{color:var(--texto)}
   .ficha-form .campo textarea,
   .ficha-form .campo select{background:#ffffff;border:1px solid #e2dbca}
+  .publicacion{border-top-color:#eee7d6}
+  .palanca{background:#e7e0d1}
+  .palanca::after{background:#ffffff}
 
   /* ---- Inicio como hero (referencia NanoAI): anillo centrado, fila de
      totales como tarjetitas blancas y categorías en 4 tarjetas. ---- */

@@ -2,8 +2,9 @@
 
 La app nunca toca Odoo directo (regla fija): lee el inventario del
 stock-proxy (`GET /v1/inventario`) y escribe por el order-api: los ajustes
-(`POST /api/stock/ajustes`) y la altura de la planta de la ficha
-(`PUT /api/productos/{sku}/altura`). El SQLite guarda lo que es de la app: usuarios,
+(`POST /api/stock/ajustes`), la altura de la planta de la ficha
+(`PUT /api/productos/{sku}/altura`) y el interruptor de la tienda
+(`PUT /api/productos/{sku}/publicacion`). El SQLite guarda lo que es de la app: usuarios,
 sesiones, alertas atendidas, historial de conteos y configuración.
 
 Degradación de lecturas, igual que Recepción: caché en memoria; si el proxy
@@ -109,6 +110,11 @@ def obtener_inventario(refrescar=False):
             # el proxy en produccion aun no expone el campo.
             "altura_min": item.get("height_min_cm", 0),
             "altura_max": item.get("height_max_cm", 0),
+            # Casilla "Publicada en la tienda" de Odoo. .get con True por si
+            # el proxy en produccion aun no expone el campo: sin el dato la
+            # planta cuenta como publicada, que es como estaba el catalogo
+            # antes de existir la casilla.
+            "publicado": item.get("published", True),
         }
         for item in crudo["items"]
     ]
@@ -183,6 +189,42 @@ def fijar_altura_en_odoo(sku, altura_min, altura_max):
         raise SinConexion(detalle or
                           f"El servidor de pedidos respondió {respuesta.status_code}")
     # La altura cambió en Odoo: la próxima lectura del inventario va fresca.
+    reiniciar_cache_proxy()
+    return respuesta.json()
+
+
+def fijar_publicacion_en_odoo(sku, publicado):
+    """PUT /api/productos/{sku}/publicacion. El interruptor de la tienda.
+
+    Desmarcarlo saca la planta de plantaspanama.com en la siguiente
+    reconstruccion del sitio y NADA MAS: no archiva el producto, no toca su
+    stock ni su precio, y no borra ni desasocia una sola foto (ni las del
+    catalogo en Cloudinary, ni las internas de estas apps). Volver a
+    marcarlo la repone.
+
+    Devuelve la respuesta del order-api o la simula cuando no esta
+    configurado (modo datos de prueba). Un rechazo sube como SinConexion:
+    quien aprieta el interruptor tiene que enterarse de que no quedo.
+    """
+    url = os.environ.get("ORDER_API_URL")
+    clave = os.environ.get("ORDER_API_KEY")
+    if not url or not clave:
+        return {"ok": True, "sku": sku, "publicado": publicado,
+                "resultado": "aplicado"}
+    try:
+        respuesta = httpx.put(
+            f"{url.rstrip('/')}/api/productos/{sku}/publicacion",
+            headers={"X-API-Key": clave},
+            json={"publicado": publicado},
+            timeout=30,
+        )
+    except Exception:
+        raise SinConexion("No hay conexión con el servidor de pedidos")
+    if respuesta.status_code != 200:
+        detalle = _mensaje_de_error(respuesta)
+        raise SinConexion(detalle or
+                          f"El servidor de pedidos respondió {respuesta.status_code}")
+    # La casilla cambió en Odoo: la próxima lectura del inventario va fresca.
     reiniciar_cache_proxy()
     return respuesta.json()
 

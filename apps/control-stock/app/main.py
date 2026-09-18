@@ -284,6 +284,12 @@ def inicio(request: Request, refrescar: int = 0):
             "hmin": p.get("altura_min", 0), "hmax": p.get("altura_max", 0),
             # on: está publicada en la tienda. None = no se pudo saber.
             "on": (p["sku"] in publicados) if publicados is not None else None,
+            # pub: la casilla "Publicada en la tienda" de Odoo, que es la
+            # INTENCIÓN del dueño; `on` de arriba es lo que de verdad se ve
+            # hoy en plantaspanama.com. Con pub=True y on=False la planta
+            # está marcada para publicar pero todavía le falta entrar al
+            # catálogo del sitio (foto incluida), y la ficha lo dice.
+            "pub": p.get("publicado", True),
             **_fotos_de(p),
         }
         for p in inventario
@@ -440,6 +446,37 @@ async def crear_producto(request: Request):
             stock = "falló"
     return {"ok": True, "sku": sku, "nombre": nombre, "id": creada.get("id"),
             "cantidad": cantidad, "stock": stock}
+
+
+@app.post("/productos/{sku}/publicacion")
+async def cambiar_publicacion(request: Request, sku: str):
+    """El interruptor de la tienda desde la ficha de la planta.
+
+    Marca o desmarca "Publicada en la tienda" en Odoo (por el order-api, que
+    es el único camino de escritura de esta app). Desmarcarla saca la planta
+    de plantaspanama.com en la siguiente reconstrucción del sitio y nada
+    más: el producto, su stock, sus ventas locales, su ficha y TODAS sus
+    fotos quedan intactos, así que volver a publicarla es un toque.
+    """
+    cuerpo = await request.json()
+    publicado = cuerpo.get("publicado")
+    if not isinstance(publicado, bool):
+        return Response(json.dumps({"error": "peticion_invalida",
+                                    "mensaje": "Falta si se publica o no."},
+                                   ensure_ascii=False),
+                        status_code=400, media_type="application/json")
+    try:
+        respuesta = datos.fijar_publicacion_en_odoo(sku, publicado)
+    except datos.SinConexion as fallo:
+        return Response(json.dumps({"error": "no_guardado", "mensaje": str(fallo)},
+                                   ensure_ascii=False),
+                        status_code=502, media_type="application/json")
+    # El espejo del sitio (catalogo-publicado.json) recién cambia cuando el
+    # frontend se reconstruye: se limpia para que la próxima carga lo relea
+    # en vez de mostrar el de hace un rato.
+    datos.reiniciar_cache_publicados()
+    return {"ok": True, "sku": sku, "publicado": publicado,
+            "resultado": respuesta.get("resultado", "aplicado")}
 
 
 @app.post("/alertas/atender")

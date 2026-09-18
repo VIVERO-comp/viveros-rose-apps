@@ -601,6 +601,7 @@ function abrirDetalle(sku, empujarHistoria = true) {
   document.getElementById("det-fisico").textContent = p.f;
   const [et, cl] = estado(p);
   document.getElementById("det-estado").innerHTML = `<span class="badge ${cl}">${et}</span>`;
+  pintarPublicacion(p);
   pintarFotoDetalle(p);
 
   const ficha = fichaDe(sku) || referenciaDe(sku) ||
@@ -844,6 +845,84 @@ document.getElementById("modal-agregar").addEventListener("click", e => {
 // Detalle: la foto grande abre el modal de foto de siempre; el botón
 // Modificar stock abre el modal de ajuste de siempre. El contador de la
 // descripción solo existe para los editores.
+/* ---------- interruptor "Publicada en la tienda" ----------
+   p.pub es la CASILLA de Odoo (lo que el dueno decidio) y p.on es lo que de
+   verdad se ve hoy en plantaspanama.com (espejo de catalogo-publicado.json).
+   No siempre coinciden: una planta recien creada puede estar marcada y no
+   salir todavia porque le falta entrar al catalogo del sitio, y una recien
+   desmarcada sigue viendose hasta la proxima reconstruccion. La casilla
+   pinta lo primero y el renglon de abajo cuenta lo segundo, sin adornos.
+
+   El texto lo arma aqui el navegador porque depende de dos datos que ya
+   viajaron en window.DATOS; la decision de que es "publicado" vive en el
+   servidor (datos.py / main.py), no aqui. */
+function notaDePublicacion(p) {
+  if (p.pub === false) {
+    return p.on === true
+      ? "Todavía se ve en el sitio: sale en la próxima reconstrucción."
+      : "Fuera del sitio.";
+  }
+  if (p.on === true) return "Se ve hoy en plantaspanama.com.";
+  if (p.on === false) {
+    return "Marcada, pero aún no sale: le falta entrar al catálogo del " +
+           "sitio con su foto. Avísale a Abraham.";
+  }
+  return "No se pudo comprobar qué se ve hoy en el sitio.";
+}
+
+function pintarPublicacion(p) {
+  const casilla = document.getElementById("det-publicada");
+  if (!casilla) return;
+  casilla.checked = p.pub !== false;
+  document.getElementById("det-publicacion-nota").textContent = notaDePublicacion(p);
+  mostrarErrorPublicacion("");
+}
+
+function mostrarErrorPublicacion(mensaje) {
+  const caja = document.getElementById("det-publicacion-error");
+  if (!caja) return;
+  caja.textContent = mensaje;
+  caja.classList.toggle("visible", Boolean(mensaje));
+}
+
+async function cambiarPublicacion(casilla) {
+  const p = plantas.find(x => x.sku === detalleSku);
+  if (!p) return;
+  const quiere = casilla.checked;
+  casilla.disabled = true;
+  mostrarErrorPublicacion("");
+  try {
+    const r = await fetch(`/productos/${encodeURIComponent(p.sku)}/publicacion`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ publicado: quiere }),
+    });
+    const datos = await r.json();
+    if (!r.ok) {
+      // Que la casilla no mienta: si Odoo no lo guardo, vuelve a su sitio.
+      casilla.checked = !quiere;
+      mostrarErrorPublicacion(datos.mensaje || "No se pudo guardar.");
+      return;
+    }
+    p.pub = quiere;
+    document.getElementById("det-publicacion-nota").textContent = notaDePublicacion(p);
+    pintar(); // la tarjeta de la lista lleva el mismo dato
+    toast(quiere
+      ? "✓ Marcada para la tienda: entra en la próxima reconstrucción"
+      : "✓ Fuera de la tienda: sale en la próxima reconstrucción");
+  } catch (e) {
+    casilla.checked = !quiere;
+    mostrarErrorPublicacion("No hay conexión con el servidor.");
+  } finally {
+    casilla.disabled = false;
+  }
+}
+
+const casillaPublicada = document.getElementById("det-publicada");
+if (casillaPublicada) {
+  casillaPublicada.addEventListener("change", () => cambiarPublicacion(casillaPublicada));
+}
+
 document.getElementById("det-foto").addEventListener("click", () => {
   if (detalleSku) abrirFoto(detalleSku);
 });

@@ -209,6 +209,26 @@
         <button class="btn btn-linea" id="det-ajustar">Modificar stock</button>
         <p class="edit-nota">Nombre, precio y stock vienen de Odoo; se cambian allá (o con Modificar stock).</p>
 
+        {# El interruptor de la tienda. Desmarcarlo saca la planta del sitio
+           en la siguiente reconstrucción y NO borra nada: ni el producto, ni
+           su stock, ni una sola foto. El renglón de abajo dice qué pasa de
+           verdad hoy, que no siempre es lo mismo que la casilla. #}
+        <div class="publicacion">
+          <label class="interruptor" for="det-publicada">
+            <input type="checkbox" id="det-publicada">
+            <span class="palanca"></span>
+            <span class="interruptor-texto">
+              <b>Publicada en la tienda</b>
+              <small id="det-publicacion-nota"></small>
+            </span>
+          </label>
+          <p class="edit-error" id="det-publicacion-error"></p>
+          <p class="edit-nota">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Sacarla del sitio no borra nada: la planta sigue en el inventario,
+            en Crear Venta y con todas sus fotos. Volver a marcarla la repone.
+          </p>
+        </div>
       </div>
       <div class="det-der">
         {% if puede_fichas %}
