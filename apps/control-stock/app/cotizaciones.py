@@ -114,6 +114,12 @@ TIPOS = {
     },
     "proyecto": {
         "etiqueta": "Proyecto",
+        # En los botones de "Cotizar un servicio" el nombre pelado se lee
+        # como si fuera a crear un proyecto (pedido de Abraham, 17/09/2026:
+        # "en + proyecto pon cotización de proyecto"). Al elegir el tipo de
+        # un proyecto nuevo sigue diciendo "Proyecto" a secas, que ahí sí es
+        # lo que significa.
+        "etiqueta_cotizar": "Cotización de proyecto",
         "etiqueta_cliente": "Proyecto",
         "etiqueta_orden": "PROYECTO",
         "plantilla": "vivero_rose_pedidos.plantilla_servicio_proyecto",
@@ -609,6 +615,16 @@ def obtener(n):
 
 def etiqueta_de(tipo):
     return TIPOS[tipo]["etiqueta"] if tipo in TIPOS else "Personalizado"
+
+
+def etiqueta_para_cotizar(tipo):
+    """El nombre del tipo en los botones que ABREN una cotización. Casi
+    siempre es el mismo del tipo; solo "proyecto" dice "Cotización de
+    proyecto", para que no se confunda con crear el proyecto."""
+    if tipo not in TIPOS:
+        return "Personalizado"
+    meta = TIPOS[tipo]
+    return meta.get("etiqueta_cotizar") or meta["etiqueta"]
 
 
 # ---------------------------------------------------------------------------

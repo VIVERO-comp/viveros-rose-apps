@@ -632,7 +632,7 @@ def venta(request: Request, error: str = ""):
         "ventas_activo": ventas.configurado(),
         "error_venta": error or None,
         "en_curso": en_curso,
-        "tipos_servicio": [(t, cotizaciones.TIPOS[t]["etiqueta"])
+        "tipos_servicio": [(t, cotizaciones.etiqueta_para_cotizar(t))
                           for t in cotizaciones.ORDEN_TIPOS],
         "ventas": [{**v, "fecha_texto": _fecha_venta(v["creado_en"]),
                     "etiqueta_estado": ventas.ETIQUETAS_ESTADO[v["estado"]],
@@ -1256,7 +1256,15 @@ def venta_foto(request: Request, producto_id: int):
 # ---------------------------------------------------------------------------
 
 def _tipos_de_proyecto():
+    """Los tipos tal cual, para elegir DE QUÉ es el proyecto al crearlo."""
     return [(t, cotizaciones.TIPOS[t]["etiqueta"]) for t in cotizaciones.ORDEN_TIPOS]
+
+
+def _tipos_para_cotizar():
+    """Los mismos tipos, pero con el nombre de los botones que abren una
+    cotización (dentro de la ficha del proyecto)."""
+    return [(t, cotizaciones.etiqueta_para_cotizar(t))
+            for t in cotizaciones.ORDEN_TIPOS]
 
 
 @app.get("/proyecto")
@@ -1320,7 +1328,7 @@ def proyecto_ficha(request: Request, ref: str, error: str = ""):
             "/proyecto?error=" + quote(f"No existe el proyecto {ref}."),
             status_code=303)
     return plantillas.TemplateResponse(request, "proyecto_detalle.html", {
-        "p": ficha, "tipos": _tipos_de_proyecto(), "error": error or None,
+        "p": ficha, "tipos": _tipos_para_cotizar(), "error": error or None,
     })
 
 
