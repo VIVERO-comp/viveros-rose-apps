@@ -2,6 +2,18 @@
 {% block titulo %}Vender — Control Viverorose{% endblock %}
 
 {% block contenido %}
+<style>
+  /* Los 8 botones de "Cotizar un servicio" van en el gris claro de Retail
+     (--crema), no en negro: queda UN solo botón negro por pantalla
+     (+ NUEVA VENTA). Pedido de Abraham, 22/09/2026. El override vive aquí
+     y no en styles.css para no chocar con la edición en curso de ese
+     archivo; al cerrar esa tanda puede mudarse. */
+  .servicio-boton{background:var(--crema);color:#18181b;border:1px solid var(--noche-3);font-weight:600}
+  /* El aviso "cotizando para el lead X" cuando se llega desde Retail. */
+  .aviso-lead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--crema);border:1px solid var(--noche-3);border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:10px}
+  .aviso-lead form{display:inline;margin-left:auto}
+  .btn-liga{background:none;border:0;padding:0;font:inherit;font-size:12.5px;font-weight:600;text-decoration:underline;text-underline-offset:2px;cursor:pointer;color:inherit}
+</style>
 <header>
   <div class="brand">
     <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
@@ -15,6 +27,18 @@
 <main class="angosto">
   {% if error_venta %}
   <div class="aviso-error">{{ error_venta }}</div>
+  {% endif %}
+
+  {# Vino de la ficha de un lead en Retail: la próxima cotización o venta
+     que cree nace amarrada a ese lead (y su tarjeta cae en Cotizado). #}
+  {% if lead_pendiente %}
+  <div class="aviso-lead">
+    <span>La próxima cotización quedará amarrada al lead
+      <b>{{ lead_pendiente.ref }}{% if lead_pendiente.nombre %} · {{ lead_pendiente.nombre }}{% endif %}</b>.</span>
+    <form method="post" action="/venta/lead/quitar">
+      <button class="btn-liga" type="submit">No es para este lead</button>
+    </form>
+  </div>
   {% endif %}
 
   {% if not ventas_activo %}

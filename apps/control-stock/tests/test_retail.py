@@ -65,3 +65,78 @@ def test_el_bloque_por_entregar_sale_en_el_calendario(cliente):
 def test_los_de_servicio_no_entran_a_retail():
     _columnas, por_ref = retail.tablero()
     assert "LEAD-41" not in por_ref  # Jordan W. es Eventos · Alquiler
+
+
+# ---------------------------------------------------------------------------
+# El amarre con Vender (pedido de Abraham, 22/09/2026): las cotizaciones
+# vinculadas salen en la ficha y un lead ya cotizado cae solo en "Cotizado".
+# ---------------------------------------------------------------------------
+
+def _cotizacion_suelta(cliente_nombre="Juan Carlos Lopez", total=340.0):
+    from app import cotizaciones
+    return cotizaciones._guardar_local(
+        {"id": "genesis", "nombre": "Génesis"}, "instalacion",
+        cliente_nombre, "", 9001, "S00083", total)
+
+
+def test_vincular_una_cotizacion_mueve_el_lead_a_cotizado(cliente):
+    registro = _cotizacion_suelta()
+    r = cliente.post("/retail/vincular",
+                     data={"ref": "LEAD-48", "clase": "servicio",
+                           "n": registro["n"]},
+                     follow_redirects=False)
+    assert r.status_code == 303 and "abrir=LEAD-48" in r.headers["location"]
+    _columnas, por_ref = retail.tablero()
+    assert por_ref["LEAD-48"]["etapa"] == "facturar"
+    # La ficha lista la cotización con su PDF.
+    cuerpo = cliente.get("/retail?abrir=LEAD-48").text
+    assert "S00083 · Juan Carlos Lopez" in cuerpo
+    assert f"/venta/servicio/{registro['n']}/propuesta.pdf" in cuerpo
+
+
+def test_desvincular_regresa_el_lead_a_por_cotizar(cliente):
+    registro = _cotizacion_suelta()
+    cliente.post("/retail/vincular",
+                 data={"ref": "LEAD-48", "clase": "servicio", "n": registro["n"]})
+    cliente.post("/retail/desvincular",
+                 data={"ref": "LEAD-48", "clase": "servicio", "n": registro["n"]})
+    _columnas, por_ref = retail.tablero()
+    assert por_ref["LEAD-48"]["etapa"] == "cotizar"
+
+
+def test_la_ficha_ofrece_las_cotizaciones_sueltas_para_vincular(cliente):
+    registro = _cotizacion_suelta("Tamara", 787.0)
+    cuerpo = cliente.get("/retail?abrir=LEAD-48").text
+    assert "vincular" in cuerpo.lower()
+    assert f'value="{registro["n"]}"' in cuerpo
+
+
+def test_el_drag_hacia_adelante_le_gana_a_la_etapa_derivada(cliente):
+    registro = _cotizacion_suelta()
+    cliente.post("/retail/vincular",
+                 data={"ref": "LEAD-48", "clase": "servicio", "n": registro["n"]})
+    cliente.post("/retail/mover", data={"ref": "LEAD-48", "etapa": "entregado"})
+    _columnas, por_ref = retail.tablero()
+    assert por_ref["LEAD-48"]["etapa"] == "entregado"
+
+
+def test_cotizar_en_vender_deja_el_lead_pendiente(cliente):
+    from app import ventas
+    r = cliente.get("/venta?lead=LEAD-46&cliente=Jasmin", follow_redirects=False)
+    assert r.status_code == 303
+    assert ventas.lead_pendiente("genesis") == {"ref": "LEAD-46", "nombre": "Jasmin"}
+    # La pantalla avisa el amarre y se puede quitar.
+    cuerpo = cliente.get("/venta").text
+    assert "LEAD-46" in cuerpo
+    cliente.post("/venta/lead/quitar")
+    assert ventas.lead_pendiente("genesis") is None
+
+
+def test_la_cotizacion_creada_con_lead_pendiente_nace_vinculada(cliente):
+    from app import ventas
+    ventas.poner_lead_pendiente("genesis", "LEAD-46", "Jasmin")
+    registro = _cotizacion_suelta("Jasmin", 100.0)
+    assert registro["lead_issue"] == "LEAD-46"
+    assert ventas.lead_pendiente("genesis") is None  # se consumió
+    _columnas, por_ref = retail.tablero()
+    assert por_ref["LEAD-46"]["etapa"] == "facturar"

@@ -111,17 +111,67 @@
     {% if abierta.cel %}
     <a class="btn" href="https://wa.me/507{{ abierta.cel.replace('-', '') }}" target="_blank" rel="noopener">💬 WhatsApp</a>
     {% endif %}
+    {# Los PDF de la venta amarrada, si la hay; sin vínculo, a /venta. #}
+    {% set facturada = (abierta.cotizaciones | selectattr('facturada') | list) %}
     {% if abierta.etapa == 'cotizar' %}
-    <a class="btn oro" href="/venta">Cotizar en Vender →</a>
+    <a class="btn oro" href="/venta?lead={{ abierta.ref | urlencode }}&cliente={{ abierta.nombre | urlencode }}">Cotizar en Vender →</a>
     {% elif abierta.etapa == 'facturar' %}
-    <a class="btn" href="/venta">🖨 Imprimir cotización</a>
+    <a class="btn" href="{{ abierta.cotizaciones[0].pdf if abierta.cotizaciones else '/venta' }}">🖨 Imprimir cotización</a>
     {% elif abierta.etapa in ('entregar', 'entregado') %}
-    <a class="btn" href="/venta">🖨 Imprimir factura</a>
+    <a class="btn" href="{{ facturada[0].pdf if facturada else '/venta' }}">🖨 Imprimir factura</a>
     {% endif %}
     {% if abierta.etapa == 'entregar' %}
     <a class="btn oro" href="/retail?fecha={{ abierta.ref }}">📅 {{ 'Cambiar fecha (' ~ cal.dmy(abierta.entrega) ~ ')' if abierta.entrega else 'Poner fecha de entrega' }}</a>
     {% endif %}
   </div>
+
+  {# Las cotizaciones de Vender amarradas a este lead (pedido del dueño,
+     22/09/2026): las mismas tarjetas de la lista de /venta, sin salir de
+     la ficha. Con vínculo, la tarjeta cae sola en su columna. #}
+  {% if abierta.cotizaciones %}
+  <div class="ret-cotizs">
+    <div class="tenue ret-cotiz-titulo">Cotizaciones</div>
+    {% for c in abierta.cotizaciones %}
+    <div class="ret-cotiz">
+      <div class="fila"><b>{{ c.orden }} · {{ c.cliente }}</b>
+        <span class="monto">{{ c.total | dinero }}</span></div>
+      <small>{{ c.fecha_texto }} · {{ c.etiqueta }}{% if c.facturada %} · Facturada{% endif %}</small>
+      <div class="liga">
+        <a href="{{ c.pdf }}">Descargar {{ 'factura' if c.facturada else ('cotización' if c.clase == 'venta' else 'propuesta') }} (PDF)</a>
+        <form method="post" action="/retail/desvincular">
+          <input type="hidden" name="ref" value="{{ abierta.ref }}">
+          <input type="hidden" name="clase" value="{{ c.clase }}">
+          <input type="hidden" name="n" value="{{ c.n }}">
+          <button class="btn chico" type="submit">Quitar</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# ¿Ya se cotizó en Vender pero la cotización quedó suelta? Se amarra
+     desde aquí y el lead pasa solo a "Cotizado · por facturar". #}
+  {% if candidatas and abierta.etapa in ('cotizar', 'facturar') %}
+  <div class="ret-cotizs">
+    <div class="tenue ret-cotiz-titulo">{{ 'Ya está cotizado · vincular su cotización' if abierta.etapa == 'cotizar' else 'Vincular otra cotización' }}</div>
+    {% for c in candidatas %}
+    <div class="ret-cotiz">
+      <div class="fila"><b>{{ c.orden }} · {{ c.cliente }}</b>
+        <span class="monto">{{ c.total | dinero }}</span></div>
+      <small>{{ c.fecha_texto }} · {{ c.etiqueta }}</small>
+      <div class="liga">
+        <form method="post" action="/retail/vincular">
+          <input type="hidden" name="ref" value="{{ abierta.ref }}">
+          <input type="hidden" name="clase" value="{{ c.clase }}">
+          <input type="hidden" name="n" value="{{ c.n }}">
+          <button class="btn chico" type="submit">Vincular a {{ abierta.ref }}</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
 
   {# Mover de etapa: ABAJO, separado (pedido del dueño). #}
   <div class="ret-mover">

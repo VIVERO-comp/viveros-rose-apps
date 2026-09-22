@@ -31,6 +31,7 @@ import xmlrpc.client
 from datetime import datetime
 
 from .datos import ZONA_PANAMA, _db
+from . import crm_leads
 
 # Estados del registro local, en orden. Cada uno es un paso YA logrado en
 # Odoo; el siguiente paso solo corre si el anterior quedó sellado.
@@ -281,6 +282,27 @@ def iniciar_tablas():
         # Migración suave: qué compró el cliente, para la tarjeta del historial.
         if "resumen" not in columnas:
             con.execute("ALTER TABLE ventas_locales ADD COLUMN resumen TEXT")
+        # Migración suave: el espejo en el CRM (22/09/2026) — referencia
+        # PP-XXXXX del lead, su issue de Linear (LEAD-NN, la llave del
+        # kanban Retail), el link, y la oportunidad del Flujo de Odoo.
+        if "lead_ref" not in columnas:
+            con.execute("ALTER TABLE ventas_locales ADD COLUMN lead_ref TEXT")
+        if "lead_issue" not in columnas:
+            con.execute("ALTER TABLE ventas_locales ADD COLUMN lead_issue TEXT")
+        if "lead_url" not in columnas:
+            con.execute("ALTER TABLE ventas_locales ADD COLUMN lead_url TEXT")
+        if "oportunidad_id" not in columnas:
+            con.execute("ALTER TABLE ventas_locales ADD COLUMN oportunidad_id INTEGER")
+        # El lead "pendiente" de cada empleada: al tocar "Cotizar en Vender"
+        # en la ficha de Retail queda anotado aquí, y la próxima
+        # venta/cotización que esa empleada cree nace vinculada a él.
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS venta_lead_pendiente (
+                usuario TEXT PRIMARY KEY,
+                ref TEXT NOT NULL,
+                nombre TEXT NOT NULL DEFAULT ''
+            )
+        """)
 
 
 def guardar_borrador(usuario, nombre, celular, servicios=None, datos=None,
@@ -333,6 +355,73 @@ def borrador_de(usuario):
 def _limpiar_borrador(usuario):
     with _db() as con:
         con.execute("DELETE FROM venta_borrador WHERE usuario=?", (usuario,))
+
+
+# ---------------------------------------------------------------------------
+# El amarre con la pestaña Retail. "Cotizar en Vender" desde la ficha de un
+# lead deja el lead pendiente; la próxima venta o cotización de esa empleada
+# nace con lead_ref y la tarjeta del tablero se mueve sola a "Cotizado".
+# ---------------------------------------------------------------------------
+
+def poner_lead_pendiente(usuario, ref, nombre=""):
+    with _db() as con:
+        con.execute("""
+            INSERT INTO venta_lead_pendiente (usuario, ref, nombre) VALUES (?,?,?)
+            ON CONFLICT(usuario) DO UPDATE SET ref = excluded.ref,
+                nombre = excluded.nombre
+        """, (usuario, ref, (nombre or "").strip()))
+
+
+def lead_pendiente(usuario):
+    with _db() as con:
+        fila = con.execute(
+            "SELECT ref, nombre FROM venta_lead_pendiente WHERE usuario=?",
+            (usuario,)).fetchone()
+    return dict(fila) if fila else None
+
+
+def quitar_lead_pendiente(usuario):
+    with _db() as con:
+        con.execute("DELETE FROM venta_lead_pendiente WHERE usuario=?", (usuario,))
+
+
+def tomar_lead_pendiente(usuario):
+    """El lead pendiente, quitándolo: se consume una sola vez."""
+    lead = lead_pendiente(usuario)
+    if lead:
+        quitar_lead_pendiente(usuario)
+    return lead
+
+
+def vincular_lead(n, issue):
+    """Amarra (o con issue None desamarra) una venta local a un issue del
+    kanban Retail (LEAD-NN). Es la corrección manual desde la ficha; el
+    espejo del CRM llena lead_issue solo al crear la venta."""
+    with _db() as con:
+        con.execute("UPDATE ventas_locales SET lead_issue=? WHERE n=?",
+                    (issue or None, n))
+
+
+def vinculadas_por_lead():
+    """{LEAD-NN: [ventas locales vinculadas, la más nueva primero]}."""
+    with _db() as con:
+        filas = con.execute(
+            "SELECT * FROM ventas_locales WHERE lead_issue IS NOT NULL"
+            " ORDER BY n DESC").fetchall()
+    resultado = {}
+    for fila in filas:
+        resultado.setdefault(fila["lead_issue"], []).append(dict(fila))
+    return resultado
+
+
+def sin_lead(limite=6):
+    """Las ventas locales recientes que aún no pertenecen a ningún lead
+    (candidatas a vincular desde la ficha de Retail)."""
+    with _db() as con:
+        filas = con.execute(
+            "SELECT * FROM ventas_locales WHERE lead_issue IS NULL"
+            " ORDER BY n DESC LIMIT ?", (limite,)).fetchall()
+    return [dict(f) for f in filas]
 
 
 def carrito_de(usuario):
@@ -526,18 +615,70 @@ def crear_cotizacion(empleada, nombre_cliente, celular="", datos=None):
     leido = _ejecutar("sale.order", "read", [[orden_id]],
                       {"fields": ["name", "amount_total"]})[0]
     resumen = ", ".join(f"{l['cantidad']}× {l['nombre']}" for l in lineas)
+    espejo, oportunidad_id = _espejar_en_crm(
+        empleada, nombre_cliente, celular, partner, orden_id,
+        leido["name"], leido["amount_total"])
     with _db() as con:
         cursor = con.execute(
             "INSERT INTO ventas_locales (creado_en, empleada, cliente, celular,"
-            " orden_id, orden, total, estado, resumen)"
-            " VALUES (?,?,?,?,?,?,?, 'cotizacion', ?)",
+            " orden_id, orden, total, estado, resumen, lead_ref, lead_issue,"
+            " lead_url, oportunidad_id)"
+            " VALUES (?,?,?,?,?,?,?, 'cotizacion', ?,?,?,?,?)",
             (_ahora(), empleada["nombre"], (nombre_cliente or "").strip() or "Cliente Local",
              (celular or "").strip() or None,
-             orden_id, leido["name"], leido["amount_total"], resumen))
+             orden_id, leido["name"], leido["amount_total"], resumen,
+             (espejo or {}).get("codigoRef"), (espejo or {}).get("identifier"),
+             (espejo or {}).get("url"), oportunidad_id))
         n = cursor.lastrowid
+    # El lead pendiente de "Cotizar en Vender" (ficha de Retail) se consume
+    # SIEMPRE aquí (que no se le pegue a la próxima venta ajena); si el
+    # espejo no resolvió un issue, ese lead es el amarre.
+    lead = tomar_lead_pendiente(usuario)
+    if lead and not (espejo or {}).get("identifier"):
+        vincular_lead(n, lead["ref"])
     vaciar_carrito(usuario)
     _limpiar_borrador(usuario)
     return obtener_venta(n)
+
+
+def _espejar_en_crm(empleada, nombre_cliente, celular, partner, orden_id,
+                    orden, total):
+    """El espejo de la venta en el CRM (decisión del 22/09/2026): el lead
+    en Linear/Twenty vía el puente de Vercel, la oportunidad en el Flujo de
+    Odoo (etiqueta RETAIL VENTA, etapa Cotizado) amarrada a la orden, y la
+    tarjeta del kanban Retail en su columna. Todo best-effort: si algo
+    falla, la venta ya está creada y sale igual."""
+    from . import cotizaciones, retail  # diferidos: cotizaciones importa este módulo
+    pendiente = tomar_lead_pendiente(empleada["id"])
+    espejo = crm_leads.espejar_venta(nombre_cliente, celular, "venta",
+                                     orden, total, empleada["nombre"],
+                                     issue=(pendiente or {}).get("ref", ""))
+    if pendiente and not (espejo or {}).get("identifier"):
+        # El puente no respondió, pero la venta venía de la ficha de un
+        # lead concreto del kanban: queda vinculada igual.
+        espejo = {**(espejo or {}), "identifier": pendiente["ref"]}
+    oportunidad_id = None
+    try:
+        # Sin espejo Y sin datos del cliente no hay a quién dar seguimiento:
+        # una tarjeta "Cliente Local" en el Flujo sería puro ruido.
+        if espejo or (nombre_cliente or "").strip() or (celular or "").strip():
+            oportunidad_id = cotizaciones._oportunidad_espejada(
+                partner, (nombre_cliente or "").strip() or "Cliente Local",
+                "RETAIL VENTA", espejo)
+            _ejecutar("sale.order", "write",
+                      [[orden_id], {"opportunity_id": oportunidad_id}])
+            _ejecutar("crm.lead", "write",
+                      [[oportunidad_id], {"expected_revenue": total}])
+    except Exception as error:
+        print(f"ventas: oportunidad de {orden} falló: {error!r}", flush=True)
+    identificador = (espejo or {}).get("identifier")
+    if identificador:
+        try:
+            retail.mover(identificador, "facturar")
+            retail.refrescar()
+        except Exception as error:
+            print(f"ventas: kanban Retail de {orden} falló: {error!r}", flush=True)
+    return espejo, oportunidad_id
 
 
 def _confirmar_orden(venta):
@@ -651,7 +792,36 @@ def cobrar(n, metodo):
             _pagar_factura(venta, metodo)
     except Exception as error:
         _actualizar_venta(n, ultimo_error=_mensaje_de_error(error))
-    return obtener_venta(n)
+    venta = obtener_venta(n)
+    if venta["estado"] == "pagado":
+        _avanzar_crm_pagada(venta)
+    return venta
+
+
+def _avanzar_crm_pagada(venta):
+    """Con la venta cobrada, el espejo avanza: la oportunidad del Flujo
+    pasa a Facturado y la tarjeta del kanban Retail a "Facturado · por
+    entregar". El sync entre los dos tableros vive SOLO en Cotizado y
+    Facturado (regla de Abraham, 22/09/2026): Abono lo mueve él a mano,
+    Pagado no se pone solo y "Entregado" existe solo en el kanban.
+    Best-effort: el cobro ya quedó sellado y nada de esto lo tumba."""
+    from . import cotizaciones, retail  # diferidos
+    if venta.get("oportunidad_id"):
+        try:
+            _ejecutar("crm.lead", "write", [[venta["oportunidad_id"]], {
+                "stage_id": cotizaciones._id_ref(
+                    "vivero_rose_pedidos.etapa_flujo_facturado"),
+            }])
+        except Exception as error:
+            print(f"ventas: Flujo de {venta.get('orden')} falló: {error!r}",
+                  flush=True)
+    if venta.get("lead_issue"):
+        try:
+            retail.mover(venta["lead_issue"], "entregar")
+            retail.refrescar()
+        except Exception as error:
+            print(f"ventas: kanban Retail de {venta.get('orden')} falló: "
+                  f"{error!r}", flush=True)
 
 
 def cancelar(n):

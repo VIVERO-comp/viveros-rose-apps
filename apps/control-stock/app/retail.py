@@ -44,6 +44,7 @@ ETAPAS = [
      "pie": "Cerrados; aquí descansan."},
 ]
 CLAVES_ETAPA = {e["clave"] for e in ETAPAS}
+INDICE_ETAPA = {e["clave"]: indice for indice, e in enumerate(ETAPAS)}
 
 TTL_LEADS = 120
 
@@ -56,6 +57,14 @@ query { issues(first: 80, filter: {
 """
 
 _cache = {"en": 0, "dato": None}
+
+
+def refrescar():
+    """Olvida el caché de leads: la próxima vista trae Linear fresco. Lo
+    llama Vender cuando el espejo del CRM acaba de abrir o mover un lead —
+    una venta recién hecha no puede tardar 2 minutos (el TTL) en salir en
+    su columna."""
+    _cache.update({"en": 0, "dato": None})
 
 
 def iniciar_tablas():
@@ -133,13 +142,66 @@ def _estados():
     return {f[0]: {"etapa": f[1], "entrega": f[2], "actividad": f[3]} for f in filas}
 
 
+def _vinculos():
+    """{LEAD-NN: [registros de Vender vinculados]} — cotizaciones de
+    servicio y ventas locales, normalizadas para la ficha del lead. Todo
+    sale de SQLite: la pantalla nunca espera a Odoo por esto."""
+    from . import cotizaciones, ventas  # aquí abajo para no ciclar imports
+    cotizaciones.iniciar_tablas()  # cada base (real o de prueba) las trae
+    ventas.iniciar_tablas()
+    juntos = {}
+    for ref, filas in cotizaciones.vinculadas_por_lead().items():
+        for f in filas:
+            juntos.setdefault(ref, []).append({
+                "clase": "servicio", "n": f["n"], "orden": f["orden"],
+                "cliente": f["cliente"], "total": f["total"],
+                "creado_en": f["creado_en"],
+                "etiqueta": cotizaciones.etiqueta_de(f["tipo"]),
+                "pdf": f"/venta/servicio/{f['n']}/propuesta.pdf",
+                "facturada": False})
+    for ref, filas in ventas.vinculadas_por_lead().items():
+        for f in filas:
+            facturada = bool(f.get("factura_id")) or f.get("estado") in ("facturada", "pagado")
+            juntos.setdefault(ref, []).append({
+                "clase": "venta", "n": f["n"], "orden": f["orden"] or f"Venta {f['n']}",
+                "cliente": f["cliente"], "total": f["total"],
+                "creado_en": f["creado_en"],
+                "etiqueta": "Venta local",
+                "pdf": (f"/venta/{f['n']}/factura.pdf" if facturada
+                        else f"/venta/{f['n']}/cotizacion.pdf"),
+                "facturada": facturada})
+    for filas in juntos.values():
+        filas.sort(key=lambda r: r["creado_en"], reverse=True)
+    return juntos
+
+
+def _etapa_derivada(registros):
+    """La etapa que los hechos de Vender imponen como mínimo: con una
+    cotización vinculada el lead ya está "Cotizado"; con una factura o un
+    pago, "Facturado · por entregar". None si no hay nada vinculado."""
+    if not registros:
+        return None
+    if any(r["facturada"] for r in registros):
+        return "entregar"
+    return "facturar"
+
+
 def tablero():
     """[{clave, titulo, pie, leads: [...]}] con todo resuelto en Python."""
     estados = _estados()
+    vinculos = _vinculos()
     leads = []
     for lead in _crudos():
         estado = estados.get(lead["ref"], {})
-        lead["etapa"] = estado.get("etapa") or "cotizar"
+        lead["cotizaciones"] = vinculos.get(lead["ref"], [])
+        # La etapa guardada (drag/botones) nunca queda ATRÁS de lo que los
+        # hechos ya dicen: cotización vinculada = mínimo "Cotizado". Hacia
+        # adelante (p. ej. marcar Entregado a mano) la guardada manda.
+        guardada = estado.get("etapa") or "cotizar"
+        derivada = _etapa_derivada(lead["cotizaciones"])
+        if derivada and INDICE_ETAPA[derivada] > INDICE_ETAPA[guardada]:
+            guardada = derivada
+        lead["etapa"] = guardada
         lead["entrega"] = estado.get("entrega") or ""
         lead["color"] = COLORES[lead["tipo"]]
         lead["tipo_nombre"] = NOMBRES_TIPO[lead["tipo"]]

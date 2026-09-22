@@ -187,6 +187,13 @@ class OdooServicios:
         self.oportunidades[nuevo] = {**vals, "tag_ids": [], "expected_revenue": 0.0}
         return nuevo
 
+    def crm_lead_search(self, args, kw):
+        # Como busca _oportunidad_espejada: un solo criterio de igualdad
+        # (lead_ref); el context {"active_test": False} no cambia el fake.
+        campo, _, valor = args[0][0]
+        return [i for i, o in self.oportunidades.items()
+                if o.get(campo) == valor][:1]
+
     def crm_lead_write(self, args, kw):
         for oid in args[0]:
             for campo, valor in args[1].items():
@@ -248,8 +255,10 @@ class OdooServicios:
             ids = [i for i in dominio[0][2] if i in self.ordenes]
         elif dominio and dominio[0][0] == "opportunity_id":
             objetivo = dominio[0][2]
+            # El vinculo puede venir del create (vals) o del write posterior
+            # (top-level), como en sale_order_read.
             ids = [i for i, o in self.ordenes.items()
-                   if o["vals"].get("opportunity_id") == objetivo]
+                   if (o.get("opportunity_id") or o["vals"].get("opportunity_id")) == objetivo]
         else:
             ids = list(self.ordenes)
         return [{"id": i, **{c: self.ordenes[i].get(c) for c in kw["fields"]}}
@@ -462,7 +471,7 @@ def test_crea_oportunidad_en_el_crm_ya_cotizada(odoo):
         {"id": "g", "nombre": "Génesis"}, "boda", "Ana", "",
         [{"texto": "Ambientación de la ceremonia", "monto": "300"}], [])
     orden = odoo.ordenes[registro["orden_id"]]
-    oportunidad_id = orden["vals"]["opportunity_id"]
+    oportunidad_id = orden["opportunity_id"]
     oportunidad = odoo.oportunidades[oportunidad_id]
     assert oportunidad["name"] == "Ana"
     assert oportunidad["type"] == "opportunity"
@@ -563,7 +572,7 @@ def test_personalizada_sin_plantilla(odoo):
     assert orden["vals"]["tipo_servicio"] == "general"
     assert "sale_order_template_id" not in orden["vals"]
     assert registro["total"] == 90.0
-    oportunidad = odoo.oportunidades[orden["vals"]["opportunity_id"]]
+    oportunidad = odoo.oportunidades[orden["opportunity_id"]]
     assert oportunidad["expected_revenue"] == 90.0
     assert odoo.tags[oportunidad["tag_ids"][0]] == "SERVICIO"
 
@@ -799,7 +808,7 @@ def test_editar_reescribe_los_renglones_y_el_total(odoo):
     planta = next(l for l in orden["lineas"] if l.get("product_id") == 601)
     assert planta["product_uom_qty"] == 5.0
     # El ingreso esperado de la oportunidad acompaña al nuevo total.
-    oportunidad = odoo.oportunidades[orden["vals"]["opportunity_id"]]
+    oportunidad = odoo.oportunidades[orden["opportunity_id"]]
     assert oportunidad["expected_revenue"] == 1200.0 + 5 * 45.0
 
 

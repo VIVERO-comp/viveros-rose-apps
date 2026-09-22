@@ -836,15 +836,23 @@ def _enlace_whatsapp(request, venta):
 
 
 @app.get("/venta")
-def venta(request: Request, error: str = ""):
+def venta(request: Request, error: str = "", lead: str = "", cliente: str = ""):
     # La pestaña: el botón grande "+ Nueva venta" y el historial local.
+    usuario = request.state.empleada["id"]
+    if lead:
+        # "Cotizar en Vender" desde la ficha de Retail: queda anotado el
+        # lead y la próxima cotización/venta de esta empleada nace
+        # vinculada a él. Redirige a la URL limpia (recargar no lo repone).
+        ventas.poner_lead_pendiente(usuario, lead, cliente)
+        return RedirectResponse("/venta", status_code=303)
     en_curso = 0
     if ventas.configurado():
         try:
-            en_curso = len(ventas.carrito_de(request.state.empleada["id"])[0])
+            en_curso = len(ventas.carrito_de(usuario)[0])
         except Exception:
             pass
     return plantillas.TemplateResponse(request, "venta.html", {
+        "lead_pendiente": ventas.lead_pendiente(usuario),
         # El menu de abajo muestra Fichas con la misma regla del principal.
         "puede_fichas": fichas.es_editora(request.state.empleada["id"]),
         "ventas_activo": ventas.configurado(),
@@ -882,6 +890,13 @@ def _cotizaciones_con_estado():
             "editable": bool(estado and estado["editable"]),
         })
     return resultado
+
+
+@app.post("/venta/lead/quitar")
+def venta_lead_quitar(request: Request):
+    # "No es para este lead": la cotización que viene se crea suelta.
+    ventas.quitar_lead_pendiente(request.state.empleada["id"])
+    return RedirectResponse("/venta", status_code=303)
 
 
 @app.post("/venta/cancelar/{n}")
@@ -1978,9 +1993,28 @@ def retail_pantalla(request: Request):
     """La pestaña Retail: kanban de leads de venta (diseño del artefacto)."""
     columnas, por_ref = retail.tablero()
     abierta = por_ref.get(request.query_params.get("abrir", ""))
+    candidatas = []
     if abierta:
         abierta["etapa_titulo"] = next(
             e["titulo"] for e in retail.ETAPAS if e["clave"] == abierta["etapa"])
+        for c in abierta["cotizaciones"]:
+            c["fecha_texto"] = _fecha_venta(c["creado_en"])
+        # Las cotizaciones/ventas de Vender que aún no son de ningún lead:
+        # candidatas a amarrar desde la ficha (mismo dato que la lista de
+        # /venta, aquí para no salir de la pantalla).
+        candidatas = sorted(
+            [{"clase": "servicio", "n": c["n"], "orden": c["orden"],
+              "cliente": c["cliente"], "total": c["total"],
+              "creado_en": c["creado_en"],
+              "etiqueta": cotizaciones.etiqueta_de(c["tipo"])}
+             for c in cotizaciones.sin_lead()]
+            + [{"clase": "venta", "n": v["n"], "orden": v["orden"] or f"Venta {v['n']}",
+                "cliente": v["cliente"], "total": v["total"],
+                "creado_en": v["creado_en"], "etiqueta": "Venta local"}
+               for v in ventas.sin_lead()],
+            key=lambda c: c["creado_en"], reverse=True)[:6]
+        for c in candidatas:
+            c["fecha_texto"] = _fecha_venta(c["creado_en"])
     con_fecha = por_ref.get(request.query_params.get("fecha", ""))
     dia_hoy = calendario.hoy()
     return plantillas.TemplateResponse(request, "retail.html", {
@@ -1990,6 +2024,7 @@ def retail_pantalla(request: Request):
         "columnas": columnas,
         "etapas": retail.ETAPAS,
         "abierta": abierta,
+        "candidatas": candidatas,
         "con_fecha": con_fecha,
         "hoy": dia_hoy.isoformat(),
         "manana": (dia_hoy + timedelta(days=1)).isoformat(),
@@ -2003,6 +2038,38 @@ async def retail_mover(request: Request):
     form = await request.form()
     retail.mover(form.get("ref", ""), form.get("etapa", ""))
     return RedirectResponse("/retail", status_code=303)
+
+
+@app.post("/retail/vincular")
+async def retail_vincular(request: Request):
+    """Amarra una cotización/venta existente de Vender al lead abierto; con
+    el vínculo la tarjeta cae sola en su columna (mínimo Cotizado)."""
+    form = await request.form()
+    ref = form.get("ref", "")
+    try:
+        n = int(form.get("n", ""))
+    except ValueError:
+        return RedirectResponse("/retail", status_code=303)
+    if form.get("clase") == "servicio":
+        cotizaciones.vincular_lead(n, ref)
+    else:
+        ventas.vincular_lead(n, ref)
+    return RedirectResponse(f"/retail?abrir={quote(ref)}", status_code=303)
+
+
+@app.post("/retail/desvincular")
+async def retail_desvincular(request: Request):
+    form = await request.form()
+    ref = form.get("ref", "")
+    try:
+        n = int(form.get("n", ""))
+    except ValueError:
+        return RedirectResponse("/retail", status_code=303)
+    if form.get("clase") == "servicio":
+        cotizaciones.vincular_lead(n, None)
+    else:
+        ventas.vincular_lead(n, None)
+    return RedirectResponse(f"/retail?abrir={quote(ref)}", status_code=303)
 
 
 @app.post("/retail/fecha")

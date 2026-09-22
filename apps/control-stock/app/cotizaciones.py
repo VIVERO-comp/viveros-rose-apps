@@ -20,7 +20,7 @@ import re
 from datetime import date, datetime, timedelta
 
 from .datos import ZONA_PANAMA, _db
-from . import ventas
+from . import crm_leads, ventas
 
 # tipo -> metadatos de la plantilla, calcados de PLANTILLA_POR_TIPO /
 # TIPOS_SERVICIO / ETIQUETA_ORDEN_POR_TIPO del addon vivero_rose_pedidos
@@ -362,6 +362,39 @@ def _crear_oportunidad(partner_id, nombre, etiqueta_tipo):
     return oportunidad_id
 
 
+def _oportunidad_espejada(partner_id, nombre, etiqueta_tipo, espejo):
+    """La oportunidad cuando la venta se espejó al CRM (Linear/Twenty).
+
+    Si el espejo devolvió un codigoRef PP-XXXXX, la oportunidad es la que
+    tiene ese lead_ref — la que el pipeline acaba de abrir, o la del lead
+    de WhatsApp reutilizado (decisión del 22/09/2026: nunca dos tarjetas
+    del mismo cliente). Se busca aun archivada (el barrido de 15 días pudo
+    dormirla; el espejo ya pidió revivirla) y se le escribe el cliente y
+    la etapa Cotizado. Si no aparece o no hubo espejo, se crea la propia
+    como siempre, y se le graba el lead_ref para que los dos lados queden
+    amarrados igual."""
+    ref = (espejo or {}).get("codigoRef") or ""
+    if ref:
+        ids = ventas._ejecutar(
+            "crm.lead", "search", [[["lead_ref", "=", ref]]],
+            {"limit": 1, "context": {"active_test": False}})
+        if ids:
+            oportunidad_id = ids[0]
+            ventas._ejecutar("crm.lead", "write", [[oportunidad_id], {
+                "partner_id": partner_id,
+                "stage_id": _id_ref("vivero_rose_pedidos.etapa_flujo_cotizado"),
+            }])
+            _etiquetar_oportunidad(oportunidad_id, etiqueta_tipo)
+            crm_leads.marcar_odoo(ref)
+            return oportunidad_id
+    oportunidad_id = _crear_oportunidad(partner_id, nombre, etiqueta_tipo)
+    if ref:
+        ventas._ejecutar("crm.lead", "write",
+                         [[oportunidad_id], {"lead_ref": ref}])
+        crm_leads.marcar_odoo(ref)
+    return oportunidad_id
+
+
 # ---------------------------------------------------------------------------
 # Armado de las líneas y creación de la cotización
 # ---------------------------------------------------------------------------
@@ -558,40 +591,61 @@ def crear_cotizacion(empleada, tipo, nombre, celular, servicios,
     lineas = _lineas_por_tipo(tipo, servicios, lineas_catalogo)
 
     partner = _cliente_id(nombre, celular, datos_cliente)
-    oportunidad_id = _oportunidad_para(partner, nombre, meta["etiqueta_orden"],
-                                       proyecto_ref)
+    proyecto = (proyecto_ref or "").strip()
+    # Con proyecto la oportunidad es la DEL PROYECTO y no se espeja al
+    # equipo LEAD (una sola tarjeta por proyecto, regla del dueño). Sin
+    # proyecto, la orden nace primero y la oportunidad se resuelve después
+    # con lo que diga el espejo del CRM (¿cliente ya conocido?).
+    oportunidad_id = _oportunidad_para(
+        partner, nombre, meta["etiqueta_orden"], proyecto) if proyecto else None
     plantilla_id = _id_ref(meta["plantilla"])
     plantilla = ventas._ejecutar(
         "sale.order.template", "read", [[plantilla_id]],
         {"fields": ["note", "number_of_days"]})[0]
     dias = plantilla.get("number_of_days") or DIAS_VALIDEZ_DEFECTO
-    orden_id = ventas._ejecutar("sale.order", "create", [{
+    valores_orden = {
         "partner_id": partner,
         "sale_order_template_id": plantilla_id,
         "tipo_servicio": tipo,
-        "opportunity_id": oportunidad_id,
         "note": plantilla.get("note") or "",
         "validity_date": (date.today() + timedelta(days=dias)).isoformat(),
         "order_line": [[0, 0, linea] for linea in lineas],
-    }])
+    }
+    if oportunidad_id:
+        valores_orden["opportunity_id"] = oportunidad_id
+    orden_id = ventas._ejecutar("sale.order", "create", [valores_orden])
     if isinstance(orden_id, list):
         orden_id = orden_id[0]
     _etiquetar_cliente(partner, meta["etiqueta_cliente"])
     _etiquetar_orden(orden_id, meta["etiqueta_orden"])
     leido = ventas._ejecutar("sale.order", "read", [[orden_id]],
                              {"fields": ["name", "amount_total"]})[0]
-    if (proyecto_ref or "").strip():
+    espejo = None
+    if proyecto:
         # En un proyecto el ingreso esperado es la SUMA de sus cotizaciones
         # (y la tarjeta pasa a Cotizado): eso lo hace proyectos, no este
         # módulo, para no pisar el total del proyecto con el de esta sola.
         from . import proyectos  # diferido: proyectos importa este módulo
-        proyectos.enlazar_cotizacion(orden_id, proyecto_ref.strip())
+        proyectos.enlazar_cotizacion(orden_id, proyecto)
     else:
+        pendiente = ventas.tomar_lead_pendiente(empleada["id"])
+        espejo = crm_leads.espejar_venta(
+            nombre, celular, tipo, leido["name"], leido["amount_total"],
+            empleada["nombre"], issue=(pendiente or {}).get("ref", ""))
+        if pendiente and not (espejo or {}).get("identifier"):
+            # El puente no respondió, pero la empleada venía de la ficha de
+            # un lead concreto: la cotización queda vinculada igual.
+            espejo = {**(espejo or {}), "identifier": pendiente["ref"]}
+        oportunidad_id = _oportunidad_espejada(
+            partner, nombre, meta["etiqueta_orden"], espejo)
+        ventas._ejecutar("sale.order", "write",
+                         [[orden_id], {"opportunity_id": oportunidad_id}])
         ventas._ejecutar("crm.lead", "write",
                          [[oportunidad_id],
                           {"expected_revenue": leido["amount_total"]}])
     return _guardar_local(empleada, tipo, nombre, celular, orden_id,
-                          leido["name"], leido["amount_total"])
+                          leido["name"], leido["amount_total"],
+                          espejo=espejo)
 
 
 # ---------------------------------------------------------------------------
@@ -616,17 +670,70 @@ def iniciar_tablas():
             );
             """
         )
+        # Migración suave: el espejo en el CRM (22/09/2026) — la referencia
+        # PP-XXXXX del lead y el link a su issue de Linear.
+        columnas = [fila[1] for fila in con.execute(
+            "PRAGMA table_info(cotizaciones_servicio)")]
+        if "lead_ref" not in columnas:
+            con.execute("ALTER TABLE cotizaciones_servicio ADD COLUMN lead_ref TEXT")
+        if "lead_url" not in columnas:
+            con.execute("ALTER TABLE cotizaciones_servicio ADD COLUMN lead_url TEXT")
+        # Migración suave: el issue del kanban Retail (LEAD-NN), la llave
+        # con la que la ficha del lead encuentra sus cotizaciones.
+        if "lead_issue" not in columnas:
+            con.execute("ALTER TABLE cotizaciones_servicio ADD COLUMN lead_issue TEXT")
 
 
-def _guardar_local(empleada, tipo, cliente, celular, orden_id, orden, total):
+def _guardar_local(empleada, tipo, cliente, celular, orden_id, orden, total,
+                   espejo=None):
     with _db() as con:
         cursor = con.execute(
             "INSERT INTO cotizaciones_servicio (creado_en, empleada, tipo,"
-            " cliente, celular, orden_id, orden, total) VALUES (?,?,?,?,?,?,?,?)",
+            " cliente, celular, orden_id, orden, total, lead_ref, lead_url,"
+            " lead_issue)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (datetime.now(ZONA_PANAMA).isoformat(), empleada["nombre"], tipo,
-             cliente, (celular or "").strip() or None, orden_id, orden, total))
+             cliente, (celular or "").strip() or None, orden_id, orden, total,
+             (espejo or {}).get("codigoRef"), (espejo or {}).get("url"),
+             (espejo or {}).get("identifier")))
         n = cursor.lastrowid
+    # El lead pendiente de "Cotizar en Vender" (ficha de Retail) se consume
+    # SIEMPRE aquí (que no se le pegue a la próxima cotización ajena); si el
+    # espejo no resolvió un issue, ese lead es el amarre.
+    lead = ventas.tomar_lead_pendiente(empleada.get("id") or "")
+    if lead and not (espejo or {}).get("identifier"):
+        vincular_lead(n, lead["ref"])
     return obtener(n)
+
+
+def vincular_lead(n, issue):
+    """Amarra (o con issue None desamarra) una cotización a un issue del
+    kanban Retail (LEAD-NN): la corrección manual desde la ficha."""
+    with _db() as con:
+        con.execute("UPDATE cotizaciones_servicio SET lead_issue=? WHERE n=?",
+                    (issue or None, n))
+
+
+def vinculadas_por_lead():
+    """{LEAD-NN: [cotizaciones vinculadas, la más nueva primero]}."""
+    with _db() as con:
+        filas = con.execute(
+            "SELECT * FROM cotizaciones_servicio WHERE lead_issue IS NOT NULL"
+            " ORDER BY n DESC").fetchall()
+    resultado = {}
+    for fila in filas:
+        resultado.setdefault(fila["lead_issue"], []).append(dict(fila))
+    return resultado
+
+
+def sin_lead(limite=6):
+    """Las cotizaciones recientes sin lead (candidatas a vincular desde la
+    ficha de Retail)."""
+    with _db() as con:
+        filas = con.execute(
+            "SELECT * FROM cotizaciones_servicio WHERE lead_issue IS NULL"
+            " ORDER BY n DESC LIMIT ?", (limite,)).fetchall()
+    return [dict(f) for f in filas]
 
 
 def cotizaciones_todas():
@@ -724,21 +831,29 @@ def crear_personalizada(empleada, nombre, celular, lineas_catalogo=None,
         raise ValueError("El nombre del cliente es obligatorio.")
     lineas = _lineas_personalizada(servicios, renglones, lineas_catalogo)
     partner = _cliente_id(nombre, celular, datos_cliente)
-    oportunidad_id = _crear_oportunidad(partner, nombre, "SERVICIO")
     orden_id = ventas._ejecutar("sale.order", "create", [{
         "partner_id": partner,
         "tipo_servicio": "general",
-        "opportunity_id": oportunidad_id,
         "order_line": [[0, 0, linea] for linea in lineas],
     }])
     if isinstance(orden_id, list):
         orden_id = orden_id[0]
     leido = ventas._ejecutar("sale.order", "read", [[orden_id]],
                              {"fields": ["name", "amount_total"]})[0]
+    pendiente = ventas.tomar_lead_pendiente(empleada["id"])
+    espejo = crm_leads.espejar_venta(
+        nombre, celular, "general", leido["name"], leido["amount_total"],
+        empleada["nombre"], issue=(pendiente or {}).get("ref", ""))
+    if pendiente and not (espejo or {}).get("identifier"):
+        espejo = {**(espejo or {}), "identifier": pendiente["ref"]}
+    oportunidad_id = _oportunidad_espejada(partner, nombre, "SERVICIO", espejo)
+    ventas._ejecutar("sale.order", "write",
+                     [[orden_id], {"opportunity_id": oportunidad_id}])
     ventas._ejecutar("crm.lead", "write",
                      [[oportunidad_id], {"expected_revenue": leido["amount_total"]}])
     return _guardar_local(empleada, "general", nombre, celular, orden_id,
-                          leido["name"], leido["amount_total"])
+                          leido["name"], leido["amount_total"],
+                          espejo=espejo)
 
 
 # ---------------------------------------------------------------------------
