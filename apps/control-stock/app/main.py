@@ -1868,6 +1868,12 @@ def calendario_pantalla(request: Request):
 
     ligas_vista = {v: _liga(estado, vista=v) for v in calendario.VISTAS}
 
+    # El log de leads de servicio del menú lateral: un toque abre "Nueva
+    # actividad" prellenada con el tipo y el nombre del lead.
+    leads_servicio = calendario.leads_de_servicio()
+    for lead in leads_servicio:
+        lead["liga"] = _liga(estado, nueva="1", tipo=lead["tipo"], cliente=lead["nombre"])
+
     abierta = None
     id_abierta = request.query_params.get("abrir", "")
     if id_abierta:
@@ -1887,6 +1893,7 @@ def calendario_pantalla(request: Request):
         "mes": mes,
         "grupos": grupos,
         "movil": movil,
+        "leads_servicio": leads_servicio,
         "dias": dias,
         "ligas_vista": ligas_vista,
         "franja": [a for a in visibles if calendario.esta_atrasada(a, dia_hoy)][:6],

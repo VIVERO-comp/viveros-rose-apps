@@ -72,6 +72,22 @@
     <a class="pil" href="/?tab=ajustes">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Ajustes
     </a>
+    {# Log de leads de servicio por agendar (dueño, 22/09/2026): solo
+       alquiler/mantenimiento/eventos — nada de venta retail. Un toque
+       abre "Nueva actividad" con el tipo y el cliente ya puestos; el
+       lead sale solo del log cuando su issue se factura o se pierde. #}
+    <div class="leads-lado">
+      <div class="leads-tit">Leads de servicio<span>por agendar</span></div>
+      {% for l in leads_servicio %}
+      <a class="lead-it" href="{{ l.liga }}" title="Agendar a {{ l.nombre }} ({{ l.etiqueta }})">
+        <span class="pt" style="background:{{ cal.color_de(l.tipo) }}"></span>
+        <span class="ln"><b>{{ l.nombre }}</b><small>{{ l.etiqueta }} · {{ l.hace }}</small></span>
+      </a>
+      {% else %}
+      <div class="lead-vacio">Ninguno por agendar.</div>
+      {% endfor %}
+    </div>
+
     <div class="pie">
       <b>{{ yo.nombre }}</b>
       <span>

@@ -404,6 +404,93 @@ def calentar_en_fondo():
     _en_fondo("calentar", tarea)
 
 
+# ---------------------------------------------------------------------------
+# Leads de servicio (equipo LEAD de Linear): el "log" del menú lateral.
+#
+# Pedido del dueño (22/09/2026): en el espacio libre del menú del calendario
+# va un log de leads de alquiler/mantenimiento — todo lo que sea SERVICIO,
+# nada de venta retail ni mayorista — que todavía no tienen su actividad
+# agendada. Un toque en el lead abre "Nueva actividad" prellenada con su
+# tipo y su nombre. El log se limpia solo: cuando el lead se factura o se
+# pierde, su issue sale de los estados vivos y desaparece de aquí.
+# ---------------------------------------------------------------------------
+
+# Etiqueta del equipo LEAD -> tipo del calendario (para el color).
+ETIQUETAS_LEADS_SERVICIO = {
+    "Mantenimiento": "mantenimiento",
+    "Eventos · Alquiler": "alquiler",
+    "Eventos · Bodas": "alquiler",
+    "Eventos · Ferias": "alquiler",
+}
+TTL_LEADS = 120
+
+CONSULTA_LEADS = """
+query { issues(first: 50, filter: {
+    team: { key: { eq: "LEAD" } }
+    state: { type: { nin: ["completed", "canceled"] } }
+  }) { nodes { id identifier title url createdAt labels { nodes { name } } } }
+}
+"""
+
+_leads_cache = {"en": 0, "dato": None}
+
+
+def leads_de_servicio():
+    """[{ref, nombre, tipo, etiqueta, hace, url}] de leads de servicio vivos.
+
+    Mismo patrón de velocidad que el resto: se sirve lo guardado al
+    instante y, si venció el TTL, Linear se consulta por detrás.
+    """
+    if not configurado():
+        return _muestra_leads()
+    if _leads_cache["dato"] is not None:
+        if time.time() - _leads_cache["en"] >= TTL_LEADS:
+            _en_fondo("leads", _buscar_leads)
+        return _leads_cache["dato"]
+    try:
+        return _buscar_leads()
+    except ErrorCalendario:
+        return []  # el log es un extra: sin Linear no tumba la pantalla
+
+
+def _buscar_leads():
+    filas = []
+    for issue in _pedir(CONSULTA_LEADS)["issues"]["nodes"]:
+        etiquetas = [l["name"] for l in issue["labels"]["nodes"]]
+        etiqueta = next((e for e in etiquetas if e in ETIQUETAS_LEADS_SERVICIO), None)
+        if not etiqueta:
+            continue  # retail, mayorista y demás: no son servicio
+        titulo = issue["title"] or ""
+        # "Laura Porcell (PP-WATHA)" -> el nombre pelado para prellenar.
+        nombre = titulo.split(" (PP-")[0].strip() or titulo
+        dias = 0
+        try:
+            dias = (datetime.now(ZONA_PANAMA).date()
+                    - datetime.fromisoformat(issue["createdAt"].replace("Z", "+00:00"))
+                      .astimezone(ZONA_PANAMA).date()).days
+        except (ValueError, KeyError, TypeError):
+            pass
+        filas.append({
+            "ref": issue["identifier"], "nombre": nombre,
+            "tipo": ETIQUETAS_LEADS_SERVICIO[etiqueta], "etiqueta": etiqueta,
+            "hace": "hoy" if dias <= 0 else (f"hace {dias} día" + ("s" if dias > 1 else "")),
+            "dias": dias, "url": issue.get("url") or "",
+        })
+    filas.sort(key=lambda f: -f["dias"])  # el más viejo arriba: es el urgente
+    _leads_cache.update({"en": time.time(), "dato": filas})
+    return filas
+
+
+def _muestra_leads():
+    """Dos leads de ejemplo para el modo muestra (diseño y pruebas)."""
+    return [
+        {"ref": "LEAD-90", "nombre": "Hotel Bristol", "tipo": "mantenimiento",
+         "etiqueta": "Mantenimiento", "hace": "hace 3 días", "dias": 3, "url": ""},
+        {"ref": "LEAD-91", "nombre": "Boda Las Nubes", "tipo": "alquiler",
+         "etiqueta": "Eventos · Bodas", "hace": "hoy", "dias": 0, "url": ""},
+    ]
+
+
 def invalidar_cache():
     _lista_cache.clear()
 

@@ -420,3 +420,43 @@ def test_todos_pueden_cambiar_hasta_previo_aviso(cliente, monkeypatch):
     cuerpo = _abrir(cliente, abrir=actividad_real["id"]).text
     assert "Solo lectura" not in cuerpo
     assert 'name="resp_id"' not in cuerpo
+
+
+def test_leads_de_servicio_filtra_y_ordena(monkeypatch):
+    """Solo lo que es servicio (alquiler/mantenimiento/eventos), nunca
+    retail ni mayorista; el más viejo arriba y el nombre sin el (PP-…)."""
+    monkeypatch.setenv("LINEAR_API_KEY", "lin_x")
+    monkeypatch.setenv("LINEAR_PROJECT_CALENDARIO_ID", "p1")
+    calendario._leads_cache.update({"en": 0, "dato": None})
+    hoy_iso = calendario.datetime.now(calendario.ZONA_PANAMA)
+    viejo = (hoy_iso - calendario.timedelta(days=4)).isoformat()
+    monkeypatch.setattr(calendario, "_pedir", lambda *_a, **_k: {"issues": {"nodes": [
+        {"id": "1", "identifier": "LEAD-1", "title": "Laura Porcell (PP-WATHA)",
+         "url": "", "createdAt": hoy_iso.isoformat(),
+         "labels": {"nodes": [{"name": "Plantas retail"}]}},
+        {"id": "2", "identifier": "LEAD-2", "title": "Hotel Riu (PP-AAA11)",
+         "url": "", "createdAt": hoy_iso.isoformat(),
+         "labels": {"nodes": [{"name": "Mantenimiento"}]}},
+        {"id": "3", "identifier": "LEAD-3", "title": "Boda Vega (PP-BBB22)",
+         "url": "", "createdAt": viejo,
+         "labels": {"nodes": [{"name": "Eventos · Bodas"}]}},
+        {"id": "4", "identifier": "LEAD-4", "title": "Diego (PP-CCC33)",
+         "url": "", "createdAt": hoy_iso.isoformat(),
+         "labels": {"nodes": [{"name": "Mayorista"}]}},
+    ]}})
+    filas = calendario.leads_de_servicio()
+    calendario._leads_cache.update({"en": 0, "dato": None})
+    assert [f["ref"] for f in filas] == ["LEAD-3", "LEAD-2"]  # el viejo primero
+    assert filas[0]["nombre"] == "Boda Vega"
+    assert filas[0]["tipo"] == "alquiler" and filas[1]["tipo"] == "mantenimiento"
+    assert "hace 4 días" == filas[0]["hace"]
+
+
+def test_el_log_de_leads_sale_en_el_menu_y_agenda_con_un_toque(cliente):
+    cuerpo = _abrir(cliente).text
+    assert "Leads de servicio" in cuerpo
+    assert "Hotel Bristol" in cuerpo  # el lead de muestra
+    # Su enlace abre el formulario con tipo y cliente ya puestos.
+    assert "nueva=1" in cuerpo
+    assert "tipo=mantenimiento" in cuerpo
+    assert "cliente=Hotel%20Bristol" in cuerpo
