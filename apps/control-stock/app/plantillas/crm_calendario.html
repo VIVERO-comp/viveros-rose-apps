@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calendario · Vivero Rose</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+/* Piel de Twenty: la página vive dentro del CRM como un iframe (el menú
+   lateral de Twenty queda a la izquierda), por eso aquí no hay sidebar. */
+:root{
+  --bg:#f7f7f6; --panel:#ffffff; --panel-2:#fbfbfa;
+  --border:#e4e3e1; --border-soft:#eeedeb;
+  --ink:#19191a; --ink-2:#6b6b70; --ink-3:#9c9ca1;
+  --accent:#2563eb; --primary:#19191a; --primary-ink:#ffffff;
+  --hover:#f0efee; --sel:#e9e8e6;
+  --sombra:0 8px 32px rgba(20,20,20,.14);
+  --ok:#2a6e3f; --mal:#b42318;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#111112; --panel:#1a1a1c; --panel-2:#161617;
+    --border:#2b2b2e; --border-soft:#232326;
+    --ink:#ececee; --ink-2:#9a9aa1; --ink-3:#6e6e75;
+    --accent:#6c9bff; --primary:#ececee; --primary-ink:#141415;
+    --hover:#232326; --sel:#2b2b2e;
+    --sombra:0 8px 32px rgba(0,0,0,.5);
+    --ok:#63c983; --mal:#f3968b; color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0; background:var(--panel); color:var(--ink); overflow:hidden;
+  font:13px/1.45 Inter,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased}
+a{color:inherit; text-decoration:none}
+a:focus-visible,button:focus-visible{outline:2px solid var(--accent); outline-offset:1px; border-radius:4px}
+button,input,select,textarea{font:inherit; color:var(--ink)}
+
+.main{height:100vh; height:100dvh; display:flex; flex-direction:column}
+.top{height:46px; flex:none; display:flex; align-items:center; gap:10px; padding:0 14px;
+  border-bottom:1px solid var(--border)}
+.crumb{display:flex; align-items:center; gap:8px; font-weight:600}
+.cnt{color:var(--ink-3); font-weight:500}
+.sp{flex:1}
+.aviso{font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:40%}
+.aviso.ok{color:var(--ok)} .aviso.mal{color:var(--mal)}
+.btn{display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border-radius:6px;
+  border:1px solid var(--border); background:var(--panel); font-weight:500; color:var(--ink-2); cursor:pointer}
+.btn:hover{background:var(--hover); color:var(--ink)}
+.btn.dark{background:var(--primary); color:var(--primary-ink); border-color:var(--primary); font-weight:600}
+.btn.dark:hover{opacity:.88}
+.btn.quiet{border-color:transparent}
+.btn.on{background:var(--sel); color:var(--ink); border-color:var(--border)}
+.bar{flex:none; display:flex; align-items:center; gap:10px; padding:8px 14px;
+  border-bottom:1px solid var(--border); flex-wrap:wrap}
+.rango{font-weight:600; font-variant-numeric:tabular-nums}
+.nav3{display:flex; align-items:center; gap:2px}
+.nav3 a{width:26px; height:26px; border-radius:6px; display:grid; place-items:center; color:var(--ink-2)}
+.nav3 a:hover{background:var(--hover); color:var(--ink)}
+.nav3 a.hoy{width:auto; padding:0 9px; font-weight:500; border:1px solid var(--border); color:var(--ink)}
+.seg{display:flex; border:1px solid var(--border); border-radius:7px; overflow:hidden}
+.seg a{padding:5px 11px; font-weight:500; color:var(--ink-2); border-right:1px solid var(--border)}
+.seg a:last-child{border-right:none}
+.seg a.on{background:var(--sel); color:var(--ink); font-weight:600}
+
+.cuerpo{flex:1; min-height:0; display:flex}
+.lienzo{flex:1; min-width:0; display:flex; flex-direction:column; overflow:auto}
+
+/* carril semana / día */
+.gcab{position:relative; height:32px; flex:none; border-bottom:1px solid var(--border)}
+.gcab .d{position:absolute; top:0; bottom:0; padding:7px 8px; font-weight:500; color:var(--ink-2);
+  border-left:1px solid var(--border-soft); display:flex; align-items:baseline; gap:6px; overflow:hidden}
+.gcab .num{font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums}
+.gcab .today .num{background:var(--accent); color:#fff; border-radius:6px; padding:1px 6px}
+.gbody{position:relative; flex:1; min-height:520px}
+.hlbl{position:absolute; left:0; width:46px; font-size:10.5px; color:var(--ink-3); text-align:right;
+  padding-right:8px; transform:translateY(-6px); font-variant-numeric:tabular-nums}
+.hlin{position:absolute; left:46px; right:0; border-top:1px solid var(--border-soft)}
+.gcol{position:absolute; top:0; bottom:0; border-left:1px solid var(--border-soft)}
+.celda{position:absolute; display:block}
+.celda:hover{background:color-mix(in srgb, var(--accent) 5%, transparent)}
+.ahora{position:absolute; left:46px; right:0; border-top:2px solid #e11d48; z-index:6; pointer-events:none}
+/* los fondos de los bloques vienen horneados en claro: la tinta va fija */
+.ev{position:absolute; border-radius:6px; padding:3px 6px 3px 8px; overflow:hidden;
+  border:1px solid; border-left-width:3px; min-height:24px; color:#26262a}
+.ev b{display:block; font-size:11.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.ev span{font-size:10.5px; color:#55555c; font-variant-numeric:tabular-nums; display:block;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.ev.done{opacity:.45}
+.ev.done b{text-decoration:line-through}
+.ev.atrasada b::before{content:"⚑ "; color:#e11d48}
+
+/* mes */
+.mes{flex:1; display:flex; flex-direction:column; min-height:520px}
+.mes-cab{display:grid; grid-template-columns:repeat(7,1fr); flex:none}
+.mes-cab div{padding:6px 8px; font-weight:500; color:var(--ink-2);
+  border-bottom:1px solid var(--border); border-left:1px solid var(--border-soft)}
+.mes-fila{display:grid; grid-template-columns:repeat(7,1fr); flex:1}
+.mc{border-left:1px solid var(--border-soft); border-bottom:1px solid var(--border-soft);
+  padding:4px 5px; min-width:0; overflow:hidden}
+.mc .n{font-size:11.5px; font-weight:600; color:var(--ink-2); padding:1px 5px; display:inline-block;
+  border-radius:6px; font-variant-numeric:tabular-nums}
+.mc .n:hover{background:var(--hover)}
+.mc.fuera .n{color:var(--ink-3); font-weight:400}
+.mc.today .n{background:var(--accent); color:#fff}
+.pill{display:block; font-size:10.5px; font-weight:600; padding:1px 6px; border-radius:4px;
+  margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  border-left:3px solid; color:#26262a}
+.pill.done{opacity:.45; text-decoration:line-through}
+.mc .mas{font-size:10.5px; color:var(--ink-3); padding:1px 6px; display:block}
+
+/* lista */
+.lista{flex:1; padding:6px 0}
+.ld{padding:10px 16px 4px; font-weight:600; color:var(--ink-2); font-size:12px}
+.ld.atraso{color:var(--mal)}
+.lrow{display:flex; align-items:center; gap:10px; width:100%; padding:7px 16px}
+.lrow:hover{background:var(--hover)}
+.lrow .hh{width:110px; flex:none; color:var(--ink-2); font-variant-numeric:tabular-nums; font-size:12px}
+.lrow .pt{width:8px; height:8px; border-radius:2px; flex:none}
+.lrow b{font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.lrow .cl{color:var(--ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.lrow.done{opacity:.5}
+.lrow.done b{text-decoration:line-through}
+.lrow .est{margin-left:auto; flex:none}
+.vacio{padding:24px 16px; color:var(--ink-3); text-align:center}
+
+/* chips */
+.chip{display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:4px;
+  font-size:11.5px; font-weight:500; white-space:nowrap}
+.chip .pt{width:6px; height:6px; border-radius:50%}
+
+/* carril derecho: por agendar */
+.rail{width:232px; flex:none; border-left:1px solid var(--border); background:var(--panel-2);
+  overflow:auto; padding:10px 8px; display:flex; flex-direction:column; gap:1px}
+.rail-t{font-size:11px; font-weight:600; color:var(--ink-3); letter-spacing:.02em; padding:2px 8px 6px}
+.rail-lead{display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px}
+.rail-lead:hover{background:var(--hover)}
+.rail-lead .pt{width:7px; height:7px; border-radius:50%; flex:none}
+.rail-lead .nm{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500}
+.rail-lead .hz{font-size:11px; color:var(--ink-3); flex:none; font-variant-numeric:tabular-nums}
+
+/* ficha (drawer estilo Twenty) */
+.velo{position:fixed; inset:0; background:rgba(15,15,15,.25); z-index:15; display:block}
+.drawer{position:fixed; top:0; right:0; bottom:0; width:min(720px,100%); background:var(--panel);
+  border-left:1px solid var(--border); box-shadow:var(--sombra); z-index:20;
+  display:flex; flex-direction:column}
+.dr-top{height:46px; flex:none; display:flex; align-items:center; gap:8px; padding:0 12px;
+  border-bottom:1px solid var(--border); color:var(--ink-2); font-weight:500}
+.dr-top .x{margin-left:auto; width:28px; height:28px; border-radius:6px; display:grid;
+  place-items:center; color:var(--ink-2); font-size:15px}
+.dr-top .x:hover{background:var(--hover); color:var(--ink)}
+.dr-body{flex:1; min-height:0; display:flex}
+.dr-izq{width:264px; flex:none; border-right:1px solid var(--border); overflow:auto; padding:18px 16px}
+.dr-der{flex:1; min-width:0; display:flex; flex-direction:column}
+.avatar{width:40px; height:40px; border-radius:10px; display:grid; place-items:center;
+  font-weight:700; font-size:15px; color:#fff; margin-bottom:10px}
+.dr-izq h2{font-size:16px; margin:0 0 2px; font-weight:600; text-wrap:balance}
+.dr-izq .sub{color:var(--ink-2); margin-bottom:10px; font-variant-numeric:tabular-nums}
+.chips{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px}
+.campo{display:flex; align-items:flex-start; gap:8px; padding:5px 0; color:var(--ink-2)}
+.campo .k{width:70px; flex:none; font-size:12px}
+.campo .v{color:var(--ink); font-weight:500; font-variant-numeric:tabular-nums; min-width:0; overflow-wrap:anywhere}
+.dr-acciones{display:flex; flex-direction:column; gap:8px; margin-top:16px}
+.dr-acciones .btn,.dr-acciones button{width:100%; justify-content:center; padding:7px 10px; text-align:center}
+.tabs{flex:none; display:flex; gap:2px; padding:0 14px; border-bottom:1px solid var(--border)}
+.tabs .t{padding:10px 10px 9px; font-weight:600; color:var(--ink); border-bottom:2px solid var(--ink); margin-bottom:-1px}
+.tab-c{flex:1; overflow:auto; padding:16px}
+.chat{display:flex; flex-direction:column; gap:8px; max-width:540px}
+.msg{max-width:78%; padding:7px 10px; border-radius:10px; border:1px solid var(--border-soft);
+  background:var(--panel-2); align-self:flex-start}
+.msg.yo{align-self:flex-end; background:color-mix(in srgb, var(--ok) 10%, var(--panel));
+  border-color:color-mix(in srgb, var(--ok) 25%, var(--border-soft))}
+.msg .h{font-size:10.5px; color:var(--ink-3); margin-top:3px; text-align:right; font-variant-numeric:tabular-nums}
+.nota{border:1px solid var(--border-soft); background:var(--panel-2); border-radius:8px;
+  padding:10px 12px; margin-bottom:8px; max-width:540px; white-space:pre-wrap}
+.nota .h{font-size:11px; color:var(--ink-3); margin-bottom:4px; font-variant-numeric:tabular-nums}
+
+/* formulario nueva actividad */
+.form{padding:18px 20px; overflow:auto; max-width:520px; width:100%}
+.form h2{font-size:16px; margin:0 0 14px; font-weight:600}
+.f{margin-bottom:12px}
+.f label{display:block; font-size:12px; color:var(--ink-2); font-weight:500; margin-bottom:4px}
+.f input,.f select,.f textarea{width:100%; padding:7px 9px; border:1px solid var(--border);
+  border-radius:7px; background:var(--panel); font-size:16px}
+.f textarea{resize:vertical; min-height:60px}
+.f2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+.form .btn.dark{width:100%; justify-content:center; padding:8px; margin-top:6px; border:none}
+
+@media (max-width: 900px){ .rail{display:none} }
+@media (max-width: 640px){
+  .dr-body{flex-direction:column; overflow:auto}
+  .dr-izq{width:100%; border-right:none; border-bottom:1px solid var(--border)}
+  .drawer{width:100%}
+}
+@media (prefers-reduced-motion: no-preference){
+  .drawer{animation:entrar .18s cubic-bezier(.32,.72,.28,1)}
+  @keyframes entrar{from{transform:translateX(40px);opacity:.4}to{transform:none;opacity:1}}
+}
+</style>
+</head>
+<body>
+<div class="main">
+  <header class="top">
+    <span class="crumb">📅 Calendario</span><span class="cnt">{{ cuenta }}</span>
+    {% if aviso %}<span class="aviso ok">{{ aviso }}</span>{% endif %}
+    {% if error %}<span class="aviso mal">{{ error }}</span>{% endif %}
+    <span class="sp"></span>
+    {% if puede_escribir %}<a class="btn dark" href="{{ ligas.nueva }}">+ Nueva actividad</a>{% endif %}
+  </header>
+
+  <div class="bar">
+    <div class="nav3">
+      <a href="{{ ligas.ant }}" aria-label="Anterior">‹</a>
+      <a class="hoy" href="{{ ligas.hoy }}">Hoy</a>
+      <a href="{{ ligas.sig }}" aria-label="Siguiente">›</a>
+    </div>
+    <span class="rango">{{ titulo_rango }}</span>
+    <span class="sp"></span>
+    <a class="btn quiet {{ 'on' if not hechas }}" href="{{ ligas.hechas }}">Ocultar terminadas</a>
+    <div class="seg">
+      {% for v, nombre in (("dia","Día"),("semana","Semana"),("mes","Mes"),("lista","Lista")) %}
+      <a class="{{ 'on' if vista == v }}" href="{{ ligas.vistas[v] }}">{{ nombre }}</a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="cuerpo">
+    <div class="lienzo">
+      {% if carril %}
+      <div class="gcab">
+        {% for c in carril.columnas %}
+        <div class="d {{ 'today' if c.hoy }}" style="{{ c.estilo }}">{{ c.dow }} <span class="num">{{ c.num }}</span></div>
+        {% endfor %}
+      </div>
+      <div class="gbody">
+        {% for f in carril.horas %}
+        <div class="hlbl" style="top:{{ f.top }}%">{{ f.etiqueta }}</div>
+        <div class="hlin" style="top:{{ f.top }}%"></div>
+        {% endfor %}
+        {% for c in carril.columnas %}
+        <div class="gcol" style="{{ c.estilo }}"></div>
+        {% for celda in c.celdas %}
+        <a class="celda" style="{{ c.estilo }};top:{{ celda.top }}%;height:{{ celda.alto }}%"
+           href="{{ celda.liga }}" aria-label="Nueva actividad"></a>
+        {% endfor %}
+        {% endfor %}
+        {% if carril.ahora is not none %}<div class="ahora" style="top:{{ carril.ahora }}%"></div>{% endif %}
+        {% for b in carril.bloques %}
+        <a class="ev {{ 'done' if b.a.estado in ('hecha','cancel') }} {{ 'atrasada' if b.atrasada }}"
+           style="{{ b.estilo }}" href="{{ b.liga }}">
+          <b>{{ b.a.cliente }}</b>
+          <span>{{ cal_tipo(b.a.tipo) }}{% if b.ver_pie %} · {{ b.rango }}{% endif %}</span>
+        </a>
+        {% endfor %}
+      </div>
+
+      {% elif mes %}
+      <div class="mes">
+        <div class="mes-cab">
+          {% for d in ("lun","mar","mié","jue","vie","sáb","dom") %}<div>{{ d }}</div>{% endfor %}
+        </div>
+        {% for semana in mes %}
+        <div class="mes-fila">
+          {% for celda in semana %}
+          <div class="mc {{ 'fuera' if celda.otro_mes }} {{ 'today' if celda.hoy }}">
+            <a class="n" href="{{ celda.liga_dia }}">{{ celda.num }}</a>
+            {% for b in celda.barras %}
+            <a class="pill {{ 'done' if b.a.estado in ('hecha','cancel') }}" href="{{ b.liga }}"
+               style="background:{{ b.fondo }};border-left-color:{{ b.color }}">{{ b.a.hora }} {{ b.a.cliente }}</a>
+            {% endfor %}
+            {% if celda.resto %}<a class="mas" href="{{ celda.liga_dia }}">+{{ celda.resto }} más</a>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+
+      {% else %}
+      <div class="lista">
+        {% for g in grupos %}
+        <div class="ld {{ 'atraso' if g.es_atraso }}">{{ g.titulo }}</div>
+        {% for fila in g.filas %}
+        <a class="lrow {{ 'done' if fila.a.estado in ('hecha','cancel') }}" href="{{ fila.liga }}">
+          <span class="hh">{{ fila.rango }}</span>
+          <span class="pt" style="background:{{ fila.color }}"></span>
+          <b>{{ fila.a.cliente }}</b>
+          {% if fila.a.lugar %}<span class="cl">· {{ fila.a.lugar }}</span>{% endif %}
+          <span class="est chip" style="background:color-mix(in srgb, {{ fila.color }} 12%, var(--panel));color:{{ fila.color }}">{{ fila.tipo_nombre }}</span>
+        </a>
+        {% endfor %}
+        {% else %}
+        <div class="vacio">Nada agendado por delante.</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    {% if leads %}
+    <aside class="rail" aria-label="Leads de servicio por agendar">
+      <div class="rail-t">Por agendar · servicio</div>
+      {% for l in leads %}
+      <a class="rail-lead" href="{{ l.liga }}">
+        <span class="pt" style="background:{{ l.color }}"></span>
+        <span class="nm">{{ l.nombre }}</span><span class="hz">{{ l.hace }}</span>
+      </a>
+      {% endfor %}
+    </aside>
+    {% endif %}
+  </div>
+</div>
+
+{% if abierta %}
+<a class="velo" href="{{ ligas.cerrar }}" aria-label="Cerrar"></a>
+<aside class="drawer">
+  <div class="dr-top">📅 Calendario / {{ abierta.a.ref }} <a class="x" href="{{ ligas.cerrar }}" aria-label="Cerrar">✕</a></div>
+  <div class="dr-body">
+    <div class="dr-izq">
+      <div class="avatar" style="background:{{ abierta.color }}">{{ abierta.iniciales }}</div>
+      <h2>{{ abierta.a.cliente }}</h2>
+      <div class="sub">{{ abierta.a.ref }}</div>
+      <div class="chips">
+        <span class="chip" style="background:color-mix(in srgb, {{ abierta.color }} 12%, var(--panel));color:{{ abierta.color }}"><span class="pt" style="background:{{ abierta.color }}"></span>{{ abierta.tipo_nombre }}</span>
+        {% if abierta.a.estado != 'pend' %}<span class="chip" style="background:var(--sel)">{{ abierta.estado_nombre }}</span>{% endif %}
+      </div>
+      <div class="campo"><span class="k">Cuándo</span><span class="v">{{ abierta.cuando }}</span></div>
+      {% if abierta.a.lugar %}<div class="campo"><span class="k">Dónde</span><span class="v">{{ abierta.a.lugar }}</span></div>{% endif %}
+      <div class="campo"><span class="k">Quién</span><span class="v">{{ abierta.a.resp }}</span></div>
+      {% if abierta.a.nota %}<div class="campo"><span class="k">Nota</span><span class="v">{{ abierta.a.nota }}</span></div>{% endif %}
+      <div class="dr-acciones">
+        {% if puede_escribir %}
+        {% if abierta.a.estado != 'hecha' %}
+        <form method="post" action="{{ abierta.accion_estado }}">
+          <input type="hidden" name="estado" value="hecha">
+          <button class="btn dark">Marcar terminada</button>
+        </form>
+        {% else %}
+        <form method="post" action="{{ abierta.accion_estado }}">
+          <input type="hidden" name="estado" value="pend">
+          <button class="btn">Reabrir</button>
+        </form>
+        {% endif %}
+        {% if abierta.a.estado != 'cancel' %}
+        <form method="post" action="{{ abierta.accion_estado }}">
+          <input type="hidden" name="estado" value="cancel">
+          <button class="btn">Cancelar actividad</button>
+        </form>
+        {% endif %}
+        {% endif %}
+        {% if abierta.a.url %}<a class="btn" href="{{ abierta.a.url }}" target="_blank" rel="noopener">Abrir en Linear</a>{% endif %}
+      </div>
+    </div>
+    <div class="dr-der">
+      <div class="tabs"><span class="t">Notas</span></div>
+      <div class="tab-c">
+        {% for n in abierta.notas %}
+        <div class="nota"><div class="h">{{ n.quien }} · {{ n.cuando | fecha_dmy }}</div>{{ n.texto }}</div>
+        {% else %}
+        <div class="vacio">Sin notas todavía.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</aside>
+{% endif %}
+
+{% if lead_abierto %}
+<a class="velo" href="{{ ligas.cerrar }}" aria-label="Cerrar"></a>
+<aside class="drawer">
+  <div class="dr-top">👽 Leads / {{ lead_abierto.pp or lead_abierto.l.ref }} <a class="x" href="{{ ligas.cerrar }}" aria-label="Cerrar">✕</a></div>
+  <div class="dr-body">
+    <div class="dr-izq">
+      <div class="avatar" style="background:{{ lead_abierto.l.color }}">{{ lead_abierto.iniciales }}</div>
+      <h2>{{ lead_abierto.l.nombre }}</h2>
+      <div class="sub">{{ lead_abierto.pp }}{% if lead_abierto.pp %} · {% endif %}{{ lead_abierto.l.ref }}</div>
+      <div class="chips">
+        <span class="chip" style="background:color-mix(in srgb, {{ lead_abierto.l.color }} 12%, var(--panel));color:{{ lead_abierto.l.color }}">{{ lead_abierto.l.etiqueta }}</span>
+      </div>
+      {% if lead_abierto.telefono %}<div class="campo"><span class="k">Teléfono</span><span class="v">{{ lead_abierto.telefono }}</span></div>{% endif %}
+      <div class="campo"><span class="k">Llegó</span><span class="v">{{ lead_abierto.llego or lead_abierto.l.hace }}</span></div>
+      <div class="campo"><span class="k">Canal</span><span class="v">WhatsApp</span></div>
+      <div class="dr-acciones">
+        {% if puede_escribir %}<a class="btn dark" href="{{ lead_abierto.liga_agendar }}">Agendar actividad</a>{% endif %}
+        {% if lead_abierto.wa %}<a class="btn" href="https://wa.me/{{ lead_abierto.wa }}" target="_blank" rel="noopener">Abrir en WhatsApp</a>{% endif %}
+        {% if lead_abierto.l.url %}<a class="btn" href="{{ lead_abierto.l.url }}" target="_blank" rel="noopener">Abrir en Linear</a>{% endif %}
+        <a class="btn" href="{{ lead_abierto.twenty_url }}" target="_top">Abrir en Twenty</a>
+      </div>
+    </div>
+    <div class="dr-der">
+      <div class="tabs"><span class="t">Conversación</span></div>
+      <div class="tab-c">
+        {% if lead_abierto.mensajes %}
+        <div class="chat">
+          {% for m in lead_abierto.mensajes %}
+          <div class="msg {{ 'yo' if m.salida }}">{{ m.texto }}<div class="h">{{ m.cuando }}</div></div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="vacio">Sin conversación conectada todavía.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</aside>
+{% endif %}
+
+{% if nueva %}
+<a class="velo" href="{{ ligas.cerrar }}" aria-label="Cerrar"></a>
+<aside class="drawer">
+  <div class="dr-top">📅 Calendario / Nueva actividad <a class="x" href="{{ ligas.cerrar }}" aria-label="Cerrar">✕</a></div>
+  <form class="form" method="post" action="{{ nueva.accion }}">
+    <h2>Nueva actividad</h2>
+    <div class="f"><label for="f-cliente">Cliente o trabajo</label>
+      <input id="f-cliente" name="cliente" value="{{ nueva.cliente }}" required autofocus></div>
+    <div class="f"><label for="f-tipo">Tipo</label>
+      <select id="f-tipo" name="tipo">
+        {% for t in tipos %}<option value="{{ t.clave }}" {{ 'selected' if t.clave == nueva.tipo }}>{{ t.nombre }}</option>{% endfor %}
+      </select></div>
+    <div class="f2">
+      <div class="f"><label for="f-fecha">Fecha</label>
+        <input id="f-fecha" name="fecha" type="date" value="{{ nueva.fecha }}" required></div>
+      <div class="f"><label for="f-hora">Hora</label>
+        <input id="f-hora" name="hora" type="time" value="{{ nueva.hora }}"></div>
+    </div>
+    <div class="f2">
+      <div class="f"><label for="f-dur">Duración</label>
+        <select id="f-dur" name="dur">
+          {% for d, nombre in (("30","30 min"),("60","1 hora"),("90","1 h 30"),("120","2 horas"),("180","3 horas"),("240","4 horas")) %}
+          <option value="{{ d }}" {{ 'selected' if d == nueva.dur }}>{{ nombre }}</option>
+          {% endfor %}
+        </select></div>
+      <div class="f"><label for="f-lugar">Dónde</label>
+        <input id="f-lugar" name="lugar" value="{{ nueva.lugar }}" placeholder="Opcional"></div>
+    </div>
+    <div class="f"><label for="f-nota">Nota</label>
+      <textarea id="f-nota" name="nota">{{ nueva.nota }}</textarea></div>
+    <button class="btn dark">Crear actividad</button>
+  </form>
+</aside>
+{% endif %}
+</body>
+</html>

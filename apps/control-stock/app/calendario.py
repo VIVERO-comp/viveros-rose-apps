@@ -511,8 +511,11 @@ def _buscar_leads():
                       .astimezone(ZONA_PANAMA).date()).days
         except (ValueError, KeyError, TypeError):
             pass
+        # "Laura Porcell (PP-WATHA)" -> PP-WATHA, para casar el lead en Twenty.
+        pp = re.search(r"\((PP-[A-Z0-9]+)\)", titulo)
         filas.append({
-            "ref": issue["identifier"], "nombre": nombre,
+            "id": issue["id"], "ref": issue["identifier"], "nombre": nombre,
+            "pp": pp.group(1) if pp else "",
             "tipo": ETIQUETAS_LEADS_SERVICIO[etiqueta], "etiqueta": etiqueta,
             "hace": "hoy" if dias <= 0 else (f"hace {dias} día" + ("s" if dias > 1 else "")),
             "dias": dias, "url": issue.get("url") or "",
@@ -525,9 +528,11 @@ def _buscar_leads():
 def _muestra_leads():
     """Dos leads de ejemplo para el modo muestra (diseño y pruebas)."""
     return [
-        {"ref": "LEAD-90", "nombre": "Hotel Bristol", "tipo": "mantenimiento",
+        {"id": "muestra-90", "ref": "LEAD-90", "nombre": "Hotel Bristol",
+         "pp": "PP-MU3ST", "tipo": "mantenimiento",
          "etiqueta": "Mantenimiento", "hace": "hace 3 días", "dias": 3, "url": ""},
-        {"ref": "LEAD-91", "nombre": "Boda Las Nubes", "tipo": "alquiler",
+        {"id": "muestra-91", "ref": "LEAD-91", "nombre": "Boda Las Nubes",
+         "pp": "PP-MU3SU", "tipo": "alquiler",
          "etiqueta": "Eventos · Bodas", "hace": "hoy", "dias": 0, "url": ""},
     ]
 

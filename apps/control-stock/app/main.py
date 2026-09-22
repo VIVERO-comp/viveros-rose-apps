@@ -20,8 +20,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import (acceso_google, calculos, calendario, calendario_google, retail,
-               calendario_ics, compras, conteos, cotizaciones, datos, fichas,
-               fotos, proyectos, seguridad, ventas)
+               calendario_ics, compras, conteos, cotizaciones, crm_twenty,
+               datos, fichas, fotos, proyectos, seguridad, ventas)
 
 app = FastAPI(title="Control Viverorose")
 
@@ -125,9 +125,10 @@ async def exigir_sesion(request: Request, call_next):
     # exista la sesión.
     # /calendario.ics es la suscripción del teléfono: la autoriza su token
     # secreto (empleada_del_token), no la cookie de sesión.
-    if (ruta == "/login" or ruta == "/calendario.ics"
+    if (ruta == "/login" or ruta == "/calendario.ics" or ruta == "/crm/login"
             or ruta.startswith("/static") or ruta.startswith("/f/")
-            or ruta.startswith("/auth/google") or ruta.startswith("/invitacion/")):
+            or ruta.startswith("/auth/google") or ruta.startswith("/invitacion/")
+            or ruta.startswith("/crm/auth/google")):
         respuesta = await call_next(request)
         # Los estáticos versionados (?v=mtime) se guardan un año: cambiar de
         # pestaña no vuelve a bajar CSS/JS (pedido de velocidad, 22/09/2026).
@@ -150,7 +151,10 @@ async def exigir_sesion(request: Request, call_next):
             return await call_next(request)
     empleada = seguridad.empleada_de_sesion(request.cookies.get("sesion"))
     if empleada is None:
-        return RedirectResponse("/login", status_code=303)
+        # La cara del CRM (bajo crm.plantaspanama.com) tiene su propio login:
+        # el de siempre vive en otro dominio y su cookie no sirve aquí.
+        destino = "/crm/login" if ruta.startswith("/crm/") else "/login"
+        return RedirectResponse(destino, status_code=303)
     request.state.empleada = empleada
     return await call_next(request)
 
@@ -2158,6 +2162,307 @@ async def calendario_nota(request: Request, id_actividad: str):
         return "Nota agregada como comentario del issue."
 
     return await _accion_calendario(request, id_actividad, hacer)
+
+
+# ---------------------------------------------------------------------------
+# El calendario con piel de Twenty (/crm/calendario): la MISMA lógica del
+# calendario (Linear manda, mismo alcance por rol, mismas escrituras), con la
+# cara del CRM. El nginx del droplet del CRM lo proxya bajo
+# crm.plantaspanama.com y una pestaña inyectada en Twenty lo abre como
+# iframe, igual que la pestaña Chats. Los colores son los de los labels de
+# Twenty (dueño, 22/09/2026): crm_twenty.repintar los traduce.
+# ---------------------------------------------------------------------------
+
+VISTAS_CRM = ("dia", "semana", "mes", "lista")
+
+
+def _base_crm(request):
+    """La URL pública de la cara del CRM (detrás del nginx del droplet CRM)."""
+    return (os.environ.get("CRM_PUBLIC_BASE_URL")
+            or str(request.base_url)).rstrip("/")
+
+
+@app.get("/crm/login")
+def crm_login(request: Request):
+    """El login de la cara del CRM. El OAuth de Google no corre dentro de un
+    iframe, así que el botón sale del marco (target=_top), entra y vuelve a
+    /crm/calendario; la pestaña de Twenty ya encuentra la sesión puesta."""
+    usuario_dev = os.environ.get("SIN_LOGIN", "").strip()
+    if usuario_dev and seguridad.empleada_por_usuario(usuario_dev):
+        return RedirectResponse("/crm/calendario", status_code=303)
+    if seguridad.empleada_de_sesion(request.cookies.get("sesion")):
+        return RedirectResponse("/crm/calendario", status_code=303)
+    return plantillas.TemplateResponse(request, "crm_login.html", {
+        "google": acceso_google.configurado(),
+        "error": request.query_params.get("error") or None,
+    })
+
+
+@app.get("/crm/auth/google")
+def crm_google_entrar(request: Request):
+    if not acceso_google.configurado():
+        return RedirectResponse("/crm/login", status_code=303)
+    estado = secrets.token_urlsafe(24)
+    destino = _base_crm(request) + "/crm/auth/google/callback"
+    respuesta = RedirectResponse(
+        acceso_google.url_entrada(destino, estado), status_code=303)
+    respuesta.set_cookie("oauth_estado", estado, max_age=600,
+                         httponly=True, samesite="lax", secure=_cookie_segura())
+    return respuesta
+
+
+@app.get("/crm/auth/google/callback")
+def crm_google_callback(request: Request, code: str = "", state: str = ""):
+    if (not acceso_google.configurado() or not code or not state
+            or state != request.cookies.get("oauth_estado")):
+        return RedirectResponse(
+            "/crm/login?error=" + quote("La entrada con Google no se pudo "
+                                        "completar. Prueba de nuevo."),
+            status_code=303)
+    try:
+        cuenta = acceso_google.canjear_codigo(
+            code, _base_crm(request) + "/crm/auth/google/callback")
+    except acceso_google.FalloGoogle:
+        return RedirectResponse(
+            "/crm/login?error=" + quote("No se pudo verificar la cuenta con "
+                                        "Google. Prueba de nuevo."),
+            status_code=303)
+    empleada = seguridad.entrar_con_google(
+        cuenta["email"], cuenta["nombre"], es_admin=cuenta["email"] in _admins(),
+        token=request.cookies.get("invitacion"))
+    if empleada is None:
+        return RedirectResponse(
+            "/crm/login?error=" + quote(f"{cuenta['email']} no tiene "
+                                        "invitación. Pide una al encargado."),
+            status_code=303)
+    respuesta = RedirectResponse("/crm/calendario", status_code=303)
+    respuesta.set_cookie(
+        "sesion", seguridad.crear_sesion(empleada["id"]),
+        max_age=seguridad.DIAS_SESION * 24 * 3600,
+        httponly=True, samesite="lax", secure=_cookie_segura(),
+    )
+    respuesta.delete_cookie("oauth_estado")
+    respuesta.delete_cookie("invitacion")
+    return respuesta
+
+
+def _estado_crm(request):
+    q = request.query_params
+    dia = q.get("dia", "")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", dia):
+        dia = calendario.hoy().isoformat()
+    vista = q.get("vista", "semana")
+    if vista not in VISTAS_CRM:
+        vista = "semana"
+    return {"dia": dia, "vista": vista, "hechas": q.get("hechas", "1") != "0"}
+
+
+def _liga_crm(estado, **cambios):
+    datos = {"dia": estado["dia"], "vista": estado["vista"],
+             "hechas": "1" if estado["hechas"] else "0"}
+    datos.update(cambios)
+    partes = [f"{k}={quote(str(v))}" for k, v in datos.items() if v not in ("", None)]
+    return "/crm/calendario?" + "&".join(partes)
+
+
+def _iniciales(texto):
+    partes = [p for p in (texto or "").split() if p]
+    return "".join(p[0] for p in partes[:2]).upper() or "·"
+
+
+@app.get("/crm/calendario")
+def crm_calendario_pantalla(request: Request):
+    empleada = request.state.empleada
+    estado = _estado_crm(request)
+    q = request.query_params
+    dia_hoy = calendario.hoy().isoformat()
+    ancla = datetime.strptime(estado["dia"], "%Y-%m-%d").date()
+    error = q.get("error") or None
+    aviso = q.get("aviso") or None
+
+    try:
+        todas = _actividades_para(estado)
+    except calendario.ErrorCalendario as fallo:
+        todas, error = [], error or str(fallo)
+
+    # Mismo alcance que el calendario de inventario: el empleado entra
+    # viendo lo suyo y el dueño el equipo; lo decide el servidor.
+    yo = _yo_en_el_calendario(empleada)
+    solo_mio = not yo["admin"] and bool(yo["id"])
+    visibles = calendario.filtrar(todas, ver_hechas=estado["hechas"],
+                                  solo_de=yo["id"] if solo_mio else "")
+    dias = calendario.dias_de(estado["vista"], ancla)
+    puede_escribir = calendario.escritura_activa() or not calendario.configurado()
+
+    carril = mes = grupos = None
+    if estado["vista"] in ("semana", "dia"):
+        columnas = dias if estado["vista"] == "semana" else [estado["dia"]]
+        carril = crm_twenty.repintar(
+            crm_twenty.carril_dias(visibles, columnas, dia_hoy))
+        for col in carril["columnas"]:
+            # Tocar una hora vacía abre el formulario con fecha y hora puestas.
+            col["celdas"] = [
+                {"top": f["top"], "alto": f["alto"],
+                 "liga": _liga_crm(estado, nueva="1", fecha=col["iso"],
+                                   hora=f"{f['h']:02d}:00")}
+                for f in carril["horas"]] if puede_escribir else []
+        for bloque in carril["bloques"]:
+            bloque["liga"] = _liga_crm(estado, act=bloque["a"]["id"])
+            bloque["rango"] = calendario._rango_bonito(bloque["a"])
+    elif estado["vista"] == "mes":
+        mes = crm_twenty.repintar(
+            calendario.rejilla_mes(visibles, ancla, estado["dia"], dia_hoy))
+        for fila_mes in mes:
+            for celda in fila_mes:
+                celda["liga_dia"] = _liga_crm(estado, vista="dia", dia=celda["iso"])
+                for barra in celda["barras"]:
+                    barra["liga"] = _liga_crm(estado, act=barra["a"]["id"])
+    else:
+        grupos = [{
+            "titulo": g["titulo"], "es_atraso": g["es_atraso"],
+            "filas": [{
+                "a": a, "rango": calendario._rango_bonito(a),
+                "color": crm_twenty.color_crm(a["tipo"]),
+                "tipo_nombre": calendario.nombre_de_tipo(a["tipo"]),
+                "liga": _liga_crm(estado, act=a["id"]),
+            } for a in g["actividades"]],
+        } for g in calendario.grupos_lista(visibles, dias, dia_hoy)]
+
+    leads = [dict(lead, liga=_liga_crm(estado, lead=lead["ref"]),
+                  color=crm_twenty.color_etiqueta(lead["etiqueta"]))
+             for lead in calendario.leads_de_servicio()]
+
+    # La ficha abierta (actividad, lead o el formulario) la decide la
+    # dirección: la página entera se arma aquí, el navegador no calcula nada.
+    abierta = lead_abierto = nueva = None
+    id_abierta = q.get("act", "")
+    if id_abierta:
+        a = next((x for x in todas if x["id"] == id_abierta), None)
+        if a:
+            try:
+                notas = calendario.comentarios(a["id"])
+            except calendario.ErrorCalendario:
+                notas = []
+            cuando = calendario.dmy(a["fecha"])
+            if a["fecha"]:
+                fecha_a = datetime.strptime(a["fecha"], "%Y-%m-%d").date()
+                cuando = f"{calendario.DOW_LARGO[fecha_a.weekday()]} {cuando}"
+            abierta = {
+                "a": a,
+                "color": crm_twenty.color_crm(a["tipo"]),
+                "tipo_nombre": calendario.nombre_de_tipo(a["tipo"]),
+                "estado_nombre": calendario.nombre_de_estado(a["estado"]),
+                "cuando": f"{cuando} · {calendario._rango_bonito(a)}",
+                "iniciales": _iniciales(a["cliente"]),
+                "notas": notas,
+                "accion_estado": (f"/crm/calendario/actividad/{a['id']}/estado"
+                                  f"?volver={quote(_liga_crm(estado))}"),
+            }
+    ref_lead = q.get("lead", "")
+    if ref_lead:
+        fila_lead = next((l for l in leads if l["ref"] == ref_lead), None)
+        if fila_lead:
+            ficha = crm_twenty.ficha_de_lead(fila_lead) or {}
+            lead_abierto = {
+                "l": fila_lead,
+                "iniciales": _iniciales(fila_lead["nombre"]),
+                "pp": ficha.get("pp") or fila_lead.get("pp") or "",
+                "telefono": ficha.get("telefono") or "",
+                "wa": ficha.get("wa") or "",
+                "llego": ficha.get("llego") or "",
+                "mensajes": ficha.get("mensajes") or [],
+                "twenty_url": ficha.get("twenty_url") or crm_twenty.twenty_publico(),
+                "liga_agendar": _liga_crm(estado, nueva="1", fecha=estado["dia"],
+                                          tipo=fila_lead["tipo"],
+                                          cliente=fila_lead["nombre"]),
+            }
+    if q.get("nueva") == "1":
+        nueva = {
+            "fecha": (q.get("fecha") if re.fullmatch(r"\d{4}-\d{2}-\d{2}", q.get("fecha", ""))
+                      else estado["dia"]),
+            "hora": q.get("hora") or calendario.HORA_POR_DEFECTO,
+            "dur": q.get("dur") or str(calendario.DURACION_POR_DEFECTO),
+            "tipo": (q.get("tipo") if q.get("tipo") in calendario.POR_CLAVE else "entrega"),
+            "cliente": q.get("cliente", ""),
+            "lugar": q.get("lugar", ""),
+            "nota": q.get("nota", ""),
+            "accion": f"/crm/calendario/actividad?volver={quote(_liga_crm(estado))}",
+        }
+
+    ligas = {
+        "vistas": {v: _liga_crm(estado, vista=v) for v in VISTAS_CRM},
+        "ant": _liga_crm(estado, dia=calendario.paso_de_vista(
+            estado["vista"], ancla, -1).isoformat()),
+        "sig": _liga_crm(estado, dia=calendario.paso_de_vista(
+            estado["vista"], ancla, 1).isoformat()),
+        "hoy": _liga_crm(estado, dia=dia_hoy),
+        "hechas": _liga_crm(estado, hechas="0" if estado["hechas"] else "1"),
+        "nueva": _liga_crm(estado, nueva="1", fecha=estado["dia"]),
+        "cerrar": _liga_crm(estado),
+    }
+
+    return plantillas.TemplateResponse(request, "crm_calendario.html", {
+        "titulo_rango": calendario.titulo_de(estado["vista"], ancla),
+        "cuenta": len(visibles),
+        "vista": estado["vista"], "hechas": estado["hechas"],
+        "ligas": ligas, "carril": carril, "mes": mes, "grupos": grupos,
+        "leads": leads, "abierta": abierta, "lead_abierto": lead_abierto,
+        "nueva": nueva, "tipos": calendario.TIPOS,
+        "error": error, "aviso": aviso, "puede_escribir": puede_escribir,
+    })
+
+
+def _volver_crm(request, **extras):
+    destino = request.query_params.get("volver") or "/crm/calendario"
+    if not destino.startswith("/crm/calendario"):
+        destino = "/crm/calendario"
+    if extras:
+        destino += ("&" if "?" in destino else "?") + "&".join(
+            f"{clave}={quote(str(valor))}" for clave, valor in extras.items()
+            if valor not in ("", None))
+    return RedirectResponse(destino, status_code=303)
+
+
+@app.post("/crm/calendario/actividad")
+async def crm_calendario_crear(request: Request):
+    form = await request.form()
+    yo = _yo_en_el_calendario(request.state.empleada)
+    try:
+        bloqueo = _puede_tocar(None, yo)
+        if bloqueo:
+            raise calendario.ErrorCalendario(bloqueo)
+        creada = calendario.crear(
+            tipo=form.get("tipo", "otro"), cliente=form.get("cliente", ""),
+            fecha=form.get("fecha", ""),
+            hora=form.get("hora") or calendario.HORA_POR_DEFECTO,
+            dur=form.get("dur") or calendario.DURACION_POR_DEFECTO,
+            lugar=form.get("lugar", ""), resp_id=yo["id"],
+            nota=form.get("nota", ""))
+    except calendario.ErrorCalendario as fallo:
+        # Se vuelve al formulario abierto y CON lo escrito.
+        return _volver_crm(request, error=str(fallo), nueva="1",
+                           fecha=form.get("fecha", ""), hora=form.get("hora", ""),
+                           dur=form.get("dur", ""), tipo=form.get("tipo", ""),
+                           cliente=form.get("cliente", ""),
+                           lugar=form.get("lugar", ""), nota=form.get("nota", ""))
+    calendario_google.sincronizar_en_fondo()
+    return _volver_crm(request, aviso=f"Creada {creada['ref']}.")
+
+
+@app.post("/crm/calendario/actividad/{id_actividad}/estado")
+async def crm_calendario_estado(request: Request, id_actividad: str):
+    form = await request.form()
+    yo = _yo_en_el_calendario(request.state.empleada)
+    try:
+        bloqueo = _puede_tocar(None, yo)
+        if bloqueo:
+            raise calendario.ErrorCalendario(bloqueo)
+        calendario.cambiar_estado(id_actividad, form.get("estado", ""))
+    except calendario.ErrorCalendario as fallo:
+        return _volver_crm(request, error=str(fallo))
+    calendario_google.sincronizar_en_fondo()
+    return _volver_crm(
+        request, aviso=calendario.nombre_de_estado(form.get("estado", "")) + ".")
 
 
 @app.get("/calendario.ics")
