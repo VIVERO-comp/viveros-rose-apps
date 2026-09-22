@@ -117,6 +117,11 @@ function renglonesDe(contenedor, nombres) {
 }
 
 function sincronizarCliente() {
+  // La pantalla de EDITAR marca sus contenedores con data-sin-borrador:
+  // el borrador es el de una cotización nueva y guardarlo desde aquí lo
+  // pisaría con los renglones de la que se está editando.
+  if ((contenedorServicios && contenedorServicios.dataset.sinBorrador) ||
+      (contenedorRenglones && contenedorRenglones.dataset.sinBorrador)) return;
   const nombre = entradaNombre ? entradaNombre.value : "";
   const celular = entradaCelular ? entradaCelular.value : "";
   clearTimeout(temporizadorBorrador);

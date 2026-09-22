@@ -87,16 +87,22 @@
   {% if cotizaciones_servicio %}
   <div class="seccion-titulo" style="margin-top:16px">Cotizaciones de servicios</div>
   {% for c in cotizaciones_servicio %}
-  <div class="venta-item cotizacion">
+  {# El id ancla la tarjeta: al volver de editar, la lista queda aquí. #}
+  <div class="venta-item cotizacion" id="cot-{{ c.n }}">
     <div class="fila1">
       <div>
         <b class="titulo">{{ c.orden }} · {{ c.cliente }}</b>
         <small>{{ c.fecha_texto }}{% if c.celular %} · {{ c.celular }}{% endif %} · {{ c.etiqueta_tipo }}</small>
       </div>
-      <span class="badge b-bajo">Cotización</span>
+      {# El estado REAL en Odoo (una consulta para toda la lista). Editar
+         solo mientras siga en cotización: facturada, ni el botón. #}
+      {% if c.facturada %}<span class="badge b-ok">Facturado</span>
+      {% elif c.cancelada %}<span class="badge b-neutro">Cancelada</span>
+      {% else %}<span class="badge b-bajo">Cotización</span>{% endif %}
     </div>
     <div class="venta-acciones">
-      <span><a href="/venta/servicio/{{ c.n }}/propuesta.pdf">Descargar propuesta (PDF)</a></span>
+      <span><a href="/venta/servicio/{{ c.n }}/propuesta.pdf">Descargar propuesta (PDF)</a>{% if c.editable %}
+        · <a href="/venta/servicio/{{ c.n }}/editar">Editar</a>{% endif %}</span>
       <span class="venta-monto">{{ c.total | dinero }}</span>
     </div>
   </div>

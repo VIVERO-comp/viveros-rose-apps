@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block titulo %}Editar {{ registro.orden }} — Control de Stock{% endblock %}
+
+{% block contenido %}
+<header>
+  <div class="brand">
+    <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
+    <div>
+      <h1>Editar {{ registro.orden }}</h1>
+      <small>{{ etiqueta_tipo }} · mientras siga en cotización</small>
+    </div>
+  </div>
+</header>
+
+<main class="angosto">
+  <a class="volver" href="/venta#cot-{{ registro.n }}">← Volver a Vender</a>
+
+  {% if error_venta %}
+  <div class="aviso-error">{{ error_venta }}</div>
+  {% endif %}
+
+  {# El cliente NO se edita aquí (alcance que eligió Abraham, 22/09/2026):
+     solo se muestra de quién es la cotización. #}
+  <div class="seccion-titulo" style="margin-top:16px">Cliente</div>
+  <p class="nada-venta">{{ registro.cliente }}{% if registro.celular %} · {{ registro.celular }}{% endif %}</p>
+
+  <form id="form-servicio" method="post"
+        action="/venta/servicio/{{ registro.n }}/editar" style="display:none"></form>
+
+  <div class="seccion-titulo" style="margin-top:16px">Servicios</div>
+  {# data-sin-borrador: esta pantalla NO guarda borrador (el borrador es el
+     de una cotización NUEVA y editarlo aquí lo pisaría). #}
+  <div id="servicios" data-sin-borrador="1">
+    {% for s in servicios %}
+    <div class="servicio">
+      <textarea class="servicio-texto" name="servicio_texto" form="form-servicio"
+                rows="1" placeholder="Ej: Instalación de sistema de riego"
+                >{{ s.texto }}</textarea>
+      <textarea class="servicio-descripcion" name="servicio_descripcion" form="form-servicio"
+                rows="1" placeholder="Descripción (opcional): el párrafo que sale debajo en el PDF"
+                >{{ s.descripcion }}</textarea>
+      <div class="servicio-pie">
+        <label class="servicio-monto">Monto
+          <input name="servicio_monto" form="form-servicio" type="number"
+                 step="0.01" min="0" inputmode="decimal" placeholder="0.00"
+                 value="{{ s.monto }}">
+        </label>
+        <button class="quitar-servicio" type="button">Quitar</button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <button class="anadir-servicio" type="button" id="anadir-servicio">
+    + Añadir otro servicio</button>
+  <div class="total-venta">
+    <span>Subtotal servicios</span>
+    <b id="subtotal-servicios">$0.00</b>
+  </div>
+
+  {% if es_personalizada %}
+  <div class="seccion-titulo" style="margin-top:16px">Otros renglones</div>
+  <div id="renglones" data-tipo="renglon" data-sin-borrador="1">
+    {% for r in renglones %}
+    <div class="servicio">
+      <textarea class="servicio-texto" name="renglon_texto" form="form-servicio"
+                rows="1" placeholder="Ej: 50 sacos de tierra negra"
+                >{{ r.texto }}</textarea>
+      <div class="servicio-pie">
+        <label class="servicio-monto">Cant
+          <input class="servicio-cantidad" name="renglon_cantidad" form="form-servicio"
+                 type="number" step="1" min="1" inputmode="numeric"
+                 placeholder="1" value="{{ r.cantidad }}">
+        </label>
+        <label class="servicio-monto">Precio
+          <input name="renglon_precio" form="form-servicio" type="number"
+                 step="0.01" min="0" inputmode="decimal" placeholder="0.00"
+                 value="{{ r.precio }}">
+        </label>
+        <button class="quitar-servicio" type="button">Quitar</button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <button class="anadir-servicio" type="button" id="anadir-renglon">
+    + Añadir otro renglón</button>
+  <div class="total-venta">
+    <span>Subtotal renglones</span>
+    <b id="subtotal-renglones">$0.00</b>
+  </div>
+  {% endif %}
+
+  {% if plantas %}
+  <div class="seccion-titulo" style="margin-top:16px">Plantas</div>
+  <p class="nada-venta">Cambia la cantidad; en 0 la planta se quita de la
+    cotización.</p>
+  {% for p in plantas %}
+  <div class="servicio">
+    <div class="servicio-pie" style="border-top:none;margin-top:0;padding-top:0">
+      <span style="flex:1">{{ p.nombre }}</span>
+      <label class="servicio-monto">Cant
+        <input type="hidden" name="planta_id" form="form-servicio" value="{{ p.producto_id }}">
+        <input class="servicio-cantidad" name="planta_cantidad" form="form-servicio"
+               type="number" step="1" min="0" inputmode="numeric"
+               value="{{ p.cantidad }}">
+      </label>
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <button class="btn btn-dorado btn-grande" style="margin-top:16px"
+          form="form-servicio" type="submit">GUARDAR CAMBIOS</button>
+</main>
+
+<script src="/static/venta.js?v={{ v_estaticos }}"></script>
+{% endblock %}

@@ -656,18 +656,11 @@ def etiqueta_para_cotizar(tipo):
 # buscador de catálogo con precio normal — mismo mecanismo de cliente.
 # ---------------------------------------------------------------------------
 
-def crear_personalizada(empleada, nombre, celular, lineas_catalogo=None,
-                        renglones=None, datos_cliente=None, servicios=None):
-    """La cotización personalizada: todo lo escribe la empleada. Va en tres
-    secciones separadas, como las plantillas de los otros tipos (pedido del
-    dueño 17/09/2026): las plantas y materiales del catálogo (con el precio
-    de Odoo), los servicios (párrafo + monto) y los renglones libres
-    (descripción + cantidad + precio). Los servicios y los renglones libres
-    usan el producto SV-PERSONALIZADO con su texto como descripción. Sin
-    plantilla (tipo_servicio='general')."""
-    nombre = (nombre or "").strip()
-    if not nombre:
-        raise ValueError("El nombre del cliente es obligatorio.")
+def _lineas_personalizada(servicios, renglones, lineas_catalogo):
+    """Los renglones de una cotización personalizada, en sus tres
+    secciones. Lo usan crear_personalizada y la edición, para que una
+    cotización editada quede con la MISMA estructura que una recién
+    creada."""
     cuerpos = [
         ("Plantas y materiales",
          [{"product_id": linea["producto_id"], "product_uom_qty": linea["cantidad"]}
@@ -703,6 +696,22 @@ def crear_personalizada(empleada, nombre, celular, lineas_catalogo=None,
             secuencia += 1
     if not lineas:
         raise ValueError("Agrega al menos un renglón, un servicio o una planta.")
+    return lineas
+
+
+def crear_personalizada(empleada, nombre, celular, lineas_catalogo=None,
+                        renglones=None, datos_cliente=None, servicios=None):
+    """La cotización personalizada: todo lo escribe la empleada. Va en tres
+    secciones separadas, como las plantillas de los otros tipos (pedido del
+    dueño 17/09/2026): las plantas y materiales del catálogo (con el precio
+    de Odoo), los servicios (párrafo + monto) y los renglones libres
+    (descripción + cantidad + precio). Los servicios y los renglones libres
+    usan el producto SV-PERSONALIZADO con su texto como descripción. Sin
+    plantilla (tipo_servicio='general')."""
+    nombre = (nombre or "").strip()
+    if not nombre:
+        raise ValueError("El nombre del cliente es obligatorio.")
+    lineas = _lineas_personalizada(servicios, renglones, lineas_catalogo)
     partner = _cliente_id(nombre, celular, datos_cliente)
     oportunidad_id = _crear_oportunidad(partner, nombre, "SERVICIO")
     orden_id = ventas._ejecutar("sale.order", "create", [{
@@ -830,3 +839,220 @@ def pdf_de_muestra():
     Odoo vive una sola, marcada MUESTRA-PDF, que se reutiliza."""
     return ventas.descargar_pdf("vivero_rose_pedidos.reporte_propuesta_venta",
                                 _orden_de_muestra())
+
+
+# ---------------------------------------------------------------------------
+# Edición de una cotización (pedido de Abraham, 22/09/2026): se pueden
+# corregir los servicios (título, descripción, monto) y las plantas
+# (cantidades; 0 la quita) mientras la cotización siga siendo cotización.
+# En cuanto Odoo le conoce una factura, se acabó: solo lectura.
+# ---------------------------------------------------------------------------
+
+def estados_en_odoo(orden_ids):
+    """{orden_id: {"facturada", "cancelada", "editable"}} en UNA consulta.
+
+    "Facturada" es que el sale.order tenga cualquier factura ligada; ahí
+    la cotización deja de poder editarse (regla de Abraham, 22/09/2026).
+    Una orden que ya no existe en Odoo simplemente no viene en el dict."""
+    if not orden_ids:
+        return {}
+    filas = ventas._ejecutar(
+        "sale.order", "search_read", [[["id", "in", list(orden_ids)]]],
+        {"fields": ["state", "invoice_ids"]})
+    estados = {}
+    for fila in filas:
+        facturada = bool(fila.get("invoice_ids"))
+        cancelada = fila.get("state") == "cancel"
+        estados[fila["id"]] = {
+            "facturada": facturada,
+            "cancelada": cancelada,
+            "editable": not facturada and not cancelada,
+        }
+    return estados
+
+
+def _titulo_de_linea(linea, producto):
+    """El texto que la empleada escribió en una línea de servicio, limpio
+    del nombre enlatado del producto (Odoo antepone "[SV-...] Nombre" a lo
+    que la plantilla copia). Mismo criterio que _parrafo_de_servicio del
+    addon."""
+    nombre_producto = (producto or {}).get("name") or ""
+    pedazos = [p.strip() for p in (linea.get("name") or "").split("\n") if p.strip()]
+    if pedazos and nombre_producto and nombre_producto in pedazos[0]:
+        pedazos = pedazos[1:]
+    return " ".join(p for p in pedazos if p != nombre_producto).strip() or nombre_producto
+
+
+def _numero_form(valor):
+    """Un número listo para el value= de un input: 850 en vez de 850.0."""
+    if valor is None:
+        return ""
+    return ("%d" % valor) if float(valor) == int(valor) else ("%.2f" % valor)
+
+
+def cargar_para_editar(n):
+    """El registro local + lo que la cotización tiene HOY en Odoo, en la
+    forma que esperan los formularios: servicios [{texto, descripcion,
+    monto}], plantas [{producto_id, nombre, cantidad}] y, en la
+    personalizada, renglones [{texto, cantidad, precio}]. None si el
+    registro no existe o la orden ya no está en Odoo."""
+    registro = obtener(n)
+    if not registro:
+        return None
+    orden_id = registro["orden_id"]
+    estado = estados_en_odoo([orden_id]).get(orden_id)
+    if estado is None:
+        return None
+    lineas = ventas._ejecutar(
+        "sale.order.line", "search_read", [[["order_id", "=", orden_id]]],
+        {"fields": ["name", "display_type", "product_id",
+                    "product_uom_qty", "price_unit"],
+         "order": "sequence, id"})
+    ids = list({l["product_id"][0] for l in lineas if l.get("product_id")})
+    productos = {}
+    if ids:
+        productos = {p["id"]: p for p in ventas._ejecutar(
+            "product.product", "read", [ids],
+            {"fields": ["name", "type", "default_code"]})}
+    servicios, plantas, renglones = [], [], []
+    seccion = ""
+    for linea in lineas:
+        tipo_linea = linea.get("display_type")
+        if tipo_linea == "line_section":
+            seccion = linea.get("name") or ""
+        elif tipo_linea in ("line_subsection", "line_note"):
+            # La descripción del servicio: el párrafo pegado debajo.
+            if servicios and not servicios[-1]["descripcion"]:
+                servicios[-1]["descripcion"] = linea.get("name") or ""
+        elif not tipo_linea:
+            producto = productos.get(linea["product_id"][0]) if linea.get("product_id") else None
+            if producto and producto.get("type") != "service":
+                plantas.append({
+                    "producto_id": producto["id"],
+                    "nombre": producto.get("name") or "",
+                    "cantidad": _numero_form(linea.get("product_uom_qty") or 0),
+                })
+                continue
+            titulo = _titulo_de_linea(linea, producto)
+            if registro["tipo"] not in TIPOS and seccion != "Servicios":
+                # Personalizada: lo que no está bajo "Servicios" es un
+                # renglón libre (descripción + cantidad + precio).
+                renglones.append({
+                    "texto": titulo,
+                    "cantidad": _numero_form(linea.get("product_uom_qty") or 1),
+                    "precio": _numero_form(linea.get("price_unit") or 0),
+                })
+            else:
+                servicios.append({
+                    "texto": titulo,
+                    "descripcion": "",
+                    "monto": _numero_form(linea.get("price_unit") or 0),
+                })
+    return {
+        "registro": registro,
+        "editable": estado["editable"],
+        "facturada": estado["facturada"],
+        "cancelada": estado["cancelada"],
+        "servicios": servicios or [{"texto": "", "monto": "", "descripcion": ""}],
+        "plantas": plantas,
+        "renglones": renglones or [{"texto": "", "cantidad": "", "precio": ""}],
+    }
+
+
+def plantas_del_formulario(ids, cantidades):
+    """Las filas de plantas del form de edición (planta_id[] +
+    planta_cantidad[]) emparejadas."""
+    ids, cantidades = list(ids or []), list(cantidades or [])
+    total = max(len(ids), len(cantidades))
+
+    def dato(lista, i):
+        return lista[i] if i < len(lista) else ""
+
+    return [{"producto_id": dato(ids, i), "cantidad": dato(cantidades, i)}
+            for i in range(total)]
+
+
+def _plantas_limpias(plantas):
+    """[{producto_id, cantidad}] listos para Odoo. Cantidad 0 o vacía
+    QUITA la planta (así se quita sin más botones); una cantidad ilegible
+    avisa en vez de adivinar."""
+    limpias = []
+    for planta in plantas or []:
+        try:
+            producto_id = int(planta.get("producto_id"))
+        except (TypeError, ValueError):
+            continue
+        crudo = str(planta.get("cantidad") or "").strip().replace(",", ".")
+        if not crudo:
+            continue
+        try:
+            cantidad = float(crudo)
+        except ValueError:
+            raise ValueError("Cantidad inválida en una planta.")
+        if cantidad < 0:
+            raise ValueError("La cantidad de una planta no puede ser negativa.")
+        if cantidad > 0:
+            limpias.append({"producto_id": producto_id, "cantidad": cantidad})
+    return limpias
+
+
+def editar_cotizacion(n, servicios, plantas, renglones=None):
+    """Reescribe los renglones de la cotización en Odoo (misma estructura
+    que al crearla, descripciones incluidas) y actualiza el total local y
+    el ingreso esperado de la oportunidad. Antes de escribir re-verifica
+    que siga editable: si alguien la facturó en el medio, no toca nada."""
+    registro = obtener(n)
+    if not registro:
+        raise ValueError("No existe esa cotización.")
+    orden_id = registro["orden_id"]
+    estado = estados_en_odoo([orden_id]).get(orden_id)
+    if estado is None:
+        raise ValueError("La cotización ya no está en Odoo.")
+    if estado["facturada"]:
+        raise ValueError("Esta cotización ya está facturada: ya no se puede editar.")
+    if estado["cancelada"]:
+        raise ValueError("Esta cotización está cancelada: ya no se puede editar.")
+    lineas_catalogo = _plantas_limpias(plantas)
+    if registro["tipo"] in TIPOS:
+        # Un tipo sin sección de catálogo (boda, evento) no sabe dónde
+        # poner plantas: si alguien se las metió a mano en Odoo, mejor
+        # avisar que descartarlas en silencio.
+        if lineas_catalogo and not any(
+                s.get("catalogo") for s in TIPOS[registro["tipo"]]["secciones"]):
+            raise ValueError(
+                "Este tipo de cotización no lleva plantas; edítalas en Odoo.")
+        lineas = _lineas_por_tipo(registro["tipo"], servicios, lineas_catalogo)
+    else:
+        lineas = _lineas_personalizada(servicios, renglones, lineas_catalogo)
+    # [5,0,0] vacía los renglones actuales y los [0,0,...] crean los nuevos,
+    # en el mismo write: la orden nunca queda a medias.
+    ventas._ejecutar("sale.order", "write", [[orden_id], {
+        "order_line": [[5, 0, 0]] + [[0, 0, linea] for linea in lineas]}])
+    leido = ventas._ejecutar(
+        "sale.order", "read", [[orden_id]],
+        {"fields": ["name", "amount_total", "opportunity_id"]})[0]
+    with _db() as con:
+        con.execute("UPDATE cotizaciones_servicio SET total=? WHERE n=?",
+                    (leido["amount_total"], n))
+    _actualizar_ingreso_esperado(leido.get("opportunity_id"))
+    return obtener(n)
+
+
+def _actualizar_ingreso_esperado(oportunidad):
+    """El ingreso esperado de la oportunidad = la SUMA de sus cotizaciones
+    vivas. Para una cotización suelta eso es su propio total; para un
+    proyecto (varias cotizaciones colgadas de la misma oportunidad) es la
+    suma, sin pisar el total del proyecto con el de una sola (misma regla
+    que proyectos._sincronizar_flujo, sin tocar etapas)."""
+    oportunidad_id = (oportunidad[0] if isinstance(oportunidad, (list, tuple))
+                      else oportunidad)
+    if not oportunidad_id:
+        return
+    from .proyectos import ESTADOS_VIVOS
+    ordenes = ventas._ejecutar(
+        "sale.order", "search_read",
+        [[["opportunity_id", "=", oportunidad_id]]],
+        {"fields": ["amount_total", "state"]})
+    ventas._ejecutar("crm.lead", "write", [[oportunidad_id], {
+        "expected_revenue": sum(o["amount_total"] for o in ordenes
+                                if o["state"] in ESTADOS_VIVOS)}])

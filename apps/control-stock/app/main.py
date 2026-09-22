@@ -753,11 +753,34 @@ def venta(request: Request, error: str = ""):
                     "etiqueta_estado": ventas.ETIQUETAS_ESTADO[v["estado"]],
                     "whatsapp": _enlace_whatsapp(request, v)}
                    for v in ventas.ventas_todas()],
-        "cotizaciones_servicio": [
-            {**c, "fecha_texto": _fecha_venta(c["creado_en"]),
-             "etiqueta_tipo": cotizaciones.etiqueta_de(c["tipo"])}
-            for c in cotizaciones.cotizaciones_todas()],
+        "cotizaciones_servicio": _cotizaciones_con_estado(),
     })
+
+
+def _cotizaciones_con_estado():
+    """Las cotizaciones locales con su estado REAL en Odoo (una sola
+    consulta para todas): facturada, cancelada o todavía cotización, y de
+    ahí si se puede editar. Si Odoo no contesta, la lista sale como
+    siempre, sin botón Editar (mejor sin botón que un botón que rompe)."""
+    filas = cotizaciones.cotizaciones_todas()
+    estados = {}
+    try:
+        estados = cotizaciones.estados_en_odoo([c["orden_id"] for c in filas])
+    except Exception:
+        pass
+    resultado = []
+    for c in filas:
+        estado = estados.get(c["orden_id"])
+        resultado.append({
+            **c, "fecha_texto": _fecha_venta(c["creado_en"]),
+            "etiqueta_tipo": cotizaciones.etiqueta_de(c["tipo"]),
+            "facturada": bool(estado and estado["facturada"]),
+            "cancelada": bool(estado and estado["cancelada"]),
+            "editable": bool(estado and estado["editable"]),
+        })
+    return resultado
+
+
 
 
 @app.post("/venta/cancelar/{n}")
@@ -1138,6 +1161,86 @@ def venta_propuesta_muestra(request: Request):
     return Response(contenido, media_type="application/pdf",
                     headers={"Content-Disposition":
                              'attachment; filename="propuesta-de-ejemplo.pdf"'})
+
+
+@app.get("/venta/servicio/{n}/editar")
+def venta_servicio_editar(request: Request, n: int):
+    """Editar una cotización que sigue en cotización: los servicios
+    (título, descripción, monto) y las cantidades de sus plantas (0 la
+    quita). Facturada o cancelada, ni se abre (Abraham, 22/09/2026)."""
+    try:
+        datos_edicion = cotizaciones.cargar_para_editar(n)
+    except Exception as error:
+        return _redirigir_venta(
+            f"No se pudo abrir la cotización: {ventas._mensaje_de_error(error)}")
+    if datos_edicion is None:
+        return _redirigir_venta("Esa cotización ya no está en Odoo.")
+    if not datos_edicion["editable"]:
+        motivo = ("ya está facturada" if datos_edicion["facturada"]
+                  else "está cancelada")
+        return _redirigir_venta(f"Esta cotización {motivo}: ya no se puede editar.")
+    return plantillas.TemplateResponse(request, "venta_servicio_editar.html",
+                                       _contexto_editar(request, datos_edicion))
+
+
+def _contexto_editar(request, datos_edicion, error=None):
+    registro = datos_edicion["registro"]
+    return {
+        "puede_fichas": fichas.es_editora(request.state.empleada["id"]),
+        "registro": registro,
+        "es_personalizada": registro["tipo"] not in cotizaciones.TIPOS,
+        "etiqueta_tipo": cotizaciones.etiqueta_de(registro["tipo"]),
+        "servicios": datos_edicion["servicios"],
+        "plantas": datos_edicion["plantas"],
+        "renglones": datos_edicion["renglones"],
+        "error_venta": error or None,
+    }
+
+
+@app.post("/venta/servicio/{n}/editar")
+async def venta_servicio_editar_guardar(request: Request, n: int):
+    form = await request.form()
+    servicios = cotizaciones.servicios_del_formulario(
+        [t[:2000] for t in form.getlist("servicio_texto")],
+        [m[:20] for m in form.getlist("servicio_monto")],
+        [d[:2000] for d in form.getlist("servicio_descripcion")])
+    plantas = cotizaciones.plantas_del_formulario(
+        form.getlist("planta_id"), form.getlist("planta_cantidad"))
+    renglones = cotizaciones.renglones_del_formulario(
+        [t[:2000] for t in form.getlist("renglon_texto")],
+        [c[:20] for c in form.getlist("renglon_cantidad")],
+        [p[:20] for p in form.getlist("renglon_precio")])
+    try:
+        cotizaciones.editar_cotizacion(n, servicios, plantas, renglones)
+    except ValueError as error:
+        # El formulario vuelve con lo escrito, como al crear: un redirect
+        # perdería lo que la empleada ya corrigió.
+        datos_edicion = cotizaciones.cargar_para_editar(n)
+        if datos_edicion is None or not datos_edicion["editable"]:
+            return _redirigir_venta(str(error))
+        datos_edicion["servicios"] = servicios or datos_edicion["servicios"]
+        nombres = {p["producto_id"]: p["nombre"] for p in datos_edicion["plantas"]}
+        datos_edicion["plantas"] = [
+            {**p, "nombre": nombres.get(_entero_o_none(p["producto_id"]), "")}
+            for p in plantas] or datos_edicion["plantas"]
+        datos_edicion["renglones"] = renglones or datos_edicion["renglones"]
+        return plantillas.TemplateResponse(
+            request, "venta_servicio_editar.html",
+            _contexto_editar(request, datos_edicion, error=str(error)),
+            status_code=200)
+    except Exception as error:
+        return _redirigir_venta(
+            f"No se pudo guardar: {ventas._mensaje_de_error(error)}")
+    # De vuelta a la lista, ANCLADO en la tarjeta que se editó: guardar no
+    # debe mandar a la empleada al tope de la lista.
+    return RedirectResponse(f"/venta#cot-{n}", status_code=303)
+
+
+def _entero_o_none(valor):
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        return None
 
 
 @app.get("/venta/servicio/{n}/propuesta.pdf")

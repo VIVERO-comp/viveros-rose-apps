@@ -44,7 +44,25 @@ PLANTILLAS = {
 
 class OdooServicios:
     def __init__(self):
-        self.productos = {601: {"default_code": "PL-CROTO", "name": "CROTO", "list_price": 45.0}}
+        self.productos = {
+            601: {"default_code": "PL-CROTO", "name": "CROTO",
+                  "list_price": 45.0, "type": "consu"},
+            # Los productos de servicio del addon (los ids de XML_IDS):
+            # la edición los lee para saber qué renglón es servicio.
+            8001: {"default_code": "SV-ALQUILER",
+                   "name": "Alquiler de plantas para evento",
+                   "list_price": 0.0, "type": "service"},
+            8002: {"default_code": "SV-INSTALACION",
+                   "name": "Instalación, transporte y mantenimiento inicial",
+                   "list_price": 0.0, "type": "service"},
+            8003: {"default_code": "SV-BODA", "name": "Ambientación de boda",
+                   "list_price": 0.0, "type": "service"},
+            8006: {"default_code": "SV-EVENTO", "name": "Ambientación de evento",
+                   "list_price": 0.0, "type": "service"},
+            8007: {"default_code": "SV-MANTENIMIENTO",
+                   "name": "Mantenimiento por contrato",
+                   "list_price": 0.0, "type": "service"},
+        }
         self.partners = {}
         self.categorias = {}
         self.tags = {}
@@ -196,11 +214,26 @@ class OdooServicios:
         self.ordenes[nuevo] = {
             "name": f"S{nuevo}", "amount_total": round(total, 2),
             "vals": vals, "lineas": lineas, "tag_ids": [],
+            "state": "draft", "invoice_ids": [],
         }
         return nuevo
 
+    def _total_de(self, lineas):
+        total = 0.0
+        for l in lineas:
+            if l.get("display_type"):
+                continue
+            precio = l.get("price_unit")
+            if precio is None:
+                precio = self.productos.get(l.get("product_id"), {}).get("list_price", 0.0)
+            total += precio * l.get("product_uom_qty", 1)
+        return round(total, 2)
+
     def sale_order_read(self, args, kw):
-        return [{"id": i, **{c: self.ordenes[i][c] for c in kw["fields"]}} for i in args[0]]
+        # Los campos que no viven arriba (opportunity_id) caen a los vals
+        # con que se creó la orden, como haría Odoo.
+        return [{"id": i, **{c: self.ordenes[i].get(c, self.ordenes[i]["vals"].get(c))
+                             for c in kw["fields"]}} for i in args[0]]
 
     def sale_order_search(self, args, kw):
         # Solo por client_order_ref + state: es como se busca la cotización
@@ -208,6 +241,40 @@ class OdooServicios:
         ref = next((c[2] for c in args[0] if c[0] == "client_order_ref"), None)
         return [i for i, o in self.ordenes.items()
                 if o["vals"].get("client_order_ref") == ref]
+
+    def sale_order_search_read(self, args, kw):
+        dominio = args[0]
+        if dominio and dominio[0][0] == "id":
+            ids = [i for i in dominio[0][2] if i in self.ordenes]
+        elif dominio and dominio[0][0] == "opportunity_id":
+            objetivo = dominio[0][2]
+            ids = [i for i, o in self.ordenes.items()
+                   if o["vals"].get("opportunity_id") == objetivo]
+        else:
+            ids = list(self.ordenes)
+        return [{"id": i, **{c: self.ordenes[i].get(c) for c in kw["fields"]}}
+                for i in ids]
+
+    def sale_order_line_search_read(self, args, kw):
+        # Las lineas guardadas son los dicts crudos del create/write; aqui
+        # se les da la forma que devuelve Odoo (product_id como [id, nombre],
+        # name heredado del producto cuando la linea no trajo uno).
+        oid = args[0][0][2]
+        filas = []
+        for idx, l in enumerate(self.ordenes[oid]["lineas"], start=1):
+            pid = l.get("product_id")
+            producto = self.productos.get(pid, {})
+            filas.append({
+                "id": idx,
+                "name": l.get("name") or producto.get("name") or "",
+                "display_type": l.get("display_type") or False,
+                "product_id": [pid, producto.get("name", "")] if pid else False,
+                "product_uom_qty": l.get("product_uom_qty", 0.0),
+                "price_unit": (l.get("price_unit")
+                               if l.get("price_unit") is not None
+                               else producto.get("list_price", 0.0)),
+            })
+        return filas
 
     def sale_order_unlink(self, args, kw):
         for oid in args[0]:
@@ -222,6 +289,7 @@ class OdooServicios:
                 if campo == "order_line":
                     lineas = [c[2] for c in valor if c[0] == 0]
                     self.ordenes[oid]["lineas"] = lineas
+                    self.ordenes[oid]["amount_total"] = self._total_de(lineas)
                 elif campo == "tag_ids":
                     for comando in valor:
                         if comando[0] == 4:
@@ -687,3 +755,146 @@ def test_crear_renta_por_http_con_descripcion(cliente, odoo):
     subsecciones = [l for l in orden["lineas"]
                     if l.get("display_type") == "line_subsection"]
     assert [s["name"] for s in subsecciones] == ["Incluye montaje y retiro"]
+
+
+# ---------------------------------------------------------------------------
+# Edición de una cotización (22/09/2026): solo mientras siga en cotización.
+# Con factura ligada en Odoo, ni botón ni escritura.
+# ---------------------------------------------------------------------------
+
+def _cotizacion_de_renta(odoo, plantas=True):
+    return cotizaciones.crear_cotizacion(
+        {"id": "g", "nombre": "Génesis"}, "renta", "María", "6567-3062",
+        [{"texto": "Alquiler de 20 plantas", "monto": "850",
+          "descripcion": "Incluye transporte y montaje"}],
+        [{"producto_id": 601, "cantidad": 10}] if plantas else [])
+
+
+def test_cargar_para_editar_reconstruye_el_formulario(odoo):
+    registro = _cotizacion_de_renta(odoo)
+    datos = cotizaciones.cargar_para_editar(registro["n"])
+    assert datos["editable"] and not datos["facturada"]
+    assert datos["servicios"] == [{"texto": "Alquiler de 20 plantas",
+                                   "descripcion": "Incluye transporte y montaje",
+                                   "monto": "850"}]
+    assert datos["plantas"] == [{"producto_id": 601, "nombre": "CROTO",
+                                 "cantidad": "10"}]
+
+
+def test_editar_reescribe_los_renglones_y_el_total(odoo):
+    registro = _cotizacion_de_renta(odoo)
+    editado = cotizaciones.editar_cotizacion(
+        registro["n"],
+        [{"texto": "Alquiler de 30 plantas", "monto": "1200",
+          "descripcion": "Con retiro al final"}],
+        [{"producto_id": "601", "cantidad": "5"}])
+    # El fake no reproduce la regla del addon que pone en $0 las plantas
+    # informativas de renta (eso se prueba del lado de Odoo): aquí el
+    # total suma el servicio + 5 CROTO a precio de lista.
+    assert editado["total"] == 1200.0 + 5 * 45.0
+    orden = odoo.ordenes[registro["orden_id"]]
+    nombres = [l.get("name") for l in orden["lineas"]]
+    assert "Alquiler de 30 plantas" in nombres
+    assert "Con retiro al final" in nombres  # la descripción sigue viajando
+    planta = next(l for l in orden["lineas"] if l.get("product_id") == 601)
+    assert planta["product_uom_qty"] == 5.0
+    # El ingreso esperado de la oportunidad acompaña al nuevo total.
+    oportunidad = odoo.oportunidades[orden["vals"]["opportunity_id"]]
+    assert oportunidad["expected_revenue"] == 1200.0 + 5 * 45.0
+
+
+def test_planta_en_cero_se_quita(odoo):
+    registro = _cotizacion_de_renta(odoo)
+    cotizaciones.editar_cotizacion(
+        registro["n"],
+        [{"texto": "Alquiler", "monto": "850"}],
+        [{"producto_id": "601", "cantidad": "0"}])
+    orden = odoo.ordenes[registro["orden_id"]]
+    assert not any(l.get("product_id") == 601 for l in orden["lineas"])
+
+
+def test_facturada_no_se_edita(odoo):
+    registro = _cotizacion_de_renta(odoo)
+    odoo.ordenes[registro["orden_id"]]["invoice_ids"] = [901]
+    lineas_antes = list(odoo.ordenes[registro["orden_id"]]["lineas"])
+    with pytest.raises(ValueError, match="facturada"):
+        cotizaciones.editar_cotizacion(
+            registro["n"], [{"texto": "Otro", "monto": "1"}], [])
+    assert odoo.ordenes[registro["orden_id"]]["lineas"] == lineas_antes
+
+
+def test_estados_en_odoo_marca_la_facturada(odoo):
+    a = _cotizacion_de_renta(odoo)
+    b = _cotizacion_de_renta(odoo)
+    odoo.ordenes[b["orden_id"]]["invoice_ids"] = [902]
+    estados = cotizaciones.estados_en_odoo([a["orden_id"], b["orden_id"]])
+    assert estados[a["orden_id"]]["editable"]
+    assert estados[b["orden_id"]]["facturada"]
+    assert not estados[b["orden_id"]]["editable"]
+
+
+def test_editar_personalizada_conserva_sus_tres_secciones(odoo):
+    registro = cotizaciones.crear_personalizada(
+        {"id": "g", "nombre": "Génesis"}, "Ana", "",
+        [{"producto_id": 601, "cantidad": 2}],
+        [{"texto": "Sacos de tierra", "cantidad": "100", "precio": "5.75"}],
+        None,
+        [{"texto": "Instalación de riego", "monto": "8000",
+          "descripcion": "Con pruebas de funcionamiento"}])
+    datos = cotizaciones.cargar_para_editar(registro["n"])
+    assert datos["servicios"][0]["texto"] == "Instalación de riego"
+    assert datos["servicios"][0]["descripcion"] == "Con pruebas de funcionamiento"
+    assert datos["renglones"][0] == {"texto": "Sacos de tierra",
+                                     "cantidad": "100", "precio": "5.75"}
+    assert datos["plantas"][0]["producto_id"] == 601
+    editado = cotizaciones.editar_cotizacion(
+        registro["n"],
+        [{"texto": "Instalación de riego", "monto": "7500"}],
+        [{"producto_id": "601", "cantidad": "2"}],
+        [{"texto": "Sacos de tierra", "cantidad": "50", "precio": "5.75"}])
+    secciones = [l["name"] for l in odoo.ordenes[registro["orden_id"]]["lineas"]
+                 if l.get("display_type") == "line_section"]
+    assert secciones == ["Plantas y materiales", "Servicios", "Renglones"]
+    assert editado["total"] == 7500 + 50 * 5.75 + 2 * 45.0
+
+
+def test_editar_por_http_y_volver_anclado(cliente, odoo):
+    registro = _cotizacion_de_renta(odoo)
+    pagina = cliente.get(f"/venta/servicio/{registro['n']}/editar")
+    assert "Alquiler de 20 plantas" in pagina.text
+    assert "Incluye transporte y montaje" in pagina.text
+    assert "CROTO" in pagina.text
+    r = cliente.post(f"/venta/servicio/{registro['n']}/editar",
+                     data={"servicio_texto": "Alquiler de 30 plantas",
+                           "servicio_monto": "1200",
+                           "servicio_descripcion": "",
+                           "planta_id": "601", "planta_cantidad": "10"},
+                     follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == f"/venta#cot-{registro['n']}"
+
+
+def test_la_lista_muestra_editar_solo_en_cotizacion(cliente, odoo):
+    editable = _cotizacion_de_renta(odoo)
+    facturada = _cotizacion_de_renta(odoo)
+    odoo.ordenes[facturada["orden_id"]]["invoice_ids"] = [903]
+    pagina = cliente.get("/venta").text
+    assert f"/venta/servicio/{editable['n']}/editar" in pagina
+    assert f"/venta/servicio/{facturada['n']}/editar" not in pagina
+    assert "Facturado" in pagina
+    # Y editar la facturada por URL directa tampoco pasa.
+    r = cliente.get(f"/venta/servicio/{facturada['n']}/editar",
+                    follow_redirects=False)
+    assert r.status_code == 303
+    assert "facturada" in r.headers["location"]
+
+
+def test_sin_monto_al_editar_no_pierde_lo_escrito(cliente, odoo):
+    registro = _cotizacion_de_renta(odoo)
+    r = cliente.post(f"/venta/servicio/{registro['n']}/editar",
+                     data={"servicio_texto": "Alquiler corregido",
+                           "servicio_monto": "",
+                           "planta_id": "601", "planta_cantidad": "10"})
+    assert r.status_code == 200
+    assert "Falta el monto" in r.text
+    assert "Alquiler corregido" in r.text
