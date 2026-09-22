@@ -136,9 +136,11 @@ function sincronizarCliente() {
     if (contenedorServicios) {
       datos.append("servicios", "1");
       for (const s of renglonesDe(contenedorServicios,
-                                  {texto: "servicio_texto", monto: "servicio_monto"})) {
+                                  {texto: "servicio_texto", monto: "servicio_monto",
+                                   descripcion: "servicio_descripcion"})) {
         datos.append("servicio_texto", s.texto);
         datos.append("servicio_monto", s.monto);
+        datos.append("servicio_descripcion", s.descripcion);
       }
     }
     if (contenedorRenglones) {
@@ -203,12 +205,14 @@ function activarRenglones(contenedor, idBoton, idSubtotal, importeDe) {
   function nuevoRenglon() {
     const copia = contenedor.querySelector(".servicio").cloneNode(true);
     for (const campo of copia.querySelectorAll("textarea, input")) campo.value = "";
-    copia.querySelector("textarea").removeAttribute("style");
+    // Todas las áreas (título y descripción): sin el alto heredado del clon.
+    for (const area of copia.querySelectorAll("textarea")) {
+      area.removeAttribute("style");
+    }
     contenedor.appendChild(copia);
     alternarQuitar();
-    const area = copia.querySelector("textarea");
-    crecerTexto(area);
-    area.focus();
+    for (const area of copia.querySelectorAll("textarea")) crecerTexto(area);
+    copia.querySelector("textarea").focus();
   }
 
   for (const area of contenedor.querySelectorAll("textarea")) crecerTexto(area);

@@ -105,8 +105,12 @@
     {% for sv in servicios %}
     <div class="servicio">
       <textarea class="servicio-texto" name="servicio_texto" form="form-servicio"
-                rows="1" placeholder="Ej: Instalación, transporte y mantenimiento inicial"
+                rows="1" placeholder="Ej: Instalación de sistema de riego"
                 >{{ sv.texto }}</textarea>
+      {# El párrafo gris bajo el título en el PDF (estilo City Mall). #}
+      <textarea class="servicio-descripcion" name="servicio_descripcion" form="form-servicio"
+                rows="1" placeholder="Descripción (opcional) — Ej: Suministro e instalación, incluyendo materiales, mano de obra y pruebas de funcionamiento"
+                >{{ sv.descripcion }}</textarea>
       <div class="servicio-pie">
         <label class="servicio-monto">Monto
           <input name="servicio_monto" form="form-servicio" type="number"

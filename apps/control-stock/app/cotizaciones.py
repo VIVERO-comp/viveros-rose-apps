@@ -47,8 +47,9 @@ TIPOS = {
             {"titulo": "Alquiler del evento", "servicios": {
                 "producto": "vivero_rose_pedidos.producto_sv_alquiler_evento",
                 "requerido": True,
-                "ejemplo": "Alquiler de 20 plantas para el evento del sábado, "
-                           "incluye transporte, montaje y retiro",
+                "ejemplo": "Alquiler de 20 plantas para el evento del sábado",
+                "ejemplo_descripcion": "Incluye transporte, montaje y "
+                                       "retiro al finalizar el evento",
             }},
             {"titulo": "Plantas alquiladas (se llevan y regresan)",
              "catalogo": "informativo"},
@@ -63,8 +64,9 @@ TIPOS = {
             {"titulo": "Ambientación", "servicios": {
                 "producto": "vivero_rose_pedidos.producto_sv_boda",
                 "requerido": True,
-                "ejemplo": "Ambientación con plantas para la ceremonia y el "
-                           "salón, incluye montaje y retiro",
+                "ejemplo": "Ambientación con plantas para la ceremonia y el salón",
+                "ejemplo_descripcion": "Incluye montaje antes de la "
+                                       "ceremonia y retiro al terminar",
             }},
         ],
     },
@@ -77,8 +79,8 @@ TIPOS = {
             {"titulo": "Ambientación", "servicios": {
                 "producto": "vivero_rose_pedidos.producto_sv_evento",
                 "requerido": True,
-                "ejemplo": "Ambientación con plantas del evento, incluye "
-                           "transporte, montaje y retiro",
+                "ejemplo": "Ambientación con plantas del evento",
+                "ejemplo_descripcion": "Incluye transporte, montaje y retiro",
             }},
         ],
     },
@@ -91,8 +93,9 @@ TIPOS = {
             {"titulo": "Mantenimiento del contrato", "servicios": {
                 "producto": "vivero_rose_pedidos.producto_sv_mantenimiento_total",
                 "requerido": True,
-                "ejemplo": "Mantenimiento mensual: 2 visitas, riego, abono, "
-                           "poda y control de plagas",
+                "ejemplo": "Mantenimiento mensual del jardín",
+                "ejemplo_descripcion": "2 visitas al mes: riego, abono, "
+                                       "poda y control de plagas",
             }},
             {"titulo": "Qué cubre (referencia)", "catalogo": "informativo"},
         ],
@@ -107,8 +110,9 @@ TIPOS = {
             {"titulo": "Servicio del proyecto", "servicios": {
                 "producto": "vivero_rose_pedidos.producto_sv_instalacion",
                 "requerido": True,
-                "ejemplo": "Diseño del jardín, preparación de suelo, siembra "
-                           "e instalación, transporte y mantenimiento inicial",
+                "ejemplo": "Diseño e instalación del jardín",
+                "ejemplo_descripcion": "Diseño, preparación de suelo, siembra, "
+                                       "transporte y mantenimiento inicial",
             }},
         ],
     },
@@ -128,8 +132,10 @@ TIPOS = {
             {"titulo": "Servicio del proyecto", "servicios": {
                 "producto": "vivero_rose_pedidos.producto_sv_instalacion",
                 "requerido": True,
-                "ejemplo": "Instalación en sitio, transporte y mantenimiento "
-                           "inicial de prendimiento",
+                "ejemplo": "Instalación de sistema de riego",
+                "ejemplo_descripcion": "Suministro e instalación, incluyendo "
+                                       "materiales, mano de obra y pruebas "
+                                       "de funcionamiento",
             }},
         ],
     },
@@ -143,8 +149,8 @@ TIPOS = {
             {"titulo": "Servicio de instalación", "servicios": {
                 "producto": "vivero_rose_pedidos.producto_sv_instalacion",
                 "requerido": True,
-                "ejemplo": "Instalación de 12 palmas en el jardín frontal, "
-                           "incluye tierra, abono y transporte",
+                "ejemplo": "Instalación de 12 palmas en el jardín frontal",
+                "ejemplo_descripcion": "Incluye tierra, abono y transporte",
             }},
         ],
     },
@@ -387,14 +393,22 @@ def _monto_servicio(valor):
     return max(numero, 0.0)
 
 
-def servicios_del_formulario(textos, montos):
+def servicios_del_formulario(textos, montos, descripciones=None):
     """Los renglones repetibles del mini-formulario (servicio_texto[] +
-    servicio_monto[]) emparejados en el orden en que se muestran."""
+    servicio_descripcion[] + servicio_monto[]) emparejados en el orden en
+    que se muestran. El texto es el titulo del servicio (la linea en
+    negrita del PDF) y la descripcion el parrafo que sale debajo, como en
+    las cotizaciones de City Mall (pedido de Abraham, 22/09/2026)."""
     textos = list(textos or [])
     montos = list(montos or [])
-    total = max(len(textos), len(montos))
-    return [{"texto": textos[i] if i < len(textos) else "",
-             "monto": montos[i] if i < len(montos) else ""}
+    descripciones = list(descripciones or [])
+    total = max(len(textos), len(montos), len(descripciones))
+
+    def dato(lista, i):
+        return lista[i] if i < len(lista) else ""
+
+    return [{"texto": dato(textos, i), "monto": dato(montos, i),
+             "descripcion": dato(descripciones, i)}
             for i in range(total)]
 
 
@@ -454,17 +468,20 @@ def _resumen(texto):
 def _servicios_limpios(servicios):
     """Descarta los renglones que quedaron totalmente en blanco (la
     empleada añadió uno y no lo llenó) y avisa de los que tienen párrafo
-    sin monto o monto ilegible."""
+    sin monto o monto ilegible. Una descripción sola tampoco alcanza: sin
+    monto no hay renglón que cobrar."""
     limpios = []
     for renglon in servicios or []:
         texto = (renglon.get("texto") or "").strip()
+        descripcion = (renglon.get("descripcion") or "").strip()
         crudo = (renglon.get("monto") or "").strip()
         monto = _monto_servicio(crudo)
-        if not texto and monto is None:
+        if not texto and not descripcion and monto is None:
             continue
         if monto is None:
-            raise ValueError(f"Falta el monto del servicio: «{_resumen(texto)}».")
-        limpios.append({"texto": texto, "monto": monto})
+            raise ValueError(f"Falta el monto del servicio: «{_resumen(texto or descripcion)}».")
+        limpios.append({"texto": texto, "monto": monto,
+                        "descripcion": descripcion})
     return limpios
 
 
@@ -489,6 +506,13 @@ def _lineas_por_tipo(tipo, servicios, lineas_catalogo):
                 if renglon["texto"]:
                     linea["name"] = renglon["texto"]
                 cuerpo.append(linea)
+                # La descripción del servicio viaja como su propio renglón
+                # line_subsection, pegado al servicio: es lo que el PDF
+                # pinta como párrafo gris debajo del título, igual que en
+                # las cotizaciones de City Mall (S00077).
+                if renglon.get("descripcion"):
+                    cuerpo.append({"display_type": "line_subsection",
+                                   "name": renglon["descripcion"]})
         if seccion.get("catalogo"):
             # Sin mínimo de plantas (pedido del dueño 17/09/2026): una
             # cotización puede ser solo de servicio, con 0 plantas.
@@ -649,10 +673,17 @@ def crear_personalizada(empleada, nombre, celular, lineas_catalogo=None,
          [{"product_id": linea["producto_id"], "product_uom_qty": linea["cantidad"]}
           for linea in lineas_catalogo or []]),
         ("Servicios",
-         [{"product_id": _id_producto_personalizado(), "product_uom_qty": 1,
-           "price_unit": servicio["monto"],
-           **({"name": servicio["texto"]} if servicio["texto"] else {})}
-          for servicio in _servicios_limpios(servicios)]),
+         [linea
+          for servicio in _servicios_limpios(servicios)
+          for linea in (
+              [{"product_id": _id_producto_personalizado(),
+                "product_uom_qty": 1, "price_unit": servicio["monto"],
+                **({"name": servicio["texto"]} if servicio["texto"] else {})}]
+              # La descripción, como renglón line_subsection pegado al
+              # servicio (el párrafo gris bajo el título en el PDF).
+              + ([{"display_type": "line_subsection",
+                   "name": servicio["descripcion"]}]
+                 if servicio.get("descripcion") else []))]),
         ("Renglones",
          [{"product_id": _id_producto_personalizado(),
            "product_uom_qty": renglon["cantidad"], "price_unit": renglon["precio"],

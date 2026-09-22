@@ -74,13 +74,44 @@ class _HojaConteo(FPDF):
 _ANCHOS = [42, 68, 42, 22, 22]  # mm; suma < 216 - márgenes
 
 
+# Lo que puede achicarse la letra de una celda antes de recortar el texto.
+# Por debajo de 6 pt la hoja deja de leerse caminando el vivero, que es para
+# lo que existe.
+_CUERPO = 9
+_CUERPO_MINIMO = 6
+
+
+def _escribir_celda(pdf, texto, ancho):
+    """Una celda cuyo texto NUNCA se sale de su columna.
+
+    fpdf dibuja el texto aunque no quepa: un codigo largo
+    (PL-PALMA-BISMARKIA-GRANDE) se montaba encima del nombre de al lado y la
+    hoja salia ilegible justo en las plantas de nombre largo. Aqui la letra
+    se achica hasta que entre y, si ni al minimo entra, se recorta con "..."
+    para que el renglon siga siendo una fila limpia."""
+    texto = _latin1(texto)
+    util = ancho - 2  # el padding que fpdf deja a los lados de la celda
+    tamano = _CUERPO
+    while tamano > _CUERPO_MINIMO and pdf.get_string_width(texto) > util:
+        tamano -= 0.5
+        pdf.set_font_size(tamano)
+    while texto and pdf.get_string_width(texto) > util:
+        texto = texto[:-1]
+        if pdf.get_string_width(texto + "...") <= util:
+            texto += "..."
+            break
+    pdf.cell(ancho, 8, texto, border=1)
+    if tamano != _CUERPO:
+        pdf.set_font_size(_CUERPO)
+
+
 def generar_pdf(inventario, ruta):
     """Escribe la hoja de conteo en `ruta`: todo el inventario ordenado por
     categoría y nombre, con la cantidad física del sistema y la columna de
     conteo en blanco."""
     pdf = _HojaConteo(_fecha_bonita())
     pdf.add_page()
-    pdf.set_font("helvetica", "", 9)
+    pdf.set_font("helvetica", "", _CUERPO)
     ordenados = sorted(inventario, key=lambda p: (p["categoria"], p["nombre"]))
     for producto in ordenados:
         for valor, ancho in zip(
@@ -88,7 +119,7 @@ def generar_pdf(inventario, ruta):
              str(producto["fisico"]), ""],
             _ANCHOS,
         ):
-            pdf.cell(ancho, 8, _latin1(valor), border=1)
+            _escribir_celda(pdf, valor, ancho)
         pdf.ln()
     pdf.output(ruta)
 

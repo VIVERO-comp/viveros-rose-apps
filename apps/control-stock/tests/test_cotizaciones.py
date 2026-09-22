@@ -339,7 +339,8 @@ def test_paisajismo_cobra_las_plantas_a_precio_de_catalogo(odoo):
 def test_servicios_del_formulario_empareja_los_renglones(odoo):
     assert cotizaciones.servicios_del_formulario(
         ["Uno", "Dos"], ["10"]) == [
-            {"texto": "Uno", "monto": "10"}, {"texto": "Dos", "monto": ""}]
+            {"texto": "Uno", "monto": "10", "descripcion": ""},
+            {"texto": "Dos", "monto": "", "descripcion": ""}]
 
 
 def test_datos_opcionales_del_cliente_en_una_cotizacion(odoo):
@@ -597,3 +598,92 @@ def test_pdf_de_muestra_reutiliza_una_sola_cotizacion(odoo, monkeypatch):
     # Y no deja nada más: ni oportunidad en el CRM ni fila en el historial.
     assert odoo.oportunidades == {}
     assert not cotizaciones.cotizaciones_todas()
+
+
+# ---------------------------------------------------------------------------
+# Descripción del servicio (22/09/2026): además del título, cada servicio
+# lleva un párrafo de descripción opcional que en el PDF sale en gris debajo
+# del título, como en las cotizaciones de City Mall (S00077). Viaja a Odoo
+# como un renglón line_subsection pegado al servicio.
+# ---------------------------------------------------------------------------
+
+def test_formulario_empareja_la_descripcion():
+    servicios = cotizaciones.servicios_del_formulario(
+        ["Instalación de riego", "Transporte"], ["8000", "30"],
+        ["Suministro e instalación con pruebas", ""])
+    assert servicios == [
+        {"texto": "Instalación de riego", "monto": "8000",
+         "descripcion": "Suministro e instalación con pruebas"},
+        {"texto": "Transporte", "monto": "30", "descripcion": ""},
+    ]
+
+
+def test_la_descripcion_sale_como_subsection_pegada_al_servicio(odoo):
+    registro = cotizaciones.crear_cotizacion(
+        {"id": "g", "nombre": "Génesis"}, "renta", "María", "",
+        [{"texto": "Alquiler de 20 plantas", "monto": "850",
+          "descripcion": "Incluye transporte, montaje y retiro"},
+         {"texto": "Instalación", "monto": "100"}], [])
+    orden = odoo.ordenes[registro["orden_id"]]
+    lineas = orden["lineas"]
+    # sección, servicio 1, SU descripción, servicio 2 (sin descripción)
+    assert lineas[1]["name"] == "Alquiler de 20 plantas"
+    assert lineas[2]["display_type"] == "line_subsection"
+    assert lineas[2]["name"] == "Incluye transporte, montaje y retiro"
+    assert lineas[3]["name"] == "Instalación"
+    assert not any(l.get("display_type") == "line_subsection"
+                   for l in lineas[4:])
+    # La descripción no toca el total: es un renglón sin monto.
+    assert orden["amount_total"] == 950.0
+
+
+def test_descripcion_sola_no_alcanza(odoo):
+    with pytest.raises(ValueError, match="monto"):
+        cotizaciones.crear_cotizacion(
+            {"id": "g", "nombre": "Génesis"}, "renta", "María", "",
+            [{"texto": "", "monto": "", "descripcion": "Solo un párrafo"}], [])
+    assert not odoo.ordenes
+
+
+def test_personalizada_lleva_la_descripcion_del_servicio(odoo):
+    registro = cotizaciones.crear_personalizada(
+        {"id": "g", "nombre": "Génesis"}, "Ana", "", [],
+        None, None,
+        [{"texto": "Instalación de sistema de riego", "monto": "8000",
+          "descripcion": "Suministro e instalación, con pruebas"}])
+    orden = odoo.ordenes[registro["orden_id"]]
+    lineas = orden["lineas"]
+    assert lineas[0]["display_type"] == "line_section"  # "Servicios"
+    assert lineas[1]["name"] == "Instalación de sistema de riego"
+    assert lineas[2]["display_type"] == "line_subsection"
+    assert lineas[2]["name"] == "Suministro e instalación, con pruebas"
+
+
+def test_el_form_trae_el_campo_descripcion(cliente, odoo):
+    pagina = cliente.get("/venta/servicio/renta")
+    assert 'name="servicio_descripcion"' in pagina.text
+    personalizada = cliente.get("/venta/servicio-personalizada")
+    assert 'name="servicio_descripcion"' in personalizada.text
+
+
+def test_la_descripcion_sobrevive_en_el_borrador(cliente, odoo):
+    cliente.post("/venta/borrador",
+                 data={"cliente": "Ana", "celular": "", "servicios": "1",
+                       "servicio_texto": "Instalación de 12 palmas",
+                       "servicio_monto": "250",
+                       "servicio_descripcion": "Incluye tierra y abono"})
+    pagina = cliente.get("/venta/servicio/instalacion")
+    assert "Incluye tierra y abono" in pagina.text
+
+
+def test_crear_renta_por_http_con_descripcion(cliente, odoo):
+    r = cliente.post("/venta/servicio/renta",
+                     data={"cliente": "María", "celular": "",
+                           "servicio_texto": "Alquiler de 20 plantas",
+                           "servicio_monto": "850",
+                           "servicio_descripcion": "Incluye montaje y retiro"})
+    assert "Cotización de servicio creada" in r.text
+    orden = list(odoo.ordenes.values())[-1]
+    subsecciones = [l for l in orden["lineas"]
+                    if l.get("display_type") == "line_subsection"]
+    assert [s["name"] for s in subsecciones] == ["Incluye montaje y retiro"]

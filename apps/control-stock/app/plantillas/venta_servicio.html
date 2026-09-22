@@ -45,6 +45,11 @@
         <textarea class="servicio-texto" name="servicio_texto" form="form-servicio"
                   rows="1" placeholder="Ej: {{ seccion.servicios.ejemplo }}"
                   >{{ s.texto }}</textarea>
+        {# La descripción del servicio: el párrafo que sale en gris debajo
+           del título en el PDF, como en las cotizaciones de City Mall. #}
+        <textarea class="servicio-descripcion" name="servicio_descripcion" form="form-servicio"
+                  rows="1" placeholder="Descripción (opcional) — Ej: {{ seccion.servicios.ejemplo_descripcion }}"
+                  >{{ s.descripcion }}</textarea>
         <div class="servicio-pie">
           <label class="servicio-monto">Monto
             <input name="servicio_monto" form="form-servicio" type="number"

@@ -601,6 +601,15 @@ nav button.on, nav a.on{color:var(--dorado);background:rgba(227,181,127,.1)}
   padding:0;outline:none;overflow:hidden;min-height:22px;
 }
 .servicio-texto::placeholder{color:var(--texto-suave)}
+/* La descripción del servicio (22/09/2026): el párrafo gris que en el PDF
+   sale debajo del título, estilo City Mall. Más chica y apagada que el
+   título para que se lea como lo que es. */
+.servicio-descripcion{
+  width:100%;display:block;background:none;border:none;resize:none;
+  color:var(--texto-suave);font-family:inherit;font-size:13px;line-height:1.5;
+  padding:0;outline:none;overflow:hidden;min-height:20px;margin-top:6px;
+}
+.servicio-descripcion::placeholder{color:var(--texto-suave);opacity:.7}
 .servicio-pie{
   display:flex;align-items:center;gap:10px;
   border-top:1px solid var(--noche-3);margin-top:10px;padding-top:9px;
@@ -1070,7 +1079,7 @@ button.enlace-sub{
   .campo input, .campo select, .campo textarea,
   .campos-cliente .campo input, .campos-cliente .campo select,
   .ficha-form .campo textarea, .ficha-form .campo select,
-  .buscador input, .servicio-texto, .servicio-monto input,
+  .buscador input, .servicio-texto, .servicio-descripcion, .servicio-monto input,
   .umbral-form input, .edit-qty input{font-size:16px}
   .campos-cliente .campo input, .campos-cliente .campo select{padding:11px 12px}
 

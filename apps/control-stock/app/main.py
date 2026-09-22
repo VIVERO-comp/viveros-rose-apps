@@ -834,7 +834,8 @@ def _servicios_del_form(form):
         return None
     return cotizaciones.servicios_del_formulario(
         [t[:2000] for t in form.getlist("servicio_texto")],
-        [m[:20] for m in form.getlist("servicio_monto")])
+        [m[:20] for m in form.getlist("servicio_monto")],
+        [d[:2000] for d in form.getlist("servicio_descripcion")])
 
 
 def _renglones_del_form(form):
@@ -955,7 +956,7 @@ def _contexto_servicio(request, tipo, q="", error=None, servicios=None,
         "ventas_activo": ventas.configurado(), "tipo": tipo,
         "meta": cotizaciones.TIPOS[tipo], "q": (q or "").strip(),
         "resultados": None, "carrito": [], "total_carrito": 0.0,
-        "borrador": borrador, "servicios": servicios or [{"texto": "", "monto": ""}],
+        "borrador": borrador, "servicios": servicios or [{"texto": "", "monto": "", "descripcion": ""}],
         "error_venta": error or None,
         "proyecto": (proyecto or "").strip(), "proyecto_nombre": None,
         # El selector está SIEMPRE en "Cotizar Proyecto", aunque todavía no
@@ -1006,7 +1007,8 @@ async def venta_servicio_crear(request: Request, tipo: str):
     form = await request.form()
     usuario = request.state.empleada["id"]
     servicios = cotizaciones.servicios_del_formulario(
-        form.getlist("servicio_texto"), form.getlist("servicio_monto"))
+        form.getlist("servicio_texto"), form.getlist("servicio_monto"),
+        form.getlist("servicio_descripcion"))
     datos_cliente = _datos_cliente_del_form(form)
     proyecto_ref = (form.get("proyecto") or "").strip()
     carrito, _total = ventas.carrito_de(usuario)
@@ -1064,7 +1066,7 @@ def _contexto_personalizada(request, q="", error=None, renglones=None,
         "resultados": None, "carrito": [], "total_carrito": 0.0,
         "borrador": borrador, "error_venta": error or None,
         "renglones": renglones or [{"texto": "", "cantidad": "", "precio": ""}],
-        "servicios": servicios or [{"texto": "", "monto": ""}],
+        "servicios": servicios or [{"texto": "", "monto": "", "descripcion": ""}],
     }
     if contexto["ventas_activo"]:
         try:
@@ -1092,7 +1094,8 @@ async def venta_personalizada_crear(request: Request):
         form.getlist("renglon_texto"), form.getlist("renglon_cantidad"),
         form.getlist("renglon_precio"))
     servicios = cotizaciones.servicios_del_formulario(
-        form.getlist("servicio_texto"), form.getlist("servicio_monto"))
+        form.getlist("servicio_texto"), form.getlist("servicio_monto"),
+        form.getlist("servicio_descripcion"))
     carrito, _total = ventas.carrito_de(usuario)
     lineas_catalogo = [{"producto_id": l["producto_id"], "cantidad": l["cantidad"]}
                        for l in carrito]
