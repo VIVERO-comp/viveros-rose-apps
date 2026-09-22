@@ -505,12 +505,15 @@ a{color:inherit}
 
 /* ---------- pestaña Retail (kanban de leads de venta, 22/09/2026) ---------- */
 .pt-leyenda{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:0}
+/* El tablero entra COMPLETO en la pantalla (dueño, 22/09/2026: "que retail
+   no tenga scroll de barra abajo"): las columnas se reparten el ancho en
+   partes iguales en vez de medir 290px fijos con scroll horizontal. */
 .ret-tablero{
-  flex:1;min-height:0;display:flex;gap:12px;overflow-x:auto;overscroll-behavior:contain;
-  padding-bottom:4px;scrollbar-width:thin;
+  flex:1;min-height:0;display:flex;gap:12px;
+  padding-bottom:4px;
 }
 .ret-col{
-  flex:0 0 290px;display:flex;flex-direction:column;min-height:0;
+  flex:1 1 0;min-width:0;display:flex;flex-direction:column;min-height:0;
   background:var(--crema);border:1px solid var(--borde);border-radius:14px;
 }
 .ret-cab{display:flex;align-items:center;gap:8px;padding:11px 13px 9px;border-bottom:1px solid var(--borde-2)}
