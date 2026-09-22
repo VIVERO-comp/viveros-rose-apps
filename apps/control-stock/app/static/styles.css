@@ -607,7 +607,9 @@ nav button.on, nav a.on{color:var(--dorado);background:rgba(227,181,127,.1)}
 .servicio-descripcion{
   width:100%;display:block;background:none;border:none;resize:none;
   color:var(--texto-suave);font-family:inherit;font-size:13px;line-height:1.5;
-  padding:0;outline:none;overflow:hidden;min-height:20px;margin-top:6px;
+  padding:8px 0 0;outline:none;overflow:hidden;min-height:20px;margin-top:8px;
+  /* La linea chiquita entre el titulo y la descripcion (Abraham, 22/09/2026). */
+  border-top:1px solid var(--noche-3);
 }
 .servicio-descripcion::placeholder{color:var(--texto-suave);opacity:.7}
 .servicio-pie{
@@ -1032,6 +1034,7 @@ button.enlace-sub{
      título/descripción del renglón del precio (pedido de Abraham,
      22/09/2026, "una línea por separado arriba de monto"). */
   .servicio-pie{border-top-color:#dcd2bc}
+  .servicio-descripcion{border-top-color:#dcd2bc}
   .servicio-monto input{background:#f5f2ea;border-color:#e2dbca}
   .anadir-servicio{border-color:#e0d7c3}
   .fab{bottom:26px;right:28px}
