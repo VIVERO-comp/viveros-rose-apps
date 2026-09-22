@@ -402,3 +402,21 @@ def test_la_raiz_abre_el_calendario(cliente):
     r = cliente.get("/", follow_redirects=False)
     assert r.status_code == 303
     assert r.headers["location"] == "/calendario"
+
+
+def test_todos_pueden_cambiar_hasta_previo_aviso(cliente, monkeypatch):
+    """Regla suspendida (22/09/2026): sin candado de "cada quien lo suyo",
+    cualquier empleada cambia cualquier actividad, y el campo Responsable
+    no aparece ni en la ficha ni en el formulario de crear."""
+    from app import main as m
+    yo_comun = {"id": "otra-persona", "nombre": "Alguien", "admin": False}
+    actividad = {"resp_id": "juan", "resp": "Juan"}
+    with monkeypatch.context() as mp:
+        mp.setattr(m.calendario, "configurado", lambda: True)
+        mp.setattr(m.calendario, "escritura_activa", lambda: True)
+        assert m._puede_tocar(actividad, yo_comun) is None
+    dia = calendario.hoy().isoformat()
+    actividad_real = calendario.listar(dia, dia)[0]
+    cuerpo = _abrir(cliente, abrir=actividad_real["id"]).text
+    assert "Solo lectura" not in cuerpo
+    assert 'name="resp_id"' not in cuerpo

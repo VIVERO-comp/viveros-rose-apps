@@ -344,13 +344,8 @@
       </span></div>
     <div class="dato"><b>Lugar</b>
       <input class="campo" name="lugar" value="{{ abierta.lugar }}" {{ 'disabled' if not puede_tocar_abierta }}></div>
-    <div class="dato"><b>Responsable</b>
-      <select class="sel ancho" name="resp_id" {{ 'disabled' if not (puede_tocar_abierta and yo.admin) }}>
-        <option value="">Sin asignar</option>
-        {% for g in gente %}
-        <option value="{{ g.id }}" {{ 'selected' if g.id == abierta.resp_id }}>{{ g.nombre }}</option>
-        {% endfor %}
-      </select></div>
+    {# El renglón Responsable se quitó hasta previo aviso (dueño,
+       22/09/2026: "responsable quítalo... que todos puedan cambiar"). #}
     <div class="dato"><b>Prioridad</b>
       <select class="sel ancho" name="prioridad" {{ 'disabled' if not puede_tocar_abierta }}>
         {% for valor, nombre in [(1, 'Urgente'), (2, 'Alta'), (3, 'Normal')] %}
@@ -433,16 +428,8 @@ No se borra nada: el issue {{ abierta.ref }} queda en Linear marcado como Cancel
         {% for t in cal.TIPOS %}<option value="{{ t.clave }}" {{ 'selected' if t.clave == pre.tipo }}>{{ t.nombre }}</option>{% endfor %}
       </select>
     </div>
-    <div class="campo-caja">
-      <label for="resp_id">Responsable</label>
-      <select class="sel ancho" id="resp_id" name="resp_id" {{ 'disabled' if not yo.admin }}>
-        {% if yo.admin %}<option value="">Sin asignar</option>{% endif %}
-        {% for g in gente %}{% if yo.admin or g.id == yo.id %}
-        <option value="{{ g.id }}" {{ 'selected' if g.id == pre.resp }}>{{ g.nombre }}</option>
-        {% endif %}{% endfor %}
-      </select>
-      {% if not yo.admin %}<span class="pie-nota">Lo que creás nace a tu nombre.</span>{% endif %}
-    </div>
+    {# El campo Responsable se quitó hasta previo aviso (22/09/2026):
+       lo que se crea nace a nombre de quien lo crea. #}
     <div class="campo-caja ancho">
       <label for="cliente">Cliente</label>
       <input class="campo" id="cliente" name="cliente" required placeholder="Hotel Bristol"

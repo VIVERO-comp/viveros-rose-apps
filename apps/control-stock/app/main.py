@@ -1774,17 +1774,26 @@ def _actividades_para(estado, refrescar=False):
 
 
 def _puede_tocar(actividad, yo):
-    """Cada quien lo suyo: la regla se decide aquí, no en el navegador."""
+    """Quién puede cambiar una actividad; la regla vive aquí, no en el
+    navegador.
+
+    La regla "cada quien lo suyo" está SUSPENDIDA hasta previo aviso
+    (dueño, 22/09/2026: "que todos puedan cambiar"): cualquier empleada
+    edita cualquier actividad. El candado original queda comentado abajo,
+    listo para reactivarse cuando él avise.
+    """
     if not calendario.configurado():
         return None  # modo muestra: es una demo, no hay nada real que cuidar
     if not calendario.escritura_activa():
         return "Esta instancia mira el calendario real pero no escribe en Linear."
-    if yo["admin"]:
-        return None
-    if actividad and yo["id"] and actividad["resp_id"] == yo["id"]:
-        return None
-    de_quien = actividad["resp"] if actividad else "otra persona"
-    return f"Esa actividad es de {de_quien}: vos la ves, pero no la cambiás."
+    return None
+    # --- el candado suspendido (no borrar): ---
+    # if yo["admin"]:
+    #     return None
+    # if actividad and yo["id"] and actividad["resp_id"] == yo["id"]:
+    #     return None
+    # de_quien = actividad["resp"] if actividad else "otra persona"
+    # return f"Esa actividad es de {de_quien}: vos la ves, pero no la cambiás."
 
 
 @app.get("/calendario")
@@ -1966,8 +1975,10 @@ async def calendario_crear(request: Request):
         if not (calendario.escritura_activa() or not calendario.configurado()):
             raise calendario.ErrorCalendario(
                 "Esta instancia mira el calendario real pero no escribe en Linear.")
-        # Un empleado crea a su nombre; solo el dueño reparte trabajo.
-        resp = form.get("resp_id", "") if yo["admin"] else yo["id"]
+        # Sin el campo Responsable (quitado hasta previo aviso, 22/09/2026)
+        # todo nace a nombre de quien lo crea; sin correo enlazado a
+        # Linear, queda sin asignar.
+        resp = form.get("resp_id") or yo["id"]
         creada = calendario.crear(
             tipo=form.get("tipo", "otro"), cliente=form.get("cliente", ""),
             fecha=form.get("fecha", ""), hora=form.get("hora") or calendario.HORA_POR_DEFECTO,
