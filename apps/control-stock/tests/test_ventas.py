@@ -268,11 +268,14 @@ def test_buscar_en_vivo_devuelve_json(cliente_venta):
         {"id": 501, "sku": "PL-ROMERO", "nombre": "ROMERO", "precio": "$3.50"}]
 
 
-def test_agregar_conserva_la_busqueda(cliente_venta):
+def test_agregar_limpia_la_busqueda_y_ancla_en_plantas(cliente_venta):
+    # Pedido del dueño (22/09/2026): al elegir una planta la búsqueda se
+    # borra (la q no viaja de vuelta) y el redirect lleva el ancla #plantas
+    # para no saltar al tope de la página.
     r = cliente_venta.post("/venta/carrito/agregar",
                            data={"producto_id": 501, "cantidad": 1, "q": "romero"},
                            follow_redirects=False)
-    assert r.status_code == 303 and r.headers["location"] == "/venta/nueva?q=romero"
+    assert r.status_code == 303 and r.headers["location"] == "/venta/nueva#plantas"
 
 
 def test_carrito_agrega_edita_y_quita(cliente_venta):

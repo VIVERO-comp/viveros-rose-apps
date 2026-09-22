@@ -21,11 +21,11 @@
   <div class="aviso-error">La conexión con Odoo no está configurada en este
     servidor, así que Vender está apagado. Avísale a Abraham.</div>
   {% else %}
+  {# Pantalla simple (pedido del dueño, 22/09/2026): sin textos de ayuda y
+     sin el botón "Ver PDF de ejemplo" con su párrafo. Solo las acciones. #}
   <a class="btn btn-dorado btn-grande" href="/venta/nueva" style="margin-bottom:6px">
     + NUEVA VENTA{% if en_curso %} ({{ en_curso }} planta{{ '' if en_curso == 1 else 's' }} en curso){% endif %}
   </a>
-  <p class="nada-venta" style="text-align:center">Abre el formulario: cliente,
-    plantas y total, para cotizar o cobrar.</p>
 
   <div class="seccion-titulo" style="margin-top:16px">Cotizar un servicio</div>
   <div class="grid-servicios">
@@ -34,15 +34,6 @@
     {% endfor %}
     <a class="servicio-boton" href="/venta/servicio-personalizada">+ Personalizado</a>
   </div>
-
-  {# Para revisar el documento sin cotizarle a nadie: en Odoo vive UNA
-     cotización de ejemplo (referencia MUESTRA-PDF) que se reutiliza. #}
-  <a class="btn btn-linea" href="/venta/propuesta-de-muestra.pdf"
-     style="margin-top:12px;justify-content:center">VER PDF DE EJEMPLO</a>
-  <p class="nada-venta" style="text-align:center">Una propuesta de muestra
-    para ver cómo sale el documento. No le cotiza a nadie ni crea clientes:
-    en Odoo se reutiliza siempre la misma cotización de ejemplo, marcada
-    MUESTRA-PDF.</p>
   {% endif %}
 
   <div class="seccion-titulo" style="margin-top:16px">Ventas y cotizaciones locales</div>
@@ -77,6 +68,9 @@
             <button type="submit" class="enlace-sub">Cancelar</button>
           </form>
         {% elif v.estado == "pagado" %}
+          {# Sin target="_blank" en los PDF: bajan con cabeceras de descarga
+             sin salir de la pantalla; la pestaña nueva era la "ventana sin
+             poder salir" del celular (Abraham, 22/09/2026). #}
           <a href="/venta/{{ v.n }}/factura.pdf">Factura</a>
           {% if v.whatsapp %}
           <a class="enlace-sub" href="{{ v.whatsapp }}" target="_blank" rel="noopener">Mandar factura</a>

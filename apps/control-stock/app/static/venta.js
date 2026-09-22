@@ -52,7 +52,6 @@ function pintarResultados(lista, q) {
     <form method="post" action="/venta/carrito/agregar" class="sin-margen">
       <input type="hidden" name="producto_id" value="${p.id}">
       <input type="hidden" name="cantidad" value="1">
-      <input type="hidden" name="q" value="${escaparHtml(q)}">
       <input type="hidden" name="volver" value="${escaparHtml(volver)}">
       ${campoProyecto}
       <button class="planta planta-boton" type="submit">

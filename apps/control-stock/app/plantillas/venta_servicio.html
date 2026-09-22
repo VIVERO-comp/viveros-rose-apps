@@ -75,9 +75,10 @@
     <p class="nada-venta">Se listan en la propuesta sin precio: lo que se
       cobra son los montos de arriba.</p>
     {% endif %}
-    <form class="buscador" method="get" action="/venta/servicio/{{ tipo }}">
+    {# Buscador compacto (pedido del dueño, 22/09/2026): solo el campo de
+       texto, sin la caja grande con lupa. #}
+    <form class="buscador buscador-compacto" method="get" action="/venta/servicio/{{ tipo }}">
       {% if proyecto %}<input type="hidden" name="proyecto" value="{{ proyecto }}">{% endif %}
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9aa3bd" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
       <input id="busca-venta" name="q" value="{{ q }}" placeholder="Buscar planta por nombre o SKU…"
              autocomplete="off" enterkeyhint="search">
     </form>
@@ -92,7 +93,6 @@
       <form method="post" action="/venta/carrito/agregar" class="sin-margen">
         <input type="hidden" name="producto_id" value="{{ p.id }}">
         <input type="hidden" name="cantidad" value="1">
-        <input type="hidden" name="q" value="{{ q }}">
         <input type="hidden" name="volver" value="/venta/servicio/{{ tipo }}">
         <input type="hidden" name="proyecto" value="{{ proyecto or '' }}">
         <button class="planta planta-boton" type="submit">
@@ -106,7 +106,9 @@
     {% endif %}
     </div>
 
-    <div class="seccion-titulo" style="margin-top:14px">Plantas · {{ carrito | length }}</div>
+    {# id="plantas": el ancla a la que vuelven agregar/quitar/cantidad, para
+       no saltar al tope de la página (pedido del dueño, 22/09/2026). #}
+    <div class="seccion-titulo" id="plantas" style="margin-top:14px">Plantas · {{ carrito | length }}</div>
     {% if not carrito %}
     <p class="nada-venta">Todavía no has añadido plantas: búscalas arriba y
       tócalas para sumarlas.</p>
@@ -133,7 +135,16 @@
             <input type="hidden" name="proyecto" value="{{ proyecto or '' }}">
             <button type="submit" aria-label="Menos">−</button>
           </form>
-          <span class="valor">{{ l.cantidad }}</span>
+          {# La cantidad también se escribe a mano (pedido del dueño,
+             22/09/2026): al cambiarla o dar Enter se guarda sola. #}
+          <form method="post" action="/venta/carrito/cantidad" class="sin-margen">
+            <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
+            <input type="hidden" name="volver" value="/venta/servicio/{{ tipo }}">
+            <input type="hidden" name="proyecto" value="{{ proyecto or '' }}">
+            <input class="valor" name="cantidad" type="number" min="0" step="1"
+                   inputmode="numeric" value="{{ l.cantidad }}"
+                   aria-label="Cantidad" onchange="this.form.submit()">
+          </form>
           <form method="post" action="/venta/carrito/cantidad">
             <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
             <input type="hidden" name="cantidad" value="{{ l.cantidad + 1 }}">

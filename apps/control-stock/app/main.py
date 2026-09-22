@@ -847,26 +847,26 @@ def _renglones_del_form(form):
         [p[:20] for p in form.getlist("renglon_precio")])
 
 
-def _volver_del_carrito(form, q=""):
+def _volver_del_carrito(form):
     """El carrito (app/ventas.py) es el mismo para Nueva Venta y para los
     mini-formularios de cotización de servicio (una sola en curso por
     empleada, igual que hoy): cada pantalla manda de vuelta a sí misma con
     un campo oculto "volver", limitado a rutas propias de Vender.
 
-    La búsqueda activa y el proyecto de la cotización viajan en la URL de
-    vuelta: sin el proyecto, agregar una planta al carrito sacaría a la
-    cotización de su proyecto sin que nadie lo note."""
+    El proyecto de la cotización viaja en la URL de vuelta: sin él, agregar
+    una planta al carrito sacaría a la cotización de su proyecto sin que
+    nadie lo note. La búsqueda ya NO viaja (pedido del dueño, 22/09/2026):
+    al elegir una planta el buscador queda limpio. Y la vuelta lleva el
+    ancla #plantas, para quedar en la lista de plantas en vez de saltar al
+    tope de la página."""
     destino = (form.get("volver") or "").strip()
     if destino != "/venta/servicio-personalizada" \
             and not destino.startswith("/venta/servicio/"):
         destino = "/venta/nueva"
-    partes = []
     proyecto = (form.get("proyecto") or "").strip()
     if proyecto:
-        partes.append(f"proyecto={quote(proyecto)}")
-    if (q or "").strip():
-        partes.append(f"q={quote(q.strip())}")
-    return destino + ("?" + "&".join(partes) if partes else "")
+        destino += f"?proyecto={quote(proyecto)}"
+    return destino + "#plantas"
 
 
 @app.post("/venta/carrito/agregar")
@@ -878,10 +878,7 @@ async def venta_agregar(request: Request):
                                   int(form.get("cantidad", 1)))
     except (TypeError, ValueError):
         pass
-    # Conservar la búsqueda activa: así se pueden agregar varias plantas
-    # seguidas sin volver a escribir.
-    return RedirectResponse(_volver_del_carrito(form, form.get("q") or ""),
-                            status_code=303)
+    return RedirectResponse(_volver_del_carrito(form), status_code=303)
 
 
 @app.post("/venta/carrito/cantidad")

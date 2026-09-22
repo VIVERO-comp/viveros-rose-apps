@@ -32,8 +32,9 @@
   {# ---- Plantas del catálogo (opcional): con el precio de Odoo ---- #}
   <div class="seccion-titulo" style="margin-top:16px">Plantas y materiales</div>
   <p class="nada-venta">Del catálogo, con el precio de Odoo.</p>
-  <form class="buscador" method="get" action="/venta/servicio-personalizada">
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9aa3bd" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+  {# Buscador compacto (pedido del dueño, 22/09/2026): solo el campo de
+     texto, sin la caja grande con lupa. #}
+  <form class="buscador buscador-compacto" method="get" action="/venta/servicio-personalizada">
     <input id="busca-venta" name="q" value="{{ q }}" placeholder="Buscar planta por nombre o SKU…"
            autocomplete="off" enterkeyhint="search">
   </form>
@@ -47,7 +48,6 @@
     <form method="post" action="/venta/carrito/agregar" class="sin-margen">
       <input type="hidden" name="producto_id" value="{{ p.id }}">
       <input type="hidden" name="cantidad" value="1">
-      <input type="hidden" name="q" value="{{ q }}">
       <input type="hidden" name="volver" value="/venta/servicio-personalizada">
       <button class="planta planta-boton" type="submit">
         <div class="foto">🪴<img src="/venta/foto/{{ p.id }}" alt="" loading="lazy" onerror="this.remove()"></div>
@@ -61,7 +61,9 @@
   </div>
 
   {% if carrito %}
-  <div class="seccion-titulo" style="margin-top:14px">Plantas de la cotización · {{ carrito | length }}</div>
+  {# id="plantas": el ancla a la que vuelven agregar/quitar/cantidad, para
+     no saltar al tope de la página (pedido del dueño, 22/09/2026). #}
+  <div class="seccion-titulo" id="plantas" style="margin-top:14px">Plantas de la cotización · {{ carrito | length }}</div>
     {% for l in carrito %}
     <div class="planta fila-carrito" style="cursor:default">
       <div class="foto">🪴<img src="/venta/foto/{{ l.producto_id }}" alt="" loading="lazy" onerror="this.remove()"></div>
@@ -82,7 +84,15 @@
           <input type="hidden" name="volver" value="/venta/servicio-personalizada">
           <button type="submit" aria-label="Menos">−</button>
         </form>
-        <span class="valor">{{ l.cantidad }}</span>
+        {# La cantidad también se escribe a mano (pedido del dueño,
+           22/09/2026): al cambiarla o dar Enter se guarda sola. #}
+        <form method="post" action="/venta/carrito/cantidad" class="sin-margen">
+          <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
+          <input type="hidden" name="volver" value="/venta/servicio-personalizada">
+          <input class="valor" name="cantidad" type="number" min="0" step="1"
+                 inputmode="numeric" value="{{ l.cantidad }}"
+                 aria-label="Cantidad" onchange="this.form.submit()">
+        </form>
         <form method="post" action="/venta/carrito/cantidad">
           <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
           <input type="hidden" name="cantidad" value="{{ l.cantidad + 1 }}">
