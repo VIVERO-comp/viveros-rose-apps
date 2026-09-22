@@ -47,7 +47,7 @@ class _HojaConteo(FPDF):
             self.image(_LOGO, x=10, y=8, w=16)
         self.set_font("helvetica", "B", 14)
         self.set_xy(30, 9)
-        self.cell(0, 7, _latin1("Hoja de conteo — Control de Stock"))
+        self.cell(0, 7, _latin1("Hoja de conteo — Control Viverorose"))
         self.set_font("helvetica", "", 9)
         self.set_xy(30, 16)
         self.set_text_color(90)

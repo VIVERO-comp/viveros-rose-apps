@@ -24,6 +24,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import httpx
+import threading
 
 ZONA_PANAMA = ZoneInfo("America/Panama")
 
@@ -57,6 +58,31 @@ class SinConexion(Exception):
 
 _cache_proxy = {}  # {"inventario": {"valor": ..., "en": epoch}}
 
+# Refrescos en segundo plano (uno a la vez por clave): la pantalla sirve lo
+# guardado AL INSTANTE y el dato viejo se renueva por detrás. Pedido del
+# dueño (22/09/2026): cambiar de pestaña tiene que sentirse como una app,
+# sin esperar a Odoo/Linear/el sitio en cada clic.
+_refrescos_en_curso = set()
+_candado_refrescos = threading.Lock()
+
+
+def _en_fondo(clave, tarea):
+    with _candado_refrescos:
+        if clave in _refrescos_en_curso:
+            return
+        _refrescos_en_curso.add(clave)
+
+    def correr():
+        try:
+            tarea()
+        except Exception:
+            pass  # era un refresco: el valor guardado sigue sirviendo
+        finally:
+            with _candado_refrescos:
+                _refrescos_en_curso.discard(clave)
+
+    threading.Thread(target=correr, daemon=True).start()
+
 
 def reiniciar_cache_proxy():
     """Solo para pruebas."""
@@ -80,20 +106,31 @@ def obtener_inventario(refrescar=False):
 
     productos: [{sku, nombre, categoria, disponible, fisico}] con nombres en
     español; actualizado_en: epoch de cuándo se leyó del proxy.
+
+    Desde el 22/09/2026 la pantalla NUNCA espera al proxy si hay un valor
+    guardado: se sirve al instante y, si ya está viejo (TTL), se renueva en
+    segundo plano (la lectura sigue siendo refresh=true contra Odoo). El
+    candado del ajuste sigue protegiendo contra números viejos: valida en
+    el POST, no con lo que se pintó. `refrescar=True` (el botón ⟳) sí lee
+    en el momento.
     """
-    # Es una herramienta interna de una o dos personas: SIEMPRE se lee fresco
-    # de Odoo (refresh=true, rompiendo tambien el cache del proxy). Asi el
-    # numero en pantalla es el real y el candado del ajuste nunca choca por
-    # comparar contra un valor viejo. El cache local solo sirve de respaldo
-    # si el proxy se cae.
     entrada = _cache_proxy.get("inventario")
+    if entrada and not refrescar:
+        if time.time() - entrada["en"] >= TTL_INVENTARIO:
+            _en_fondo("inventario", _leer_inventario)
+        return entrada["valor"], entrada["en"]
     try:
-        crudo = _pedir_al_proxy("inventario?refresh=true")
+        return _leer_inventario()
     except Exception:
         if entrada:
             # Proxy caído: el último valor bueno vale más que un error.
             return entrada["valor"], entrada["en"]
         raise SinConexion("El stock-proxy no responde y no hay datos previos")
+
+
+def _leer_inventario():
+    """La lectura real (bloqueante) al proxy; actualiza el caché."""
+    crudo = _pedir_al_proxy("inventario?refresh=true")
     if crudo is None:
         return list(INVENTARIO_DE_PRUEBA), time.time()
     productos = [
@@ -327,18 +364,24 @@ def obtener_publicados():
     devuelve (None, motivo) y la pestaña lo dice en pantalla en vez de
     mostrar una lista incompleta como si fuera la verdad.
     """
-    url = os.environ.get("CATALOGO_PUBLICADO_URL", URL_CATALOGO_PUBLICADO)
     entrada = _cache_publicados.get("skus")
-    if entrada and time.time() - entrada["en"] < TTL_PUBLICADOS:
+    if entrada:
+        # Nunca se espera al sitio si hay un valor: viejo => refresco en fondo.
+        if time.time() - entrada["en"] >= TTL_PUBLICADOS:
+            _en_fondo("publicados", _leer_publicados)
         return entrada["valor"], None
     try:
-        respuesta = httpx.get(url, timeout=6)
-        respuesta.raise_for_status()
-        publicados = set(respuesta.json()["publicados"])
+        return _leer_publicados()
     except Exception as error:
-        if entrada:
-            return entrada["valor"], None
         return None, f"no se pudo leer el catálogo del sitio ({error})"
+
+
+def _leer_publicados():
+    """La lectura real (bloqueante) del catálogo publicado del sitio."""
+    url = os.environ.get("CATALOGO_PUBLICADO_URL", URL_CATALOGO_PUBLICADO)
+    respuesta = httpx.get(url, timeout=6)
+    respuesta.raise_for_status()
+    publicados = set(respuesta.json()["publicados"])
     _cache_publicados["skus"] = {"valor": publicados, "en": time.time()}
     return publicados, None
 

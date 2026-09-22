@@ -29,6 +29,7 @@ texto que escribió la persona en Linear nunca se pisa.
 
 import os
 import re
+import threading
 import time
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -156,8 +157,10 @@ query($equipo: String!) {
 
 
 def catalogo(refrescar=False):
-    ahora = time.time()
-    if not refrescar and _catalogo_cache["dato"] and ahora - _catalogo_cache["en"] < TTL_CATALOGO:
+    if _catalogo_cache["dato"] and not refrescar:
+        # Nunca se espera a Linear si ya hay catálogo: viejo => refresco en fondo.
+        if time.time() - _catalogo_cache["en"] >= TTL_CATALOGO:
+            _en_fondo("catalogo", lambda: catalogo(refrescar=True))
         return _catalogo_cache["dato"]
     equipo = _var("LINEAR_TEAM_CALENDARIO_ID") or _var("LINEAR_TEAM_ID")
     datos = _pedir(CONSULTA_CATALOGO, {"equipo": equipo})["team"]
@@ -250,24 +253,21 @@ CAMPOS = """
   labels(first: 10) { nodes { id name } }
 """
 
-CONSULTA_RANGO = """
-query($proyecto: ID!, $desde: TimelessDateOrDuration!, $hasta: TimelessDateOrDuration!) {
-  issues(first: 250, filter: {
+# Una sola consulta con alias: el rango visible y las atrasadas viajan en
+# UN viaje a Linear (antes eran dos, en fila — la mitad de la espera).
+CONSULTA_LISTA = """
+query($proyecto: ID!, $desde: TimelessDateOrDuration!, $hasta: TimelessDateOrDuration!, $hoy: TimelessDateOrDuration!) {
+  rango: issues(first: 250, filter: {
     project: { id: { eq: $proyecto } }
     dueDate: { gte: $desde, lte: $hasta }
   }) { nodes { %s } }
-}
-""" % CAMPOS
-
-CONSULTA_ATRASADAS = """
-query($proyecto: ID!, $hasta: TimelessDateOrDuration!) {
-  issues(first: 100, filter: {
+  atrasadas: issues(first: 100, filter: {
     project: { id: { eq: $proyecto } }
-    dueDate: { lt: $hasta }
+    dueDate: { lt: $hoy }
     state: { type: { nin: ["completed", "canceled"] } }
   }) { nodes { %s } }
 }
-""" % CAMPOS
+""" % (CAMPOS, CAMPOS)
 
 
 def _tipo_de(issue):
@@ -322,6 +322,11 @@ def _normalizar(issue):
 
 
 _lista_cache = {}
+# Refrescos en fondo por llave: la pantalla sirve lo guardado al instante
+# aunque el TTL haya vencido, y Linear se consulta por detrás (pedido del
+# dueño, 22/09/2026: cambiar de pestaña sin esperar).
+_refrescos_lista = set()
+_candado_lista = threading.Lock()
 
 
 def listar(desde, hasta, refrescar=False):
@@ -334,22 +339,69 @@ def listar(desde, hasta, refrescar=False):
         return _muestra_listar(desde, hasta)
 
     llave = f"{desde}:{hasta}"
-    ahora = time.time()
     guardado = _lista_cache.get(llave)
-    if not refrescar and guardado and ahora - guardado["en"] < TTL_LISTA:
+    if guardado and not refrescar:
+        # Lo guardado sale YA; si venció el TTL, Linear se consulta por
+        # detrás y la próxima pintada trae lo nuevo.
+        if time.time() - guardado["en"] >= TTL_LISTA:
+            _refrescar_lista_en_fondo(llave, desde, hasta)
         return guardado["dato"]
+    return _buscar_lista(llave, desde, hasta)
 
+
+def _buscar_lista(llave, desde, hasta):
+    """La consulta real (bloqueante) a Linear; actualiza el caché."""
     proyecto = _var("LINEAR_PROJECT_CALENDARIO_ID")
-    rango = _pedir(CONSULTA_RANGO, {"proyecto": proyecto, "desde": desde, "hasta": hasta})
-    atrasadas = _pedir(CONSULTA_ATRASADAS, {"proyecto": proyecto, "hasta": hoy().isoformat()})
+    datos = _pedir(CONSULTA_LISTA, {"proyecto": proyecto, "desde": desde,
+                                    "hasta": hasta, "hoy": hoy().isoformat()})
 
     porid = {}
-    for issue in rango["issues"]["nodes"] + atrasadas["issues"]["nodes"]:
+    for issue in datos["rango"]["nodes"] + datos["atrasadas"]["nodes"]:
         if issue.get("dueDate"):
             porid[issue["id"]] = _normalizar(issue)
     dato = sorted(porid.values(), key=lambda a: (a["fecha"], a["hora"]))
-    _lista_cache[llave] = {"en": ahora, "dato": dato}
+    _lista_cache[llave] = {"en": time.time(), "dato": dato}
     return dato
+
+
+def _en_fondo(clave, tarea):
+    """Corre `tarea` en un hilo, una sola vez por clave a la vez."""
+    with _candado_lista:
+        if clave in _refrescos_lista:
+            return
+        _refrescos_lista.add(clave)
+
+    def correr():
+        try:
+            tarea()
+        except Exception:
+            pass  # era un refresco: lo guardado sigue sirviendo
+        finally:
+            with _candado_lista:
+                _refrescos_lista.discard(clave)
+
+    threading.Thread(target=correr, daemon=True).start()
+
+
+def _refrescar_lista_en_fondo(llave, desde, hasta):
+    _en_fondo("lista:" + llave, lambda: _buscar_lista(llave, desde, hasta))
+
+
+def calentar_en_fondo():
+    """Al arrancar el proceso: catálogo y el mes en curso quedan calientes,
+    para que ni la PRIMERA visita del día espere a Linear. (El rango es el
+    mismo que arma la pantalla: del 1° del mes, 10 días atrás y 52 adelante.)"""
+    if not configurado():
+        return
+
+    def tarea():
+        catalogo()
+        primero = hoy().replace(day=1)
+        desde = (primero - timedelta(days=10)).isoformat()
+        hasta = (primero + timedelta(days=52)).isoformat()
+        listar(desde, hasta)
+
+    _en_fondo("calentar", tarea)
 
 
 def invalidar_cache():
@@ -522,7 +574,7 @@ def agregar_nota(id_issue, texto, autor=""):
         raise ErrorCalendario("Escribí la nota primero.")
     if not configurado():
         return _muestra_nota(id_issue, texto, autor)
-    firma = f"{texto}\n\n_— {autor} desde Control de Stock_" if autor else texto
+    firma = f"{texto}\n\n_— {autor} desde Control Viverorose_" if autor else texto
     hecho = _pedir(MUTACION_COMENTAR, {"id": id_issue, "texto": firma})["commentCreate"]
     if not hecho.get("success"):
         raise ErrorCalendario("Linear no pudo guardar la nota.")
@@ -1034,6 +1086,69 @@ def grupos_lista(actividades, dias, dia_hoy):
                     + f"{DOW[fecha.weekday()].upper()} {fecha.day} {MESES[fecha.month - 1]}")
         grupos.append({"titulo": etiqueta, "es_atraso": False, "actividades": del_dia})
     return grupos
+
+
+def vista_movil(actividades, dia_iso, dia_hoy):
+    """La pantalla del teléfono: un día a la vez (pedido del dueño, 22/09/2026).
+
+    En el celular no caben siete columnas angostas: se muestra UNA agenda del
+    día elegido, con una tira arriba para saltar entre los días de la semana.
+    Como todo lo demás, se arma aquí: la tira, el título del mes, las filas
+    de hora y qué actividad cae en cada una. La plantilla solo recorre y los
+    enlaces (que arma main.py) llevan el estado; el navegador no calcula nada.
+    """
+    fecha = _dia(dia_iso)
+    inicio_semana = _lunes(fecha)
+    tira = []
+    for i in range(7):
+        dia = inicio_semana + timedelta(days=i)
+        iso = dia.isoformat()
+        tira.append({
+            "iso": iso, "dow": DOW[i], "num": dia.day,
+            "hoy": iso == dia_hoy, "sel": iso == dia_iso,
+            "con_trabajo": bool(_del_dia(actividades, iso)),
+        })
+
+    del_dia = _del_dia(actividades, dia_iso)
+    desde, hasta = rango_horas(del_dia)
+    ahora = datetime.now(ZONA_PANAMA)
+    horas = []
+    for h in range(desde, hasta + 1):
+        # Cada actividad cae en la fila de la hora en que EMPIEZA (las que
+        # duran más lo dicen en su propio texto con el rango completo). Las
+        # de la misma hora se apilan una debajo de otra: nunca se enciman.
+        if h == desde:  # una actividad más temprana que la primera fila
+            suyas = [a for a in del_dia if _minutos(a["hora"]) // 60 <= h]
+        elif h == hasta:  # o más tarde que la última
+            suyas = [a for a in del_dia if _minutos(a["hora"]) // 60 >= h]
+        else:
+            suyas = [a for a in del_dia if _minutos(a["hora"]) // 60 == h]
+        horas.append({
+            "h": h, "etiqueta": hora_bonita(f"{h:02d}:00"),
+            "actividades": [dict(a, rango=_rango_bonito(a),
+                                 atrasada=esta_atrasada(a, dia_hoy),
+                                 color=color_de(a["tipo"]),
+                                 fondo=_tinta(color_de(a["tipo"]), 0.07))
+                            for a in suyas],
+            "vacia": not suyas,
+            "ahora": dia_iso == dia_hoy and ahora.hour == h,
+        })
+    return {
+        "titulo": f"{MESES[fecha.month - 1].capitalize()} {fecha.year}",
+        "subtitulo": ("Hoy" if dia_iso == dia_hoy else DOW_LARGO[fecha.weekday()])
+                     + " " + dmy(dia_iso),
+        "tira": tira, "horas": horas, "total": len(del_dia),
+        "semana_ant": (inicio_semana - timedelta(days=7)).isoformat(),
+        "semana_sig": (inicio_semana + timedelta(days=7)).isoformat(),
+    }
+
+
+def _rango_bonito(actividad):
+    """9 am – 10:30 am, ya resuelto para la tarjeta del teléfono."""
+    inicio = _minutos(actividad["hora"])
+    fin_min = min(inicio + actividad["dur"], 23 * 60 + 59)  # no pasa de medianoche
+    fin = f"{fin_min // 60:02d}:{fin_min % 60:02d}"
+    return f"{hora_bonita(actividad['hora'])} – {hora_bonita(fin)}"
 
 
 def mini_calendario(mes_ancla, dia_elegido, dias_en_vista, actividades, dia_hoy):

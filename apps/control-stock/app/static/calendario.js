@@ -34,4 +34,34 @@
       }
     });
   });
+
+  // Al volver con Atrás, el navegador puede restaurar la página con un
+  // botón todavía en "Guardando…": se revive aquí.
+  window.addEventListener('pageshow', function () {
+    document.querySelectorAll('button[data-guardando]').forEach(function (boton) {
+      var form = boton.closest('form');
+      if (form) delete form.dataset.mandado;
+      boton.disabled = false;
+      boton.classList.remove('guardando');
+      if (boton.dataset.texto) boton.textContent = boton.dataset.texto;
+    });
+  });
+
+  // Al mandar un formulario, el botón avisa "Guardando…" y se apaga: un
+  // toque doble (fácil en el teléfono) no crea la actividad dos veces.
+  document.querySelectorAll('button[data-guardando]').forEach(function (boton) {
+    var form = boton.closest('form');
+    if (!form) return;
+    form.addEventListener('submit', function (evento) {
+      if (evento.defaultPrevented) return;
+      if (form.dataset.mandado) { evento.preventDefault(); return; }
+      form.dataset.mandado = '1';
+      boton.dataset.texto = boton.textContent;
+      boton.textContent = boton.getAttribute('data-guardando');
+      boton.classList.add('guardando');
+      // disabled recién después de que el envío salga: un botón apagado
+      // en el mismo evento haría que el navegador no mande el submit.
+      setTimeout(function () { boton.disabled = true; }, 0);
+    });
+  });
 })();

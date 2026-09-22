@@ -7,12 +7,19 @@
    van a 16px en móvil (styles.css) para que el teléfono no haga el
    zoom automático al enfocarlos. #}
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>{% block titulo %}Control de Stock — Plantas Panamá{% endblock %}</title>
+<title>{% block titulo %}Control Viverorose — Plantas Panamá{% endblock %}</title>
 <link rel="icon" type="image/jpeg" href="/static/logo.jpg">
 <link rel="apple-touch-icon" href="/static/logo.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/styles.css?v={{ v_estaticos }}">
+{# Cambiar de pestaña como una app (pedido del dueño, 22/09/2026): el
+   navegador pre-renderiza la pestaña al apoyar el dedo o pasar el mouse
+   (Chrome/Android; Safari lo ignora sin romper nada). Solo las pestañas
+   del menú — los POST y los enlaces con estado no se tocan. #}
+<script type="speculationrules">
+{"prerender": [{"urls": ["/", "/?tab=stock", "/?tab=ajustes", "/venta", "/calendario"], "eagerness": "moderate"}]}
+</script>
 </head>
 <body>
 <div class="phone">

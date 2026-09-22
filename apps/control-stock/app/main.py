@@ -23,7 +23,7 @@ from . import (acceso_google, calculos, calendario, calendario_google,
                calendario_ics, compras, conteos, cotizaciones, datos, fichas,
                fotos, proyectos, seguridad, ventas)
 
-app = FastAPI(title="Control de Stock")
+app = FastAPI(title="Control Viverorose")
 
 RUTA_APP = os.path.dirname(__file__)
 app.mount("/static", StaticFiles(directory=os.path.join(RUTA_APP, "static")), name="static")
@@ -73,6 +73,9 @@ proyectos.iniciar_tablas()
 calendario_ics.iniciar_tablas()
 calendario_google.iniciar_tablas()
 calendario_google.arrancar_hilo()
+# El calendario arranca calentándose en fondo (catálogo + mes en curso):
+# ni la primera visita del día espera a Linear (velocidad, 22/09/2026).
+calendario.calentar_en_fondo()
 
 
 # ---------------------------------------------------------------------------
@@ -119,7 +122,16 @@ async def exigir_sesion(request: Request, call_next):
     if (ruta == "/login" or ruta == "/calendario.ics"
             or ruta.startswith("/static") or ruta.startswith("/f/")
             or ruta.startswith("/auth/google") or ruta.startswith("/invitacion/")):
-        return await call_next(request)
+        respuesta = await call_next(request)
+        # Los estáticos versionados (?v=mtime) se guardan un año: cambiar de
+        # pestaña no vuelve a bajar CSS/JS (pedido de velocidad, 22/09/2026).
+        # Sin ?v (el logo del favicon) una hora, por si algún día cambia.
+        if ruta.startswith("/static"):
+            if "v=" in (request.url.query or ""):
+                respuesta.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            else:
+                respuesta.headers["Cache-Control"] = "public, max-age=3600"
+        return respuesta
     empleada = seguridad.empleada_de_sesion(request.cookies.get("sesion"))
     if empleada is None:
         return RedirectResponse("/login", status_code=303)
@@ -1800,24 +1812,26 @@ def calendario_pantalla(request: Request):
 
     # Cada cosa que se puede tocar lleva su enlace ya armado: la plantilla
     # no calcula direcciones ni el navegador arma estado.
-    # Los chips cuentan sobre lo mismo que se está viendo (persona, búsqueda
-    # y terminadas ya aplicadas), pero SIN el filtro de tipos: si no, apagar
-    # un tipo lo dejaría en cero y no habría cómo volver a prenderlo.
-    base_chips = calendario.filtrar(
-        todas, quien=estado["quien"], texto=estado["q"], ver_hechas=estado["hechas"],
-        solo_de=yo["id"] if estado["solo_mio"] else "")
-    chips_lista = calendario.chips(base_chips, estado["apagados"])
-    for chip in chips_lista:
-        nuevos = set(estado["apagados"])
-        if chip["encendido"]:
-            nuevos.add(chip["clave"])
-        else:
-            nuevos.discard(chip["clave"])
-        chip["liga"] = _liga(estado, apagados=",".join(sorted(nuevos)))
-        # Alt-clic no existe sin JS: el segundo enlace deja solo ese tipo.
-        chip["liga_solo"] = _liga(estado, apagados=",".join(
-            sorted(t["clave"] for t in calendario.TIPOS if t["clave"] != chip["clave"])))
-    chips_lista = calendario.chips_a_la_vista(chips_lista)
+    # (La fila de chips de tipos y el segmento "Mi calendario / Todo el
+    # equipo" se quitaron de la pantalla el 22/09/2026 a pedido del dueño;
+    # el alcance sigue decidiéndose en el servidor con estado["solo_mio"].)
+
+    # La vista del teléfono: un día a la vez con su tira de semana (pedido
+    # del dueño, 22/09/2026). Se arma siempre —es la misma página que en
+    # computadora— y el CSS decide cuál de las dos se ve según el ancho.
+    movil = calendario.vista_movil(visibles, estado["dia"], dia_hoy)
+    for dia_tira in movil["tira"]:
+        dia_tira["liga"] = _liga(estado, dia=dia_tira["iso"], mes=dia_tira["iso"])
+    for fila in movil["horas"]:
+        # Tocar una hora vacía abre el formulario con esa fecha y hora puestas.
+        fila["liga_nueva"] = _liga(estado, nueva="1", fecha=estado["dia"],
+                                   hora=f"{fila['h']:02d}:00")
+    movil["ligas"] = {
+        "ant": _liga(estado, dia=movil["semana_ant"], mes=movil["semana_ant"]),
+        "sig": _liga(estado, dia=movil["semana_sig"], mes=movil["semana_sig"]),
+        "hoy": _liga(estado, dia=dia_hoy, mes=dia_hoy),
+        "nueva": _liga(estado, nueva="1", fecha=estado["dia"]),
+    }
 
     if mes:
         for semana_celdas in mes:
@@ -1833,7 +1847,6 @@ def calendario_pantalla(request: Request):
                 resp=(columna.get("persona") or {}).get("id", ""))
 
     ligas_vista = {v: _liga(estado, vista=v) for v in calendario.VISTAS}
-    ligas_alcance = {"mio": _liga(estado, mio="1"), "equipo": _liga(estado, mio="0")}
 
     abierta = None
     id_abierta = request.query_params.get("abrir", "")
@@ -1853,10 +1866,9 @@ def calendario_pantalla(request: Request):
         "carril": carril,
         "mes": mes,
         "grupos": grupos,
+        "movil": movil,
         "dias": dias,
-        "chips": chips_lista,
         "ligas_vista": ligas_vista,
-        "ligas_alcance": ligas_alcance,
         "franja": [a for a in visibles if calendario.esta_atrasada(a, dia_hoy)][:6],
         "atrasadas_total": len([a for a in visibles if calendario.esta_atrasada(a, dia_hoy)]),
         "gente": gente,
@@ -1868,6 +1880,15 @@ def calendario_pantalla(request: Request):
             "fecha": request.query_params.get("fecha") or estado["dia"],
             "hora": request.query_params.get("hora") or calendario.HORA_POR_DEFECTO,
             "resp": request.query_params.get("resp") or yo["id"],
+            # Si el crear falló, el formulario vuelve CON lo escrito: estos
+            # llegan en la dirección del rebote (ver calendario_crear).
+            "tipo": request.query_params.get("tipo", ""),
+            "cliente": request.query_params.get("cliente", ""),
+            "lugar": request.query_params.get("lugar", ""),
+            "nota": request.query_params.get("nota", ""),
+            "dur": request.query_params.get("dur", ""),
+            "prioridad": request.query_params.get("prioridad", ""),
+            "recogida": request.query_params.get("recogida", ""),
         },
         "modo": calendario.modo(),
         "puede_escribir": calendario.escritura_activa() or not calendario.configurado(),
@@ -1883,7 +1904,6 @@ def calendario_pantalla(request: Request):
             "nueva": _liga(estado, nueva="1"),
             "cerrar": _liga(estado),
             "sin_hechas": _liga(estado, hechas="0" if estado["hechas"] else "1"),
-            "todos_tipos": _liga(estado, apagados=""),
             # La franja de atrasadas dice cuántas hay y lleva a la lista,
             # donde se leen enteras, en vez de repetirlas ahí arriba.
             "atrasadas": _liga(estado, vista="lista"),
@@ -1956,7 +1976,25 @@ async def calendario_crear(request: Request):
             texto += f" + la recogida {otra['ref']} el {calendario.dmy(recogida)}"
         return texto + "."
 
-    return await _accion_calendario(request, "", hacer)
+    # No pasa por _accion_calendario: si Linear falla, se vuelve al
+    # formulario abierto y CON lo escrito, no a la pantalla pelada.
+    yo = _yo_en_el_calendario(request.state.empleada)
+    try:
+        aviso = hacer(yo, None) or "Listo."
+    except calendario.ErrorCalendario as fallo:
+        destino = request.query_params.get("volver") or "/calendario"
+        if not destino.startswith("/calendario"):
+            destino = "/calendario"
+        campos = {"nueva": "1", "error": str(fallo)}
+        for llave in ("tipo", "cliente", "lugar", "fecha", "hora", "dur",
+                      "prioridad", "recogida", "nota", "resp_id"):
+            if form.get(llave):
+                campos["resp" if llave == "resp_id" else llave] = form.get(llave)
+        destino += ("&" if "?" in destino else "?") + "&".join(
+            f"{clave}={quote(str(valor))}" for clave, valor in campos.items())
+        return RedirectResponse(destino, status_code=303)
+    calendario_google.sincronizar_en_fondo()
+    return _volver_a(request, aviso=aviso)
 
 
 @app.post("/calendario/actividad/{id_actividad}/mover")

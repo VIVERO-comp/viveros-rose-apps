@@ -303,6 +303,9 @@ a{color:inherit}
 /* En el teléfono vuelve el scroll normal de la página. */
 @media (max-width: 860px){
   body{overflow:auto}
+  /* Con una hoja abierta (telón presente) el fondo se queda quieto: el
+     único scroll es el de la hoja. */
+  body:has(.telon){overflow:hidden}
   .app{height:auto;min-height:100vh}
   .tablero{overflow:visible}
     .carril-cuerpo{max-height:70vh}
@@ -310,4 +313,126 @@ a{color:inherit}
 .segmento .apagado{
   font-size:12px;font-weight:600;color:var(--muy-suave);padding:6px 12px;border-radius:9px;
   cursor:not-allowed;opacity:.65;
+}
+
+/* ---------- guardando (el botón se apaga y gira mientras el POST viaja) ---------- */
+.btn.guardando{opacity:.75;pointer-events:none}
+.btn.guardando::after{
+  content:'';width:12px;height:12px;border-radius:50%;flex:0 0 auto;
+  border:2px solid rgba(255,255,255,.35);border-top-color:#fff;animation:gira .7s linear infinite;
+}
+@keyframes gira{to{transform:rotate(360deg)}}
+
+/* ---------- la vista del teléfono (rediseño del 22/09/2026) ----------
+   En computadora y tablet (≥768px) esta sección ni existe visualmente; en el
+   celular es LO ÚNICO que se ve junto al navbar de abajo (el mismo de toda
+   la app): un día a la vez, la tira de la semana para cambiar de fecha, y
+   el "+" flotante. Todo lo demás de la pantalla grande (barra, chips,
+   buscador, vistas, sidebar) se esconde. */
+.movil,.fab,body>nav{display:none}
+
+@media (max-width:767.98px){
+  /* Solo navbar + calendario: fuera la barra de controles, los chips, la
+     franja de atrasadas (a.franja), las vistas de computadora Y el sidebar
+     .lado (en el teléfono manda el navbar de abajo, el mismo de toda la
+     app). El error (div.franja) y el aviso verde sí se quedan: son la
+     respuesta a lo que la empleada acaba de hacer. */
+  .barra,.chips,a.franja,.zona,.lado{display:none}
+  .tablero{padding:10px 12px calc(104px + env(safe-area-inset-bottom));gap:10px}
+
+  /* El navbar de abajo, calcado del de styles.css (blanco, difuminado,
+     icono arriba y letra abajo, activo en dorado). Es el mismo componente
+     (_nav.html); aquí solo se pinta porque esta pantalla no carga
+     styles.css. */
+  body>nav{
+    display:flex;position:fixed;bottom:0;left:0;right:0;z-index:30;
+    background:rgba(255,255,255,.94);backdrop-filter:blur(12px);
+    border-top:1px solid #e4e4e7;
+    padding:8px 14px calc(10px + env(safe-area-inset-bottom));gap:6px;
+  }
+  body>nav a{
+    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:4px;font-size:10.5px;font-weight:600;color:#71717a;text-decoration:none;
+    padding:8px 0;border-radius:16px;min-height:44px;
+  }
+  body>nav a .ic{display:flex;align-items:center;justify-content:center;height:20px}
+  body>nav a.on{color:var(--texto);background:var(--crema-2)}
+
+  .movil{display:flex;flex-direction:column;gap:10px}
+  .mov-cab{display:flex;align-items:center;gap:8px}
+  .mov-cab h3{font-size:17px;font-weight:800;flex:1}
+  .mov-cab .btn{min-height:44px;min-width:44px;justify-content:center}
+  .mov-cab .btn.icono{font-size:18px}
+
+  .mov-tira{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .mov-dia{
+    display:flex;flex-direction:column;align-items:center;gap:1px;min-height:56px;
+    padding:7px 0 5px;border:1px solid var(--borde);border-radius:12px;background:var(--lienzo);
+    text-decoration:none;color:var(--texto);
+  }
+  .mov-dia .dw{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muy-suave)}
+  .mov-dia .nm{font-size:16px;font-weight:800;line-height:1.2}
+  .mov-dia .pt{width:5px;height:5px;border-radius:50%;background:transparent}
+  .mov-dia .pt.on{background:var(--muy-suave)}
+  .mov-dia.hoy{border-color:var(--dorado)}
+  .mov-dia.sel{background:var(--dorado);border-color:var(--dorado);color:#fff}
+  .mov-dia.sel .dw{color:rgba(255,255,255,.75)}
+  .mov-dia.sel .pt.on{background:#fff}
+
+  .mov-sub{font-size:12px;font-weight:600;color:var(--suave)}
+
+  .mov-agenda{border:1px solid var(--borde);border-radius:14px;background:var(--lienzo);overflow:hidden}
+  .mov-fila{display:grid;grid-template-columns:54px 1fr;border-bottom:1px solid var(--borde-2)}
+  .mov-fila:last-child{border-bottom:0}
+  .mov-hora{
+    font-size:10.5px;font-weight:600;color:var(--muy-suave);text-align:right;
+    padding:9px 8px 0 0;border-right:1px solid var(--borde-2);
+  }
+  .mov-fila.ahora .mov-hora{color:var(--critico);font-weight:800}
+  .mov-celda{position:relative;min-height:48px;padding:6px;display:flex;flex-direction:column;gap:6px}
+  /* La hora vacía entera es el botón de "nueva actividad a esta hora". */
+  .mov-vacia{position:absolute;inset:0;display:block}
+
+  .mov-act{
+    display:block;border:1px solid var(--borde);border-left-width:3px;border-left-style:solid;
+    border-radius:11px;padding:10px 12px;min-height:44px;text-decoration:none;color:var(--texto);
+  }
+  .mov-act .mov-tt{display:block;font-size:13.5px;font-weight:700;line-height:1.35}
+  .mov-act .mov-det{display:block;font-size:11.5px;color:var(--suave);margin-top:2px}
+  .mov-act .etiquetas{margin-top:4px}
+  .mov-act .etiquetas:empty{display:none}
+  .mov-act.hecha .mov-tt{opacity:.55;text-decoration:line-through}
+  .mov-act.cancel{opacity:.5;filter:grayscale(1)}
+  .mov-act.cancel .mov-tt{text-decoration:line-through}
+
+  .fab{
+    display:grid;place-items:center;position:fixed;right:16px;
+    bottom:calc(88px + env(safe-area-inset-bottom));width:52px;height:52px;border-radius:50%;
+    background:var(--dorado);color:#fff;font-size:26px;font-weight:500;line-height:1;
+    text-decoration:none;box-shadow:0 10px 26px rgba(0,0,0,.28);z-index:30;
+  }
+
+  /* El formulario y la ficha, como hoja que sube desde abajo: pantalla casi
+     completa, campos grandes (16px: así iOS no hace zoom al enfocar) y el
+     renglón de Guardar pegado abajo aunque salga el teclado. */
+  .modal{
+    top:auto;left:0;right:0;bottom:0;transform:none;width:100%;max-height:94dvh;
+    border-radius:20px 20px 0 0;padding:16px 16px calc(10px + env(safe-area-inset-bottom));
+    animation:sube .2s ease;
+  }
+  .panel-der{width:100%;border-left:0}
+  /* El scroll de la hoja es SOLO de la hoja: sin encadenarse al fondo
+     (ahí se "trababa" la Nota nueva) y con impulso tactil en iOS. */
+  .modal,.panel-der{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+  @keyframes sube{from{transform:translateY(30px);opacity:0}to{transform:none;opacity:1}}
+  .modal input.campo,.modal select.sel,.modal textarea.campo,
+  .panel-der input.campo,.panel-der select.sel,.panel-der textarea.campo{
+    font-size:16px;padding:12px;
+  }
+  .modal .pie-form{
+    position:sticky;bottom:0;background:#fff;border-top:1px solid var(--borde-2);
+    padding:10px 0 2px;margin-top:4px;
+  }
+  .modal .pie-form .btn{flex:1;justify-content:center;min-height:48px;font-size:14px}
+  @media (prefers-reduced-motion: reduce){.modal{animation:none}}
 }

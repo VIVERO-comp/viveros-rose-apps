@@ -109,7 +109,7 @@ def rango():
 def feed(actividades, nombre="Calendario Rose"):
     """El archivo ICS, como bytes listos para responder."""
     cal = Calendar()
-    cal.add("prodid", "-//Vivero Rose//Control de Stock//ES")
+    cal.add("prodid", "-//Vivero Rose//Control Viverorose//ES")
     cal.add("version", "2.0")
     cal.add("x-wr-calname", nombre)
     cal.add("x-wr-timezone", "America/Panama")

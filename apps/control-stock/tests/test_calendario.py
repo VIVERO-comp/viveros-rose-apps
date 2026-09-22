@@ -206,14 +206,14 @@ def test_si_linear_falla_el_inicio_igual_abre(cliente, monkeypatch):
 # La suscripción del teléfono (feed ICS) y la pantalla limpia
 # ---------------------------------------------------------------------------
 
-def test_chips_solo_los_que_existen(cliente):
-    """Trece tipos definidos, pero la pantalla pinta solo los que aparecen
-    en la vista (más los apagados, para poder volver a prenderlos)."""
+def test_sin_chips_ni_alcance_en_la_pantalla(cliente):
+    """Pedido del dueño (22/09/2026): fuera la fila de chips de tipos y el
+    segmento "Mi calendario / Todo el equipo" — quitaban espacio. El alcance
+    lo sigue decidiendo el servidor y los colores hablan en los bloques."""
     cuerpo = _abrir(cliente).text
-    # En la muestra no hay ninguna "instalación" ni "otro": sus chips no salen.
-    fila = cuerpo.split('class="chips"')[1].split("</div>")[0]
-    assert "Instalación" not in fila
-    assert "Otro" not in fila
+    assert 'class="chips"' not in cuerpo
+    assert "Todo el equipo" not in cuerpo
+    assert "Ocultar terminadas" in cuerpo  # sobrevive, ahora en la barra
 
 
 def test_atrasadas_es_un_renglon_que_lleva_a_la_lista(cliente):
@@ -299,3 +299,75 @@ def test_proyectos_se_esconde_con_la_bandera(cliente, monkeypatch):
     assert 'href="/proyecto"' not in _abrir(cliente).text
     r = cliente.get("/proyecto", follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/"
+
+
+# ---------------------------------------------------------------------------
+# La vista del teléfono (rediseño del 22/09/2026): un día a la vez.
+# ---------------------------------------------------------------------------
+
+def test_la_pagina_trae_la_vista_del_telefono(cliente):
+    """La misma página trae la tira de la semana, la agenda del día, el
+    navbar de abajo compartido y el "+" flotante; el CSS decide qué se ve."""
+    cuerpo = _abrir(cliente).text
+    assert "mov-tira" in cuerpo
+    assert "mov-agenda" in cuerpo
+    assert cuerpo.count("mov-dia") >= 7  # los siete días de la semana
+    assert 'class="fab"' in cuerpo
+    assert "<nav>" in cuerpo  # el navbar de _nav.html
+
+
+def test_vista_movil_un_dia_a_la_vez():
+    dia = calendario.hoy().isoformat()
+    actividades = calendario.listar(dia, dia)
+    movil = calendario.vista_movil(actividades, dia, dia)
+    assert len(movil["tira"]) == 7
+    assert [d for d in movil["tira"] if d["sel"]][0]["iso"] == dia
+    # Todas las actividades DEL DÍA caen en alguna fila de hora (listar
+    # también trae atrasadas de otros días; esas no son de esta agenda).
+    del_dia = [a for a in actividades if a["fecha"] == dia]
+    en_filas = sum(len(f["actividades"]) for f in movil["horas"])
+    assert en_filas == movil["total"] == len(del_dia)
+    # Y las de la misma hora se apilan (traen su rango legible, no posición).
+    for fila in movil["horas"]:
+        for a in fila["actividades"]:
+            assert "–" in a["rango"]
+
+
+def test_tocar_una_hora_vacia_preselecciona_fecha_y_hora(cliente):
+    import re
+    cuerpo = _abrir(cliente).text
+    # Cada fila VACÍA de la agenda enlaza al formulario con fecha y hora ya
+    # puestas (las ocupadas muestran sus tarjetas, no un enlace de crear).
+    assert re.search(r'nueva=1&(?:amp;)?fecha=[^"&]+&(?:amp;)?hora=\d{2}%3A00', cuerpo)
+
+
+def test_error_al_crear_conserva_lo_escrito(cliente, monkeypatch):
+    """Si Linear falla, el formulario vuelve abierto y con lo tipeado."""
+    def truena(**_kw):
+        raise calendario.ErrorCalendario("Linear no respondió.")
+    monkeypatch.setattr(calendario, "crear", truena)
+    dia = calendario.hoy().isoformat()
+    r = cliente.post(
+        "/calendario/actividad",
+        params={"volver": f"/calendario?dia={dia}&vista=semana"},
+        data={"tipo": "entrega", "cliente": "Hotel Prueba", "lugar": "Obarrio",
+              "fecha": dia, "hora": "11:30", "dur": "90", "prioridad": "2",
+              "nota": "dos palmas"},
+        follow_redirects=False)
+    assert r.status_code == 303
+    destino = r.headers["location"]
+    assert "nueva=1" in destino and "error=" in destino
+    cuerpo = cliente.get(destino).text
+    assert 'value="Hotel Prueba"' in cuerpo
+    assert 'value="Obarrio"' in cuerpo
+    assert "dos palmas" in cuerpo
+    assert "Linear no respondi" in cuerpo
+
+
+def test_el_nav_sin_inicio_y_calendario_primero(cliente):
+    """Pedido del dueño (22/09/2026): "quita inicio y pon calendario de
+    primero". El navbar compartido no lleva Inicio y arranca en Calendario."""
+    cuerpo = cliente.get("/venta").text
+    nav = cuerpo.split("<nav>")[1].split("</nav>")[0]
+    assert "Inicio" not in nav
+    assert nav.find("Calendario") < nav.find("Stock") < nav.find("Vender")

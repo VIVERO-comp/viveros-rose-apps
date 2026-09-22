@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Calendario — Control de Stock</title>
+<title>Calendario — Control Viverorose</title>
 <link rel="icon" type="image/jpeg" href="/static/logo.jpg">
 <link rel="apple-touch-icon" href="/static/logo.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -14,6 +14,11 @@
    días de la vista, la posición de cada bloque, los solapes, las celdas del
    mes y hasta el enlace de cada control. La plantilla solo recorre. #}
 <link rel="stylesheet" href="/static/calendario.css?v={{ v_estaticos }}">
+{# Cambiar de pestaña como una app (22/09/2026): pre-render al apoyar el
+   dedo o pasar el mouse; Safari lo ignora sin romper nada. #}
+<script type="speculationrules">
+{"prerender": [{"urls": ["/", "/?tab=stock", "/?tab=ajustes", "/venta"], "eagerness": "moderate"}]}
+</script>
 </head>
 <body>
 
@@ -44,20 +49,19 @@
   <aside class="lado">
     <div class="marca">
       <img src="/static/logo.jpg" alt="Vivero Rose">
-      <span>Control de Stock</span>
+      <span>Control Viverorose</span>
     </div>
-    <a class="pil" href="/">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>Inicio
-    </a>
+    {# Sin "Inicio" y con Calendario de primero (pedido del dueño,
+       22/09/2026: "quita inicio y pon calendario de primero"). #}
+    <span class="pil on">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>Calendario
+    </span>
     <a class="pil" href="/?tab=stock">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M12 10C12 6 9 3 4 3c0 5 3 8 8 7z"/><path d="M12 13c0-3.5 2.5-6 7-6 0 4.5-2.5 7-7 6z"/></svg>Stock
     </a>
     <a class="pil" href="/venta">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2 2h2l2.7 12.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 1.9-1.6L22 6H5"/></svg>Vender
     </a>
-    <span class="pil on">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>Calendario
-    </span>
     {# Proyectos se apaga con PROYECTOS_ACTIVOS=0 (dueño, 22/09/2026: en el
        real queda escondida hasta que la dé por lista). #}
     {% if proyectos_activos %}
@@ -95,16 +99,9 @@
         <a class="{{ 'on' if estado.vista == 'lista' }}" href="{{ ligas_vista.lista }}">Lista</a>
       </span>
       <span class="crece"></span>
-      <span class="segmento">
-        {# Sin correo enlazado a un usuario de Linear no hay "lo mío": el
-           botón queda apagado y dice por qué. #}
-        {% if yo.id %}
-        <a class="{{ 'on' if estado.solo_mio }}" href="{{ ligas_alcance.mio }}">Mi calendario</a>
-        {% else %}
-        <span class="apagado" title="Tu correo todavía no está enlazado a un usuario de Linear">Mi calendario</span>
-        {% endif %}
-        <a class="{{ 'on' if not estado.solo_mio }}" href="{{ ligas_alcance.equipo }}">Todo el equipo</a>
-      </span>
+      {# El segmento "Mi calendario / Todo el equipo" se quitó (dueño,
+         22/09/2026): el alcance sigue decidiéndose en el servidor — el
+         empleado entra viendo lo suyo y el dueño, el equipo. #}
       <form class="buscador" method="get" action="/calendario">
         <input type="hidden" name="dia" value="{{ estado.dia }}">
         <input type="hidden" name="vista" value="{{ estado.vista }}">
@@ -116,6 +113,9 @@
         <input id="buscar" type="search" name="q" value="{{ estado.q }}"
                placeholder="Buscar…" aria-label="Buscar actividad">
       </form>
+      <a class="btn chico tenue" href="{{ ligas.sin_hechas }}">
+        {{ 'Ocultar terminadas' if estado.hechas else 'Ver terminadas' }}
+      </a>
       <a class="btn icono tenue" href="{{ ligas.refrescar }}" title="Volver a preguntarle a Linear">⟳</a>
       {% if puede_escribir %}
       <a class="btn oro" href="{{ ligas.nueva }}">+ Nueva actividad</a>
@@ -125,25 +125,9 @@
     {% if error %}<div class="franja"><b>Ups.</b> <span>{{ error }}</span></div>{% endif %}
     {% if aviso %}<div class="aviso-ok">{{ aviso }}</div>{% endif %}
 
-    {# Solo los tipos que aparecen en lo que se está viendo (lo decide
-       calendario.chips_a_la_vista); antes eran trece, casi todos en cero. #}
-    <div class="chips">
-      {% if estado.apagados %}
-      <a class="chip" href="{{ ligas.todos_tipos }}">Todos</a>
-      {% endif %}
-      {% for c in chips %}
-      <a class="chip {{ 'on' if c.encendido }}"
-         style="{{ 'background:%s;color:#fff;border-color:transparent'|format(c.color) if c.encendido }}"
-         href="{{ c.liga }}" title="Prender o apagar {{ c.nombre }}">
-        <span class="pt" style="background:{{ '#fff' if c.encendido else c.color }}"></span>
-        {{ c.nombre }}<span class="cuenta-chip">{{ c.cuenta }}</span>
-      </a>
-      {% endfor %}
-      <span class="crece"></span>
-      <a class="chip tenue" href="{{ ligas.sin_hechas }}">
-        {{ 'Ocultar terminadas' if estado.hechas else 'Ver terminadas' }}
-      </a>
-    </div>
+    {# La fila de chips de tipos se quitó entera (dueño, 22/09/2026: "quita
+       lo de alquiler y eso de arriba, quita espacio"): los colores de los
+       tipos siguen hablando en los propios bloques del calendario. #}
 
     {% if atrasadas_total %}
     <a class="franja" href="{{ ligas.atrasadas }}">
@@ -153,6 +137,59 @@
       <span class="ver">Verlas →</span>
     </a>
     {% endif %}
+
+    {# ----- La vista del teléfono (solo <768px): un día a la vez -----
+       La arma calendario.vista_movil en Python; en computadora el CSS la
+       esconde y en el celular esconde el resto. Misma página, mismos datos. #}
+    <div class="movil">
+      <div class="mov-cab">
+        <h3>{{ movil.titulo }}</h3>
+        <span class="flechas">
+          <a class="btn icono" href="{{ movil.ligas.ant }}" aria-label="Semana anterior">‹</a>
+          <a class="btn chico" href="{{ movil.ligas.hoy }}">Hoy</a>
+          <a class="btn icono" href="{{ movil.ligas.sig }}" aria-label="Semana siguiente">›</a>
+        </span>
+      </div>
+      <div class="mov-tira">
+        {% for d in movil.tira %}
+        <a class="mov-dia {{ 'sel' if d.sel }} {{ 'hoy' if d.hoy }}" href="{{ d.liga }}">
+          <span class="dw">{{ d.dow }}</span>
+          <span class="nm">{{ d.num }}</span>
+          <span class="pt {{ 'on' if d.con_trabajo }}"></span>
+        </a>
+        {% endfor %}
+      </div>
+      <div class="mov-sub">{{ movil.subtitulo }}{% if movil.total %} · {{ movil.total }} actividad{{ 'es' if movil.total > 1 }}{% endif %}</div>
+      <div class="mov-agenda">
+        {% for fila in movil.horas %}
+        <div class="mov-fila {{ 'ahora' if fila.ahora }}">
+          <span class="mov-hora">{{ fila.etiqueta }}</span>
+          <div class="mov-celda">
+            {% if fila.vacia %}
+              {% if puede_escribir %}
+              <a class="mov-vacia" href="{{ fila.liga_nueva }}"
+                 aria-label="Nueva actividad a las {{ fila.etiqueta }}"></a>
+              {% else %}<span class="mov-vacia"></span>{% endif %}
+            {% else %}
+              {% for a in fila.actividades %}
+              <a class="mov-act {{ 'hecha' if a.estado == 'hecha' }} {{ 'cancel' if a.estado == 'cancel' }}"
+                 style="border-left-color:{{ a.color }};background:{{ a.fondo }}"
+                 href="{{ ligas.cerrar }}&abrir={{ a.id }}">
+                <span class="mov-tt">{{ cal.nombre_de_tipo(a.tipo) }} — {{ a.cliente }}</span>
+                <span class="mov-det">{{ a.rango }}{% if a.lugar %} · {{ a.lugar }}{% endif %} · {{ a.resp }}</span>
+                <span class="etiquetas">
+                  {% if a.atrasada %}<span class="etq at">atrasada</span>{% endif %}
+                  {% if a.estado == 'hecha' %}<span class="etq ok">terminada</span>{% endif %}
+                  {% if a.estado == 'curso' %}<span class="etq curso">en curso</span>{% endif %}
+                </span>
+              </a>
+              {% endfor %}
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
 
     <div class="zona">
       <div id="vista">
@@ -253,6 +290,16 @@
   </div>
 </div>
 
+{# En el teléfono el menú es el MISMO navbar de abajo que el resto de la
+   app (pedido del dueño, 22/09/2026); el CSS lo esconde en computadora,
+   donde manda el sidebar .lado de esta pantalla. #}
+{% set activa = 'calendario' %}{% include '_nav.html' %}
+
+{% if puede_escribir and not nueva and not abierta %}
+{# El "+" flotante del teléfono (el CSS lo esconde en computadora). #}
+<a class="fab" href="{{ movil.ligas.nueva }}" aria-label="Nueva actividad">+</a>
+{% endif %}
+
 {% if abierta %}
 {# Ficha de la actividad: la pinta el servidor y cada acción es un formulario. #}
 <a class="telon" href="{{ ligas.cerrar }}" aria-label="Cerrar"></a>
@@ -313,7 +360,7 @@
     <div class="dato"><b>En Linear</b>
       <span class="mono">{{ abierta.ref }}{% if abierta.url %} · <a href="{{ abierta.url }}" target="_blank" rel="noopener">abrir</a>{% endif %}</span></div>
     {% if puede_tocar_abierta %}
-    <button class="btn oro" type="submit" style="margin-top:10px">Guardar cambios</button>
+    <button class="btn oro" type="submit" style="margin-top:10px" data-guardando="Guardando…">Guardar cambios</button>
     {% endif %}
   </form>
 
@@ -354,7 +401,7 @@ No se borra nada: el issue {{ abierta.ref }} queda en Linear marcado como Cancel
     <label for="texto">Nota nueva</label>
     <textarea class="campo" id="texto" name="texto" rows="2"
               placeholder="Ej: el cliente pidió llegar antes de las 9."></textarea>
-    <button class="btn chico" type="submit" style="align-self:flex-start">Agregar nota</button>
+    <button class="btn chico" type="submit" style="align-self:flex-start" data-guardando="Agregando…">Agregar nota</button>
   </form>
   {% endif %}
 
@@ -376,11 +423,14 @@ No se borra nada: el issue {{ abierta.ref }} queda en Linear marcado como Cancel
     <div><span class="tenue">CALENDARIO ROSE</span><h4>Actividad nueva</h4></div>
     <a class="btn chico" href="{{ ligas.cerrar }}">Cerrar</a>
   </div>
+  {# Si crear falló, el error se lee AQUÍ (en el celular el formulario tapa
+     la pantalla) y los campos vuelven con lo que se había escrito. #}
+  {% if error %}<div class="franja"><b>Ups.</b> <span>{{ error }}</span></div>{% endif %}
   <div class="form-red">
     <div class="campo-caja">
       <label for="tipo">Tipo de actividad</label>
       <select class="sel ancho" id="tipo" name="tipo">
-        {% for t in cal.TIPOS %}<option value="{{ t.clave }}">{{ t.nombre }}</option>{% endfor %}
+        {% for t in cal.TIPOS %}<option value="{{ t.clave }}" {{ 'selected' if t.clave == pre.tipo }}>{{ t.nombre }}</option>{% endfor %}
       </select>
     </div>
     <div class="campo-caja">
@@ -395,11 +445,13 @@ No se borra nada: el issue {{ abierta.ref }} queda en Linear marcado como Cancel
     </div>
     <div class="campo-caja ancho">
       <label for="cliente">Cliente</label>
-      <input class="campo" id="cliente" name="cliente" required placeholder="Hotel Bristol" autocomplete="off">
+      <input class="campo" id="cliente" name="cliente" required placeholder="Hotel Bristol"
+             autocomplete="off" value="{{ pre.cliente }}">
     </div>
     <div class="campo-caja ancho">
       <label for="lugar">Lugar</label>
-      <input class="campo" id="lugar" name="lugar" placeholder="Obarrio, Costa del Este, oficina…">
+      <input class="campo" id="lugar" name="lugar" placeholder="Obarrio, Costa del Este, oficina…"
+             value="{{ pre.lugar }}">
     </div>
     <div class="campo-caja">
       <label for="fecha">Fecha</label>
@@ -411,7 +463,7 @@ No se borra nada: el issue {{ abierta.ref }} queda en Linear marcado como Cancel
         <input class="campo" type="time" id="hora" name="hora" value="{{ pre.hora }}">
         <select class="sel" name="dur">
           {% for m in [30, 60, 90, 120, 180, 240, 480] %}
-          <option value="{{ m }}" {{ 'selected' if m == 60 }}>{{ (m ~ ' min') if m < 60 else ((m // 60) ~ ' h') }}</option>
+          <option value="{{ m }}" {{ 'selected' if m == pre.dur|int(60) }}>{{ (m ~ ' min') if m < 60 else ((m // 60) ~ ' h') }}</option>
           {% endfor %}
         </select>
       </span>
@@ -419,23 +471,25 @@ No se borra nada: el issue {{ abierta.ref }} queda en Linear marcado como Cancel
     <div class="campo-caja">
       <label for="prioridad">Prioridad</label>
       <select class="sel ancho" id="prioridad" name="prioridad">
-        <option value="3">Normal</option><option value="2">Alta</option><option value="1">Urgente</option>
+        {% for valor, nombre in [(3, 'Normal'), (2, 'Alta'), (1, 'Urgente')] %}
+        <option value="{{ valor }}" {{ 'selected' if valor == pre.prioridad|int(3) }}>{{ nombre }}</option>
+        {% endfor %}
       </select>
     </div>
     <div class="campo-caja">
       <label for="recogida">Fecha de recogida (alquiler)</label>
-      <input class="campo" type="date" id="recogida" name="recogida">
+      <input class="campo" type="date" id="recogida" name="recogida" value="{{ pre.recogida }}">
       <span class="pie-nota">Si el tipo es Alquiler, se crean dos actividades: el alquiler y su recogida.</span>
     </div>
     <div class="campo-caja ancho">
       <label for="nota">Nota</label>
       <textarea class="campo" id="nota" name="nota" rows="2"
-                placeholder="Qué plantas, con quién coordinar, cuánto se cobra…"></textarea>
+                placeholder="Qué plantas, con quién coordinar, cuánto se cobra…">{{ pre.nota }}</textarea>
     </div>
   </div>
-  <div class="acciones" style="justify-content:flex-end">
+  <div class="acciones pie-form" style="justify-content:flex-end">
     <a class="btn" href="{{ ligas.cerrar }}">Cancelar</a>
-    <button class="btn oro" type="submit">Crear en Linear</button>
+    <button class="btn oro" type="submit" data-guardando="Guardando…">Crear en Linear</button>
   </div>
   <p class="pie-nota">El issue nace como “Tipo — Cliente”, con su etiqueta de tipo, su responsable y su fecha límite.</p>
 </form>
