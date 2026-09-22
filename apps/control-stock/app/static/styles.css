@@ -104,6 +104,9 @@ header{
 .logo img{width:100%;height:100%;border-radius:50%;object-fit:cover}
 .brand h1{font-size:16px;font-weight:700;letter-spacing:.2px}
 .brand small{display:block;font-size:11px;font-weight:400;color:var(--texto-suave)}
+/* Cabecera sin título (pantalla principal): solo la campana a la derecha,
+   con poco alto para que las pestañas del stock queden arriba. */
+header.solo-campana{justify-content:flex-end;padding:12px 20px 0}
 .bell{
   position:relative;width:42px;height:42px;border-radius:50%;
   background:var(--noche-3);border:none;color:var(--dorado);
@@ -797,6 +800,7 @@ button.enlace-sub{
     grid-template-areas:"lado cabecera" "lado principal";
   }
   header{grid-area:cabecera}
+  header.solo-campana{padding:14px 34px 0}
   main{grid-area:principal;width:100%}
   main.angosto{max-width:940px;justify-self:center}
   .stars{display:none}

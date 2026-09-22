@@ -17,14 +17,10 @@
 {% endblock %}
 
 {% block contenido %}
-<header>
-  <div class="brand">
-    <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
-    <div>
-      <h1>Control de Stock</h1>
-      <small>Plantas Panamá · Vivero Rose</small>
-    </div>
-  </div>
+{# Sin el bloque "Control de Stock" (pedido del dueño, 22/09/2026): el
+   título con el logo empujaba las pestañas Stock online / Stock global
+   hacia abajo. Queda solo la campana y el contenido sube. #}
+<header class="solo-campana">
   <button class="bell" onclick="togglePanel()" aria-label="Alertas">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
       <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
