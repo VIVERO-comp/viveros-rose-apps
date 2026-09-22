@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Retail — Control Viverorose</title>
+<link rel="icon" type="image/jpeg" href="/static/logo.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+{# La pestaña Retail (diseño aprobado en el artefacto, 22/09/2026): kanban
+   de leads retail/mayorista. Comparte la piel del calendario
+   (calendario.css) y, como todo, el servidor arma cada columna y cada
+   enlace; el único JS es el arrastre, que POSTea un formulario. #}
+<link rel="stylesheet" href="/static/calendario.css?v={{ v_estaticos }}">
+<script type="speculationrules">
+{"prerender": [{"urls": ["/", "/?tab=stock", "/?tab=ajustes", "/venta", "/calendario"], "eagerness": "moderate"}]}
+</script>
+</head>
+<body>
+
+<div class="app">
+  <aside class="lado">
+    <div class="marca">
+      <img src="/static/logo.jpg" alt="Vivero Rose">
+      <span>Control Viverorose</span>
+    </div>
+    <a class="pil" href="/calendario">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>Calendario
+    </a>
+    <a class="pil" href="/?tab=stock">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M12 10C12 6 9 3 4 3c0 5 3 8 8 7z"/><path d="M12 13c0-3.5 2.5-6 7-6 0 4.5-2.5 7-7 6z"/></svg>Stock
+    </a>
+    <a class="pil" href="/venta">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2 2h2l2.7 12.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 1.9-1.6L22 6H5"/></svg>Vender
+    </a>
+    <span class="pil on">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7 12 3 4 7v10l8 4 8-4z"/><path d="M12 11 4 7"/><path d="m12 11 8-4"/><path d="M12 11v10"/></svg>Retail
+    </span>
+    <a class="pil" href="/?tab=ajustes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Ajustes
+    </a>
+    <div class="pie">
+      <b>{{ empleada.nombre or empleada.id }}</b>
+      <span>{% if modo == 'muestra' %}Datos de muestra (sin Linear){% else %}Leads · Linear{% endif %}</span>
+    </div>
+  </aside>
+
+  <div class="tablero">
+    <div class="barra">
+      <h3>Retail</h3>
+      <span class="tenue" style="font-size:12px">A quién falta cotizar, facturar o entregar · leads Retail y Mayorista</span>
+      <span class="crece"></span>
+      <span class="tenue"><span class="pt-leyenda" style="background:#16a34a"></span>Plantas retail</span>
+      <span class="tenue"><span class="pt-leyenda" style="background:#dc2626"></span>Mayorista</span>
+    </div>
+
+    {% if error %}<div class="franja"><b>Ups.</b> <span>{{ error }}</span></div>{% endif %}
+    {% if aviso %}<div class="aviso-ok">{{ aviso }}</div>{% endif %}
+
+    <div class="ret-tablero">
+      {% for col in columnas %}
+      <div class="ret-col {{ 'urgente' if col.clave == 'entregar' }}" data-etapa="{{ col.clave }}">
+        <div class="ret-cab"><b>{{ col.titulo }}</b><span class="crece"></span>
+          <span class="ret-cuenta">{{ col.leads|length }}</span></div>
+        <div class="ret-lista" data-etapa="{{ col.clave }}">
+          {% for l in col.leads %}
+          <a class="ret-tarjeta" draggable="true" data-ref="{{ l.ref }}" href="/retail?abrir={{ l.ref }}">
+            <span class="t-cab"><span class="pt-leyenda" style="background:{{ l.color }}"></span>
+              <b>{{ l.nombre }}</b></span>
+            <span class="t-sub"><span class="mono">{{ l.ref }}</span> · {{ l.hace }}
+              {% if col.clave == 'entregar' %}
+                {% if l.entrega %}<span class="etq {{ 'at' if l.entrega <= hoy else 'ok' }}">entrega {{ cal.dmy(l.entrega) }}</span>
+                {% else %}<span class="etq at">sin fecha de entrega</span>{% endif %}
+              {% endif %}</span>
+          </a>
+          {% endfor %}
+        </div>
+        <div class="ret-pie">{{ col.pie }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{% set activa = 'retail' %}{% include '_nav.html' %}
+
+{% if abierta %}
+<a class="telon" href="/retail" aria-label="Cerrar"></a>
+<aside class="panel-der" role="dialog" aria-label="Ficha del cliente">
+  <div class="cab-panel">
+    <span class="chip on" style="background:{{ abierta.color }};color:#fff">
+      <span class="pt" style="background:#fff"></span>{{ abierta.tipo_nombre }}</span>
+    <a class="btn chico" href="/retail">Cerrar</a>
+  </div>
+  <h4>{{ abierta.nombre }}</h4>
+  <div>
+    <div class="dato"><b>Ahora está en</b><span>{{ abierta.etapa_titulo }}</span></div>
+    {% if abierta.entrega %}<div class="dato"><b>Entrega</b><span>{{ cal.dmy(abierta.entrega) }}/{{ abierta.entrega[:4] }}</span></div>{% endif %}
+    {% if abierta.cel %}<div class="dato"><b>Celular</b><span>{{ abierta.cel }}</span></div>{% endif %}
+    <div class="dato"><b>En Linear</b>
+      <span>{% if abierta.url %}<a class="liga-ret" href="{{ abierta.url }}" target="_blank" rel="noopener">{{ abierta.ref }} · abrir</a>{% else %}{{ abierta.ref }}{% endif %}</span></div>
+  </div>
+
+  <div class="acciones">
+    {% if abierta.cel %}
+    <a class="btn" href="https://wa.me/507{{ abierta.cel.replace('-', '') }}" target="_blank" rel="noopener">💬 WhatsApp</a>
+    {% endif %}
+    {% if abierta.etapa == 'cotizar' %}
+    <a class="btn oro" href="/venta">Cotizar en Vender →</a>
+    {% elif abierta.etapa == 'facturar' %}
+    <a class="btn" href="/venta">🖨 Imprimir cotización</a>
+    {% elif abierta.etapa in ('entregar', 'entregado') %}
+    <a class="btn" href="/venta">🖨 Imprimir factura</a>
+    {% endif %}
+    {% if abierta.etapa == 'entregar' %}
+    <a class="btn oro" href="/retail?fecha={{ abierta.ref }}">📅 {{ 'Cambiar fecha (' ~ cal.dmy(abierta.entrega) ~ ')' if abierta.entrega else 'Poner fecha de entrega' }}</a>
+    {% endif %}
+  </div>
+
+  {# Mover de etapa: ABAJO, separado (pedido del dueño). #}
+  <div class="ret-mover">
+    <div class="tenue" style="text-transform:uppercase;letter-spacing:.05em">Mover a</div>
+    <div class="acciones" style="margin-top:8px">
+      {% for e in etapas %}{% if e.clave != abierta.etapa %}
+      <form method="post" action="/retail/mover">
+        <input type="hidden" name="ref" value="{{ abierta.ref }}">
+        <input type="hidden" name="etapa" value="{{ e.clave }}">
+        <button class="btn {{ 'oro' if e.clave == 'entregado' }}" type="submit">→ {{ e.titulo }}</button>
+      </form>
+      {% endif %}{% endfor %}
+    </div>
+    <p class="pie-nota">Las etapas se moverán solas cuando la venta viva
+      amarrada (ver plan); estos botones y el arrastre quedan para corregir.</p>
+  </div>
+</aside>
+{% endif %}
+
+{% if con_fecha %}
+<a class="telon" href="/retail" aria-label="Cerrar"></a>
+<form class="modal ret-modal-fecha" method="post" action="/retail/fecha">
+  <h4>Fecha de entrega · {{ con_fecha.nombre }}</h4>
+  <input type="hidden" name="ref" value="{{ con_fecha.ref }}">
+  <input type="hidden" name="nombre" value="{{ con_fecha.nombre }}">
+  <input class="campo" type="date" name="entrega" required
+         value="{{ con_fecha.entrega or manana }}" min="{{ hoy }}">
+  <div class="acciones" style="justify-content:flex-end">
+    <a class="btn" href="/retail">Luego</a>
+    <button class="btn oro" type="submit" data-guardando="Guardando…">Guardar fecha</button>
+  </div>
+  <p class="pie-nota">Al guardar, la entrega aparece como actividad en el
+    calendario y en el bloque "Por entregar".</p>
+</form>
+{% endif %}
+
+<script src="/static/retail.js?v={{ v_estaticos }}"></script>
+<script src="/static/calendario.js?v={{ v_estaticos }}"></script>
+</body>
+</html>

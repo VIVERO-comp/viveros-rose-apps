@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse,
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import (acceso_google, calculos, calendario, calendario_google,
+from . import (acceso_google, calculos, calendario, calendario_google, retail,
                calendario_ics, compras, conteos, cotizaciones, datos, fichas,
                fotos, proyectos, seguridad, ventas)
 
@@ -75,6 +75,7 @@ datos.iniciar_db()
 ventas.iniciar_tablas()
 cotizaciones.iniciar_tablas()
 proyectos.iniciar_tablas()
+retail.iniciar_tablas()
 calendario_ics.iniciar_tablas()
 calendario_google.iniciar_tablas()
 calendario_google.arrancar_hilo()
@@ -1874,6 +1875,12 @@ def calendario_pantalla(request: Request):
     for lead in leads_servicio:
         lead["liga"] = _liga(estado, nueva="1", tipo=lead["tipo"], cliente=lead["nombre"])
 
+    # Y debajo, el bloque "Por entregar": TODOS los facturados de la
+    # pestaña Retail — sin fecha primero (a ponerla), luego por fecha.
+    por_entregar = retail.por_entregar()
+    for lead in por_entregar:
+        lead["liga"] = ("/retail?abrir=" if lead["entrega"] else "/retail?fecha=") + lead["ref"]
+
     abierta = None
     id_abierta = request.query_params.get("abrir", "")
     if id_abierta:
@@ -1894,6 +1901,7 @@ def calendario_pantalla(request: Request):
         "grupos": grupos,
         "movil": movil,
         "leads_servicio": leads_servicio,
+        "por_entregar": por_entregar,
         "dias": dias,
         "ligas_vista": ligas_vista,
         "franja": [a for a in visibles if calendario.esta_atrasada(a, dia_hoy)][:6],
@@ -1937,6 +1945,55 @@ def calendario_pantalla(request: Request):
         },
         "volver": _liga(estado),
     })
+
+
+@app.get("/retail")
+def retail_pantalla(request: Request):
+    """La pestaña Retail: kanban de leads de venta (diseño del artefacto)."""
+    columnas, por_ref = retail.tablero()
+    abierta = por_ref.get(request.query_params.get("abrir", ""))
+    if abierta:
+        abierta["etapa_titulo"] = next(
+            e["titulo"] for e in retail.ETAPAS if e["clave"] == abierta["etapa"])
+    con_fecha = por_ref.get(request.query_params.get("fecha", ""))
+    dia_hoy = calendario.hoy()
+    return plantillas.TemplateResponse(request, "retail.html", {
+        "empleada": request.state.empleada,
+        "cal": calendario,
+        "modo": calendario.modo(),
+        "columnas": columnas,
+        "etapas": retail.ETAPAS,
+        "abierta": abierta,
+        "con_fecha": con_fecha,
+        "hoy": dia_hoy.isoformat(),
+        "manana": (dia_hoy + timedelta(days=1)).isoformat(),
+        "error": request.query_params.get("error") or None,
+        "aviso": request.query_params.get("aviso"),
+    })
+
+
+@app.post("/retail/mover")
+async def retail_mover(request: Request):
+    form = await request.form()
+    retail.mover(form.get("ref", ""), form.get("etapa", ""))
+    return RedirectResponse("/retail", status_code=303)
+
+
+@app.post("/retail/fecha")
+async def retail_fecha(request: Request):
+    form = await request.form()
+    ref, entrega = form.get("ref", ""), form.get("entrega", "")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", entrega):
+        return RedirectResponse(
+            f"/retail?fecha={quote(ref)}&error=" + quote("Esa fecha no se ve válida."),
+            status_code=303)
+    retail.poner_fecha(ref, form.get("nombre", ""), entrega)
+    # El empuje rápido a Google Calendar, como cualquier otra escritura.
+    calendario_google.sincronizar_en_fondo()
+    return RedirectResponse(
+        "/retail?aviso=" + quote(
+            f"Entrega el {calendario.dmy(entrega)} guardada y puesta en el calendario."),
+        status_code=303)
 
 
 def _volver_a(request, aviso="", error=""):

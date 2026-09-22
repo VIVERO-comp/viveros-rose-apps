@@ -62,6 +62,9 @@
     <a class="pil" href="/venta">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2 2h2l2.7 12.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 1.9-1.6L22 6H5"/></svg>Vender
     </a>
+    <a class="pil" href="/retail">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7 12 3 4 7v10l8 4 8-4z"/><path d="M12 11 4 7"/><path d="m12 11 8-4"/><path d="M12 11v10"/></svg>Retail
+    </a>
     {# Proyectos se apaga con PROYECTOS_ACTIVOS=0 (dueño, 22/09/2026: en el
        real queda escondida hasta que la dé por lista). #}
     {% if proyectos_activos %}
@@ -85,6 +88,25 @@
       </a>
       {% else %}
       <div class="lead-vacio">Ninguno por agendar.</div>
+      {% endfor %}
+    </div>
+
+    {# El bloque "Por entregar" (pestaña Retail): TODOS los facturados —
+       sin fecha primero, en rojo; tocarlos lleva a ponerles fecha. #}
+    <div class="leads-lado">
+      <div class="leads-tit">Por entregar<span>de la pestaña Retail</span></div>
+      {% for l in por_entregar %}
+      <a class="lead-it" href="{{ l.liga }}">
+        <span class="pt" style="background:{{ l.color }}"></span>
+        <span class="ln"><b>{{ l.nombre }}</b>
+          {% if l.entrega %}
+          <small class="fecha-e {{ 'roja' if l.entrega <= hoy }}">entregar el {{ cal.dmy(l.entrega) }}</small>
+          {% else %}
+          <small class="fecha-e roja">sin fecha · ponla</small>
+          {% endif %}</span>
+      </a>
+      {% else %}
+      <div class="lead-vacio">Nada facturado pendiente.</div>
       {% endfor %}
     </div>
 
