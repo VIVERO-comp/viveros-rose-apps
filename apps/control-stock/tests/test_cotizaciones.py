@@ -845,7 +845,8 @@ def test_editar_personalizada_conserva_sus_tres_secciones(odoo):
     assert datos["servicios"][0]["texto"] == "Instalación de riego"
     assert datos["servicios"][0]["descripcion"] == "Con pruebas de funcionamiento"
     assert datos["renglones"][0] == {"texto": "Sacos de tierra",
-                                     "cantidad": "100", "precio": "5.75"}
+                                     "cantidad": "100", "precio": "5.75",
+                                     "descripcion": ""}
     assert datos["plantas"][0]["producto_id"] == 601
     editado = cotizaciones.editar_cotizacion(
         registro["n"],
@@ -898,3 +899,39 @@ def test_sin_monto_al_editar_no_pierde_lo_escrito(cliente, odoo):
     assert r.status_code == 200
     assert "Falta el monto" in r.text
     assert "Alquiler corregido" in r.text
+
+
+def test_renglon_libre_lleva_descripcion(odoo):
+    registro = cotizaciones.crear_personalizada(
+        {"id": "g", "nombre": "Génesis"}, "Ana", "", [],
+        [{"texto": "Sacos de tierra", "cantidad": "100", "precio": "5.75",
+          "descripcion": "Tierra negra abonada, entregada en obra"}],
+        None, None)
+    lineas = odoo.ordenes[registro["orden_id"]]["lineas"]
+    # sección Renglones, el renglón, y SU descripción pegada debajo
+    assert lineas[1]["name"] == "Sacos de tierra"
+    assert lineas[2]["display_type"] == "line_subsection"
+    assert lineas[2]["name"] == "Tierra negra abonada, entregada en obra"
+    # Y al editar, vuelve al formulario en su renglón (no en servicios).
+    datos = cotizaciones.cargar_para_editar(registro["n"])
+    assert datos["renglones"][0]["descripcion"] == "Tierra negra abonada, entregada en obra"
+    assert datos["servicios"] == [{"texto": "", "monto": "", "descripcion": ""}]
+
+
+def test_editar_conserva_la_descripcion_del_renglon(odoo):
+    registro = cotizaciones.crear_personalizada(
+        {"id": "g", "nombre": "Génesis"}, "Ana", "", [],
+        [{"texto": "Sacos de tierra", "cantidad": "100", "precio": "5.75",
+          "descripcion": "Tierra negra"}], None, None)
+    cotizaciones.editar_cotizacion(
+        registro["n"], [], [],
+        [{"texto": "Sacos de tierra", "cantidad": "80", "precio": "5.75",
+          "descripcion": "Tierra negra abonada"}])
+    lineas = odoo.ordenes[registro["orden_id"]]["lineas"]
+    assert lineas[1]["product_uom_qty"] == 80.0
+    assert lineas[2]["name"] == "Tierra negra abonada"
+
+
+def test_el_form_personalizada_trae_descripcion_de_renglon(cliente, odoo):
+    pagina = cliente.get("/venta/servicio-personalizada")
+    assert 'name="renglon_descripcion"' in pagina.text

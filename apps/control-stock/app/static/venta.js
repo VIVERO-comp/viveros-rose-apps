@@ -151,10 +151,12 @@ function sincronizarCliente() {
       datos.append("renglones", "1");
       for (const r of renglonesDe(contenedorRenglones,
                                   {texto: "renglon_texto", cantidad: "renglon_cantidad",
-                                   precio: "renglon_precio"})) {
+                                   precio: "renglon_precio",
+                                   descripcion: "renglon_descripcion"})) {
         datos.append("renglon_texto", r.texto);
         datos.append("renglon_cantidad", r.cantidad);
         datos.append("renglon_precio", r.precio);
+        datos.append("renglon_descripcion", r.descripcion);
       }
     }
     fetch("/venta/borrador", { method: "POST", body: datos }).catch(() => {});

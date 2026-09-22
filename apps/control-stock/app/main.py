@@ -911,7 +911,8 @@ def _renglones_del_form(form):
     return cotizaciones.renglones_del_formulario(
         [t[:2000] for t in form.getlist("renglon_texto")],
         [c[:20] for c in form.getlist("renglon_cantidad")],
-        [p[:20] for p in form.getlist("renglon_precio")])
+        [p[:20] for p in form.getlist("renglon_precio")],
+        [d[:2000] for d in form.getlist("renglon_descripcion")])
 
 
 def _volver_del_carrito(form):
@@ -1129,7 +1130,7 @@ def _contexto_personalizada(request, q="", error=None, renglones=None,
         "ventas_activo": ventas.configurado(), "q": (q or "").strip(),
         "resultados": None, "carrito": [], "total_carrito": 0.0,
         "borrador": borrador, "error_venta": error or None,
-        "renglones": renglones or [{"texto": "", "cantidad": "", "precio": ""}],
+        "renglones": renglones or [{"texto": "", "cantidad": "", "precio": "", "descripcion": ""}],
         "servicios": servicios or [{"texto": "", "monto": "", "descripcion": ""}],
     }
     if contexto["ventas_activo"]:
@@ -1156,7 +1157,7 @@ async def venta_personalizada_crear(request: Request):
     usuario = request.state.empleada["id"]
     renglones = cotizaciones.renglones_del_formulario(
         form.getlist("renglon_texto"), form.getlist("renglon_cantidad"),
-        form.getlist("renglon_precio"))
+        form.getlist("renglon_precio"), form.getlist("renglon_descripcion"))
     servicios = cotizaciones.servicios_del_formulario(
         form.getlist("servicio_texto"), form.getlist("servicio_monto"),
         form.getlist("servicio_descripcion"))
@@ -1252,7 +1253,8 @@ async def venta_servicio_editar_guardar(request: Request, n: int):
     renglones = cotizaciones.renglones_del_formulario(
         [t[:2000] for t in form.getlist("renglon_texto")],
         [c[:20] for c in form.getlist("renglon_cantidad")],
-        [p[:20] for p in form.getlist("renglon_precio")])
+        [p[:20] for p in form.getlist("renglon_precio")],
+        [d[:2000] for d in form.getlist("renglon_descripcion")])
     try:
         cotizaciones.editar_cotizacion(n, servicios, plantas, renglones)
     except ValueError as error:

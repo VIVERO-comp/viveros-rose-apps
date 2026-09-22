@@ -149,6 +149,11 @@
       <textarea class="servicio-texto" name="renglon_texto" form="form-servicio"
                 rows="1" placeholder="Ej: 50 sacos de tierra negra"
                 >{{ r.texto }}</textarea>
+      {# El párrafo gris bajo el título en el PDF, igual que en los
+         servicios (Abraham, 22/09/2026). #}
+      <textarea class="servicio-descripcion" name="renglon_descripcion" form="form-servicio"
+                rows="1" placeholder="Descripción (opcional): el párrafo que sale debajo en el PDF"
+                >{{ r.descripcion }}</textarea>
       <div class="servicio-pie">
         <label class="servicio-monto">Cant
           <input class="servicio-cantidad" name="renglon_cantidad" form="form-servicio"

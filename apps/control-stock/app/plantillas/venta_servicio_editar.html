@@ -10,11 +10,12 @@
       <small>{{ etiqueta_tipo }} · mientras siga en cotización</small>
     </div>
   </div>
+  {# El botón va al lado del título (Abraham, 22/09/2026), no en una fila
+     propia que empuja el contenido. #}
+  <a class="volver" style="margin:0" href="/venta#cot-{{ registro.n }}">← Volver a Vender</a>
 </header>
 
 <main class="angosto">
-  <a class="volver" href="/venta#cot-{{ registro.n }}">← Volver a Vender</a>
-
   {% if error_venta %}
   <div class="aviso-error">{{ error_venta }}</div>
   {% endif %}
@@ -65,6 +66,9 @@
       <textarea class="servicio-texto" name="renglon_texto" form="form-servicio"
                 rows="1" placeholder="Ej: 50 sacos de tierra negra"
                 >{{ r.texto }}</textarea>
+      <textarea class="servicio-descripcion" name="renglon_descripcion" form="form-servicio"
+                rows="1" placeholder="Descripción (opcional): el párrafo que sale debajo en el PDF"
+                >{{ r.descripcion }}</textarea>
       <div class="servicio-pie">
         <label class="servicio-monto">Cant
           <input class="servicio-cantidad" name="renglon_cantidad" form="form-servicio"

@@ -412,18 +412,22 @@ def servicios_del_formulario(textos, montos, descripciones=None):
             for i in range(total)]
 
 
-def renglones_del_formulario(textos, cantidades, precios):
+def renglones_del_formulario(textos, cantidades, precios, descripciones=None):
     """Los renglones libres de la cotización personalizada
-    (renglon_texto[] + renglon_cantidad[] + renglon_precio[]) emparejados
-    en el orden en que se muestran."""
+    (renglon_texto[] + renglon_cantidad[] + renglon_precio[] +
+    renglon_descripcion[]) emparejados en el orden en que se muestran.
+    La descripción es el párrafo gris bajo el título en el PDF, igual que
+    en los servicios (Abraham, 22/09/2026)."""
     textos, cantidades, precios = list(textos or []), list(cantidades or []), list(precios or [])
-    total = max(len(textos), len(cantidades), len(precios))
+    descripciones = list(descripciones or [])
+    total = max(len(textos), len(cantidades), len(precios), len(descripciones))
 
     def dato(lista, i):
         return lista[i] if i < len(lista) else ""
 
     return [{"texto": dato(textos, i), "cantidad": dato(cantidades, i),
-             "precio": dato(precios, i)} for i in range(total)]
+             "precio": dato(precios, i), "descripcion": dato(descripciones, i)}
+            for i in range(total)]
 
 
 def _cantidad(valor):
@@ -445,9 +449,10 @@ def _renglones_limpios(renglones):
     limpios = []
     for renglon in renglones or []:
         texto = (renglon.get("texto") or "").strip()
+        descripcion = (renglon.get("descripcion") or "").strip()
         crudo_precio = (renglon.get("precio") or "").strip()
         crudo_cantidad = (renglon.get("cantidad") or "").strip()
-        if not texto and not crudo_precio and not crudo_cantidad:
+        if not texto and not descripcion and not crudo_precio and not crudo_cantidad:
             continue
         if not texto:
             raise ValueError("Falta la descripción de un renglón.")
@@ -457,7 +462,8 @@ def _renglones_limpios(renglones):
         cantidad = _cantidad(crudo_cantidad)
         if cantidad is None:
             raise ValueError(f"Cantidad inválida en el renglón: «{_resumen(texto)}».")
-        limpios.append({"texto": texto, "cantidad": cantidad, "precio": precio})
+        limpios.append({"texto": texto, "cantidad": cantidad, "precio": precio,
+                        "descripcion": descripcion})
     return limpios
 
 
@@ -678,10 +684,15 @@ def _lineas_personalizada(servicios, renglones, lineas_catalogo):
                    "name": servicio["descripcion"]}]
                  if servicio.get("descripcion") else []))]),
         ("Renglones",
-         [{"product_id": _id_producto_personalizado(),
-           "product_uom_qty": renglon["cantidad"], "price_unit": renglon["precio"],
-           "name": renglon["texto"]}
-          for renglon in _renglones_limpios(renglones)]),
+         [linea
+          for renglon in _renglones_limpios(renglones)
+          for linea in (
+              [{"product_id": _id_producto_personalizado(),
+                "product_uom_qty": renglon["cantidad"],
+                "price_unit": renglon["precio"], "name": renglon["texto"]}]
+              + ([{"display_type": "line_subsection",
+                   "name": renglon["descripcion"]}]
+                 if renglon.get("descripcion") else []))]),
     ]
     lineas = []
     secuencia = 1
@@ -915,15 +926,16 @@ def cargar_para_editar(n):
             "product.product", "read", [ids],
             {"fields": ["name", "type", "default_code"]})}
     servicios, plantas, renglones = [], [], []
-    seccion = ""
+    seccion, ultimo = "", None
     for linea in lineas:
         tipo_linea = linea.get("display_type")
         if tipo_linea == "line_section":
             seccion = linea.get("name") or ""
         elif tipo_linea in ("line_subsection", "line_note"):
-            # La descripción del servicio: el párrafo pegado debajo.
-            if servicios and not servicios[-1]["descripcion"]:
-                servicios[-1]["descripcion"] = linea.get("name") or ""
+            # La descripción: el párrafo pegado debajo del último renglón
+            # (servicio o renglón libre, lo que se haya agregado último).
+            if ultimo is not None and not ultimo.get("descripcion"):
+                ultimo["descripcion"] = linea.get("name") or ""
         elif not tipo_linea:
             producto = productos.get(linea["product_id"][0]) if linea.get("product_id") else None
             if producto and producto.get("type") != "service":
@@ -932,22 +944,27 @@ def cargar_para_editar(n):
                     "nombre": producto.get("name") or "",
                     "cantidad": _numero_form(linea.get("product_uom_qty") or 0),
                 })
+                # Una descripción después de una planta no es de nadie.
+                ultimo = None
                 continue
             titulo = _titulo_de_linea(linea, producto)
             if registro["tipo"] not in TIPOS and seccion != "Servicios":
                 # Personalizada: lo que no está bajo "Servicios" es un
                 # renglón libre (descripción + cantidad + precio).
-                renglones.append({
+                ultimo = {
                     "texto": titulo,
+                    "descripcion": "",
                     "cantidad": _numero_form(linea.get("product_uom_qty") or 1),
                     "precio": _numero_form(linea.get("price_unit") or 0),
-                })
+                }
+                renglones.append(ultimo)
             else:
-                servicios.append({
+                ultimo = {
                     "texto": titulo,
                     "descripcion": "",
                     "monto": _numero_form(linea.get("price_unit") or 0),
-                })
+                }
+                servicios.append(ultimo)
     return {
         "registro": registro,
         "editable": estado["editable"],
@@ -955,7 +972,8 @@ def cargar_para_editar(n):
         "cancelada": estado["cancelada"],
         "servicios": servicios or [{"texto": "", "monto": "", "descripcion": ""}],
         "plantas": plantas,
-        "renglones": renglones or [{"texto": "", "cantidad": "", "precio": ""}],
+        "renglones": renglones or [{"texto": "", "cantidad": "", "precio": "",
+                                    "descripcion": ""}],
     }
 
 
