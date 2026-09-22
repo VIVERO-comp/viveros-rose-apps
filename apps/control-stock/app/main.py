@@ -1999,20 +1999,11 @@ def retail_pantalla(request: Request):
             e["titulo"] for e in retail.ETAPAS if e["clave"] == abierta["etapa"])
         for c in abierta["cotizaciones"]:
             c["fecha_texto"] = _fecha_venta(c["creado_en"])
-        # Las cotizaciones/ventas de Vender que aún no son de ningún lead:
-        # candidatas a amarrar desde la ficha (mismo dato que la lista de
-        # /venta, aquí para no salir de la pantalla).
-        candidatas = sorted(
-            [{"clase": "servicio", "n": c["n"], "orden": c["orden"],
-              "cliente": c["cliente"], "total": c["total"],
-              "creado_en": c["creado_en"],
-              "etiqueta": cotizaciones.etiqueta_de(c["tipo"])}
-             for c in cotizaciones.sin_lead()]
-            + [{"clase": "venta", "n": v["n"], "orden": v["orden"] or f"Venta {v['n']}",
-                "cliente": v["cliente"], "total": v["total"],
-                "creado_en": v["creado_en"], "etiqueta": "Venta local"}
-               for v in ventas.sin_lead()],
-            key=lambda c: c["creado_en"], reverse=True)[:6]
+        # Las cotizaciones/ventas de Vender que aún no son de ningún lead
+        # y que PERTENECEN a este cliente (mismo celular o nombre):
+        # candidatas a amarrar desde la ficha. Corrección de Abraham
+        # (22/09/2026): nunca se ofrecen cotizaciones de otros clientes.
+        candidatas = retail.candidatas_para(abierta)
         for c in candidatas:
             c["fecha_texto"] = _fecha_venta(c["creado_en"])
     con_fecha = por_ref.get(request.query_params.get("fecha", ""))

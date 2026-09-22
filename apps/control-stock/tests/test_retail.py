@@ -72,11 +72,12 @@ def test_los_de_servicio_no_entran_a_retail():
 # vinculadas salen en la ficha y un lead ya cotizado cae solo en "Cotizado".
 # ---------------------------------------------------------------------------
 
-def _cotizacion_suelta(cliente_nombre="Juan Carlos Lopez", total=340.0):
+def _cotizacion_suelta(cliente_nombre="Juan Carlos Lopez", total=340.0,
+                       celular=""):
     from app import cotizaciones
     return cotizaciones._guardar_local(
         {"id": "genesis", "nombre": "Génesis"}, "instalacion",
-        cliente_nombre, "", 9001, "S00083", total)
+        cliente_nombre, celular, 9001, "S00083", total)
 
 
 def test_vincular_una_cotizacion_mueve_el_lead_a_cotizado(cliente):
@@ -104,11 +105,33 @@ def test_desvincular_regresa_el_lead_a_por_cotizar(cliente):
     assert por_ref["LEAD-48"]["etapa"] == "cotizar"
 
 
-def test_la_ficha_ofrece_las_cotizaciones_sueltas_para_vincular(cliente):
-    registro = _cotizacion_suelta("Tamara", 787.0)
+def test_la_ficha_ofrece_solo_las_cotizaciones_del_cliente(cliente):
+    """Corrección de Abraham (22/09/2026): la ficha solo ofrece vincular
+    lo que pertenece a SU cliente (mismo celular o mismo nombre), nunca
+    la lista general de cotizaciones sueltas."""
+    # LEAD-48 en la muestra es Laura Porcell, cel 6512-8890.
+    suya = _cotizacion_suelta("Laura Porcell", 340.0)
+    por_celular = _cotizacion_suelta("Cliente Local", 25.0, celular="6512-8890")
+    ajena = _cotizacion_suelta("Tamara", 787.0)
     cuerpo = cliente.get("/retail?abrir=LEAD-48").text
     assert "vincular" in cuerpo.lower()
-    assert f'value="{registro["n"]}"' in cuerpo
+    assert f'value="{suya["n"]}"' in cuerpo
+    assert f'value="{por_celular["n"]}"' in cuerpo
+    assert f'value="{ajena["n"]}"' not in cuerpo
+
+
+def test_un_lead_anonimo_sin_celular_no_ofrece_candidatas():
+    _cotizacion_suelta("Tamara", 787.0)
+    assert retail.candidatas_para(
+        {"ref": "LEAD-21", "nombre": "Plantas retail", "cel": ""}) == []
+
+
+def test_el_celular_sale_de_la_tarjeta_del_issue():
+    assert retail._cel_de(
+        "💬 [Responder por WhatsApp](https://wa.me/50769999901)") == "6999-9901"
+    assert retail._cel_de(
+        "**Cliente**\nAna · +507 6999-9901") == "6999-9901"
+    assert retail._cel_de("sin telefono aqui") == ""
 
 
 def test_el_drag_hacia_adelante_le_gana_a_la_etapa_derivada(cliente):

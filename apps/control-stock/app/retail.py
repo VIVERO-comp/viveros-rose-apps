@@ -22,6 +22,7 @@ Sin credenciales de Linear la pestaña corre con leads de muestra, igual
 que el calendario.
 """
 
+import re
 import time
 from datetime import datetime
 
@@ -52,7 +53,7 @@ CONSULTA_RETAIL = """
 query { issues(first: 80, filter: {
     team: { key: { eq: "LEAD" } }
     state: { type: { nin: ["completed", "canceled"] } }
-  }) { nodes { id identifier title url createdAt labels { nodes { name } } } }
+  }) { nodes { id identifier title description url createdAt labels { nodes { name } } } }
 }
 """
 
@@ -111,6 +112,61 @@ def _crudos():
         return []
 
 
+def _cel_de(descripcion):
+    """El celular del cliente, sacado de la tarjeta del issue (el link de
+    WhatsApp o el bloque Cliente). Vuelve como "6999-9901", o "" si la
+    tarjeta no trae teléfono."""
+    texto = descripcion or ""
+    encontrado = re.search(r"wa\.me/(\d{8,15})", texto)
+    digitos = encontrado.group(1)[-8:] if encontrado else ""
+    if not digitos:
+        encontrado = re.search(r"\+507\s?(\d{4})[- ]?(\d{4})", texto)
+        digitos = (encontrado.group(1) + encontrado.group(2)) if encontrado else ""
+    return f"{digitos[:4]}-{digitos[4:]}" if len(digitos) == 8 else ""
+
+
+def _digitos(texto):
+    return re.sub(r"\D", "", texto or "")
+
+
+def candidatas_para(lead, limite=6):
+    """Las cotizaciones/ventas de Vender sin lead que PERTENECEN a este
+    lead: mismo celular (últimos 8 dígitos) o, en su defecto, mismo nombre
+    real. Corrección de Abraham (22/09/2026): la ficha nunca ofrece
+    vincular cotizaciones de otros clientes, y un lead anónimo sin celular
+    no ofrece nada."""
+    from . import cotizaciones, ventas  # aquí abajo para no ciclar imports
+    objetivo = _digitos(lead.get("cel"))[-8:]
+    nombre = (lead.get("nombre") or "").strip().lower()
+    if nombre in {n.lower() for n in NOMBRES_TIPO.values()}:
+        nombre = ""  # provisional: el título era el tipo, no un cliente
+    if not objetivo and not nombre:
+        return []
+
+    def es_suya(fila):
+        cel = _digitos(fila.get("celular"))[-8:]
+        if objetivo and cel and cel == objetivo:
+            return True
+        cliente = (fila.get("cliente") or "").strip().lower()
+        return bool(nombre) and cliente == nombre
+
+    filas = []
+    for c in cotizaciones.sin_lead():
+        if es_suya(c):
+            filas.append({"clase": "servicio", "n": c["n"], "orden": c["orden"],
+                          "cliente": c["cliente"], "total": c["total"],
+                          "creado_en": c["creado_en"],
+                          "etiqueta": cotizaciones.etiqueta_de(c["tipo"])})
+    for v in ventas.sin_lead():
+        if es_suya(v):
+            filas.append({"clase": "venta", "n": v["n"],
+                          "orden": v["orden"] or f"Venta {v['n']}",
+                          "cliente": v["cliente"], "total": v["total"],
+                          "creado_en": v["creado_en"], "etiqueta": "Venta local"})
+    filas.sort(key=lambda f: f["creado_en"], reverse=True)
+    return filas[:limite]
+
+
 def _buscar():
     filas = []
     for issue in calendario._pedir(CONSULTA_RETAIL)["issues"]["nodes"]:
@@ -129,7 +185,8 @@ def _buscar():
             pass
         filas.append({"ref": issue["identifier"], "nombre": nombre,
                       "tipo": ETIQUETAS_RETAIL[etiqueta], "dias": dias,
-                      "cel": "", "url": issue.get("url") or ""})
+                      "cel": _cel_de(issue.get("description")),
+                      "url": issue.get("url") or ""})
     _cache.update({"en": time.time(), "dato": filas})
     return filas
 
