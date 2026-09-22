@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Calendario — Control de Stock</title>
+<link rel="icon" type="image/jpeg" href="/static/logo.jpg">
+<link rel="apple-touch-icon" href="/static/logo.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+{# Esta pantalla NO hereda base.html a propósito: base.html es la "tarjeta de
+   teléfono" (columna angosta azul noche) y el calendario es ancho y blanco en
+   los dos tamaños. Todo lo que se ve aquí lo calculó app/calendario.py: los
+   días de la vista, la posición de cada bloque, los solapes, las celdas del
+   mes y hasta el enlace de cada control. La plantilla solo recorre. #}
+<link rel="stylesheet" href="/static/calendario.css?v={{ v_estaticos }}">
+</head>
+<body>
+
+{% macro pinta_actividad(a, liga, mostrar_fecha=false, atrasada=false) %}
+<a class="act {{ 'hecha' if a.estado == 'hecha' }} {{ 'cancel' if a.estado == 'cancel' }}"
+   style="border-left-color:{{ cal.color_de(a.tipo) }}" href="{{ liga }}">
+  <span class="hora">{{ a.hora }}</span>
+  <span>
+    <span class="tit">{{ cal.nombre_de_tipo(a.tipo) }} — {{ a.cliente }}</span>
+    <span class="sub">
+      <span>{{ a.lugar or '—' }}</span>
+      <span><span class="avatar">{{ a.resp[:1]|upper }}</span> {{ a.resp }}</span>
+      {% if mostrar_fecha %}<span class="mono">{{ cal.dmy(a.fecha) }}</span>{% endif %}
+      <span class="mono tenue">{{ a.ref }}</span>
+    </span>
+  </span>
+  <span class="etiquetas">
+    {% if atrasada %}<span class="etq at">atrasada</span>{% endif %}
+    {% if a.estado == 'hecha' %}<span class="etq ok">terminada</span>{% endif %}
+    {% if a.estado == 'curso' %}<span class="etq curso">en curso</span>{% endif %}
+    {% if a.prioridad == 1 %}<span class="etq urg">urgente</span>
+    {% elif a.prioridad == 2 %}<span class="etq alta">alta</span>{% endif %}
+  </span>
+</a>
+{% endmacro %}
+
+<div class="app">
+  <aside class="lado">
+    <div class="marca">
+      <img src="/static/logo.jpg" alt="Vivero Rose">
+      <span>Control de Stock</span>
+    </div>
+    <a class="pil" href="/">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>Inicio
+    </a>
+    <a class="pil" href="/?tab=stock">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M12 10C12 6 9 3 4 3c0 5 3 8 8 7z"/><path d="M12 13c0-3.5 2.5-6 7-6 0 4.5-2.5 7-7 6z"/></svg>Stock
+    </a>
+    <a class="pil" href="/venta">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2 2h2l2.7 12.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 1.9-1.6L22 6H5"/></svg>Vender
+    </a>
+    <span class="pil on">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>Calendario
+    </span>
+    {# Proyectos (el tablero de paisajismo que ya existe en /proyecto) se queda
+       en este menú por pedido del dueño, aunque no esté en el nav de la app. #}
+    <a class="pil" href="/proyecto">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h6l2 2h10v10H3z"/></svg>Proyectos
+    </a>
+    <a class="pil" href="/?tab=ajustes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Ajustes
+    </a>
+    <div class="pie">
+      <b>{{ yo.nombre }}</b>
+      <span>
+        {% if modo == 'muestra' %}Datos de muestra (sin Linear)
+        {% elif modo == 'lectura' %}Linear · solo lectura
+        {% else %}Linear · CALENDARIO ROSE{% endif %}
+      </span>
+    </div>
+  </aside>
+
+  <div class="tablero">
+    {# Una sola fila de controles: antes eran dos (marca y buscador arriba,
+       fechas y vistas abajo) y el calendario empezaba a media pantalla. #}
+    <div class="barra">
+      <h3>{{ titulo_rango }}</h3>
+      <span class="flechas">
+        <a class="btn icono" href="{{ ligas.anterior }}" aria-label="Anterior">‹</a>
+        <a class="btn chico" href="{{ ligas.hoy }}">Hoy</a>
+        <a class="btn icono" href="{{ ligas.siguiente }}" aria-label="Siguiente">›</a>
+      </span>
+      <span class="segmento">
+        <a class="{{ 'on' if estado.vista == 'semana' }}" href="{{ ligas_vista.semana }}">Semana</a>
+        <a class="{{ 'on' if estado.vista == 'dia' }}" href="{{ ligas_vista.dia }}">Día</a>
+        <a class="{{ 'on' if estado.vista == 'mes' }}" href="{{ ligas_vista.mes }}">Mes</a>
+        <a class="{{ 'on' if estado.vista == 'lista' }}" href="{{ ligas_vista.lista }}">Lista</a>
+      </span>
+      <span class="crece"></span>
+      <span class="segmento">
+        {# Sin correo enlazado a un usuario de Linear no hay "lo mío": el
+           botón queda apagado y dice por qué. #}
+        {% if yo.id %}
+        <a class="{{ 'on' if estado.solo_mio }}" href="{{ ligas_alcance.mio }}">Mi calendario</a>
+        {% else %}
+        <span class="apagado" title="Tu correo todavía no está enlazado a un usuario de Linear">Mi calendario</span>
+        {% endif %}
+        <a class="{{ 'on' if not estado.solo_mio }}" href="{{ ligas_alcance.equipo }}">Todo el equipo</a>
+      </span>
+      <form class="buscador" method="get" action="/calendario">
+        <input type="hidden" name="dia" value="{{ estado.dia }}">
+        <input type="hidden" name="vista" value="{{ estado.vista }}">
+        <input type="hidden" name="mio" value="{{ '1' if estado.solo_mio else '0' }}">
+        <input type="hidden" name="apagados" value="{{ estado.apagados|sort|join(',') }}">
+        <input type="hidden" name="quien" value="{{ estado.quien }}">
+        <input type="hidden" name="hechas" value="{{ '1' if estado.hechas else '0' }}">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+        <input id="buscar" type="search" name="q" value="{{ estado.q }}"
+               placeholder="Buscar…" aria-label="Buscar actividad">
+      </form>
+      <a class="btn icono tenue" href="{{ ligas.refrescar }}" title="Volver a preguntarle a Linear">⟳</a>
+      {% if puede_escribir %}
+      <a class="btn oro" href="{{ ligas.nueva }}">+ Nueva actividad</a>
+      {% endif %}
+    </div>
+
+    {% if error %}<div class="franja"><b>Ups.</b> <span>{{ error }}</span></div>{% endif %}
+    {% if aviso %}<div class="aviso-ok">{{ aviso }}</div>{% endif %}
+
+    {# Solo los tipos que aparecen en lo que se está viendo (lo decide
+       calendario.chips_a_la_vista); antes eran trece, casi todos en cero. #}
+    <div class="chips">
+      {% if estado.apagados %}
+      <a class="chip" href="{{ ligas.todos_tipos }}">Todos</a>
+      {% endif %}
+      {% for c in chips %}
+      <a class="chip {{ 'on' if c.encendido }}"
+         style="{{ 'background:%s;color:#fff;border-color:transparent'|format(c.color) if c.encendido }}"
+         href="{{ c.liga }}" title="Prender o apagar {{ c.nombre }}">
+        <span class="pt" style="background:{{ '#fff' if c.encendido else c.color }}"></span>
+        {{ c.nombre }}<span class="cuenta-chip">{{ c.cuenta }}</span>
+      </a>
+      {% endfor %}
+      <span class="crece"></span>
+      <a class="chip tenue" href="{{ ligas.sin_hechas }}">
+        {{ 'Ocultar terminadas' if estado.hechas else 'Ver terminadas' }}
+      </a>
+    </div>
+
+    {% if atrasadas_total %}
+    <a class="franja" href="{{ ligas.atrasadas }}">
+      <b>{{ atrasadas_total }} atrasada{{ 's' if atrasadas_total > 1 }}</b>
+      <span class="tenue">sin terminar y ya pasó la fecha</span>
+      <span class="crece"></span>
+      <span class="ver">Verlas →</span>
+    </a>
+    {% endif %}
+
+    <div class="zona">
+      <div id="vista">
+        {% if carril %}
+        {# Semana y Día comparten los carriles de hora; cambia qué es una columna. #}
+        <div class="carril-caja">
+          <div class="carril-scroll">
+            <div class="carril-int">
+              <div class="carril-cab" style="grid-template-columns:46px repeat({{ carril.columnas|length }},1fr)">
+                <div></div>
+                {% for col in carril.columnas %}
+                <div class="{{ 'col-hoy' if col.hoy }}">
+                  {% if col.num %}
+                    <a href="{{ col.liga }}">{{ col.dow }}<span class="dnum">{{ col.num }}</span></a>
+                  {% else %}
+                    <span class="dnum" style="font-size:13px">{{ col.dow }}</span>
+                  {% endif %}
+                  {% if col.cant %}<span class="tenue">{{ col.cant }}</span>{% endif %}
+                  {% if puede_escribir %}<a class="mas" href="{{ col.liga_nueva }}" title="Nueva actividad este día">+</a>{% endif %}
+                </div>
+                {% endfor %}
+              </div>
+              <div class="carril-cuerpo">
+                <div class="rejilla-h" style="grid-template-columns:46px repeat({{ carril.columnas|length }},1fr)">
+                  {# El peso de cada fila lo decide Python (la ocupada pesa
+                     el doble que la vacía) y el carril llena el alto de la
+                     pantalla, como la vista de mes. #}
+                  {% for h in carril.horas %}
+                  <div class="franja-hora {{ 'vacia' if h.vacia }}"
+                       style="flex-grow:{{ h.alto }};grid-template-columns:46px repeat({{ carril.columnas|length }},1fr)">
+                    <div class="hora-et">{{ h.etiqueta }}</div>
+                    {% for _ in carril.columnas %}<div></div>{% endfor %}
+                  </div>
+                  {% endfor %}
+                  {% for col in carril.columnas %}
+                  <div class="col-dia {{ 'finde' if col.finde }} {{ 'hoy-fondo' if col.hoy }}" style="{{ col.estilo }}"></div>
+                  {% endfor %}
+                  {% if carril.ahora is not none %}
+                  <div class="linea-ahora" style="top:{{ carril.ahora }}%;left:46px"></div>
+                  {% endif %}
+                  {% for b in carril.bloques %}
+                  <a class="bloque {{ 'hecha' if b.a.estado == 'hecha' }} {{ 'cancel' if b.a.estado == 'cancel' }}"
+                     style="{{ b.estilo }}" href="{{ ligas.cerrar }}&abrir={{ b.a.id }}"
+                     title="{{ cal.nombre_de_tipo(b.a.tipo) }} — {{ b.a.cliente }} · {{ cal.hora_bonita(b.a.hora) }} · {{ b.a.resp }}"
+                     data-busca="{{ (b.a.cliente ~ ' ' ~ b.a.lugar ~ ' ' ~ b.a.resp ~ ' ' ~ cal.nombre_de_tipo(b.a.tipo))|lower }}">
+                    <span class="tt" style="color:{{ b.color }}">{{ cal.nombre_de_tipo(b.a.tipo) }}</span>
+                    {% if b.ver_cliente %}<small>{{ b.a.cliente }}</small>{% endif %}
+                    {% if b.ver_pie %}<small>{{ b.a.hora }} · {{ b.a.resp }}</small>{% endif %}
+                    {% if b.atrasada %}<span class="marca-at"></span>{% endif %}
+                  </a>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {% elif mes %}
+        <div class="mes">
+          {% for d in ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'] %}<div class="dow">{{ d }}</div>{% endfor %}
+          {% for semana in mes %}{% for celda in semana %}
+          <div class="celda {{ 'hoy' if celda.hoy }} {{ 'sel' if celda.elegido }} {{ 'otro' if celda.otro_mes }}">
+            <div class="num">
+              <a class="n" href="{{ celda.liga }}">{{ celda.num }}</a>
+              {% if celda.atrasadas %}<span class="punto-at">● {{ celda.atrasadas }}</span>{% endif %}
+              {% if puede_escribir %}<a class="mas" href="{{ celda.liga_nueva }}" title="Nueva actividad este día">+</a>{% endif %}
+            </div>
+            {% for barra in celda.barras %}
+            <a class="barrita {{ 'hecha' if barra.a.estado == 'hecha' }} {{ 'cancel' if barra.a.estado == 'cancel' }}"
+               style="background:{{ barra.fondo }};border-left-color:{{ barra.color }};color:{{ barra.color }}"
+               href="{{ ligas.cerrar }}&abrir={{ barra.a.id }}"
+               data-busca="{{ (barra.a.cliente ~ ' ' ~ barra.a.resp)|lower }}">{{ barra.a.hora }} {{ barra.a.cliente }}</a>
+            {% endfor %}
+            {% if celda.resto %}<a class="mas" href="{{ celda.liga_dia }}">+{{ celda.resto }} más</a>{% endif %}
+          </div>
+          {% endfor %}{% endfor %}
+        </div>
+
+        {% else %}
+        <div class="lista-caja">
+          {% for grupo in grupos %}
+          <div class="grupo-dia">
+            <div class="grupo-cab">
+              <b {% if grupo.es_atraso %}style="color:var(--critico)"{% endif %}>{{ grupo.titulo }}</b>
+              <span class="ln"></span><span class="cant">{{ grupo.actividades|length }}</span>
+            </div>
+            {% for a in grupo.actividades %}
+              {{ pinta_actividad(a, ligas.cerrar ~ '&abrir=' ~ a.id, grupo.es_atraso, grupo.es_atraso) }}
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="vacio">No hay actividades con estos filtros.</div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if abierta %}
+{# Ficha de la actividad: la pinta el servidor y cada acción es un formulario. #}
+<a class="telon" href="{{ ligas.cerrar }}" aria-label="Cerrar"></a>
+<aside class="panel-der" role="dialog" aria-label="Ficha de actividad">
+  <div class="cab-panel">
+    <span class="chip on" style="background:{{ cal.color_de(abierta.tipo) }};color:#fff">
+      <span class="pt" style="background:#fff"></span>{{ cal.nombre_de_tipo(abierta.tipo) }}</span>
+    <a class="btn chico" href="{{ ligas.cerrar }}">Cerrar</a>
+  </div>
+  <h4>{{ abierta.cliente }}</h4>
+  <div class="etiquetas">
+    {% if cal.esta_atrasada(abierta, hoy) %}<span class="etq at">atrasada</span>{% endif %}
+    <span class="etq {{ 'ok' if abierta.estado == 'hecha' }} {{ 'curso' if abierta.estado == 'curso' }}">
+      {{ cal.nombre_de_estado(abierta.estado) }}</span>
+    {% if abierta.prioridad < 3 %}
+    <span class="etq {{ 'urg' if abierta.prioridad == 1 else 'alta' }}">{{ cal.nombre_de_prioridad(abierta.prioridad) }}</span>
+    {% endif %}
+  </div>
+
+  {% if not puede_tocar_abierta %}
+  <div class="solo-lectura">
+    <b>Solo lectura.</b>
+    {% if modo == 'lectura' %}
+      Esta instancia mira el calendario real pero no escribe en Linear.
+    {% else %}
+      Esta actividad es de <b>{{ abierta.resp }}</b>: la ves para coordinarte, pero la cambia {{ abierta.resp }} o el dueño.
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <form method="post" action="/calendario/actividad/{{ abierta.id }}/detalle?volver={{ (volver ~ '&abrir=' ~ abierta.id)|urlencode }}">
+    <div class="dato"><b>Fecha</b>
+      <input class="campo" type="date" name="fecha" value="{{ abierta.fecha }}" {{ 'disabled' if not puede_tocar_abierta }}></div>
+    <div class="dato"><b>Hora</b>
+      <span class="par">
+        <input class="campo" type="time" name="hora" value="{{ abierta.hora }}" {{ 'disabled' if not puede_tocar_abierta }}>
+        <select class="sel" name="dur" {{ 'disabled' if not puede_tocar_abierta }}>
+          {% for m in [30, 60, 90, 120, 180, 240, 480] %}
+          <option value="{{ m }}" {{ 'selected' if abierta.dur == m }}>{{ (m ~ ' min') if m < 60 else ((m // 60) ~ ' h') }}</option>
+          {% endfor %}
+        </select>
+      </span></div>
+    <div class="dato"><b>Lugar</b>
+      <input class="campo" name="lugar" value="{{ abierta.lugar }}" {{ 'disabled' if not puede_tocar_abierta }}></div>
+    <div class="dato"><b>Responsable</b>
+      <select class="sel ancho" name="resp_id" {{ 'disabled' if not (puede_tocar_abierta and yo.admin) }}>
+        <option value="">Sin asignar</option>
+        {% for g in gente %}
+        <option value="{{ g.id }}" {{ 'selected' if g.id == abierta.resp_id }}>{{ g.nombre }}</option>
+        {% endfor %}
+      </select></div>
+    <div class="dato"><b>Prioridad</b>
+      <select class="sel ancho" name="prioridad" {{ 'disabled' if not puede_tocar_abierta }}>
+        {% for valor, nombre in [(1, 'Urgente'), (2, 'Alta'), (3, 'Normal')] %}
+        <option value="{{ valor }}" {{ 'selected' if abierta.prioridad == valor }}>{{ nombre }}</option>
+        {% endfor %}
+      </select></div>
+    <div class="dato"><b>En Linear</b>
+      <span class="mono">{{ abierta.ref }}{% if abierta.url %} · <a href="{{ abierta.url }}" target="_blank" rel="noopener">abrir</a>{% endif %}</span></div>
+    {% if puede_tocar_abierta %}
+    <button class="btn oro" type="submit" style="margin-top:10px">Guardar cambios</button>
+    {% endif %}
+  </form>
+
+  {% if abierta.nota %}<div class="nota-it">{{ abierta.nota }}</div>{% endif %}
+
+  {% if puede_tocar_abierta %}
+  <div class="acciones">
+    {% if abierta.estado == 'hecha' %}
+      <form method="post" action="/calendario/actividad/{{ abierta.id }}/estado?volver={{ volver|urlencode }}">
+        <input type="hidden" name="estado" value="pend">
+        <button class="btn" type="submit">Reabrir</button></form>
+    {% else %}
+      <form method="post" action="/calendario/actividad/{{ abierta.id }}/estado?volver={{ volver|urlencode }}">
+        <input type="hidden" name="estado" value="hecha">
+        <button class="btn oro" type="submit">✓ Marcar terminada</button></form>
+    {% endif %}
+    {% if abierta.estado not in ('curso', 'hecha') %}
+      <form method="post" action="/calendario/actividad/{{ abierta.id }}/estado?volver={{ (volver ~ '&abrir=' ~ abierta.id)|urlencode }}">
+        <input type="hidden" name="estado" value="curso">
+        <button class="btn" type="submit">En curso</button></form>
+    {% endif %}
+    {% if abierta.estado == 'cancel' %}
+      <form method="post" action="/calendario/actividad/{{ abierta.id }}/estado?volver={{ volver|urlencode }}">
+        <input type="hidden" name="estado" value="pend">
+        <button class="btn" type="submit">Reactivar</button></form>
+    {% else %}
+      <form method="post" action="/calendario/actividad/{{ abierta.id }}/estado?volver={{ volver|urlencode }}"
+            data-confirmar="Cancelar “{{ cal.nombre_de_tipo(abierta.tipo) }} — {{ abierta.cliente }}”.
+
+No se borra nada: el issue {{ abierta.ref }} queda en Linear marcado como Cancelado, con quién y cuándo. Desaparece de las pendientes, pero se puede reabrir.">
+        <input type="hidden" name="estado" value="cancel">
+        <button class="btn peligro" type="submit">Cancelar actividad</button></form>
+    {% endif %}
+  </div>
+
+  <form method="post" action="/calendario/actividad/{{ abierta.id }}/nota?volver={{ (volver ~ '&abrir=' ~ abierta.id)|urlencode }}"
+        class="campo-caja">
+    <label for="texto">Nota nueva</label>
+    <textarea class="campo" id="texto" name="texto" rows="2"
+              placeholder="Ej: el cliente pidió llegar antes de las 9."></textarea>
+    <button class="btn chico" type="submit" style="align-self:flex-start">Agregar nota</button>
+  </form>
+  {% endif %}
+
+  <div class="notas">
+    {% for n in notas %}
+    <div class="nota-it"><div class="q">{{ n.quien }} · {{ n.cuando }}</div>{{ n.texto }}</div>
+    {% else %}
+    <div class="pie-nota">Sin notas todavía.</div>
+    {% endfor %}
+  </div>
+  <p class="pie-nota">Desde aquí no se borra nada: una actividad se cancela y el issue queda en Linear con su historial.</p>
+</aside>
+{% endif %}
+
+{% if nueva and puede_escribir %}
+<a class="telon" href="{{ ligas.cerrar }}" aria-label="Cerrar"></a>
+<form class="modal" method="post" action="/calendario/actividad?volver={{ volver|urlencode }}">
+  <div class="cab-panel">
+    <div><span class="tenue">CALENDARIO ROSE</span><h4>Actividad nueva</h4></div>
+    <a class="btn chico" href="{{ ligas.cerrar }}">Cerrar</a>
+  </div>
+  <div class="form-red">
+    <div class="campo-caja">
+      <label for="tipo">Tipo de actividad</label>
+      <select class="sel ancho" id="tipo" name="tipo">
+        {% for t in cal.TIPOS %}<option value="{{ t.clave }}">{{ t.nombre }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="campo-caja">
+      <label for="resp_id">Responsable</label>
+      <select class="sel ancho" id="resp_id" name="resp_id" {{ 'disabled' if not yo.admin }}>
+        {% if yo.admin %}<option value="">Sin asignar</option>{% endif %}
+        {% for g in gente %}{% if yo.admin or g.id == yo.id %}
+        <option value="{{ g.id }}" {{ 'selected' if g.id == pre.resp }}>{{ g.nombre }}</option>
+        {% endif %}{% endfor %}
+      </select>
+      {% if not yo.admin %}<span class="pie-nota">Lo que creás nace a tu nombre.</span>{% endif %}
+    </div>
+    <div class="campo-caja ancho">
+      <label for="cliente">Cliente</label>
+      <input class="campo" id="cliente" name="cliente" required placeholder="Hotel Bristol" autocomplete="off">
+    </div>
+    <div class="campo-caja ancho">
+      <label for="lugar">Lugar</label>
+      <input class="campo" id="lugar" name="lugar" placeholder="Obarrio, Costa del Este, oficina…">
+    </div>
+    <div class="campo-caja">
+      <label for="fecha">Fecha</label>
+      <input class="campo" type="date" id="fecha" name="fecha" value="{{ pre.fecha }}" required>
+    </div>
+    <div class="campo-caja">
+      <label for="hora">Hora y duración</label>
+      <span class="par">
+        <input class="campo" type="time" id="hora" name="hora" value="{{ pre.hora }}">
+        <select class="sel" name="dur">
+          {% for m in [30, 60, 90, 120, 180, 240, 480] %}
+          <option value="{{ m }}" {{ 'selected' if m == 60 }}>{{ (m ~ ' min') if m < 60 else ((m // 60) ~ ' h') }}</option>
+          {% endfor %}
+        </select>
+      </span>
+    </div>
+    <div class="campo-caja">
+      <label for="prioridad">Prioridad</label>
+      <select class="sel ancho" id="prioridad" name="prioridad">
+        <option value="3">Normal</option><option value="2">Alta</option><option value="1">Urgente</option>
+      </select>
+    </div>
+    <div class="campo-caja">
+      <label for="recogida">Fecha de recogida (alquiler)</label>
+      <input class="campo" type="date" id="recogida" name="recogida">
+      <span class="pie-nota">Si el tipo es Alquiler, se crean dos actividades: el alquiler y su recogida.</span>
+    </div>
+    <div class="campo-caja ancho">
+      <label for="nota">Nota</label>
+      <textarea class="campo" id="nota" name="nota" rows="2"
+                placeholder="Qué plantas, con quién coordinar, cuánto se cobra…"></textarea>
+    </div>
+  </div>
+  <div class="acciones" style="justify-content:flex-end">
+    <a class="btn" href="{{ ligas.cerrar }}">Cancelar</a>
+    <button class="btn oro" type="submit">Crear en Linear</button>
+  </div>
+  <p class="pie-nota">El issue nace como “Tipo — Cliente”, con su etiqueta de tipo, su responsable y su fecha límite.</p>
+</form>
+{% endif %}
+
+<script src="/static/calendario.js?v={{ v_estaticos }}"></script>
+</body>
+</html>

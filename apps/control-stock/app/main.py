@@ -11,15 +11,16 @@ import json
 import os
 import re
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import quote
 
 from fastapi import FastAPI, Request, UploadFile
-from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import (acceso_google, calculos, conteos, cotizaciones, datos, fichas,
+from . import (acceso_google, calculos, calendario, calendario_google,
+               calendario_ics, compras, conteos, cotizaciones, datos, fichas,
                fotos, proyectos, seguridad, ventas)
 
 app = FastAPI(title="Control de Stock")
@@ -57,12 +58,21 @@ def dinero_venta(monto):
 
 plantillas.env.filters["dinero"] = dinero_venta
 
+# El Inicio pinta el calendario con el color y el nombre que decide
+# app/calendario.py; la plantilla no conoce los tipos.
+plantillas.env.globals["cal_color"] = calendario.color_de
+plantillas.env.globals["cal_tipo"] = calendario.nombre_de_tipo
+plantillas.env.filters["fecha_dmy"] = calendario.dmy
+
 # Las tablas se crean al importar: es idempotente y así el proceso (o los
 # tests) nunca corren contra una base sin esquema.
 datos.iniciar_db()
 ventas.iniciar_tablas()
 cotizaciones.iniciar_tablas()
 proyectos.iniciar_tablas()
+calendario_ics.iniciar_tablas()
+calendario_google.iniciar_tablas()
+calendario_google.arrancar_hilo()
 
 
 # ---------------------------------------------------------------------------
@@ -104,7 +114,10 @@ async def exigir_sesion(request: Request, call_next):
     # desde WhatsApp, sin sesión. /auth/google es el ida y vuelta del login
     # con Google e /invitacion/ el link compartible, ambos antes de que
     # exista la sesión.
-    if (ruta == "/login" or ruta.startswith("/static") or ruta.startswith("/f/")
+    # /calendario.ics es la suscripción del teléfono: la autoriza su token
+    # secreto (empleada_del_token), no la cookie de sesión.
+    if (ruta == "/login" or ruta == "/calendario.ics"
+            or ruta.startswith("/static") or ruta.startswith("/f/")
             or ruta.startswith("/auth/google") or ruta.startswith("/invitacion/")):
         return await call_next(request)
     empleada = seguridad.empleada_de_sesion(request.cookies.get("sesion"))
@@ -112,6 +125,11 @@ async def exigir_sesion(request: Request, call_next):
         return RedirectResponse("/login", status_code=303)
     request.state.empleada = empleada
     return await call_next(request)
+
+
+def _base_publica(request):
+    """La URL que ve el mundo (detrás de nginx la del request es interna)."""
+    return (os.environ.get("PUBLIC_BASE_URL") or str(request.base_url)).rstrip("/")
 
 
 def _pagina_login(request, error=None, usuario="", status=200):
@@ -294,6 +312,21 @@ def inicio(request: Request, refrescar: int = 0):
         }
         for p in inventario
     ]
+    # Resumen del calendario para el Inicio. Si Linear falla, la pestaña
+    # sigue mostrando el stock: el calendario simplemente no aparece.
+    panel_cal, error_cal = None, None
+    try:
+        dia_cal = calendario.hoy().isoformat()
+        desde_cal = (calendario.hoy() - timedelta(days=14)).isoformat()
+        hasta_cal = (calendario.hoy() + timedelta(days=14)).isoformat()
+        yo_cal = _yo_en_el_calendario(request.state.empleada)
+        del_calendario = calendario.listar(desde_cal, hasta_cal)
+        if yo_cal["id"] and not yo_cal["admin"]:
+            del_calendario = [a for a in del_calendario if a["resp_id"] == yo_cal["id"]]
+        panel_cal = calendario.panel_inicio(del_calendario, dia_cal)
+    except calendario.ErrorCalendario as fallo:
+        error_cal = str(fallo)
+
     alertas = datos.alertas_pendientes()
     # La vista de detalle muestra la ficha a todos; editarla sigue limitado
     # a FICHAS_EDITORES (y el POST /fichas lo verifica en el servidor).
@@ -312,6 +345,14 @@ def inicio(request: Request, refrescar: int = 0):
         # Para armar los links /invitacion/{token} que se comparten.
         "base_publica": (os.environ.get("PUBLIC_BASE_URL")
                          or str(request.base_url)).rstrip("/"),
+        "gcal_configurado": calendario_google.configurado(),
+        "gcal_conexion": calendario_google.conexion_de(request.state.empleada["id"]),
+        # El enlace de suscripción del calendario (feed ICS) que se pega en
+        # el iPhone o en Google Calendar; vive en Ajustes (22/09/2026).
+        "suscripcion_calendario": (
+            (os.environ.get("PUBLIC_BASE_URL") or str(request.base_url)).rstrip("/")
+            + "/calendario.ics?t="
+            + calendario_ics.token_de(request.state.empleada["id"])),
         "puntos": puntos,
         # El anillo del score: circunferencia 402, se descubre según el score.
         "anillo": round(402 * (1 - puntos / 100)),
@@ -321,6 +362,9 @@ def inicio(request: Request, refrescar: int = 0):
         "categorias": _resumen_categorias(inventario, umbral),
         "umbral": umbral,
         "alertas": alertas,
+        "cal": panel_cal,
+        "cal_error": error_cal,
+        "cal_modo": calendario.modo(),
         "conteos": datos.conteos_recientes(),
         "ultima_hoja": datos.ultima_hoja_pdf(),
         "hora_actualizado": (
@@ -596,10 +640,12 @@ def ver_hoja(n: int):
     conteo = datos.conteo(n)
     if conteo is None or not conteo["archivo"]:
         return RedirectResponse("/", status_code=303)
+    # Baja el archivo en vez de abrirlo en el visor: "inline" en el celular
+    # dejaba al empleado en una pantalla de la que no se podía salir, y esta
+    # hoja se hizo justamente para imprimirla (Abraham, 18/09/2026).
     return FileResponse(os.path.join(datos.ruta_archivos(), conteo["archivo"]),
                         media_type="application/pdf",
-                        content_disposition_type="inline",
-                        filename=conteo["archivo"])
+                        headers=cabeceras_descarga(conteo["archivo"]))
 
 
 @app.get("/plantilla.xlsx")
@@ -779,8 +825,6 @@ def _cotizaciones_con_estado():
             "editable": bool(estado and estado["editable"]),
         })
     return resultado
-
-
 
 
 @app.post("/venta/cancelar/{n}")
@@ -1159,8 +1203,7 @@ def venta_propuesta_muestra(request: Request):
         return _redirigir_venta(
             f"No se pudo armar el PDF de ejemplo: {ventas._mensaje_de_error(error)}")
     return Response(contenido, media_type="application/pdf",
-                    headers={"Content-Disposition":
-                             'attachment; filename="propuesta-de-ejemplo.pdf"'})
+                    headers=cabeceras_descarga("propuesta-de-ejemplo.pdf"))
 
 
 @app.get("/venta/servicio/{n}/editar")
@@ -1306,6 +1349,41 @@ async def venta_cobrar_confirmar(request: Request, n: int):
     })
 
 
+def cabeceras_descarga(nombre):
+    """Las cabeceras que hacen que un PDF se BAJE al teléfono, en vez de
+    abrirse en el visor del navegador.
+
+    En el celular un PDF que el navegador decide previsualizar se traga la
+    pantalla: el visor tapa la app, no siempre trae botón de guardar y no hay
+    cómo volver (Abraham, 18/09/2026: "me lleva a una pantalla y no puedo
+    hacer nada"). Tres cosas lo evitan:
+
+      - `attachment`, que pide descarga y no vista previa;
+      - el nombre también en `filename*` (RFC 5987): los nombres llevan
+        acentos y tildes, y sin esta forma algunos Android guardan el archivo
+        con el nombre roto o directamente lo abren en vez de bajarlo;
+      - `X-Content-Type-Options: nosniff`, para que el navegador no se salte
+        lo anterior por olfatear el contenido.
+
+    Los enlaces además abren en otra pestaña (target="_blank" en las
+    plantillas): así la pantalla de la app queda viva detrás, pase lo que
+    pase con la descarga.
+    """
+    # El repuesto ASCII: si al quitar los acentos no queda nombre de verdad
+    # (solo la extensión, o nada), se usa uno genérico en vez de mandar un
+    # `filename=".pdf"` que el teléfono guarda como archivo sin nombre.
+    seguro = nombre.encode("ascii", "ignore").decode().strip()
+    raiz = seguro[:-4] if seguro.lower().endswith(".pdf") else seguro
+    if not re.sub(r"\W", "", raiz):
+        seguro = "documento.pdf"
+    return {
+        "Content-Disposition": (
+            f'attachment; filename="{seguro}"; '
+            f"filename*=UTF-8''{quote(nombre)}"),
+        "X-Content-Type-Options": "nosniff",
+    }
+
+
 def _respuesta_pdf(reporte, objetivo_id, nombre):
     # Un PDF que falla (ej. credenciales web sin configurar) no debe tirar un
     # error 500 pelado: se vuelve a /venta con el aviso en pantalla.
@@ -1314,7 +1392,7 @@ def _respuesta_pdf(reporte, objetivo_id, nombre):
     except Exception as error:
         return _redirigir_venta(f"No se pudo descargar el PDF: {ventas._mensaje_de_error(error)}")
     return Response(contenido, media_type="application/pdf",
-                    headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
+                    headers=cabeceras_descarga(nombre))
 
 
 @app.get("/venta/{n}/cotizacion.pdf")
@@ -1567,3 +1645,622 @@ async def proyecto_compra(request: Request, ref: str):
 def proyecto_compra_quitar(request: Request, ref: str, n: int):
     proyectos.quitar_compra(ref, n)
     return RedirectResponse(f"/proyecto/{ref}", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Calendario del equipo (espejo del proyecto CALENDARIO ROSE de Linear).
+#
+# Pantalla server-rendered como el resto de la app: Python arma la vista
+# completa (qué días, qué bloques, en qué posición) y Jinja2 la pinta. La
+# navegación son enlaces y las acciones, formularios POST que vuelven al
+# mismo día y la misma vista, para no perder el lugar.
+# ---------------------------------------------------------------------------
+
+def _yo_en_el_calendario(empleada):
+    """Quién es la persona de la sesión dentro del calendario.
+
+    Se amarra por el email verificado de Google con el usuario de Linear: el
+    empleado entra viendo lo suyo. Los admins de la app (AJUSTES_ADMINS) ven
+    y tocan todo el equipo; el resto solo escribe sobre sus actividades, y
+    eso se verifica AQUÍ, en el servidor, no en el navegador.
+    """
+    email = (empleada.get("email") or "").lower() if empleada.get("email_verificado") else ""
+    yo_id, yo_nombre = "", empleada.get("nombre") or empleada["id"]
+    if email:
+        for persona in calendario.responsables():
+            if persona.get("email") == email:
+                yo_id, yo_nombre = persona["id"], persona["nombre"]
+                break
+    return {"id": yo_id, "nombre": yo_nombre, "admin": _es_admin(empleada)}
+
+
+def _estado_calendario(request, empleada):
+    """Lo que la barra de arriba dice que hay que mostrar."""
+    q = request.query_params
+    dia = q.get("dia", "")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", dia):
+        dia = calendario.hoy().isoformat()
+    vista = q.get("vista", "semana")
+    if vista not in calendario.VISTAS:
+        vista = "semana"
+    yo = _yo_en_el_calendario(empleada)
+    # Un empleado entra viendo lo suyo; el dueño, todo el equipo.
+    mio = q.get("mio")
+    solo_mio = (mio == "1") if mio in ("0", "1") else not yo["admin"]
+    # Sin usuario de Linear enlazado no hay "lo mío" que filtrar: se cae a
+    # ver el equipo (si no, la pantalla quedaba vacía y los chips en 0).
+    solo_mio = solo_mio and bool(yo["id"])
+    apagados = {t for t in q.get("apagados", "").split(",") if t in calendario.POR_CLAVE}
+    return {
+        "dia": dia, "vista": vista, "yo": yo, "solo_mio": solo_mio,
+        "apagados": apagados, "quien": q.get("quien", ""), "q": q.get("q", ""),
+        "hechas": q.get("hechas", "1") != "0",
+        "mes": q.get("mes", "") if re.fullmatch(r"\d{4}-\d{2}-\d{2}", q.get("mes", "")) else dia,
+    }
+
+
+def _liga(estado, **cambios):
+    """Arma el enlace de la pantalla conservando los filtros de ahora."""
+    datos = {
+        "dia": estado["dia"], "vista": estado["vista"],
+        "mio": "1" if estado["solo_mio"] else "0",
+        "apagados": ",".join(sorted(estado["apagados"])),
+        "quien": estado["quien"], "q": estado["q"],
+        "hechas": "1" if estado["hechas"] else "0",
+        "mes": estado["mes"],
+    }
+    datos.update(cambios)
+    partes = [f"{k}={quote(str(v))}" for k, v in datos.items() if v not in ("", None)]
+    return "/calendario?" + "&".join(partes)
+
+
+def _actividades_para(estado, refrescar=False):
+    ancla = datetime.strptime(estado["dia"], "%Y-%m-%d").date()
+    primero = ancla.replace(day=1)
+    desde = (primero - timedelta(days=10)).isoformat()
+    hasta = (primero + timedelta(days=52)).isoformat()
+    return calendario.listar(desde, hasta, refrescar=refrescar)
+
+
+def _puede_tocar(actividad, yo):
+    """Cada quien lo suyo: la regla se decide aquí, no en el navegador."""
+    if not calendario.configurado():
+        return None  # modo muestra: es una demo, no hay nada real que cuidar
+    if not calendario.escritura_activa():
+        return "Esta instancia mira el calendario real pero no escribe en Linear."
+    if yo["admin"]:
+        return None
+    if actividad and yo["id"] and actividad["resp_id"] == yo["id"]:
+        return None
+    de_quien = actividad["resp"] if actividad else "otra persona"
+    return f"Esa actividad es de {de_quien}: vos la ves, pero no la cambiás."
+
+
+@app.get("/calendario")
+def calendario_pantalla(request: Request):
+    empleada = request.state.empleada
+    estado = _estado_calendario(request, empleada)
+    dia_hoy = calendario.hoy().isoformat()
+    ancla = datetime.strptime(estado["dia"], "%Y-%m-%d").date()
+    error = request.query_params.get("error") or None
+
+    try:
+        todas = _actividades_para(estado, refrescar=request.query_params.get("refrescar") == "1")
+    except calendario.ErrorCalendario as fallo:
+        todas, error = [], error or str(fallo)
+
+    gente = calendario.responsables()
+    yo = estado["yo"]
+    visibles = calendario.filtrar(
+        todas, tipos_apagados=estado["apagados"], quien=estado["quien"],
+        texto=estado["q"], ver_hechas=estado["hechas"],
+        solo_de=yo["id"] if estado["solo_mio"] else "")
+    dias = calendario.dias_de(estado["vista"], ancla)
+
+    # Cada vista llega armada desde aquí; la plantilla solo recorre.
+    semana = carril = mes = grupos = None
+    if estado["vista"] == "semana":
+        carril = calendario.carril_semana(visibles, dias, dia_hoy)
+    elif estado["vista"] == "dia":
+        equipo_dia = ([p for p in gente if p["id"] == yo["id"]] if estado["solo_mio"]
+                      else [p for p in gente if not estado["quien"] or p["id"] == estado["quien"]])
+        carril = calendario.carril_dia(visibles, estado["dia"], equipo_dia, dia_hoy)
+    elif estado["vista"] == "mes":
+        mes = calendario.rejilla_mes(visibles, ancla, estado["dia"], dia_hoy)
+    else:
+        grupos = calendario.grupos_lista(visibles, dias, dia_hoy)
+
+    # Cada cosa que se puede tocar lleva su enlace ya armado: la plantilla
+    # no calcula direcciones ni el navegador arma estado.
+    # Los chips cuentan sobre lo mismo que se está viendo (persona, búsqueda
+    # y terminadas ya aplicadas), pero SIN el filtro de tipos: si no, apagar
+    # un tipo lo dejaría en cero y no habría cómo volver a prenderlo.
+    base_chips = calendario.filtrar(
+        todas, quien=estado["quien"], texto=estado["q"], ver_hechas=estado["hechas"],
+        solo_de=yo["id"] if estado["solo_mio"] else "")
+    chips_lista = calendario.chips(base_chips, estado["apagados"])
+    for chip in chips_lista:
+        nuevos = set(estado["apagados"])
+        if chip["encendido"]:
+            nuevos.add(chip["clave"])
+        else:
+            nuevos.discard(chip["clave"])
+        chip["liga"] = _liga(estado, apagados=",".join(sorted(nuevos)))
+        # Alt-clic no existe sin JS: el segundo enlace deja solo ese tipo.
+        chip["liga_solo"] = _liga(estado, apagados=",".join(
+            sorted(t["clave"] for t in calendario.TIPOS if t["clave"] != chip["clave"])))
+    chips_lista = calendario.chips_a_la_vista(chips_lista)
+
+    if mes:
+        for semana_celdas in mes:
+            for celda in semana_celdas:
+                celda["liga"] = _liga(estado, dia=celda["iso"], mes=celda["iso"])
+                celda["liga_dia"] = _liga(estado, dia=celda["iso"], mes=celda["iso"], vista="dia")
+                celda["liga_nueva"] = _liga(estado, nueva="1", fecha=celda["iso"])
+    if carril:
+        for columna in carril["columnas"]:
+            columna["liga"] = _liga(estado, dia=columna["iso"], vista="dia")
+            columna["liga_nueva"] = _liga(
+                estado, nueva="1", fecha=columna["iso"],
+                resp=(columna.get("persona") or {}).get("id", ""))
+
+    ligas_vista = {v: _liga(estado, vista=v) for v in calendario.VISTAS}
+    ligas_alcance = {"mio": _liga(estado, mio="1"), "equipo": _liga(estado, mio="0")}
+
+    abierta = None
+    id_abierta = request.query_params.get("abrir", "")
+    if id_abierta:
+        abierta = next((a for a in todas if a["id"] == id_abierta), None)
+
+    return plantillas.TemplateResponse(request, "calendario.html", {
+        "empleada": empleada,
+        "cal": calendario,
+        "estado": estado,
+        "yo": yo,
+        "hoy": dia_hoy,
+        "error": error,
+        "aviso": request.query_params.get("aviso"),
+        "titulo_rango": calendario.titulo_de(estado["vista"], ancla),
+        "carril": carril,
+        "mes": mes,
+        "grupos": grupos,
+        "dias": dias,
+        "chips": chips_lista,
+        "ligas_vista": ligas_vista,
+        "ligas_alcance": ligas_alcance,
+        "franja": [a for a in visibles if calendario.esta_atrasada(a, dia_hoy)][:6],
+        "atrasadas_total": len([a for a in visibles if calendario.esta_atrasada(a, dia_hoy)]),
+        "gente": gente,
+        "abierta": abierta,
+        "notas": calendario.comentarios(id_abierta) if abierta else [],
+        "puede_tocar_abierta": (_puede_tocar(abierta, yo) is None) if abierta else False,
+        "nueva": request.query_params.get("nueva") == "1",
+        "pre": {
+            "fecha": request.query_params.get("fecha") or estado["dia"],
+            "hora": request.query_params.get("hora") or calendario.HORA_POR_DEFECTO,
+            "resp": request.query_params.get("resp") or yo["id"],
+        },
+        "modo": calendario.modo(),
+        "puede_escribir": calendario.escritura_activa() or not calendario.configurado(),
+        "ligas": {
+            "hoy": _liga(estado, dia=dia_hoy, mes=dia_hoy),
+            "anterior": _liga(estado,
+                              dia=calendario.paso_de_vista(estado["vista"], ancla, -1).isoformat(),
+                              mes=calendario.paso_de_vista(estado["vista"], ancla, -1).isoformat()),
+            "siguiente": _liga(estado,
+                               dia=calendario.paso_de_vista(estado["vista"], ancla, 1).isoformat(),
+                               mes=calendario.paso_de_vista(estado["vista"], ancla, 1).isoformat()),
+            "refrescar": _liga(estado, refrescar="1"),
+            "nueva": _liga(estado, nueva="1"),
+            "cerrar": _liga(estado),
+            "sin_hechas": _liga(estado, hechas="0" if estado["hechas"] else "1"),
+            "todos_tipos": _liga(estado, apagados=""),
+            # La franja de atrasadas dice cuántas hay y lleva a la lista,
+            # donde se leen enteras, en vez de repetirlas ahí arriba.
+            "atrasadas": _liga(estado, vista="lista"),
+        },
+        "volver": _liga(estado),
+    })
+
+
+def _volver_a(request, aviso="", error=""):
+    """Después de una acción se vuelve al mismo día, vista y filtros."""
+    destino = request.query_params.get("volver") or "/calendario"
+    if not destino.startswith("/calendario"):
+        destino = "/calendario"
+    if aviso:
+        destino += ("&" if "?" in destino else "?") + "aviso=" + quote(aviso)
+    if error:
+        destino += ("&" if "?" in destino else "?") + "error=" + quote(error)
+    return RedirectResponse(destino, status_code=303)
+
+
+async def _accion_calendario(request, id_actividad, hacer):
+    """Envoltorio común: revisa el permiso, ejecuta y vuelve con el aviso."""
+    yo = _yo_en_el_calendario(request.state.empleada)
+    actividad = None
+    if id_actividad:
+        estado = _estado_calendario(request, request.state.empleada)
+        try:
+            actividad = next((a for a in _actividades_para(estado) if a["id"] == id_actividad), None)
+        except calendario.ErrorCalendario as fallo:
+            return _volver_a(request, error=str(fallo))
+        negado = _puede_tocar(actividad, yo)
+        if negado:
+            return _volver_a(request, error=negado)
+    try:
+        aviso = hacer(yo, actividad) or "Listo."
+    except calendario.ErrorCalendario as fallo:
+        return _volver_a(request, error=str(fallo))
+    # El aviso rápido a Google Calendar (si hay cuentas conectadas); la
+    # conciliación de cada 15 minutos cubre lo que este empuje pierda.
+    calendario_google.sincronizar_en_fondo()
+    return _volver_a(request, aviso=aviso)
+
+
+@app.post("/calendario/actividad")
+async def calendario_crear(request: Request):
+    form = await request.form()
+
+    def hacer(yo, _actividad):
+        if not (calendario.escritura_activa() or not calendario.configurado()):
+            raise calendario.ErrorCalendario(
+                "Esta instancia mira el calendario real pero no escribe en Linear.")
+        # Un empleado crea a su nombre; solo el dueño reparte trabajo.
+        resp = form.get("resp_id", "") if yo["admin"] else yo["id"]
+        creada = calendario.crear(
+            tipo=form.get("tipo", "otro"), cliente=form.get("cliente", ""),
+            fecha=form.get("fecha", ""), hora=form.get("hora") or calendario.HORA_POR_DEFECTO,
+            dur=form.get("dur") or calendario.DURACION_POR_DEFECTO,
+            lugar=form.get("lugar", ""), resp_id=resp,
+            prioridad=form.get("prioridad") or 3, nota=form.get("nota", ""))
+        texto = f"Creada {creada['ref']}: {calendario.nombre_de_tipo(form.get('tipo', 'otro'))}"
+        # Un alquiler nace con su recogida: nunca se queda una planta
+        # alquilada sin fecha de vuelta.
+        recogida = form.get("recogida", "")
+        if form.get("tipo") == "alquiler" and re.fullmatch(r"\d{4}-\d{2}-\d{2}", recogida):
+            otra = calendario.crear(
+                tipo="recogida", cliente=form.get("cliente", ""), fecha=recogida,
+                hora="09:00", dur=60, lugar=form.get("lugar", ""), resp_id=resp,
+                prioridad=form.get("prioridad") or 3,
+                nota=f"Recogida del alquiler {creada['ref']}.")
+            texto += f" + la recogida {otra['ref']} el {calendario.dmy(recogida)}"
+        return texto + "."
+
+    return await _accion_calendario(request, "", hacer)
+
+
+@app.post("/calendario/actividad/{id_actividad}/mover")
+async def calendario_mover(request: Request, id_actividad: str):
+    form = await request.form()
+
+    def hacer(_yo, _actividad):
+        calendario.mover(id_actividad, form.get("fecha", ""), form.get("hora") or None)
+        return f"Movida al {calendario.dmy(form.get('fecha', ''))}."
+
+    return await _accion_calendario(request, id_actividad, hacer)
+
+
+@app.post("/calendario/actividad/{id_actividad}/estado")
+async def calendario_estado(request: Request, id_actividad: str):
+    form = await request.form()
+
+    def hacer(_yo, _actividad):
+        nuevo = form.get("estado", "")
+        calendario.cambiar_estado(id_actividad, nuevo)
+        return calendario.nombre_de_estado(nuevo) + "."
+
+    return await _accion_calendario(request, id_actividad, hacer)
+
+
+@app.post("/calendario/actividad/{id_actividad}/detalle")
+async def calendario_detalle(request: Request, id_actividad: str):
+    form = await request.form()
+
+    def hacer(yo, actividad):
+        calendario.cambiar_detalle(
+            id_actividad, hora=form.get("hora") or None, dur=form.get("dur") or None,
+            lugar=form.get("lugar"), prioridad=form.get("prioridad") or None)
+        nuevo_resp = form.get("resp_id")
+        # Repartir trabajo es cosa del dueño; el empleado guarda lo demás.
+        if nuevo_resp is not None and yo["admin"] and actividad and nuevo_resp != actividad["resp_id"]:
+            calendario.reasignar(id_actividad, nuevo_resp)
+        fecha = form.get("fecha", "")
+        if fecha and actividad and fecha != actividad["fecha"]:
+            calendario.mover(id_actividad, fecha, form.get("hora") or None)
+        return "Guardado."
+
+    return await _accion_calendario(request, id_actividad, hacer)
+
+
+@app.post("/calendario/actividad/{id_actividad}/nota")
+async def calendario_nota(request: Request, id_actividad: str):
+    form = await request.form()
+    autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
+
+    def hacer(_yo, _actividad):
+        calendario.agregar_nota(id_actividad, form.get("texto", ""), autor)
+        return "Nota agregada como comentario del issue."
+
+    return await _accion_calendario(request, id_actividad, hacer)
+
+
+@app.get("/calendario.ics")
+def calendario_feed(request: Request):
+    """La suscripción del teléfono (Apple/Google), autorizada por token.
+
+    Con el usuario de Linear enlazado (email verificado de Google) el feed
+    trae lo de esa empleada; una admin, o una cuenta sin enlazar, recibe el
+    equipo completo. Solo lectura: el teléfono no escribe en Linear.
+    """
+    empleada = calendario_ics.empleada_del_token(request.query_params.get("t", ""))
+    if empleada is None:
+        return PlainTextResponse("No existe.", status_code=404)
+    yo = _yo_en_el_calendario(empleada)
+    desde, hasta = calendario_ics.rango()
+    try:
+        actividades = calendario.listar(desde, hasta)
+    except calendario.ErrorCalendario:
+        # Antes que romperle la suscripción al teléfono, un calendario vacío;
+        # el cliente reintenta solo en el próximo refresco.
+        return Response(calendario_ics.feed([]), media_type="text/calendar; charset=utf-8")
+    nombre = "Calendario Rose"
+    if yo["id"] and not yo["admin"]:
+        actividades = [a for a in actividades if a["resp_id"] == yo["id"]]
+        nombre = "Calendario Rose · " + yo["nombre"]
+    return Response(
+        calendario_ics.feed(actividades, nombre),
+        media_type="text/calendar; charset=utf-8",
+        headers={"Cache-Control": "private, max-age=300"})
+
+
+@app.get("/calendario/google/conectar")
+def calendario_google_conectar(request: Request):
+    """Manda a Google a pedir el permiso de calendario (scope de eventos),
+    con el mismo state anti-CSRF del login."""
+    if not calendario_google.configurado():
+        return RedirectResponse("/?tab=ajustes", status_code=303)
+    estado = secrets.token_urlsafe(24)
+    destino = _base_publica(request) + "/calendario/google/callback"
+    respuesta = RedirectResponse(
+        calendario_google.url_conectar(destino, estado), status_code=303)
+    respuesta.set_cookie("gcal_estado", estado, max_age=600,
+                         httponly=True, samesite="lax", secure=_cookie_segura())
+    return respuesta
+
+
+@app.get("/calendario/google/callback")
+def calendario_google_callback(request: Request, code: str = "", state: str = ""):
+    if (not calendario_google.configurado() or not code or not state
+            or state != request.cookies.get("gcal_estado")):
+        return RedirectResponse("/?tab=ajustes&aviso=google-error", status_code=303)
+    try:
+        cuenta = calendario_google.canjear(
+            code, _base_publica(request) + "/calendario/google/callback")
+    except acceso_google.FalloGoogle:
+        return RedirectResponse("/?tab=ajustes&aviso=google-error", status_code=303)
+    calendario_google.conectar(
+        request.state.empleada["id"], cuenta["email"], cuenta["refresh_token"])
+    # La primera pasada, ya: que el calendario aparezca lleno de una vez.
+    calendario_google.sincronizar_en_fondo()
+    respuesta = RedirectResponse("/?tab=ajustes&aviso=google-conectado", status_code=303)
+    respuesta.delete_cookie("gcal_estado")
+    return respuesta
+
+
+@app.post("/calendario/google/desconectar")
+def calendario_google_desconectar(request: Request):
+    calendario_google.desconectar(request.state.empleada["id"])
+    return RedirectResponse("/?tab=ajustes&aviso=google-fuera", status_code=303)
+
+
+@app.post("/calendario/suscripcion/regenerar")
+def calendario_regenerar_enlace(request: Request):
+    """Enlace nuevo para la empleada de la sesión; el viejo muere ya."""
+    calendario_ics.regenerar(request.state.empleada["id"])
+    return RedirectResponse("/?tab=ajustes&aviso=enlace-nuevo", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Compras/Gastos: la plata que sale
+# ---------------------------------------------------------------------------
+# La pantalla agrupa por a quien se le carga la compra (Abraham, 18/09/2026):
+# Proyectos, Ventas y Del vivero. Las compras viven en Odoo; lo unico que se
+# decide aqui es que es valido y si hay que subir stock, y eso ultimo pasa
+# siempre por el order-api.
+
+def _pagina_compras(request, vista="proyectos", q="", error=None):
+    contexto = {
+        "request": request,
+        "compras_activo": compras.activo(),
+        "vista": vista,
+        "vistas": compras.VISTAS,
+        "q": q,
+        "error": error,
+        "resumen": {"total": 0.0, "cantidad": 0, "proyectos": 0.0, "ventas": 0.0,
+                    "vivero": 0.0, "categorias": [], "mes": ""},
+        "tarjetas": [],
+        "compras": [],
+    }
+    if compras.activo():
+        try:
+            contexto["resumen"] = compras.resumen_del_mes()
+            if vista == "proyectos":
+                contexto["tarjetas"] = compras.por_proyecto()
+            elif vista == "ventas":
+                contexto["tarjetas"] = compras.por_venta()
+            else:
+                contexto["compras"] = compras.listar("vivero", q)
+        except Exception as falla:  # Odoo caido o credenciales malas
+            contexto["error"] = ventas._mensaje_de_error(falla)
+    return plantillas.TemplateResponse(request, "compras.html", contexto)
+
+
+@app.get("/compras")
+def compras_lista(request: Request, vista: str = "proyectos", q: str = "",
+                  error: str = ""):
+    if vista not in dict(compras.VISTAS):
+        vista = "proyectos"
+    return _pagina_compras(request, vista, q, error or None)
+
+
+def _contexto_compra(request, compra=None, error=None, vista="proyectos",
+                     destino="vivero", proyecto_id=None, orden_id=None,
+                     orden_nombre=""):
+    return {
+        "request": request,
+        "compra": compra,
+        "error": error,
+        "vista": vista,
+        "accion": f"/compras/{compra['n']}" if compra else "/compras/nueva",
+        "categorias": compras.CATEGORIAS,
+        "formas_pago": compras.FORMAS_PAGO,
+        "destinos": (("vivero", "Del vivero"), ("proyecto", "Un proyecto"),
+                     ("venta", "Una venta")),
+        "destino": destino,
+        "proyectos": compras.proyectos_para_elegir() if compras.activo() else [],
+        "proyecto_id": proyecto_id,
+        "orden_id": orden_id,
+        "orden_nombre": orden_nombre,
+        "hoy": datetime.now(datos.ZONA_PANAMA).date().isoformat(),
+    }
+
+
+@app.get("/compras/nueva")
+def compra_nueva(request: Request, proyecto: int = 0, orden: int = 0,
+                 error: str = ""):
+    """El formulario en blanco. Si se entra desde la tarjeta de un proyecto o
+    de una venta, ese destino llega puesto y no hay que elegirlo."""
+    if not compras.activo():
+        return RedirectResponse("/compras", status_code=303)
+    destino = "proyecto" if proyecto else ("venta" if orden else "vivero")
+    orden_nombre = ""
+    if orden:
+        filas = ventas._ejecutar("sale.order", "read", [[int(orden)]],
+                                 {"fields": ["name", "partner_id"]})
+        if filas:
+            orden_nombre = f"{filas[0]['name']} · {(filas[0].get('partner_id') or [0, ''])[1]}"
+    contexto = _contexto_compra(
+        request, error=error or None, destino=destino,
+        proyecto_id=proyecto or None, orden_id=orden or None,
+        orden_nombre=orden_nombre)
+    return plantillas.TemplateResponse(request, "compra_form.html", contexto)
+
+
+async def _recibo_del_form(form):
+    """(bytes, nombre) del archivo subido, o (None, '') si no mandaron uno."""
+    archivo = form.get("recibo")
+    if not archivo or not getattr(archivo, "filename", ""):
+        return None, ""
+    contenido = await archivo.read()
+    if not contenido:
+        return None, ""
+    if len(contenido) > 15 * 1024 * 1024:
+        raise ValueError("El recibo pesa más de 15 MB. Toma la foto otra vez.")
+    return contenido, archivo.filename
+
+
+@app.post("/compras/nueva")
+async def compra_crear(request: Request):
+    form = await request.form()
+    destino = form.get("destino") or "vivero"
+    try:
+        recibo, recibo_nombre = await _recibo_del_form(form)
+        lineas = compras.lineas_del_form(form) if destino != "proyecto" else []
+        n = compras.crear(request.state.empleada, form, lineas,
+                          recibo, recibo_nombre)
+    except ValueError as falla:
+        contexto = _contexto_compra(
+            request, error=str(falla), destino=destino,
+            proyecto_id=compras._entero(form.get("proyecto_id")),
+            orden_id=compras._entero(form.get("orden_id")))
+        return plantillas.TemplateResponse(request, "compra_form.html", contexto)
+    except Exception as falla:
+        contexto = _contexto_compra(
+            request, error=ventas._mensaje_de_error(falla), destino=destino)
+        return plantillas.TemplateResponse(request, "compra_form.html", contexto)
+
+    # El stock se mueve DESPUES de que la compra quedo guardada: si el
+    # order-api falla, la compra ya esta anotada y solo falta el inventario.
+    aviso = ""
+    if lineas:
+        try:
+            compras.subir_al_inventario(n, compras.lineas_de(n),
+                                        request.state.empleada["id"])
+            datos.reiniciar_cache_proxy()
+        except datos.SinConexion as falla:
+            aviso = (f"La compra quedó guardada, pero el stock no subió: "
+                     f"{falla}. Ajústalo desde Stock.")
+    vista = "proyectos" if destino == "proyecto" else (
+        "ventas" if destino == "venta" else "vivero")
+    destino_url = f"/compras?vista={vista}"
+    if aviso:
+        destino_url += "&error=" + quote(aviso)
+    return RedirectResponse(destino_url, status_code=303)
+
+
+@app.get("/compras/productos")
+def compras_productos(request: Request, q: str = ""):
+    """Plantas e insumos para la lista de lo que entra al inventario."""
+    if not compras.activo():
+        return {"productos": []}
+    return {"productos": compras.buscar_productos(q)}
+
+
+@app.get("/compras/ventas")
+def compras_ventas(request: Request, q: str = ""):
+    """Ventas y cotizaciones a las que colgarle la compra."""
+    if not compras.activo():
+        return {"ventas": []}
+    return {"ventas": compras.buscar_ventas(q)}
+
+
+@app.get("/compras/{n}")
+def compra_ficha(request: Request, n: int, error: str = ""):
+    if not compras.activo():
+        return RedirectResponse("/compras", status_code=303)
+    compra = compras.obtener(n)
+    if not compra:
+        return RedirectResponse("/compras", status_code=303)
+    contexto = _contexto_compra(
+        request, compra=compra, error=error or None,
+        destino=compra["destino"] if compra["destino"] != "proyecto" else "proyecto",
+        proyecto_id=compra["proyecto_id"], orden_id=compra["orden_id"],
+        orden_nombre=compra["orden_nombre"])
+    return plantillas.TemplateResponse(request, "compra_form.html", contexto)
+
+
+@app.post("/compras/{n}")
+async def compra_guardar(request: Request, n: int):
+    form = await request.form()
+    try:
+        recibo, recibo_nombre = await _recibo_del_form(form)
+        compras.editar(n, form, recibo, recibo_nombre)
+    except ValueError as falla:
+        compra = compras.obtener(n)
+        contexto = _contexto_compra(
+            request, compra=compra, error=str(falla),
+            destino=form.get("destino") or "vivero",
+            proyecto_id=compras._entero(form.get("proyecto_id")),
+            orden_id=compras._entero(form.get("orden_id")))
+        return plantillas.TemplateResponse(request, "compra_form.html", contexto)
+    vista = {"proyecto": "proyectos", "venta": "ventas"}.get(
+        form.get("destino") or "vivero", "vivero")
+    return RedirectResponse(f"/compras?vista={vista}", status_code=303)
+
+
+@app.post("/compras/{n}/borrar")
+def compra_borrar(request: Request, n: int):
+    compras.borrar(n)
+    return RedirectResponse("/compras", status_code=303)
+
+
+@app.get("/compras/{n}/recibo")
+def compra_recibo(request: Request, n: int):
+    contenido, nombre = compras.recibo_de(n)
+    if not contenido:
+        return RedirectResponse(f"/compras/{n}", status_code=303)
+    tipo = "application/pdf" if nombre.lower().endswith(".pdf") else "image/jpeg"
+    return Response(contenido, media_type=tipo,
+                    headers={"Content-Disposition": f'inline; filename="{nombre}"'})
+

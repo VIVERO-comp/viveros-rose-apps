@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block titulo %}{{ 'Editar compra' if compra else 'Nueva compra' }} — Control de Stock{% endblock %}
+
+{# El formulario del diseño elegido: todo a la vista, en tres secciones, sin
+   nada plegado. Solo el monto y la descripción son obligatorios; categoría,
+   proveedor, forma de pago, fecha y recibo son opcionales y se pueden
+   completar después editando la compra.
+
+   La sección de inventario solo existe cuando la compra NO es de un
+   proyecto: las plantas de un proyecto vienen en un contenedor comprado
+   para ese proyecto y nunca fueron stock del vivero. #}
+{% block contenido %}
+<header>
+  <div class="brand">
+    <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
+    <div>
+      <h1>{{ 'Editar compra' if compra else 'Nueva compra' }}</h1>
+      <small>{{ compra.fecha_bonita if compra else 'Solo el monto y qué compraste son obligatorios' }}</small>
+    </div>
+  </div>
+</header>
+
+<main class="angosto">
+  <a class="volver" href="/compras?vista={{ vista }}">← Volver a Compras/Gastos</a>
+
+  {% if error %}
+  <div class="aviso-error">{{ error }}</div>
+  {% endif %}
+
+  <form method="post" action="{{ accion }}" enctype="multipart/form-data"
+        id="form-compra">
+
+    <div class="seccion-compra">Qué se compró</div>
+    <div class="campos-nuevo">
+      <label class="campo">
+        <span>Monto</span>
+        <input name="monto" required inputmode="decimal" autocomplete="off"
+               placeholder="0.00" value="{{ '%.2f' % compra.monto if compra else '' }}">
+      </label>
+      <label class="campo">
+        <span>Fecha</span>
+        <input name="fecha" type="date" value="{{ compra.fecha if compra else hoy }}">
+      </label>
+    </div>
+    <label class="campo">
+      <span>Descripción</span>
+      <input name="concepto" required autocomplete="off"
+             placeholder="Abono orgánico · 20 sacos"
+             value="{{ compra.concepto if compra else '' }}">
+    </label>
+
+    <div class="filtros chips-form">
+      {% for clave, etiqueta in categorias %}
+      <label class="chip {{ 'on' if (compra.categoria if compra else '') == clave else '' }}">
+        <input type="radio" name="categoria" value="{{ clave }}"
+               {% if (compra.categoria if compra else '') == clave %}checked{% endif %}>
+        {{ etiqueta }}
+      </label>
+      {% endfor %}
+    </div>
+
+    <div class="seccion-compra">A quién se le carga</div>
+    <div class="filtros chips-form" id="chips-destino">
+      {% for clave, etiqueta in destinos %}
+      <label class="chip {{ 'on' if destino == clave else '' }}">
+        <input type="radio" name="destino" value="{{ clave }}"
+               {% if destino == clave %}checked{% endif %}>
+        {{ etiqueta }}
+      </label>
+      {% endfor %}
+    </div>
+
+    <div class="campo destino-caja" data-destino="proyecto">
+      <span>Proyecto</span>
+      <select name="proyecto_id">
+        <option value="">Elige el proyecto…</option>
+        {% for p in proyectos %}
+        <option value="{{ p.id }}" {% if proyecto_id == p.id %}selected{% endif %}>
+          {{ p.ref }} · {{ p.nombre }}</option>
+        {% endfor %}
+      </select>
+      <small class="pista-compra">Las plantas de un proyecto no entran al
+        inventario: vienen en el contenedor comprado para ese proyecto.</small>
+    </div>
+
+    <div class="campo destino-caja" data-destino="venta">
+      <span>Venta o cotización</span>
+      <input id="busca-venta-compra" autocomplete="off"
+             placeholder="Buscar por número o cliente…"
+             value="{{ orden_nombre }}">
+      <input type="hidden" name="orden_id" id="orden-id" value="{{ orden_id or '' }}">
+      <div id="resultados-ventas"></div>
+    </div>
+
+    <div class="seccion-compra">Pago <span class="opcional-compra">opcional</span></div>
+    <div class="campos-nuevo">
+      <label class="campo">
+        <span>Proveedor</span>
+        <input name="proveedor" autocomplete="off" placeholder="Agroservicios El Roble"
+               value="{{ compra.proveedor if compra else '' }}">
+      </label>
+      <label class="campo">
+        <span>Forma de pago</span>
+        <select name="forma_pago">
+          <option value="">—</option>
+          {% for clave, etiqueta in formas_pago %}
+          <option value="{{ clave }}" {% if (compra.forma_pago if compra else '') == clave %}selected{% endif %}>{{ etiqueta }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <label class="campo">
+      <span>Recibo <span class="opcional-compra">opcional</span></span>
+      <input name="recibo" type="file" accept="image/*,application/pdf">
+      {% if compra and compra.recibo %}
+      <small class="pista-compra">Ya tiene recibo:
+        <a href="/compras/{{ compra.n }}/recibo" target="_blank">verlo</a>.
+        Si eliges otro archivo, lo reemplaza.</small>
+      {% endif %}
+    </label>
+    <label class="campo">
+      <span>Nota <span class="opcional-compra">opcional</span></span>
+      <input name="nota" autocomplete="off" value="{{ compra.nota if compra else '' }}">
+    </label>
+
+    {% if not compra %}
+    <div class="seccion-compra" id="seccion-inventario">Inventario</div>
+    <div id="caja-inventario">
+      <p class="pista-compra">Si la compra trae plantas o insumos del catálogo,
+        agrégalos aquí y el stock de Odoo sube esa cantidad.</p>
+      <div class="buscador">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9aa3bd" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+        <input id="busca-producto-compra" autocomplete="off"
+               placeholder="Buscar planta o insumo…">
+      </div>
+      <div id="resultados-productos"></div>
+      <div id="lineas-compra"></div>
+    </div>
+    {% elif compra.lineas %}
+    <div class="seccion-compra">Lo que entró al inventario</div>
+    {% for l in compra.lineas %}
+    <div class="linea-producto">
+      <div class="med"><b>{{ l.nombre }}</b><small>{{ l.sku }}</small></div>
+      <div class="cant">{{ l.cantidad }}</div>
+    </div>
+    {% endfor %}
+    <p class="pista-compra">El stock ya se movió con estas cantidades; cambiarlas
+      aquí no lo desharía, así que la lista queda fija.</p>
+    {% endif %}
+
+    <button class="btn btn-dorado btn-grande" type="submit" style="margin-top:14px">
+      {{ 'GUARDAR CAMBIOS' if compra else 'GUARDAR COMPRA' }}
+    </button>
+  </form>
+
+  {% if compra %}
+  <form method="post" action="/compras/{{ compra.n }}/borrar" style="margin-top:12px"
+        onsubmit="return confirm('Se borra la compra «{{ compra.concepto }}». Si había subido stock, ese stock NO se devuelve. No se puede deshacer. ¿Borrarla?')">
+    <button type="submit" class="btn btn-linea" style="width:100%;justify-content:center">
+      BORRAR ESTA COMPRA</button>
+  </form>
+  {% endif %}
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/compras.js?v={{ v_estaticos }}"></script>
+{% endblock %}

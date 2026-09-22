@@ -8,7 +8,7 @@ os.environ["CONTROL_STOCK_ARCHIVOS"] = tempfile.mkdtemp()
 
 import pytest
 
-from app import cotizaciones, datos, ventas
+from app import calendario_google, calendario_ics, cotizaciones, datos, ventas
 
 INVENTARIO_FALSO = [
     {"sku": "PL-ROMERO", "nombre": "Romero", "categoria": "Exterior",
@@ -32,6 +32,8 @@ def db_limpia(tmp_path, monkeypatch):
     datos.iniciar_db()
     ventas.iniciar_tablas()
     cotizaciones.iniciar_tablas()
+    calendario_ics.iniciar_tablas()
+    calendario_google.iniciar_tablas()
     cotizaciones.reiniciar_cache()
     datos.reiniciar_cache_proxy()
 

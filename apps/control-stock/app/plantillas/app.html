@@ -55,6 +55,63 @@
       <div class="tot"><b>{{ cuentas.agotadas }}</b><span>agotadas</span></div>
     </div>
 
+    {# Calendario del equipo: los números y la agenda vienen calculados de
+       app/calendario.py (Inicio no decide nada, solo pinta). #}
+    {% if cal %}
+    <div class="seccion-titulo">
+      Tu día <a class="enlace-sub" href="/calendario">Ver el calendario →</a>
+    </div>
+    <div class="totales">
+      <a class="tot" href="/calendario?vista=dia"><b>{{ cal.numeros.hoy }}</b><span>hoy</span></a>
+      <a class="tot {{ 'tot-alerta' if cal.numeros.atrasadas }}" href="/calendario?vista=lista">
+        <b>{{ cal.numeros.atrasadas }}</b><span>atrasadas</span></a>
+      <a class="tot" href="/calendario?vista=semana"><b>{{ cal.numeros.semana }}</b><span>esta semana</span></a>
+      <a class="tot" href="/calendario?vista=semana"><b>{{ cal.numeros.avance }}%</b><span>avance</span></a>
+    </div>
+
+    {% if cal.atrasadas %}
+    <div class="cal-atrasadas">
+      {% for a in cal.atrasadas %}
+      <a href="/calendario?dia={{ a.fecha }}&abrir={{ a.id }}">
+        <span class="punto" style="background:{{ cal_color(a.tipo) }}"></span>
+        <b>{{ cal_tipo(a.tipo) }}</b> — {{ a.cliente }}
+        <span class="cuando">{{ a.fecha | fecha_dmy }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="cal-agenda">
+      {% for a in cal.agenda %}
+      <a class="cal-fila" href="/calendario?dia={{ a.fecha }}&abrir={{ a.id }}"
+         style="border-left-color:{{ cal_color(a.tipo) }}">
+        <span class="hora">{{ a.hora }}</span>
+        <span class="que"><b>{{ cal_tipo(a.tipo) }}</b><span>{{ a.cliente }}</span></span>
+        {% if a.estado == 'hecha' %}<span class="listo">✓</span>{% endif %}
+      </a>
+      {% else %}
+      <div class="cal-vacio">Nada agendado para hoy.</div>
+      {% endfor %}
+    </div>
+
+    <div class="cal-barras">
+      {% for b in cal.barras %}
+      <a class="cal-barra {{ 'hoy' if b.hoy }}" href="/calendario?dia={{ b.iso }}&vista=dia"
+         title="{{ b.cuenta }} actividad{{ 'es' if b.cuenta != 1 }}">
+        <span class="torre">
+          <span class="lleno" style="height:{{ b.alto }}%">
+            {% for color in b.colores %}<i style="background:{{ color }}"></i>{% endfor %}
+          </span>
+        </span>
+        <span class="et">{{ b.dow }}<br>{{ b.num }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% elif cal_error %}
+    <div class="seccion-titulo">Tu día</div>
+    <div class="cal-vacio">No se pudo leer el calendario: {{ cal_error }}</div>
+    {% endif %}
+
     <div class="seccion-titulo">Por categoría</div>
     <div class="cats">
       {% for cat in categorias %}
@@ -124,10 +181,10 @@
       <h3>Revisión semanal</h3>
       <p>Hoja con el stock del sistema y columna vacía para el conteo físico. Solo revisión, no ajusta nada.</p>
       <div class="botones">
-        <form method="post" action="/conteos/pdf">
+        <form method="post" action="/conteos/pdf" target="_blank">
           <button class="btn btn-dorado" type="submit"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg> Generar hoja PDF</button>
         </form>
-        {% if ultima_hoja %}<a class="btn btn-linea" href="/conteos/{{ ultima_hoja.n }}/pdf">Ver último</a>{% endif %}
+        {% if ultima_hoja %}<a class="btn btn-linea" href="/conteos/{{ ultima_hoja.n }}/pdf" target="_blank" rel="noopener">Ver último</a>{% endif %}
         <form method="post" action="/revisiones">
           <button class="btn btn-linea" type="submit">Revisión hecha</button>
         </form>
@@ -160,7 +217,7 @@
         <span class="dif ok">Hecha ✓</span>
       </div>
       {% else %}
-      <a class="historial-item" href="/conteos/{{ c.n }}/pdf">
+      <a class="historial-item" href="/conteos/{{ c.n }}/pdf" target="_blank" rel="noopener">
         <div><b>Hoja de conteo</b><small>{{ c.creado_en | fecha_bonita }} · {{ c.empleada }}</small></div>
         <span class="dif ok">PDF</span>
       </a>
@@ -320,12 +377,64 @@
       <h3>Imprimir hoja de conteo</h3>
       <p>PDF con todas las plantas y su stock del sistema, con columna vacía para anotar el conteo caminando el vivero. Solo revisión, no ajusta nada.</p>
       <div class="botones">
-        <form method="post" action="/conteos/pdf">
+        <form method="post" action="/conteos/pdf" target="_blank">
           <button class="btn btn-dorado" type="submit"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg> Generar hoja PDF</button>
         </form>
-        {% if ultima_hoja %}<a class="btn btn-linea" href="/conteos/{{ ultima_hoja.n }}/pdf">Ver última</a>{% endif %}
+        {% if ultima_hoja %}<a class="btn btn-linea" href="/conteos/{{ ultima_hoja.n }}/pdf" target="_blank" rel="noopener">Ver última</a>{% endif %}
       </div>
     </div>
+
+    {# Sync del calendario con el teléfono (22/09/2026): el enlace ICS que
+       se suscribe en iPhone/Mac o Google Calendar. Solo lectura. #}
+    <div class="seccion-titulo">Sync con iPhone o Google Calendar</div>
+    {% if aviso_ajustes == 'enlace-nuevo' %}<div class="aviso-ok">Enlace nuevo. El anterior dejó de funcionar: vuelve a suscribir el teléfono con este.</div>{% endif %}
+    <div class="inv-card">
+      <h3>Tu calendario en el teléfono</h3>
+      <p>Suscribe este enlace y tus actividades del Calendario aparecen solas
+      en el calendario del iPhone, de la Mac o de Google. Es solo lectura:
+      crear y cambiar actividades se sigue haciendo en la app.</p>
+      <p class="sync-url">{{ suscripcion_calendario }}</p>
+      <div class="botones">
+        <button class="btn btn-dorado btn-copiar" type="button" data-link="{{ suscripcion_calendario }}" onclick="copiarLink(this)">Copiar enlace</button>
+        <form method="post" action="/calendario/suscripcion/regenerar"
+              onsubmit="return confirm('El enlace actual dejará de funcionar y habrá que volver a suscribir cada teléfono que lo use. ¿Regenerar?')">
+          <button class="btn btn-linea" type="submit">Regenerar enlace</button>
+        </form>
+      </div>
+      <p><b>iPhone / Mac:</b> Ajustes → Apps → Calendario → Cuentas → Otra →
+      Añadir calendario suscrito, y pega el enlace. Se refresca solo cada
+      pocos minutos.<br>
+      <b>Google Calendar:</b> en la computadora, Otros calendarios → + →
+      Desde URL, y pega el enlace. Google lo refresca a su ritmo (12–24
+      horas).</p>
+    </div>
+
+    {% if gcal_configurado %}
+    {% if aviso_ajustes == 'google-conectado' %}<div class="aviso-ok">Google Calendar conectado. Tus actividades se están copiando ahora; en unos segundos aparecen en tu calendario.</div>
+    {% elif aviso_ajustes == 'google-fuera' %}<div class="aviso-ok">Google Calendar desconectado. Los eventos ya copiados quedan en tu calendario; no se crean más.</div>
+    {% elif aviso_ajustes == 'google-error' %}<div class="aviso-error">No se pudo conectar con Google. Prueba de nuevo.</div>{% endif %}
+    <div class="inv-card">
+      <h3>Google Calendar al instante</h3>
+      {% if gcal_conexion %}
+      <p>Conectado como <b>{{ gcal_conexion.email }}</b>: tus actividades se
+      escriben directo en tu Google Calendar y aparecen en segundos. Google
+      no puede cambiarlas: el calendario de la app manda.</p>
+      <div class="botones">
+        <form method="post" action="/calendario/google/desconectar"
+              onsubmit="return confirm('La app dejará de escribir en tu Google Calendar. Los eventos ya copiados quedan ahí. ¿Desconectar?')">
+          <button class="btn btn-linea" type="submit">Desconectar</button>
+        </form>
+      </div>
+      {% else %}
+      <p>El enlace de arriba en Google tarda horas en refrescar. Conectando
+      tu cuenta, la app escribe los eventos directo en tu Google Calendar y
+      aparecen en segundos (también en un iPhone que tenga esa cuenta).</p>
+      <div class="botones">
+        <a class="btn btn-dorado" href="/calendario/google/conectar">Conectar mi Google Calendar</a>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
 
     {% if es_admin %}
     {% if aviso_ajustes == 'invitada' %}
@@ -540,6 +649,8 @@
   <button class="on" data-tab="home" onclick="tab('home',this)"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></svg></span>Inicio</button>
   <button data-tab="stock" onclick="tab('stock',this)"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M12 10C12 6 9 3 4 3c0 5 3 8 8 7z"/><path d="M12 13c0-3.5 2.5-6 7-6 0 4.5-2.5 7-7 6z"/><path d="M7 21h10"/></svg></span>Stock</button>
   <a href="/venta"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg></span>Vender</a>
+  <a href="/compras"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg></span>Compras</a>
+  <a href="/calendario"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></span>Calendario</a>
   <button data-tab="ajustes" onclick="tab('ajustes',this)"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>Ajustes</button>
 </nav>
 {% endblock %}

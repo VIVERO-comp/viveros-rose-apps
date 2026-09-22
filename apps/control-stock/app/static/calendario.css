@@ -1,0 +1,301 @@
+/* Calendario del equipo: blanco en computadora Y en teléfono (pedido del
+   dueño, 18/09/2026), con la paleta crema + dorado del resto de la app.
+   color-scheme:light para que los campos de fecha y hora del navegador
+   salgan claros aunque el sistema esté en modo oscuro. */
+:root{
+  color-scheme: light;
+  /* Piel Origin/shadcn (elegida por el dueño el 22/09/2026 sobre las
+     variantes): neutros zinc, acción en negro, bordes finos. Los NOMBRES de
+     los tokens se conservan (--dorado es "el color de acción"). */
+  --fondo:#f4f4f5; --lienzo:#ffffff; --crema:#fafafa; --crema-2:#f4f4f5;
+  --borde:#e4e4e7; --borde-2:#f0f0f1;
+  --dorado:#18181b; --dorado-tinta:#18181b; --dorado-tenue:#f4f4f5;
+  --texto:#18181b; --suave:#52525b; --muy-suave:#71717a;
+  --ok:#16a34a; --bajo:#a16207; --critico:#dc2626;
+  --hoy:#fafaf9;
+  --sombra:0 18px 50px rgba(0,0,0,.08);
+  --sombra-2:0 3px 10px rgba(0,0,0,.05);
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--fondo);color:var(--texto);
+  font-family:'Inter',system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+h3,h4{margin:0;letter-spacing:-.02em}
+.crece{flex:1}
+.tenue{font-weight:600;color:var(--muy-suave);font-size:10.5px}
+.mono{font-variant-numeric:tabular-nums}
+
+/* ---------- marco ---------- */
+html,body{height:100%}
+body{overflow:hidden}
+.app{
+  background:var(--lienzo);border:1px solid var(--borde);border-radius:16px;
+  box-shadow:var(--sombra);overflow:hidden;display:grid;grid-template-columns:212px 1fr;
+  margin:14px;height:calc(100vh - 28px);
+}
+.lado{background:var(--crema);border-right:1px solid var(--borde);padding:16px 12px;display:flex;flex-direction:column;gap:7px}
+.marca{display:flex;align-items:center;gap:9px;padding:4px 6px 12px}
+.marca img{width:28px;height:28px;border-radius:50%;object-fit:cover}
+.marca span{font-size:12.5px;font-weight:700}
+.lado .pil{
+  display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;
+  background:var(--lienzo);border:1px solid var(--borde);font-size:13px;font-weight:600;
+  color:var(--texto);text-decoration:none;
+}
+.lado .pil svg{width:17px;height:17px;color:var(--suave);flex:0 0 auto}
+.lado .pil:hover{background:var(--crema-2)}
+.lado .pil.on{background:var(--crema-2);border-color:transparent;box-shadow:none;color:var(--texto);font-weight:700}
+.lado .pil.on svg{color:var(--texto)}
+.lado .pie{margin-top:auto;font-size:11px;color:var(--muy-suave);padding:8px 6px;display:flex;flex-direction:column;gap:3px}
+.lado .pie b{color:var(--texto);font-size:12px}
+.tablero{padding:16px 20px 18px;min-width:0;min-height:0;display:flex;flex-direction:column;gap:12px;overflow:hidden}
+
+/* ---------- controles ---------- */
+.barra{display:flex;align-items:center;gap:8px;flex-wrap:wrap;row-gap:8px;
+  padding-bottom:12px;border-bottom:1px solid var(--borde)}
+.barra .juntos{display:flex;align-items:center;gap:8px}
+.barra h3{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-right:2px}
+.btn.tenue{color:var(--muy-suave)}
+.flechas{display:flex;gap:4px}
+.btn{
+  font-family:inherit;font-size:12.5px;font-weight:600;color:var(--texto);background:var(--lienzo);
+  border:1px solid var(--borde);border-radius:8px;padding:8px 12px;cursor:pointer;
+  display:inline-flex;align-items:center;gap:7px;transition:background .12s,transform .08s;
+}
+.btn:hover{background:var(--crema-2)}
+.btn:active{transform:translateY(1px)}
+.btn:focus-visible{outline:2px solid var(--dorado);outline-offset:2px}
+.btn.oro{background:var(--dorado);border-color:var(--dorado);color:#fff}
+.btn.oro:hover{filter:brightness(1.06)}
+.btn.peligro{color:var(--critico);border-color:rgba(192,91,70,.4)}
+.btn.chico{padding:6px 10px;font-size:11.5px}
+.btn.icono{padding:8px 11px}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.btn input[type=checkbox]{accent-color:var(--dorado);margin:0}
+.buscador{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--borde);border-radius:8px;padding:0 11px;width:180px;flex:0 1 180px}
+.buscador input{border:0;background:transparent;font-family:inherit;font-size:12.5px;color:var(--texto);padding:9px 0;width:100%;outline:none}
+select.sel,input.campo,textarea.campo{
+  font-family:inherit;font-size:12.5px;color:var(--texto);background:#fff;
+  border:1px solid var(--borde);border-radius:11px;padding:9px 10px;outline:none;width:100%;
+}
+select.sel{font-weight:600;cursor:pointer;width:auto}
+input.campo:focus,textarea.campo:focus,select.sel:focus{border-color:var(--dorado)}
+.segmento{display:flex;background:var(--crema-2);border-radius:8px;padding:3px;gap:2px}
+.segmento button{font-family:inherit;font-size:12px;font-weight:600;border:0;background:transparent;color:var(--suave);padding:6px 12px;border-radius:9px;cursor:pointer}
+.segmento button.on{background:#fff;color:var(--texto);box-shadow:var(--sombra-2)}
+.segmento button:focus-visible{outline:2px solid var(--dorado)}
+
+/* ---------- chips de tipo ---------- */
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chip.tenue{color:var(--muy-suave);font-weight:600}
+.chip{
+  font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--borde);
+  background:#fff;color:var(--suave);border-radius:999px;padding:4px 10px;display:inline-flex;align-items:center;gap:5px;
+}
+.chip .pt{width:7px;height:7px;border-radius:50%;background:currentColor}
+.chip.on{border-color:transparent;color:#fff}
+.chip:focus-visible{outline:2px solid var(--dorado);outline-offset:2px}
+
+/* ---------- atrasadas ---------- */
+.franja{
+  display:flex;align-items:center;gap:8px;background:#fdf4f2;text-decoration:none;color:var(--texto);
+  border:1px solid rgba(192,91,70,.28);border-radius:12px;padding:7px 12px;font-size:12px;
+}
+.franja:hover{background:#fbebe7}
+.franja b{color:var(--critico)}
+.franja .ver{color:var(--critico);font-weight:700;font-size:11.5px}
+
+/* ---------- columna izquierda ---------- */
+.zona{display:grid;grid-template-columns:1fr;min-width:0;flex:1;min-height:0}
+#vista{min-width:0;min-height:0;height:100%;display:flex;flex-direction:column}
+#vista > *{max-height:100%}
+.caja{background:var(--crema);border:1px solid var(--borde);border-radius:12px;padding:13px}
+.caja h4{font-size:12.5px;font-weight:700;margin-bottom:9px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.avatar{width:20px;height:20px;border-radius:50%;background:var(--crema-2);color:var(--texto);font-size:9.5px;font-weight:700;display:inline-grid;place-items:center;border:1px solid var(--borde);flex:0 0 auto}
+
+/* ---------- carriles (semana y día) ---------- */
+.carril-caja{border:1px solid var(--borde);border-radius:12px;overflow:hidden;background:#fff;min-width:0;height:100%;max-height:100%;display:flex;flex-direction:column}
+.carril-scroll{overflow-x:auto;min-height:0;display:flex;flex:1}
+.carril-int{min-width:760px;display:flex;flex-direction:column;flex:1}
+.carril-cuerpo{overflow-y:auto;flex:1;display:flex;flex-direction:column}
+.carril-cab{display:grid;background:var(--crema);border-bottom:1px solid var(--borde);position:sticky;top:0;z-index:3}
+.carril-cab div{padding:10px 6px;font-size:10.5px;font-weight:700;color:var(--suave);text-align:center;border-left:1px solid var(--borde-2)}
+.carril-cab div:first-child{border-left:0}
+.carril-cab .dnum{display:block;font-size:18px;font-weight:800;color:var(--texto);line-height:1.3}
+.carril-cab .col-hoy{background:var(--hoy)}
+.carril-cab .col-hoy .dnum{
+  background:var(--texto);color:#fff;border-radius:999px;width:26px;height:26px;
+  display:inline-flex;align-items:center;justify-content:center;font-size:13px;margin:2px auto 0;
+}
+.carril-cuerpo{position:relative;min-height:0;overflow-y:auto}
+/* Las filas reparten el alto por flex-grow (peso que calcula Python): el
+   día llena el lienzo entero, como la vista de mes. El min-height evita que
+   en una pantalla bajita las filas se aplasten: ahí vuelve el scroll. */
+.rejilla-h{display:flex;flex-direction:column;position:relative;flex:1;min-height:430px}
+.franja-hora{display:grid;border-bottom:1px solid var(--borde-2);flex-basis:0;min-height:15px}
+/* Hora sin trabajo: fila corta, etiqueta chica pero sin encimarse. */
+.franja-hora.vacia .hora-et{font-size:9.5px;opacity:.55}
+.hora-et{line-height:1.1;white-space:nowrap;overflow:hidden}
+.hora-et{font-size:10.5px;color:var(--muy-suave);padding:4px 9px 0;text-align:right;font-weight:600;border-right:1px solid var(--borde-2)}
+.col-dia{position:absolute;top:0;bottom:0;border-left:1px solid var(--borde-2)}
+.col-dia.finde{background:#fbf9f5}
+.col-dia.hoy-fondo{background:var(--hoy)}
+.col-dia.dropok{background:var(--dorado-tenue);box-shadow:inset 0 0 0 2px var(--dorado)}
+.linea-ahora{position:absolute;left:0;right:0;height:2px;background:var(--critico);z-index:4;pointer-events:none}
+.linea-ahora::before{content:'';position:absolute;left:-4px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--critico)}
+.bloque{min-height:24px;
+  position:absolute;border-radius:6px;padding:4px 8px;font-size:10.8px;line-height:1.25;
+  border:1px solid var(--borde);background:#fff;color:var(--texto);
+  cursor:grab;text-align:left;font-family:inherit;overflow:hidden;z-index:2;
+  box-shadow:0 1px 2px rgba(60,50,30,.05);transition:box-shadow .12s,transform .08s;
+}
+.bloque .tt{font-weight:700;font-size:11px;display:block}
+.bloque small{display:block;font-weight:500;color:var(--suave);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.bloque:hover{box-shadow:var(--sombra-2);z-index:5;transform:translateY(-1px)}
+.bloque:active{cursor:grabbing}
+.bloque:focus-visible{outline:2px solid var(--dorado);outline-offset:1px}
+.bloque.hecha{opacity:.55}
+.bloque.hecha .tt{text-decoration:line-through}
+.bloque.cancel{opacity:.4;filter:grayscale(1)}
+.bloque.arrastrando{opacity:.35}
+.bloque .marca-at{position:absolute;top:5px;right:6px;width:6px;height:6px;border-radius:50%;background:var(--critico)}
+
+/* ---------- mes ---------- */
+.mes{display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:auto repeat(6,1fr);border:1px solid var(--borde);border-radius:16px;overflow:hidden;background:var(--borde);min-width:0;height:100%}
+.mes .dow{background:var(--crema);padding:8px 9px;font-size:10.2px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muy-suave)}
+.celda{background:#fff;min-height:58px;overflow:hidden;padding:6px 7px;display:flex;flex-direction:column;gap:3px;cursor:pointer;border:0;font-family:inherit;text-align:left;transition:background .12s}
+.celda:hover{background:var(--crema)}
+.celda:focus-visible{outline:2px solid var(--dorado);outline-offset:-2px}
+.celda.otro{background:var(--crema);opacity:.62}
+.celda.sel{background:var(--dorado-tenue);box-shadow:inset 0 0 0 2px var(--dorado)}
+.celda.dropok{background:var(--dorado-tenue);box-shadow:inset 0 0 0 2px var(--dorado)}
+.celda .num{font-size:12px;font-weight:700;color:var(--suave);display:flex;align-items:center;gap:5px}
+.celda.hoy .num .n{background:var(--dorado);color:#fff;border-radius:8px;width:22px;height:22px;display:grid;place-items:center;font-size:11.5px}
+.barrita{font-size:10.5px;font-weight:600;line-height:1.3;border-radius:6px;padding:2px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-left:3px solid;cursor:grab;font-family:inherit;text-align:left;width:100%;border-top:0;border-right:0;border-bottom:0}
+.barrita.hecha{opacity:.5;text-decoration:line-through}
+.barrita.cancel{opacity:.4;filter:grayscale(1);text-decoration:line-through}
+.mas{font-size:10px;color:var(--muy-suave);font-weight:600;padding-left:3px;background:none;border:0;font-family:inherit;cursor:pointer;text-align:left}
+
+/* ---------- lista ---------- */
+.lista-caja{display:flex;flex-direction:column;gap:14px;height:100%;overflow-y:auto;padding-right:3px}
+.grupo-dia{display:flex;flex-direction:column;gap:7px}
+.grupo-cab{display:flex;align-items:center;gap:9px;position:sticky;top:0;background:var(--lienzo);padding:3px 0;z-index:2}
+.grupo-cab b{font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em}
+.grupo-cab .ln{flex:1;height:1px;background:var(--borde)}
+.grupo-cab .cant{font-size:11px;color:var(--muy-suave);font-weight:600}
+.act{
+  background:#fff;border:1px solid var(--borde);border-radius:13px;padding:9px 11px;
+  display:grid;grid-template-columns:50px 1fr auto;gap:10px;align-items:center;cursor:pointer;
+  text-align:left;font-family:inherit;color:var(--texto);border-left-width:3px;border-left-style:solid;
+  width:100%;transition:transform .1s,box-shadow .12s;
+}
+.act:hover{transform:translateY(-1px);box-shadow:var(--sombra-2)}
+.act:focus-visible{outline:2px solid var(--dorado);outline-offset:2px}
+.act .hora{font-size:11.5px;font-weight:700;color:var(--suave)}
+.act .tit{font-size:12.8px;font-weight:700;line-height:1.3}
+.act .sub{font-size:11.3px;color:var(--suave);margin-top:1px;display:flex;flex-wrap:wrap;gap:3px 9px;align-items:center}
+.act.hecha .tit{opacity:.55;text-decoration:line-through}
+.act.cancel{opacity:.55}
+.act.cancel .tit{text-decoration:line-through}
+.etq{font-size:10px;font-weight:700;border-radius:999px;padding:2px 8px;white-space:nowrap}
+.etq.at{background:rgba(192,91,70,.14);color:var(--critico)}
+.etq.ok{background:rgba(46,125,68,.14);color:var(--ok)}
+.etq.curso{background:rgba(168,127,27,.16);color:var(--bajo)}
+.etq.urg{background:rgba(192,91,70,.14);color:var(--critico)}
+.etq.alta{background:rgba(168,127,27,.16);color:var(--bajo)}
+.vacio{text-align:center;color:var(--muy-suave);font-size:12.5px;padding:34px 10px;border:1px dashed var(--borde);border-radius:14px}
+.cargando{text-align:center;color:var(--muy-suave);font-size:12.5px;padding:40px 10px}
+
+/* ---------- ficha y formulario ---------- */
+.telon{position:fixed;inset:0;background:rgba(20,16,10,.45);z-index:40}
+.panel-der{
+  position:fixed;top:0;right:0;bottom:0;width:min(420px,94vw);background:#fff;border-left:1px solid var(--borde);
+  z-index:41;padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:13px;
+  box-shadow:-18px 0 50px rgba(40,30,15,.22);animation:entra .18s ease;
+}
+@keyframes entra{from{transform:translateX(22px);opacity:0}to{transform:none;opacity:1}}
+.modal{
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(620px,94vw);max-height:92vh;
+  overflow-y:auto;background:#fff;border:1px solid var(--borde);border-radius:22px;z-index:41;padding:22px;
+  display:flex;flex-direction:column;gap:14px;box-shadow:var(--sombra);
+}
+@media (prefers-reduced-motion: reduce){.panel-der{animation:none}.act:hover{transform:none}}
+.cab-panel{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.panel-der h4,.modal h4{font-size:18px;font-weight:700}
+.dato{display:grid;grid-template-columns:104px 1fr;gap:8px;font-size:12.8px;padding:7px 0;border-bottom:1px solid var(--borde-2);align-items:center}
+.dato b{color:var(--muy-suave);font-weight:600;font-size:10.8px;text-transform:uppercase;letter-spacing:.05em}
+.acciones{display:flex;flex-wrap:wrap;gap:7px}
+.form-red{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.campo-caja{display:flex;flex-direction:column;gap:5px}
+.campo-caja label{font-size:11px;font-weight:700;color:var(--muy-suave);text-transform:uppercase;letter-spacing:.05em}
+.campo-caja .err{font-size:11.5px;color:var(--critico);font-weight:600}
+.ancho{grid-column:1/-1}
+.solo-lectura{background:var(--crema);border:1px solid var(--borde);border-radius:12px;padding:9px 12px;font-size:12.2px}
+.nota-it{background:var(--crema);border:1px solid var(--borde);border-radius:11px;padding:8px 10px;font-size:12.2px}
+.nota-it .q{font-size:10.5px;color:var(--muy-suave);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
+.notas{display:flex;flex-direction:column;gap:7px}
+.pie-nota{font-size:11.5px;color:var(--muy-suave)}
+.aviso{
+  position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:60;max-width:min(560px,92vw);
+  background:var(--texto);color:#fff;font-size:12.5px;font-weight:600;padding:11px 17px;border-radius:13px;
+  box-shadow:var(--sombra);
+}
+.aviso.malo{background:var(--critico)}
+
+@media (max-width:860px){
+  .app{grid-template-columns:1fr;margin:0;border-radius:0;border:0;min-height:100vh}
+  .lado{flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--borde);padding:11px}
+  .lado .marca,.lado .pie{display:none}
+  .lado .pil{white-space:nowrap}
+  .tablero{padding:14px}
+  .barra h3{min-width:0;width:100%}
+  .form-red{grid-template-columns:1fr}
+  .celda{min-height:74px}
+}
+
+/* ---------- piezas que ahora pinta el servidor (enlaces en vez de botones) ---------- */
+a{color:inherit}
+.segmento a{
+  font-size:12px;font-weight:600;color:var(--suave);padding:6px 12px;border-radius:6px;
+  text-decoration:none;display:inline-block;
+}
+.segmento a.on{background:#fff;color:var(--texto);box-shadow:var(--sombra-2)}
+.btn{text-decoration:none}
+.chip{text-decoration:none}
+.cuenta-chip{opacity:.7;font-weight:600}
+.aviso-ok{
+  background:rgba(46,125,68,.1);border:1px solid rgba(46,125,68,.3);color:var(--ok);
+  border-radius:12px;padding:9px 13px;font-size:12.3px;font-weight:600;
+}
+.act{text-decoration:none}
+.act .etiquetas{display:flex;gap:5px;align-items:center}
+.etiquetas{display:flex;gap:6px;flex-wrap:wrap}
+.carril-cab a{text-decoration:none;color:inherit;display:block}
+.carril-cab .mas{display:inline-block;margin-top:2px}
+.bloque{text-decoration:none;display:block}
+.barrita{text-decoration:none;display:block}
+.mas{text-decoration:none;display:inline-block;padding:0 3px}
+.celda .num .n{text-decoration:none;color:inherit}
+.celda .num .punto-at{color:var(--critico);font-size:10px}
+.celda .num .mas{margin-left:auto}
+.par{display:flex;gap:7px}
+.sel.ancho{width:100%}
+.panel-der form{display:contents}
+.panel-der .acciones form{display:inline}
+.telon{display:block}
+
+/* En pantallas altas el carril respira un poco más. */
+@media (min-height: 1000px){ .tablero{gap:14px;padding:18px 22px 20px} }
+/* En el teléfono vuelve el scroll normal de la página. */
+@media (max-width: 860px){
+  body{overflow:auto}
+  .app{height:auto;min-height:100vh}
+  .tablero{overflow:visible}
+    .carril-cuerpo{max-height:70vh}
+}
+.segmento .apagado{
+  font-size:12px;font-weight:600;color:var(--muy-suave);padding:6px 12px;border-radius:9px;
+  cursor:not-allowed;opacity:.65;
+}

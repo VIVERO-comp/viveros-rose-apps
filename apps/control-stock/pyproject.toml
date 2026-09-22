@@ -13,12 +13,18 @@ dependencies = [
     "openpyxl>=3.1",
     # Fichas de producto en la base tienda (Postgres del droplet).
     "psycopg[binary]>=3.2",
+    # El feed del calendario que se suscribe en el teléfono (fase 1 del plan
+    # de sincronización con Google/Apple, 22/09/2026).
+    "icalendar>=7",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
 ]
+
+[tool.setuptools]
+packages = ["app"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
