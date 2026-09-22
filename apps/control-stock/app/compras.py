@@ -70,7 +70,14 @@ MAX_LINEAS = 20
 
 
 def activo():
-    """Sin conexión a Odoo la pestaña se muestra apagada, como Vender."""
+    """Sin conexión a Odoo la pestaña se muestra apagada, como Vender.
+
+    COMPRAS_ACTIVAS=0 la apaga por completo (dueño, 22/09/2026): la pestaña
+    viajó a producción en el deploy del calendario sin estar terminada, así
+    que en el real queda escondida hasta que él la dé por lista. Sin la
+    variable queda encendida (pruebas y desarrollo siguen igual)."""
+    if os.environ.get("COMPRAS_ACTIVAS", "1") == "0":
+        return False
     return ventas.configurado()
 
 

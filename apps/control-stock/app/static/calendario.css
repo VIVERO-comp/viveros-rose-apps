@@ -246,11 +246,23 @@ input.campo:focus,textarea.campo:focus,select.sel:focus{border-color:var(--dorad
 
 @media (max-width:860px){
   .app{grid-template-columns:1fr;margin:0;border-radius:0;border:0;min-height:100vh}
-  .lado{flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--borde);padding:11px}
+  .lado{flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--borde);padding:11px;scrollbar-width:none}
+  .lado::-webkit-scrollbar{display:none}
   .lado .marca,.lado .pie{display:none}
-  .lado .pil{white-space:nowrap}
-  .tablero{padding:14px}
-  .barra h3{min-width:0;width:100%}
+  .lado .pil{white-space:nowrap;padding:9px 12px}
+  .tablero{padding:12px;gap:9px}
+  /* La misma pantalla que en computadora, apretada: título arriba, una
+     fila de controles que envuelve poco, y los chips en UNA fila que se
+     desliza de lado en vez de comerse media pantalla. */
+  .barra{gap:6px;padding-bottom:9px}
+  .barra h3{min-width:0;width:100%;font-size:16px}
+  .segmento a{padding:6px 9px;font-size:11.5px}
+  .btn{padding:7px 10px;font-size:12px}
+  .buscador{flex:1 1 120px;width:auto;min-width:110px}
+  .chips{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{flex:0 0 auto;white-space:nowrap}
+  .chips .crece{display:none}
   .form-red{grid-template-columns:1fr}
   .celda{min-height:74px}
 }

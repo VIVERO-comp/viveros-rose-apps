@@ -276,3 +276,26 @@ def test_el_carril_llena_el_alto_en_porcentaje(cliente):
     assert "flex-grow:" in cuerpo
     assert "top:calc(" in cuerpo
     assert "height:46px" not in cuerpo  # ya no hay alturas fijas de fila
+
+
+def test_los_botones_de_sync_son_directos(cliente):
+    """El dueño pidió botones que suscriben al toque, no un enlace a copiar."""
+    inicio = cliente.get("/").text
+    assert "webcal://" in inicio
+    assert "calendar.google.com/calendar/render?cid=webcal" in inicio
+
+
+def test_compras_se_esconde_con_la_bandera(cliente, monkeypatch):
+    monkeypatch.setenv("COMPRAS_ACTIVAS", "0")
+    inicio = cliente.get("/").text
+    assert 'href="/compras"' not in inicio
+    # Y el POST rebota en el servidor, no solo se esconde el botón.
+    r = cliente.post("/compras/nueva", data={}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/compras"
+
+
+def test_proyectos_se_esconde_con_la_bandera(cliente, monkeypatch):
+    monkeypatch.setenv("PROYECTOS_ACTIVOS", "0")
+    assert 'href="/proyecto"' not in _abrir(cliente).text
+    r = cliente.get("/proyecto", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/"

@@ -390,23 +390,24 @@
     {% if aviso_ajustes == 'enlace-nuevo' %}<div class="aviso-ok">Enlace nuevo. El anterior dejó de funcionar: vuelve a suscribir el teléfono con este.</div>{% endif %}
     <div class="inv-card">
       <h3>Tu calendario en el teléfono</h3>
-      <p>Suscribe este enlace y tus actividades del Calendario aparecen solas
-      en el calendario del iPhone, de la Mac o de Google. Es solo lectura:
-      crear y cambiar actividades se sigue haciendo en la app.</p>
-      <p class="sync-url">{{ suscripcion_calendario }}</p>
+      <p>Un toque y tus actividades del Calendario aparecen solas en el
+      calendario del iPhone, de la Mac o de Google. Es solo lectura: crear y
+      cambiar actividades se sigue haciendo en la app.</p>
       <div class="botones">
-        <button class="btn btn-dorado btn-copiar" type="button" data-link="{{ suscripcion_calendario }}" onclick="copiarLink(this)">Copiar enlace</button>
+        <a class="btn btn-dorado" href="{{ suscripcion_webcal }}">Añadir al iPhone / Mac</a>
+        <a class="btn btn-dorado" href="{{ suscripcion_google }}" target="_blank" rel="noopener">Añadir a Google Calendar</a>
+      </div>
+      <p>En el iPhone se abre el diálogo de suscripción: dale Suscribir y
+      listo, se refresca solo. En Google se abre tu calendario preguntando si
+      quieres añadirlo (ojo: Google lo refresca a su ritmo, 12–24 horas; el
+      camino rápido es la tarjeta de abajo).</p>
+      <div class="botones">
+        <button class="btn btn-linea btn-chico btn-copiar" type="button" data-link="{{ suscripcion_calendario }}" onclick="copiarLink(this)">Copiar el enlace a mano</button>
         <form method="post" action="/calendario/suscripcion/regenerar"
               onsubmit="return confirm('El enlace actual dejará de funcionar y habrá que volver a suscribir cada teléfono que lo use. ¿Regenerar?')">
-          <button class="btn btn-linea" type="submit">Regenerar enlace</button>
+          <button class="btn btn-linea btn-chico" type="submit">Regenerar enlace</button>
         </form>
       </div>
-      <p><b>iPhone / Mac:</b> Ajustes → Apps → Calendario → Cuentas → Otra →
-      Añadir calendario suscrito, y pega el enlace. Se refresca solo cada
-      pocos minutos.<br>
-      <b>Google Calendar:</b> en la computadora, Otros calendarios → + →
-      Desde URL, y pega el enlace. Google lo refresca a su ritmo (12–24
-      horas).</p>
     </div>
 
     {% if gcal_configurado %}
@@ -649,7 +650,11 @@
   <button class="on" data-tab="home" onclick="tab('home',this)"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></svg></span>Inicio</button>
   <button data-tab="stock" onclick="tab('stock',this)"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M12 10C12 6 9 3 4 3c0 5 3 8 8 7z"/><path d="M12 13c0-3.5 2.5-6 7-6 0 4.5-2.5 7-7 6z"/><path d="M7 21h10"/></svg></span>Stock</button>
   <a href="/venta"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg></span>Vender</a>
+  {# Compras se esconde con COMPRAS_ACTIVAS=0 (en el real hasta que el
+     dueño la dé por lista, 22/09/2026); las rutas también lo verifican. #}
+  {% if compras_activas %}
   <a href="/compras"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg></span>Compras</a>
+  {% endif %}
   <a href="/calendario"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></span>Calendario</a>
   <button data-tab="ajustes" onclick="tab('ajustes',this)"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>Ajustes</button>
 </nav>

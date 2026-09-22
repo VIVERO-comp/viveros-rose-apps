@@ -25,6 +25,8 @@ vivero. Por eso el gasto se registra como compra y no como salida de almacén.
 import re
 from datetime import datetime
 
+import os
+
 from .datos import ZONA_PANAMA, _db
 from . import cotizaciones, ventas
 
@@ -59,6 +61,14 @@ ESTADOS_VIVOS = ("draft", "sent", "sale")
 # La etapa del Flujo del CRM a la que sube un proyecto cuando recibe su
 # primera cotización (referencia XML del addon).
 ETAPA_FLUJO_COTIZADO = "vivero_rose_pedidos.etapa_flujo_cotizado"
+
+
+def activos():
+    """PROYECTOS_ACTIVOS=0 esconde la pestaña y sus rutas (dueño,
+    22/09/2026): en el real queda apagada, junto con Compras, hasta que él
+    la dé por lista. Sin la variable queda encendida (pruebas y desarrollo
+    siguen igual)."""
+    return os.environ.get("PROYECTOS_ACTIVOS", "1") != "0"
 
 
 def iniciar_tablas():

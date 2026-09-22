@@ -127,6 +127,20 @@ async def exigir_sesion(request: Request, call_next):
     return await call_next(request)
 
 
+def _enlaces_suscripcion(request):
+    """Los enlaces de la tarjeta de sync de Ajustes, resueltos en el servidor."""
+    enlace = (_base_publica(request) + "/calendario.ics?t="
+              + calendario_ics.token_de(request.state.empleada["id"]))
+    webcal = enlace.replace("https://", "webcal://", 1).replace("http://", "webcal://", 1)
+    return {
+        "suscripcion_calendario": enlace,
+        "suscripcion_webcal": webcal,
+        # El deep link de "agregar por URL" de Google Calendar.
+        "suscripcion_google": ("https://calendar.google.com/calendar/render?cid="
+                               + quote(webcal, safe="")),
+    }
+
+
 def _base_publica(request):
     """La URL que ve el mundo (detrás de nginx la del request es interna)."""
     return (os.environ.get("PUBLIC_BASE_URL") or str(request.base_url)).rstrip("/")
@@ -345,14 +359,14 @@ def inicio(request: Request, refrescar: int = 0):
         # Para armar los links /invitacion/{token} que se comparten.
         "base_publica": (os.environ.get("PUBLIC_BASE_URL")
                          or str(request.base_url)).rstrip("/"),
+        "compras_activas": compras.activo(),
         "gcal_configurado": calendario_google.configurado(),
         "gcal_conexion": calendario_google.conexion_de(request.state.empleada["id"]),
-        # El enlace de suscripción del calendario (feed ICS) que se pega en
-        # el iPhone o en Google Calendar; vive en Ajustes (22/09/2026).
-        "suscripcion_calendario": (
-            (os.environ.get("PUBLIC_BASE_URL") or str(request.base_url)).rstrip("/")
-            + "/calendario.ics?t="
-            + calendario_ics.token_de(request.state.empleada["id"])),
+        # La suscripción del calendario (feed ICS) en Ajustes (22/09/2026).
+        # El dueño pidió botones directos, no un enlace para copiar: webcal://
+        # abre el diálogo de suscribir en iPhone/Mac, y el cid= de Google abre
+        # Google Calendar con el calendario listo para aceptar.
+        **_enlaces_suscripcion(request),
         "puntos": puntos,
         # El anillo del score: circunferencia 402, se descubre según el score.
         "anillo": round(402 * (1 - puntos / 100)),
@@ -1567,6 +1581,8 @@ def _tipos_para_cotizar():
 
 @app.get("/proyecto")
 def proyecto_tablero(request: Request, error: str = ""):
+    if not proyectos.activos():
+        return RedirectResponse("/", status_code=303)
     columnas = []
     if ventas.configurado():
         try:
@@ -1584,6 +1600,8 @@ def proyecto_tablero(request: Request, error: str = ""):
 @app.get("/proyecto/nuevo")
 def proyecto_nuevo(request: Request, error: str = "", nombre: str = "",
                    celular: str = "", nota: str = "", nombre_proyecto: str = ""):
+    if not proyectos.activos():
+        return RedirectResponse("/", status_code=303)
     return plantillas.TemplateResponse(request, "proyecto_nuevo.html", {
         "tipos": _tipos_de_proyecto(),
         "error": error or None,
@@ -1594,6 +1612,8 @@ def proyecto_nuevo(request: Request, error: str = "", nombre: str = "",
 
 @app.post("/proyecto/nuevo")
 async def proyecto_crear(request: Request):
+    if not proyectos.activos():
+        return RedirectResponse("/", status_code=303)
     form = await request.form()
     nombre = form.get("nombre", "")
     celular = form.get("celular", "")
@@ -1620,6 +1640,8 @@ async def proyecto_crear(request: Request):
 
 @app.get("/proyecto/{ref}")
 def proyecto_ficha(request: Request, ref: str, error: str = ""):
+    if not proyectos.activos():
+        return RedirectResponse("/", status_code=303)
     ficha = proyectos.detalle(ref)
     if not ficha:
         return RedirectResponse(
@@ -1632,6 +1654,8 @@ def proyecto_ficha(request: Request, ref: str, error: str = ""):
 
 @app.post("/proyecto/{ref}/compra")
 async def proyecto_compra(request: Request, ref: str):
+    if not proyectos.activos():
+        return RedirectResponse("/", status_code=303)
     form = await request.form()
     try:
         proyectos.agregar_compra(request.state.empleada, ref,
@@ -1645,6 +1669,8 @@ async def proyecto_compra(request: Request, ref: str):
 
 @app.post("/proyecto/{ref}/compra/{n}/quitar")
 def proyecto_compra_quitar(request: Request, ref: str, n: int):
+    if not proyectos.activos():
+        return RedirectResponse("/", status_code=303)
     proyectos.quitar_compra(ref, n)
     return RedirectResponse(f"/proyecto/{ref}", status_code=303)
 
@@ -1816,6 +1842,7 @@ def calendario_pantalla(request: Request):
 
     return plantillas.TemplateResponse(request, "calendario.html", {
         "empleada": empleada,
+        "proyectos_activos": proyectos.activos(),
         "cal": calendario,
         "estado": estado,
         "yo": yo,
@@ -2164,6 +2191,8 @@ async def _recibo_del_form(form):
 
 @app.post("/compras/nueva")
 async def compra_crear(request: Request):
+    if not compras.activo():
+        return RedirectResponse("/compras", status_code=303)
     form = await request.form()
     destino = form.get("destino") or "vivero"
     try:
@@ -2234,6 +2263,8 @@ def compra_ficha(request: Request, n: int, error: str = ""):
 
 @app.post("/compras/{n}")
 async def compra_guardar(request: Request, n: int):
+    if not compras.activo():
+        return RedirectResponse("/compras", status_code=303)
     form = await request.form()
     try:
         recibo, recibo_nombre = await _recibo_del_form(form)
@@ -2253,6 +2284,8 @@ async def compra_guardar(request: Request, n: int):
 
 @app.post("/compras/{n}/borrar")
 def compra_borrar(request: Request, n: int):
+    if not compras.activo():
+        return RedirectResponse("/compras", status_code=303)
     compras.borrar(n)
     return RedirectResponse("/compras", status_code=303)
 
