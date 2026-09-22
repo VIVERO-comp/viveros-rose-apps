@@ -40,6 +40,11 @@ VERSION_ESTATICOS = int(max(
     for nombre in os.listdir(os.path.join(RUTA_APP, "static"))
 ))
 plantillas.env.globals["v_estaticos"] = VERSION_ESTATICOS
+# El navbar compartido pregunta por Proyectos en cada render: la pestaña
+# aparece en TODOS los menús cuando la bandera está encendida (el dueño
+# vio que al pasar a Stock "se escondía", 22/09/2026).
+from . import proyectos as _proyectos_nav
+plantillas.env.globals["proyectos_en_nav"] = _proyectos_nav.activos
 
 
 def fecha_bonita(iso):

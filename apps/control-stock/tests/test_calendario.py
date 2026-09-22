@@ -371,3 +371,26 @@ def test_el_nav_sin_inicio_y_calendario_primero(cliente):
     nav = cuerpo.split("<nav>")[1].split("</nav>")[0]
     assert "Inicio" not in nav
     assert nav.find("Calendario") < nav.find("Stock") < nav.find("Vender")
+
+
+def test_catalogo_guarda_su_marca_de_tiempo(monkeypatch):
+    """Regresión del 500 del 22/09: el refactor de catalogo() dejó una
+    variable sin definir al guardar el caché. Se llama con Linear fingido."""
+    monkeypatch.setenv("LINEAR_API_KEY", "lin_x")
+    monkeypatch.setenv("LINEAR_PROJECT_CALENDARIO_ID", "p1")
+    monkeypatch.setattr(calendario, "_pedir", lambda *_a, **_k: {"team": {
+        "states": {"nodes": [{"id": "s1", "name": "Todo", "type": "unstarted", "position": 0}]},
+        "labels": {"nodes": []},
+        "members": {"nodes": [{"id": "u1", "name": "Ana", "displayName": "Ana",
+                               "email": "ana@x.com", "active": True}]},
+    }})
+    dato = calendario.catalogo(refrescar=True)
+    assert dato["gente"][0]["nombre"] == "Ana"
+    assert calendario._catalogo_cache["en"] > 0
+
+
+def test_proyectos_sale_en_el_nav_compartido(cliente):
+    """Al pasar a Vender (o Stock) la pestaña Proyectos no se esconde:
+    el navbar compartido la trae cuando la bandera está encendida."""
+    nav = cliente.get("/venta").text.split("<nav>")[1].split("</nav>")[0]
+    assert "Proyectos" in nav

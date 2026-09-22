@@ -194,7 +194,7 @@ def catalogo(refrescar=False):
     gente.sort(key=lambda g: g["nombre"].lower())
 
     dato = {"etiquetas": etiquetas, "estados": estados, "gente": gente}
-    _catalogo_cache.update({"en": ahora, "dato": dato})
+    _catalogo_cache.update({"en": time.time(), "dato": dato})
     return dato
 
 
