@@ -897,14 +897,14 @@ def _repartir(actividades):
     return repartidas
 
 
-# Cuánto se corre cada bloque cuando dos actividades chocan a la misma hora.
-# Se escalonan (como en Google Calendar) en vez de partirse a la mitad: con
-# columnas de ~120 px, partirlas dejaba el texto ilegible.
-CORRIMIENTO = 0.24
-
-
 def _bloque(actividad, columna, columnas, indice, total_columnas, dia_hoy, filas=()):
-    """Un bloque del carril con su posición ya resuelta en CSS."""
+    """Un bloque del carril con su posición ya resuelta en CSS.
+
+    Las actividades que chocan a la misma hora se parten la columna en
+    partes IGUALES, lado a lado, sin taparse (pedido del dueño, 22/09/2026,
+    al ver dos tarjetas encimadas el martes 22: "mira el 22"). Antes se
+    escalonaban una sobre otra y la de atrás quedaba tapada.
+    """
     ancho = f"((100% - 46px) / {total_columnas})"
     izquierda = f"(46px + (100% - 46px) * {indice / total_columnas})"
     inicio = _minutos(actividad["hora"])
@@ -913,12 +913,8 @@ def _bloque(actividad, columna, columnas, indice, total_columnas, dia_hoy, filas
     # CSS (min-height), porque el alto real depende de la pantalla.
     alto = _y_de(inicio + actividad["dur"], filas) - arriba
     color = color_de(actividad["tipo"])
-    # El último en pintarse queda arriba y deja ver el filo de los de atrás.
-    # Con dos encimados se corren casi a la mitad (se leen los dos); con tres
-    # o más se apilan más juntos y cada bloque solo muestra su tipo.
-    unidad = 0.42 if columnas == 2 else CORRIMIENTO
-    corrido = unidad * columna
-    parte = 1 - unidad * (columnas - 1)
+    parte = 1 / columnas
+    corrido = parte * columna
     return {
         "a": actividad,
         "color": color,
@@ -929,12 +925,11 @@ def _bloque(actividad, columna, columnas, indice, total_columnas, dia_hoy, filas
                    f"width:calc({ancho} * {parte:.4f} - 5px);"
                    f"z-index:{2 + columna};"
                    f"background:{_tinta(color, 0.07)};border-color:{_tinta(color, 0.3)};"
-                   f"border-left-color:{color}"
-                   + (";box-shadow:-3px 0 8px rgba(60,50,30,.10)" if columna else "")),
-        # Con poco alto (o muchos encimados) el bloque solo dice el tipo: más
-        # vale una línea legible que tres cortadas.
-        "ver_cliente": actividad["dur"] >= 45 and columnas < 3,
-        "ver_pie": actividad["dur"] >= 90 and columnas < 3,
+                   f"border-left-color:{color}"),
+        # Con la columna partida (o poco alto) el bloque solo dice el tipo:
+        # más vale una línea legible que tres cortadas.
+        "ver_cliente": actividad["dur"] >= 45 and columnas < 2,
+        "ver_pie": actividad["dur"] >= 90 and columnas < 2,
         "atrasada": esta_atrasada(actividad, dia_hoy),
     }
 
