@@ -25,7 +25,7 @@ def test_login_malo_no_entra(db_limpia):
 
 
 def test_login_y_logout(cliente, con_inventario):
-    assert cliente.get("/").status_code == 200
+    assert cliente.get("/?tab=stock").status_code == 200
     cliente.post("/logout", follow_redirects=False)
     r = cliente.get("/", follow_redirects=False)
     assert r.status_code == 303

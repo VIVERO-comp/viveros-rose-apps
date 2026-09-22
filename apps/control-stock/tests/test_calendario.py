@@ -171,7 +171,7 @@ def test_el_color_del_bloque_es_opaco():
 
 def test_el_inicio_muestra_el_calendario(cliente):
     """La pestaña Inicio trae hoy, atrasadas, la agenda y los 7 días."""
-    respuesta = cliente.get("/")
+    respuesta = cliente.get("/?tab=stock")
     assert respuesta.status_code == 200
     cuerpo = respuesta.text
     assert "Tu día" in cuerpo
@@ -197,7 +197,7 @@ def test_si_linear_falla_el_inicio_igual_abre(cliente, monkeypatch):
         raise calendario.ErrorCalendario("Linear no responde")
 
     monkeypatch.setattr(calendario, "listar", explota)
-    respuesta = cliente.get("/")
+    respuesta = cliente.get("/?tab=stock")
     assert respuesta.status_code == 200
     assert "No se pudo leer el calendario" in respuesta.text
 
@@ -263,7 +263,7 @@ def test_feed_regenerar_mata_el_enlace_viejo(cliente):
 def test_el_enlace_de_sync_vive_en_ajustes(cliente):
     """La suscripción se toma de Ajustes (pedido del 22/09/2026), no de la
     pantalla del calendario."""
-    inicio = cliente.get("/").text
+    inicio = cliente.get("/?tab=stock").text
     assert "calendario.ics?t=" in inicio
     assert "Sync con iPhone o Google Calendar" in inicio
     assert "calendario.ics?t=" not in cliente.get("/calendario").text
@@ -280,14 +280,14 @@ def test_el_carril_llena_el_alto_en_porcentaje(cliente):
 
 def test_los_botones_de_sync_son_directos(cliente):
     """El dueño pidió botones que suscriben al toque, no un enlace a copiar."""
-    inicio = cliente.get("/").text
+    inicio = cliente.get("/?tab=stock").text
     assert "webcal://" in inicio
     assert "calendar.google.com/calendar/render?cid=webcal" in inicio
 
 
 def test_compras_se_esconde_con_la_bandera(cliente, monkeypatch):
     monkeypatch.setenv("COMPRAS_ACTIVAS", "0")
-    inicio = cliente.get("/").text
+    inicio = cliente.get("/?tab=stock").text
     assert 'href="/compras"' not in inicio
     # Y el POST rebota en el servidor, no solo se esconde el botón.
     r = cliente.post("/compras/nueva", data={}, follow_redirects=False)
@@ -394,3 +394,11 @@ def test_proyectos_sale_en_el_nav_compartido(cliente):
     el navbar compartido la trae cuando la bandera está encendida."""
     nav = cliente.get("/venta").text.split("<nav>")[1].split("</nav>")[0]
     assert "Proyectos" in nav
+
+
+def test_la_raiz_abre_el_calendario(cliente):
+    """"Todavía inicio está" (22/09/2026): entrar a la app sin pestaña
+    pedida aterriza en el Calendario; el tablero vive en /?tab=stock."""
+    r = cliente.get("/", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/calendario"

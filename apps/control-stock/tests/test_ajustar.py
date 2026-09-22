@@ -13,7 +13,7 @@ def test_ajuste_rapido_viaja_al_order_api(cliente, con_inventario, ajustes_regis
 
 def test_ajuste_aplicado_cierra_la_alerta_a_nombre_de_quien_ajusto(
         cliente, con_inventario, ajustes_registrados):
-    cliente.get("/")  # crea las alertas (Romero e Ixora)
+    cliente.get("/?tab=stock")  # crea las alertas (Romero e Ixora)
     cliente.post("/ajustar", json={"sku": "PL-ROMERO", "cantidad": 7, "esperada": 2})
     # Se cierra la del Romero (la ajustada); las demás siguen.
     assert "PL-ROMERO" not in {a["sku"] for a in datos.alertas_pendientes()}
@@ -24,7 +24,7 @@ def test_ajuste_aplicado_cierra_la_alerta_a_nombre_de_quien_ajusto(
 
 
 def test_conflicto_pasa_tal_cual_y_no_toca_alertas(cliente, con_inventario, monkeypatch):
-    cliente.get("/")
+    cliente.get("/?tab=stock")
 
     def conflicto(ajustes, empleado, motivo):
         return {"ok": True, "resultados": [

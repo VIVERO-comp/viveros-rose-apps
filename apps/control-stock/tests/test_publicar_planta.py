@@ -57,7 +57,7 @@ def test_despublicar_no_toca_stock_ni_fotos(cliente, con_inventario, monkeypatch
     assert datos.fotos_subidas() == fotos_antes
     assert datos.fotos_subidas()["PL-ROMERO"] == "abc123hash"
     # Y la planta sigue entera en la pantalla, con su stock y su foto.
-    pagina = cliente.get("/").text
+    pagina = cliente.get("/?tab=stock").text
     assert "PL-ROMERO" in pagina
 
 
@@ -97,5 +97,5 @@ def test_la_pantalla_lleva_la_casilla_de_cada_planta(cliente, con_inventario, mo
     productos[0]["publicado"] = False
     monkeypatch.setattr(datos, "obtener_inventario",
                         lambda refrescar=False: (productos, 1756800000.0))
-    pagina = cliente.get("/").text
+    pagina = cliente.get("/?tab=stock").text
     assert '"pub": false' in pagina or '"pub":false' in pagina

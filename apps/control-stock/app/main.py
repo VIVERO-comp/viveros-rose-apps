@@ -288,6 +288,12 @@ def _resumen_categorias(inventario, umbral):
 
 @app.get("/")
 def inicio(request: Request, refrescar: int = 0):
+    # Sin pestaña pedida, la app ABRE en el Calendario (dueño, 22/09/2026:
+    # "quita inicio y pon calendario de primero" y, al ver que la raíz
+    # seguía mostrando el tablero, "todavía inicio está"). El tablero del
+    # home queda solo como el lienzo de /?tab=stock y /?tab=ajustes.
+    if "tab" not in request.query_params:
+        return RedirectResponse("/calendario", status_code=303)
     umbral = datos.umbral()
     try:
         inventario, leido_en = datos.obtener_inventario(refrescar=bool(refrescar))

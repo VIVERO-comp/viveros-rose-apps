@@ -124,11 +124,6 @@
       {% endfor %}
     </div>
 
-    {# El logout vivía en la pestaña Inventario; al salir esa del menú se
-       muda aquí, que lo ven todos. #}
-    <form method="post" action="/logout" style="margin-top:22px;text-align:center">
-      <button class="btn btn-linea" type="submit" style="margin:0 auto">Cerrar sesión · {{ empleada.nombre }}</button>
-    </form>
   </section>
 
   <!-- ================= STOCK ================= -->
@@ -488,6 +483,11 @@
     </div>
     {% endfor %}
     {% endif %}
+
+    {# Cerrar sesión vive en Ajustes (pedido del dueño, 22/09/2026). #}
+    <form method="post" action="/logout" style="margin-top:22px;text-align:center">
+      <button class="btn btn-linea" type="submit" style="margin:0 auto">Cerrar sesión · {{ empleada.nombre }}</button>
+    </form>
   </section>
 </main>
 

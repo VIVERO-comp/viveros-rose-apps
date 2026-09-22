@@ -134,7 +134,7 @@ def test_ajustes_exige_admin(cliente, con_inventario):
     r = cliente.post("/ajustes/invitar", data={"email": "x@y.com"})
     assert r.status_code == 403
     # Todos ven la pestaña Ajustes (Mi cuenta), pero sin la parte de admin.
-    pagina = cliente.get("/").text
+    pagina = cliente.get("/?tab=stock").text
     assert "Mi cuenta" in pagina and "Invitar a alguien" not in pagina
 
 
@@ -165,7 +165,7 @@ def test_email_sin_verificar_no_da_admin(cliente, con_inventario, monkeypatch):
     monkeypatch.setenv("AJUSTES_ADMINS", "jefa@gmail.com")
     # genesis se anota el email de la admin: no gana la pestaña ni las rutas.
     cliente.post("/ajustes/mi-email", data={"email": "jefa@gmail.com"})
-    assert "Invitar a alguien" not in cliente.get("/").text
+    assert "Invitar a alguien" not in cliente.get("/?tab=stock").text
     assert cliente.post("/ajustes/invitar", data={"email": "x@y.com"}).status_code == 403
     # Verificado por Google, sí es admin.
     seguridad.entrar_con_google("jefa@gmail.com", "Génesis", es_admin=True)
@@ -175,7 +175,7 @@ def test_email_sin_verificar_no_da_admin(cliente, con_inventario, monkeypatch):
 
 def test_ajustes_admin_invita_cancela_y_revoca(cliente, con_inventario, monkeypatch):
     monkeypatch.setenv("AJUSTES_ADMINS", "genesis")
-    assert "tab-ajustes" in cliente.get("/").text
+    assert "tab-ajustes" in cliente.get("/?tab=stock").text
 
     r = cliente.post("/ajustes/invitar",
                      data={"email": "Nueva@Gmail.com", "nombre": "Nueva"},

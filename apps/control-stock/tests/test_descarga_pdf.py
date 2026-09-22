@@ -52,7 +52,7 @@ def test_los_enlaces_de_pdf_abren_en_otra_pestana(cliente, con_inventario):
     """Aunque la descarga falle, la pantalla de la app tiene que seguir viva
     detrás: por eso los PDF abren en otra pestaña."""
     cliente.post("/conteos/pdf", follow_redirects=False)
-    pagina = cliente.get("/").text
+    pagina = cliente.get("/?tab=stock").text
     for trozo in pagina.split("<a ")[1:]:
         enlace = trozo.split(">")[0]
         if "/pdf" in enlace:

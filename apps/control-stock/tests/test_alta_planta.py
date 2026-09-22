@@ -169,7 +169,7 @@ def test_sin_sesion_no_se_crea_nada(db_limpia, altas_registradas):
 # ---------------------------------------------------------------------------
 
 def _plantas_de(cliente):
-    html = cliente.get("/").text
+    html = cliente.get("/?tab=stock").text
     crudo = html.split("window.DATOS = ", 1)[1].split(";</script>", 1)[0]
     return {p["sku"]: p for p in json.loads(crudo)["plantas"]}
 
@@ -187,7 +187,7 @@ def test_sin_el_catalogo_del_sitio_no_se_inventa(cliente, con_inventario, monkey
     vez de mostrar una lista incompleta como si fuera la buena."""
     monkeypatch.setattr(datos, "obtener_publicados",
                         lambda: (None, "el sitio no responde"))
-    html = cliente.get("/").text
+    html = cliente.get("/?tab=stock").text
     crudo = html.split("window.DATOS = ", 1)[1].split(";</script>", 1)[0]
     datos_pantalla = json.loads(crudo)
     assert datos_pantalla["sinPublicados"] == "el sitio no responde"

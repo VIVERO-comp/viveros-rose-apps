@@ -109,7 +109,7 @@ def test_sin_catalogo_no_rompe(monkeypatch, tmp_path):
 def test_pantalla_editoras_ven_el_formulario_de_ficha(cliente, editora, catalogo):
     # La pestaña Fichas ya no existe: la ficha se edita en la vista de
     # detalle del producto (tocar una tarjeta del Stock en computadora).
-    pagina = cliente.get("/").text
+    pagina = cliente.get("/?tab=stock").text
     assert "tab-fichas" not in pagina
     assert "tab-detalle" in pagina
     assert "ficha-descripcion" in pagina  # el formulario editable
@@ -118,7 +118,7 @@ def test_pantalla_editoras_ven_el_formulario_de_ficha(cliente, editora, catalogo
 
 def test_pantalla_sin_permiso_ve_la_ficha_solo_lectura(cliente, monkeypatch, catalogo):
     monkeypatch.delenv("FICHAS_EDITORES", raising=False)
-    pagina = cliente.get("/").text
+    pagina = cliente.get("/?tab=stock").text
     assert "tab-detalle" in pagina
     assert "ficha-descripcion" not in pagina  # sin formulario de edición
     # Los textos sí viajan: el detalle los muestra en solo lectura.
@@ -191,6 +191,6 @@ def test_si_odoo_falla_no_se_guarda_la_prosa(cliente, editora, monkeypatch):
 
 
 def test_pantalla_editoras_ven_las_casillas_de_altura(cliente, editora, catalogo):
-    pagina = cliente.get("/").text
+    pagina = cliente.get("/?tab=stock").text
     assert "ficha-altura-min" in pagina
     assert "ficha-altura-max" in pagina

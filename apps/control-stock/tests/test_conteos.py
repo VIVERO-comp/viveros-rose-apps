@@ -105,7 +105,7 @@ def test_conteo_sin_diferencias_queda_confirmado_directo(cliente, con_inventario
     assert datos.conteo(n)["estado"] == "confirmado"
     assert ajustes_registrados == []  # no había nada que ajustar
     # Y el reloj quincenal del score se reinició.
-    assert "conteo hecho hoy" in cliente.get("/").text
+    assert "conteo hecho hoy" in cliente.get("/?tab=stock").text
 
 
 def test_importar_con_errores_no_crea_conteo(cliente, con_inventario):
