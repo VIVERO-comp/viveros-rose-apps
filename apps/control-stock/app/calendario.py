@@ -422,7 +422,7 @@ ETIQUETAS_LEADS_SERVICIO = {
     "Eventos · Bodas": "alquiler",
     "Eventos · Ferias": "alquiler",
 }
-# La label que pone el barrido nocturno de Odoo cuando un lead lleva 10 días
+# La label que pone el barrido nocturno de Odoo cuando un lead lleva 15 días
 # en "Nuevo" sin respuesta del cliente (regla del dueño, 22/09/2026): un lead
 # desactivado NO sale en el log — no hay a quién agendarle nada. El barrido
 # no cambia el estado del issue (sigue "vivo" en Linear a propósito, para
