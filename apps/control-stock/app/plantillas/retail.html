@@ -16,7 +16,8 @@
 {"prerender": [{"urls": ["/", "/?tab=stock", "/?tab=ajustes", "/venta", "/calendario"], "eagerness": "moderate"}]}
 </script>
 </head>
-<body>
+{# El menú lateral arranca como quedó la última vez (cookie `menu`). #}
+<body class="{{ 'menu-oculto' if request.cookies.get('menu') == '0' }}">
 
 <div class="app">
   <aside class="lado">
@@ -47,6 +48,11 @@
 
   <div class="tablero">
     <div class="barra">
+      {# La misma hamburguesa del calendario (menu.js). #}
+      <button class="btn icono hamb" type="button" aria-label="Mostrar u ocultar el menú"
+              aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
       <h3>Retail</h3>
       <span class="tenue" style="font-size:12px">A quién falta cotizar, facturar o entregar · leads Retail y Mayorista</span>
       <span class="crece"></span>
@@ -154,5 +160,6 @@
 
 <script src="/static/retail.js?v={{ v_estaticos }}"></script>
 <script src="/static/calendario.js?v={{ v_estaticos }}"></script>
+<script src="/static/menu.js?v={{ v_estaticos }}"></script>
 </body>
 </html>

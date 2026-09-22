@@ -1,20 +1,8 @@
 {% extends "base.html" %}
 
-{% block intro %}
-<div class="intro" id="intro" hidden>
-  <div class="intro-brote" id="intro-brote">
-    <svg width="154" height="154" viewBox="0 0 100 100" fill="none">
-      <path class="trazo espiral" d="M50 42 a4 4 0 0 1 4 4 a6 6 0 0 1 -6 6 a9 9 0 0 1 -9 -9 a12 12 0 0 1 12 -12 a15 15 0 0 1 15 15 a18 18 0 0 1 -18 18" stroke-linecap="round"/>
-      <path class="trazo petalo1" d="M35 52 C24 54 18 62 20 72 C30 72 38 66 40 56" stroke-linecap="round"/>
-      <path class="trazo petalo2" d="M65 52 C76 54 82 62 80 72 C70 72 62 66 60 56" stroke-linecap="round"/>
-      <path class="trazo petalo3" d="M42 66 C44 76 56 76 58 66" stroke-linecap="round"/>
-      <path class="trazo luna" d="M26 74 A30 30 0 0 0 74 74" stroke-linecap="round"/>
-      <circle class="trazo aro" cx="50" cy="55" r="43.5" transform="rotate(-90 50 55)"/>
-    </svg>
-  </div>
-  <div class="intro-texto" id="intro-texto"></div>
-</div>
-{% endblock %}
+{# La animación de inicio se quitó (dueño, 22/09/2026): era un telón de ~3
+   segundos que, con el pre-render de pestañas, se disparaba al cambiar a
+   Stock o Vender y hacía sentir lento el cambio. #}
 
 {% block contenido %}
 {# Sin cabecera (pedido del dueño, 22/09/2026): ni el título "Control de
@@ -647,6 +635,12 @@
    /?tab=inv). Fichas tampoco: la descripción y la guía se editan en la
    vista de detalle del producto (tocar una tarjeta del Stock). #}
 <nav>
+  {# La hamburguesa (solo computadora): colapsa el sidebar a un riel, como
+     Google Calendar. El estado vive en la cookie `menu` (menu.js). #}
+  <button class="hamb" type="button" aria-label="Mostrar u ocultar el menú"
+          aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
+    <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span>
+  </button>
   {# Sin "Inicio" y con Calendario de primero (dueño, 22/09/2026). #}
   <a href="/calendario"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></span>Calendario</a>
   <button data-tab="stock" onclick="tab('stock',this)"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M12 10C12 6 9 3 4 3c0 5 3 8 8 7z"/><path d="M12 13c0-3.5 2.5-6 7-6 0 4.5-2.5 7-7 6z"/><path d="M7 21h10"/></svg></span>Stock</button>

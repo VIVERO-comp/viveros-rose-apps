@@ -513,27 +513,8 @@ async function crearPlanta() {
   }
 }
 
-/* ---------- animación de inicio (una vez por sesión) ---------- */
-(function () {
-  const intro = document.getElementById("intro");
-  if (!intro) return;
-  if (sessionStorage.getItem("intro-vista")) { intro.remove(); return; }
-  sessionStorage.setItem("intro-vista", "1");
-  intro.hidden = false;
-  const brote = document.getElementById("intro-brote");
-  const texto = document.getElementById("intro-texto");
-
-  setTimeout(() => brote.classList.add("viva"), 150);
-  const letras = "VIVERO ROSE".split("");
-  setTimeout(() => {
-    texto.innerHTML = letras.map((l, i) =>
-      `<span style="animation-delay:${i * 0.05}s">${l}</span>`).join("");
-  }, 1650);
-  setTimeout(() => {
-    intro.classList.add("fuera");
-    setTimeout(() => intro.remove(), 550);
-  }, 1650 + letras.length * 50 + 800);
-})();
+/* La animación de inicio se quitó (dueño, 22/09/2026): frenaba el cambio
+   de pestaña ~3 segundos, sobre todo con las pestañas pre-renderizadas. */
 
 /* ---------- vista de detalle de producto ----------
    Reemplaza a la pestaña Fichas (pedido del dueño, 16/09/2026): en

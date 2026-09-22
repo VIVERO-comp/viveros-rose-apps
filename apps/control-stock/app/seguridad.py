@@ -217,6 +217,21 @@ def cancelar_invitacion(token):
                     (token,))
 
 
+def empleada_por_usuario(usuario):
+    """La empleada activa por su usuario, sin contraseña de por medio.
+
+    Existe para SIN_LOGIN (desarrollo local): el middleware entra solo como
+    este usuario. Nunca la usa el login normal."""
+    with datos._db() as con:
+        fila = con.execute(
+            "SELECT usuario, nombre, email, email_verificado "
+            "FROM empleadas WHERE usuario=? AND activa=1", (usuario,)).fetchone()
+    if fila is None:
+        return None
+    return {"id": fila["usuario"], "nombre": fila["nombre"],
+            "email": fila["email"], "email_verificado": fila["email_verificado"]}
+
+
 def crear_sesion(usuario):
     token = secrets.token_urlsafe(32)
     ahora = datetime.now(datos.ZONA_PANAMA)

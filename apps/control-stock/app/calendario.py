@@ -72,6 +72,31 @@ TIPOS = [
 POR_NOMBRE = {t["nombre"].lower(): t["clave"] for t in TIPOS}
 POR_CLAVE = {t["clave"]: t for t in TIPOS}
 
+# Los 4 filtros del calendario (dueño, 22/09/2026: "4 filtros: eventos,
+# paisajismo, mantenimiento, entrega retail"): se prenden y apagan como los
+# calendarios de Google Calendar. Cada filtro agrupa tipos de actividad;
+# los tipos que no caen en ningún grupo (reunión, visita, cotización…)
+# se ven siempre. El color es el del tipo que representa al grupo.
+FILTROS = [
+    {"clave": "eventos",        "nombre": "Eventos",        "tipos": ("alquiler", "recogida"),      "color": "#f97316"},
+    {"clave": "paisajismo",     "nombre": "Paisajismo",     "tipos": ("proyecto", "instalacion"),   "color": "#5b55a6"},
+    {"clave": "mantenimiento",  "nombre": "Mantenimiento",  "tipos": ("mantenimiento",),            "color": "#2563eb"},
+    {"clave": "entrega-retail", "nombre": "Entrega retail", "tipos": ("entrega",),                  "color": "#c9924f"},
+]
+
+
+def filtros_del_calendario(apagados):
+    """Los 4 filtros con su estado y el conjunto de apagados que deja cada
+    toque. Encendido = ninguno de sus tipos está apagado; el enlace con el
+    conjunto nuevo lo arma main.py (_liga), la plantilla solo pinta."""
+    filas = []
+    for filtro in FILTROS:
+        tipos = set(filtro["tipos"])
+        encendido = not (tipos & set(apagados))
+        nuevos = (set(apagados) | tipos) if encendido else (set(apagados) - tipos)
+        filas.append({**filtro, "encendido": encendido, "apagados": nuevos})
+    return filas
+
 # Estado de la pantalla <-> tipo de estado en Linear.
 ESTADOS = {
     "pend": ("unstarted", "backlog"),

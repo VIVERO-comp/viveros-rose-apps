@@ -20,7 +20,9 @@
 {"prerender": [{"urls": ["/", "/?tab=stock", "/?tab=ajustes", "/venta"], "eagerness": "moderate"}]}
 </script>
 </head>
-<body>
+{# El menú lateral arranca como quedó la última vez (cookie `menu`): el
+   servidor pinta la clase y no hay parpadeo al cargar. #}
+<body class="{{ 'menu-oculto' if request.cookies.get('menu') == '0' }}">
 
 {% macro pinta_actividad(a, liga, mostrar_fecha=false, atrasada=false) %}
 <a class="act {{ 'hecha' if a.estado == 'hecha' }} {{ 'cancel' if a.estado == 'cancel' }}"
@@ -75,41 +77,9 @@
     <a class="pil" href="/?tab=ajustes">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Ajustes
     </a>
-    {# Log de leads de servicio por agendar (dueño, 22/09/2026): solo
-       alquiler/mantenimiento/eventos — nada de venta retail. Un toque
-       abre "Nueva actividad" con el tipo y el cliente ya puestos; el
-       lead sale solo del log cuando su issue se factura o se pierde. #}
-    <div class="leads-lado">
-      <div class="leads-tit">Leads de servicio<span>por agendar</span></div>
-      {% for l in leads_servicio %}
-      <a class="lead-it" href="{{ l.liga }}" title="Agendar a {{ l.nombre }} ({{ l.etiqueta }})">
-        <span class="pt" style="background:{{ cal.color_de(l.tipo) }}"></span>
-        <span class="ln"><b>{{ l.nombre }}</b><small>{{ l.etiqueta }} · {{ l.hace }}</small></span>
-      </a>
-      {% else %}
-      <div class="lead-vacio">Ninguno por agendar.</div>
-      {% endfor %}
-    </div>
-
-    {# El bloque "Por entregar" (pestaña Retail): TODOS los facturados —
-       sin fecha primero, en rojo; tocarlos lleva a ponerles fecha. #}
-    <div class="leads-lado">
-      <div class="leads-tit">Por entregar<span>de la pestaña Retail</span></div>
-      {% for l in por_entregar %}
-      <a class="lead-it" href="{{ l.liga }}">
-        <span class="pt" style="background:{{ l.color }}"></span>
-        <span class="ln"><b>{{ l.nombre }}</b>
-          {% if l.entrega %}
-          <small class="fecha-e {{ 'roja' if l.entrega <= hoy }}">entregar el {{ cal.dmy(l.entrega) }}</small>
-          {% else %}
-          <small class="fecha-e roja">sin fecha · ponla</small>
-          {% endif %}</span>
-      </a>
-      {% else %}
-      <div class="lead-vacio">Nada facturado pendiente.</div>
-      {% endfor %}
-    </div>
-
+    {# Los bloques "Leads de servicio" y "Por entregar" se mudaron a la
+       columna derecha DEL calendario (dueño, 22/09/2026): así se ven
+       aunque la hamburguesa esconda este menú. #}
     <div class="pie">
       <b>{{ yo.nombre }}</b>
       <span>
@@ -124,6 +94,12 @@
     {# Una sola fila de controles: antes eran dos (marca y buscador arriba,
        fechas y vistas abajo) y el calendario empezaba a media pantalla. #}
     <div class="barra">
+      {# Hamburguesa como la de Google Calendar (dueño, 22/09/2026):
+         esconde/muestra el menú lateral; menu.js guarda la preferencia. #}
+      <button class="btn icono hamb" type="button" aria-label="Mostrar u ocultar el menú"
+              aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
       <h3>{{ titulo_rango }}</h3>
       <span class="flechas">
         <a class="btn icono" href="{{ ligas.anterior }}" aria-label="Anterior">‹</a>
@@ -324,6 +300,61 @@
         </div>
         {% endif %}
       </div>
+
+      {# ----- La columna derecha DEL calendario (dueño, 22/09/2026) -----
+         Filtros + Leads de servicio + Por entregar viven aquí, no en el
+         menú lateral: se ven aunque la hamburguesa esconda el menú. #}
+      <aside class="cal-lado">
+        {# Los 4 filtros, como los calendarios de Google Calendar: cada
+           toque es un enlace que el servidor ya armó con el conjunto de
+           tipos apagados que deja. #}
+        <div class="cal-filtros">
+          <div class="leads-tit">Filtros</div>
+          {% for f in filtros %}
+          <a class="filtro {{ 'off' if not f.encendido }}" href="{{ f.liga }}"
+             title="{{ 'Ocultar' if f.encendido else 'Mostrar' }} {{ f.nombre|lower }}">
+            <span class="cbx" style="--c:{{ f.color }}">
+              {% if f.encendido %}<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 12.8 5 5 10-11"/></svg>{% endif %}
+            </span>{{ f.nombre }}
+          </a>
+          {% endfor %}
+        </div>
+
+        {# Log de leads de servicio por agendar: solo alquiler/mantenimiento/
+           eventos — nada de venta retail. Un toque abre "Nueva actividad"
+           con el tipo y el cliente ya puestos; el lead sale solo del log
+           cuando su issue se factura o se pierde. #}
+        <div class="leads-lado">
+          <div class="leads-tit">Leads de servicio<span>por agendar</span></div>
+          {% for l in leads_servicio %}
+          <a class="lead-it" href="{{ l.liga }}" title="Agendar a {{ l.nombre }} ({{ l.etiqueta }})">
+            <span class="pt" style="background:{{ cal.color_de(l.tipo) }}"></span>
+            <span class="ln"><b>{{ l.nombre }}</b><small>{{ l.etiqueta }} · {{ l.hace }}</small></span>
+          </a>
+          {% else %}
+          <div class="lead-vacio">Ninguno por agendar.</div>
+          {% endfor %}
+        </div>
+
+        {# El bloque "Por entregar" (pestaña Retail): TODOS los facturados —
+           sin fecha primero, en rojo; tocarlos lleva a ponerles fecha. #}
+        <div class="leads-lado">
+          <div class="leads-tit">Por entregar<span>de la pestaña Retail</span></div>
+          {% for l in por_entregar %}
+          <a class="lead-it" href="{{ l.liga }}">
+            <span class="pt" style="background:{{ l.color }}"></span>
+            <span class="ln"><b>{{ l.nombre }}</b>
+              {% if l.entrega %}
+              <small class="fecha-e {{ 'roja' if l.entrega <= hoy }}">entregar el {{ cal.dmy(l.entrega) }}</small>
+              {% else %}
+              <small class="fecha-e roja">sin fecha · ponla</small>
+              {% endif %}</span>
+          </a>
+          {% else %}
+          <div class="lead-vacio">Nada facturado pendiente.</div>
+          {% endfor %}
+        </div>
+      </aside>
     </div>
   </div>
 </div>
@@ -521,5 +552,6 @@ No se borra nada: el issue {{ abierta.ref }} queda en Linear marcado como Cancel
 {% endif %}
 
 <script src="/static/calendario.js?v={{ v_estaticos }}"></script>
+<script src="/static/menu.js?v={{ v_estaticos }}"></script>
 </body>
 </html>

@@ -21,9 +21,10 @@
 {"prerender": [{"urls": ["/", "/?tab=stock", "/?tab=ajustes", "/venta", "/calendario"], "eagerness": "moderate"}]}
 </script>
 </head>
-<body>
+{# El menú lateral de computadora arranca como quedó la última vez (cookie
+   `menu`, la voltea menu.js con la hamburguesa del sidebar). #}
+<body class="{{ 'menu-oculto' if request.cookies.get('menu') == '0' }}">
 <div class="phone">
-  {% block intro %}{% endblock %}
   <div class="stars">
     <span style="top:8%;left:12%">✦</span><span style="top:5%;left:78%">✦</span>
     <span style="top:15%;left:55%">✦</span><span style="top:24%;left:88%">✦</span>
@@ -32,5 +33,6 @@
   {% block contenido %}{% endblock %}
 </div>
 {% block scripts %}{% endblock %}
+<script src="/static/menu.js?v={{ v_estaticos }}"></script>
 </body>
 </html>

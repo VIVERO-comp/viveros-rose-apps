@@ -138,6 +138,16 @@ async def exigir_sesion(request: Request, call_next):
             else:
                 respuesta.headers["Cache-Control"] = "public, max-age=3600"
         return respuesta
+    # SIN_LOGIN=<usuario> (SOLO desarrollo local, pedido del dueño
+    # 22/09/2026: "quita los logins en localhost"): la app entra sola como
+    # ese usuario, sin pantalla de login. En el droplet la variable no
+    # existe; si el usuario no está o está inactivo, manda el login normal.
+    usuario_dev = os.environ.get("SIN_LOGIN", "").strip()
+    if usuario_dev:
+        empleada = seguridad.empleada_por_usuario(usuario_dev)
+        if empleada is not None:
+            request.state.empleada = empleada
+            return await call_next(request)
     empleada = seguridad.empleada_de_sesion(request.cookies.get("sesion"))
     if empleada is None:
         return RedirectResponse("/login", status_code=303)
@@ -188,6 +198,11 @@ def _abrir_sesion(empleada):
 
 @app.get("/login")
 def login(request: Request):
+    # Con SIN_LOGIN activo (desarrollo local) ni el login se muestra:
+    # directo a la app, que el middleware ya deja pasar.
+    usuario_dev = os.environ.get("SIN_LOGIN", "").strip()
+    if usuario_dev and seguridad.empleada_por_usuario(usuario_dev):
+        return RedirectResponse("/", status_code=303)
     if seguridad.empleada_de_sesion(request.cookies.get("sesion")):
         return RedirectResponse("/", status_code=303)
     return _pagina_login(request)
@@ -1869,8 +1884,14 @@ def calendario_pantalla(request: Request):
 
     ligas_vista = {v: _liga(estado, vista=v) for v in calendario.VISTAS}
 
-    # El log de leads de servicio del menú lateral: un toque abre "Nueva
-    # actividad" prellenada con el tipo y el nombre del lead.
+    # Los 4 filtros (columna derecha del calendario): cada uno lleva el
+    # enlace con el conjunto de tipos apagados que deja su toque.
+    filtros = calendario.filtros_del_calendario(estado["apagados"])
+    for filtro in filtros:
+        filtro["liga"] = _liga(estado, apagados=",".join(sorted(filtro["apagados"])))
+
+    # El log de leads de servicio (columna derecha del calendario): un toque
+    # abre "Nueva actividad" prellenada con el tipo y el nombre del lead.
     leads_servicio = calendario.leads_de_servicio()
     for lead in leads_servicio:
         lead["liga"] = _liga(estado, nueva="1", tipo=lead["tipo"], cliente=lead["nombre"])
@@ -1902,6 +1923,7 @@ def calendario_pantalla(request: Request):
         "movil": movil,
         "leads_servicio": leads_servicio,
         "por_entregar": por_entregar,
+        "filtros": filtros,
         "dias": dias,
         "ligas_vista": ligas_vista,
         "franja": [a for a in visibles if calendario.esta_atrasada(a, dia_hoy)][:6],

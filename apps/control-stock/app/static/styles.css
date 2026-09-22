@@ -40,55 +40,8 @@ body{
 /* Las estrellitas eran del cielo azul noche; sobre blanco no van. */
 .stars{display:none}
 
-/* ---------- animación de inicio ---------- */
-.intro{
-  position:absolute;inset:0;z-index:50;
-  background:#ffffff;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:18px;overflow:hidden;
-}
-.intro.fuera{animation:intro-fade .5s ease forwards}
-@keyframes intro-fade{to{opacity:0;visibility:hidden}}
-.intro-texto{
-  font-size:clamp(26px,8vw,36px);font-weight:800;
-  letter-spacing:4px;color:var(--dorado);
-  min-height:1.2em;display:flex;
-}
-.intro-texto span{
-  display:inline-block;opacity:0;
-  transform:translateY(10px) scale(.85);
-  animation:escribe .32s cubic-bezier(.2,1.4,.4,1) forwards;
-  white-space:pre;
-}
-@keyframes escribe{to{opacity:1;transform:none}}
-.intro-brote{opacity:0;position:relative;z-index:2}
-.intro-brote.viva{opacity:1}
-.intro-brote .trazo{
-  stroke:#e88b7a;stroke-width:2.6;
-  stroke-dasharray:200;stroke-dashoffset:200;
-}
-.intro-brote .aro{
-  stroke-dasharray:274;stroke-dashoffset:274;
-  stroke-width:2.2;
-}
-.intro-brote.viva .espiral{animation:dibuja .55s ease forwards}
-.intro-brote.viva .petalo1{animation:dibuja .35s ease .35s forwards}
-.intro-brote.viva .petalo2{animation:dibuja .35s ease .45s forwards}
-.intro-brote.viva .petalo3{animation:dibuja .3s ease .55s forwards}
-.intro-brote.viva .luna{animation:dibuja .35s ease .65s forwards}
-.intro-brote.viva .aro{animation:dibuja-aro .5s cubic-bezier(.4,0,.3,1) .8s forwards}
-@keyframes dibuja{to{stroke-dashoffset:0}}
-@keyframes dibuja-aro{to{stroke-dashoffset:0}}
-.intro-brote.viva svg{
-  animation:brillo .45s ease 1.25s forwards;
-}
-@keyframes brillo{
-  40%{filter:drop-shadow(0 0 18px rgba(232,139,122,.9))}
-  to{filter:drop-shadow(0 0 6px rgba(232,139,122,.35));transform:scale(1.02)}
-}
-@media (prefers-reduced-motion: reduce){
-  .intro{display:none}
-}
+/* La animación de inicio se quitó (dueño, 22/09/2026): frenaba el cambio
+   de pestaña ~3 segundos, sobre todo con las pestañas pre-renderizadas. */
 
 /* ---------- header ---------- */
 header{
@@ -837,7 +790,6 @@ button.enlace-sub{
   main{grid-area:principal;width:100%}
   main.angosto{max-width:940px;justify-self:center}
   .stars{display:none}
-  .intro{background:#ffffff}
   header{padding:26px 34px 14px}
   main{padding:6px 34px 110px}
   /* Sidebar: los botones pasan de columnitas con icono arriba a píldoras
@@ -1302,4 +1254,28 @@ button.enlace-sub{
   word-break:break-all;background:rgba(127,127,127,.08);
   border:1px solid rgba(127,127,127,.2);border-radius:10px;padding:8px 10px;
   user-select:all;-webkit-user-select:all;
+}
+
+/* ---------- la hamburguesa: esconder/mostrar el sidebar (22/09/2026) ----------
+   Pedido del dueño: un botón como el de Google Calendar que guarda el menú.
+   En el teléfono no existe (el menú es el navbar de abajo). En computadora
+   vive de primero en el sidebar; al colapsar, el sidebar queda como un riel
+   de puros iconos y la hamburguesa lo vuelve a abrir. El estado lo pinta el
+   servidor (cookie `menu`, la clase va en <body>) y menu.js solo la voltea. */
+nav .hamb{display:none}
+@media (min-width: 900px){
+  nav .hamb{
+    display:flex;flex:0 0 auto;flex-direction:row;justify-content:flex-start;
+    gap:11px;background:#ffffff;border:1px solid #e4e4e7;border-radius:14px;
+    padding:13px 15px;color:var(--texto);cursor:pointer;align-self:flex-start;
+  }
+  nav .hamb:hover{background:#f4f4f5}
+  .phone{transition:grid-template-columns .18s ease}
+  body.menu-oculto .phone{grid-template-columns:78px 1fr}
+  body.menu-oculto nav{padding:22px 12px}
+  /* font-size:0 esconde el texto de la píldora; el icono (.ic) conserva
+     su tamaño y el riel queda de puros iconos centrados. */
+  body.menu-oculto nav button, body.menu-oculto nav a, body.menu-oculto nav .hamb{
+    font-size:0;gap:0;justify-content:center;padding:13px 0;width:100%;
+  }
 }
