@@ -35,7 +35,7 @@ body{overflow:hidden}
   box-shadow:var(--sombra);overflow:hidden;display:grid;grid-template-columns:212px 1fr;
   margin:14px;height:calc(100vh - 28px);
 }
-.lado{background:var(--crema);border-right:1px solid var(--borde);padding:16px 12px;display:flex;flex-direction:column;gap:7px}
+.lado{background:var(--crema);border-right:1px solid var(--borde);padding:16px 12px;display:flex;flex-direction:column;gap:7px;min-height:0;overflow:hidden}
 .marca{display:flex;align-items:center;gap:9px;padding:4px 6px 12px}
 .marca img{width:28px;height:28px;border-radius:50%;object-fit:cover}
 .marca span{font-size:12.5px;font-weight:700}
@@ -51,8 +51,11 @@ body{overflow:hidden}
 /* ---------- log de leads de servicio en el sidebar ---------- */
 .leads-lado{
   margin-top:14px;border-top:1px solid var(--borde);padding-top:12px;
-  display:flex;flex-direction:column;gap:6px;overflow-y:auto;min-height:0;
+  display:flex;flex-direction:column;gap:6px;
+  flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  scrollbar-width:thin;
 }
+.lead-it{flex:0 0 auto}
 .leads-tit{
   font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;
   color:var(--muy-suave);display:flex;flex-direction:column;gap:1px;padding:0 2px 2px;

@@ -55,8 +55,8 @@ class ErrorCalendario(Exception):
 # que amarra un tipo de aquí con su etiqueta de allá.
 # ---------------------------------------------------------------------------
 TIPOS = [
-    {"clave": "alquiler",       "nombre": "Alquiler",       "color": "#7a8c3a"},
-    {"clave": "mantenimiento",  "nombre": "Mantenimiento",  "color": "#2e7d44"},
+    {"clave": "alquiler",       "nombre": "Alquiler",       "color": "#f97316"},  # naranja (dueño, 22/09/2026)
+    {"clave": "mantenimiento",  "nombre": "Mantenimiento",  "color": "#2563eb"},  # azul (dueño, 22/09/2026)
     {"clave": "entrega",        "nombre": "Entrega",        "color": "#c9924f"},
     {"clave": "recogida",       "nombre": "Recogida",       "color": "#a9552f"},
     {"clave": "instalacion",    "nombre": "Instalación",    "color": "#3c6ea6"},
@@ -422,6 +422,13 @@ ETIQUETAS_LEADS_SERVICIO = {
     "Eventos · Bodas": "alquiler",
     "Eventos · Ferias": "alquiler",
 }
+# La label que pone el barrido nocturno de Odoo cuando un lead lleva 10 días
+# en "Nuevo" sin respuesta del cliente (regla del dueño, 22/09/2026): un lead
+# desactivado NO sale en el log — no hay a quién agendarle nada. El barrido
+# no cambia el estado del issue (sigue "vivo" en Linear a propósito, para
+# revivir sin ruido si el cliente vuelve a escribir), por eso se filtra por
+# la label y no por el estado.
+LABEL_LEAD_DESACTIVADO = "Desactivado"
 TTL_LEADS = 120
 
 CONSULTA_LEADS = """
@@ -457,6 +464,8 @@ def _buscar_leads():
     filas = []
     for issue in _pedir(CONSULTA_LEADS)["issues"]["nodes"]:
         etiquetas = [l["name"] for l in issue["labels"]["nodes"]]
+        if LABEL_LEAD_DESACTIVADO in etiquetas:
+            continue  # desactivado por inactividad: no hay a quién agendar
         etiqueta = next((e for e in etiquetas if e in ETIQUETAS_LEADS_SERVICIO), None)
         if not etiqueta:
             continue  # retail, mayorista y demás: no son servicio
