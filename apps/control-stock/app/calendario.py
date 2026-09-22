@@ -413,9 +413,12 @@ def _refrescar_lista_en_fondo(llave, desde, hasta):
 
 
 def calentar_en_fondo():
-    """Al arrancar el proceso: catálogo y el mes en curso quedan calientes,
-    para que ni la PRIMERA visita del día espere a Linear. (El rango es el
-    mismo que arma la pantalla: del 1° del mes, 10 días atrás y 52 adelante.)"""
+    """Al arrancar el proceso: catálogo, el mes en curso, los leads de
+    servicio y el tablero de Retail quedan calientes, para que ni la
+    PRIMERA visita después de un deploy espere a Linear (el dueño la
+    sintió lenta el 22/09/2026: leads y Retail no se precalentaban y la
+    primera /calendario los esperaba en línea). El rango es el mismo que
+    arma la pantalla: del 1° del mes, 10 días atrás y 52 adelante."""
     if not configurado():
         return
 
@@ -425,6 +428,10 @@ def calentar_en_fondo():
         desde = (primero - timedelta(days=10)).isoformat()
         hasta = (primero + timedelta(days=52)).isoformat()
         listar(desde, hasta)
+        leads_de_servicio()
+        # Import tardío: retail importa calendario (sería circular arriba).
+        from . import retail
+        retail.por_entregar()
 
     _en_fondo("calentar", tarea)
 
