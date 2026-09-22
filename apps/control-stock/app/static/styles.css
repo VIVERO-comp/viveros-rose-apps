@@ -104,9 +104,6 @@ header{
 .logo img{width:100%;height:100%;border-radius:50%;object-fit:cover}
 .brand h1{font-size:16px;font-weight:700;letter-spacing:.2px}
 .brand small{display:block;font-size:11px;font-weight:400;color:var(--texto-suave)}
-/* Cabecera sin título (pantalla principal): solo la campana a la derecha,
-   con poco alto para que las pestañas del stock queden arriba. */
-header.solo-campana{justify-content:flex-end;padding:12px 20px 0}
 .bell{
   position:relative;width:42px;height:42px;border-radius:50%;
   background:var(--noche-3);border:none;color:var(--dorado);
@@ -182,7 +179,11 @@ main{position:relative;z-index:1;flex:1;overflow-y:auto;padding:6px 20px 110px}
   background:rgba(27,33,55,.92);backdrop-filter:blur(12px);
 }
 /* Las dos vistas del stock (Online / Global). Van dentro de .stock-top para
-   quedar pegadas arriba con el buscador y los chips. */
+   quedar pegadas arriba con el buscador y los chips. La campana de alertas
+   comparte esta fila (sin cabecera propia, pedido del dueño 22/09/2026). */
+.fila-sub{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.fila-sub .sub-tabs{flex:1;margin-bottom:0}
+.fila-sub .bell{flex:0 0 auto}
 .sub-tabs{
   display:flex;gap:4px;background:var(--noche-2);border-radius:14px;
   padding:4px;margin-bottom:9px;
@@ -800,7 +801,6 @@ button.enlace-sub{
     grid-template-areas:"lado cabecera" "lado principal";
   }
   header{grid-area:cabecera}
-  header.solo-campana{padding:14px 34px 0}
   main{grid-area:principal;width:100%}
   main.angosto{max-width:940px;justify-self:center}
   .stars{display:none}
