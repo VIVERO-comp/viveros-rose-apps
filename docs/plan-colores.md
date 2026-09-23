@@ -32,8 +32,10 @@ desalinee.
    El pipeline (tarjeta.ts) y el addon de Odoo ya crean las que falten con
    su color; el addon se despliega en su proxima tanda (solo cambia el
    color de creacion, sin logica).
-5. **Fase 5 — Repartidor y Pedidos.** Mismos colores de estado en el panel
-   y en la app del repartidor (hoy "En camino" es ambar en uno y verde en
-   el otro).
+5. **Fase 5 — Repartidor y Pedidos.** — HECHA (23/09/2026)
+   Mismos colores de estado en el panel y en la app del repartidor: el
+   mapeo estado→familia vive en src/styles/chips-pedido.css (compartido
+   por las dos pantallas): por validar/esperando pago gris, listo/saliendo
+   amarillo, en camino naranja, entregado verde, cancelado/retraso rojo.
 
 Cada fase se despliega por separado y con el OK de Abraham.
