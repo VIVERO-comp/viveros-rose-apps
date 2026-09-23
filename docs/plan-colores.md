@@ -14,9 +14,11 @@ desalinee.
    tokens CSS generados (`src/styles/paleta.css`); `chips-lead.ts` habla en
    familias; mueren las paletas duplicadas de admin/chats y las copias de
    tonos; en las apps nace `app/colores.py` y muere `repintar()`.
-2. **Fase 2 — Panel /admin.** Chips de tipo, estado, etapa y motivo con la
-   familia correcta; los puntos de columna usan el tono fuerte de la MISMA
-   familia que el chip pastel (hoy son dos paletas sin relacion).
+2. **Fase 2 — Panel /admin.** — HECHA (23/09/2026)
+   Chips de tipo, estado, etapa y motivo con la familia correcta (las
+   `asignaciones` de paleta.json); los puntos de columna (CRM, CRM pedidos,
+   rail del Equipo, Inactivo/Sin estado) usan el tono fuerte de la MISMA
+   familia que el chip pastel.
 3. **Fase 3 — Apps internas.** Calendario (los tipos que tienen label en
    Twenty cambian, los tipos internos se quedan como estan), Retail
    (Mayorista pasa a naranja), Vender/Compras/Proyectos (los tipos de
