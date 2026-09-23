@@ -26,12 +26,13 @@ import re
 import time
 from datetime import datetime
 
-from . import calendario
+from . import calendario, colores
 from .datos import ZONA_PANAMA, _db
 
 # Etiqueta del equipo LEAD -> clave de tipo (color de la pantalla).
+# Los colores viven en colores.py (la paleta unica).
 ETIQUETAS_RETAIL = {"Plantas retail": "retail", "Mayorista": "mayorista"}
-COLORES = {"retail": "#16a34a", "mayorista": "#dc2626"}
+COLORES = colores.COLORES_RETAIL
 NOMBRES_TIPO = {"retail": "Plantas retail", "mayorista": "Mayorista"}
 
 ETAPAS = [

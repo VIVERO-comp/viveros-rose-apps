@@ -36,6 +36,8 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+from . import colores
+
 ZONA_PANAMA = ZoneInfo("America/Panama")
 API = "https://api.linear.app/graphql"
 TTL_LISTA = 60          # segundos de caché de las lecturas
@@ -51,24 +53,11 @@ class ErrorCalendario(Exception):
 
 # ---------------------------------------------------------------------------
 # Los 13 tipos del grupo "Tipo de actividad", con el color que usa la
-# pantalla. El nombre tiene que coincidir con la etiqueta en Linear: es lo
-# que amarra un tipo de aquí con su etiqueta de allá.
+# pantalla (el mapa vive en colores.py, la paleta unica). El nombre tiene
+# que coincidir con la etiqueta en Linear: es lo que amarra un tipo de aquí
+# con su etiqueta de allá.
 # ---------------------------------------------------------------------------
-TIPOS = [
-    {"clave": "alquiler",       "nombre": "Alquiler",       "color": "#f97316"},  # naranja (dueño, 22/09/2026)
-    {"clave": "mantenimiento",  "nombre": "Mantenimiento",  "color": "#2563eb"},  # azul (dueño, 22/09/2026)
-    {"clave": "entrega",        "nombre": "Entrega",        "color": "#c9924f"},
-    {"clave": "recogida",       "nombre": "Recogida",       "color": "#a9552f"},
-    {"clave": "instalacion",    "nombre": "Instalación",    "color": "#3c6ea6"},
-    {"clave": "proyecto",       "nombre": "Proyecto",       "color": "#5b55a6"},
-    {"clave": "reunion",        "nombre": "Reunión",        "color": "#2f7d86"},
-    {"clave": "visita",         "nombre": "Visita",         "color": "#8d6b3f"},
-    {"clave": "cotizacion",     "nombre": "Cotización",     "color": "#9b5a86"},
-    {"clave": "seguimiento",    "nombre": "Seguimiento",    "color": "#587a99"},
-    {"clave": "compra",         "nombre": "Compra",         "color": "#5b7f6a"},
-    {"clave": "administrativo", "nombre": "Administrativo", "color": "#6f6a5e"},
-    {"clave": "otro",           "nombre": "Otro",           "color": "#8a8477"},
-]
+TIPOS = colores.TIPOS_CALENDARIO
 POR_NOMBRE = {t["nombre"].lower(): t["clave"] for t in TIPOS}
 POR_CLAVE = {t["clave"]: t for t in TIPOS}
 
@@ -77,12 +66,7 @@ POR_CLAVE = {t["clave"]: t for t in TIPOS}
 # calendarios de Google Calendar. Cada filtro agrupa tipos de actividad;
 # los tipos que no caen en ningún grupo (reunión, visita, cotización…)
 # se ven siempre. El color es el del tipo que representa al grupo.
-FILTROS = [
-    {"clave": "eventos",        "nombre": "Eventos",        "tipos": ("alquiler", "recogida"),      "color": "#f97316"},
-    {"clave": "paisajismo",     "nombre": "Paisajismo",     "tipos": ("proyecto", "instalacion"),   "color": "#5b55a6"},
-    {"clave": "mantenimiento",  "nombre": "Mantenimiento",  "tipos": ("mantenimiento",),            "color": "#2563eb"},
-    {"clave": "entrega-retail", "nombre": "Entrega retail", "tipos": ("entrega",),                  "color": "#c9924f"},
-]
+FILTROS = colores.FILTROS_CALENDARIO
 
 
 def filtros_del_calendario(apagados):
@@ -1030,7 +1014,8 @@ def _repartir(actividades):
     return repartidas
 
 
-def _bloque(actividad, columna, columnas, indice, total_columnas, dia_hoy, filas=()):
+def _bloque(actividad, columna, columnas, indice, total_columnas, dia_hoy, filas=(),
+            color_de_tipo=None):
     """Un bloque del carril con su posición ya resuelta en CSS.
 
     Las actividades que chocan a la misma hora se parten la columna en
@@ -1045,7 +1030,7 @@ def _bloque(actividad, columna, columnas, indice, total_columnas, dia_hoy, filas
     # En % del carril; el piso de 24px para que siempre se lea lo pone el
     # CSS (min-height), porque el alto real depende de la pantalla.
     alto = _y_de(inicio + actividad["dur"], filas) - arriba
-    color = color_de(actividad["tipo"])
+    color = (color_de_tipo or color_de)(actividad["tipo"])
     parte = 1 / columnas
     corrido = parte * columna
     return {
@@ -1178,7 +1163,9 @@ def carril_dia(actividades, dia_iso, gente, dia_hoy):
             "ahora": linea_ahora(filas) if dia_iso == dia_hoy else None}
 
 
-def rejilla_mes(actividades, ancla, dia_elegido, dia_hoy):
+def rejilla_mes(actividades, ancla, dia_elegido, dia_hoy, color_de_tipo=None):
+    # color_de_tipo: la cara CRM (crm_twenty) pasa la suya; sin ella manda TIPOS.
+    color_de_tipo = color_de_tipo or color_de
     celdas = []
     for dia_iso in dias_de("mes", ancla):
         fecha = _dia(dia_iso)
@@ -1189,8 +1176,8 @@ def rejilla_mes(actividades, ancla, dia_elegido, dia_hoy):
             "elegido": dia_iso == dia_elegido,
             "otro_mes": fecha.month != ancla.month,
             "atrasadas": len([a for a in del_dia if esta_atrasada(a, dia_hoy)]),
-            "barras": [{"a": a, "color": color_de(a["tipo"]),
-                        "fondo": _tinta(color_de(a["tipo"]), 0.12)}
+            "barras": [{"a": a, "color": color_de_tipo(a["tipo"]),
+                        "fondo": _tinta(color_de_tipo(a["tipo"]), 0.12)}
                        for a in del_dia[:3]],
             "resto": max(0, len(del_dia) - 3),
         })

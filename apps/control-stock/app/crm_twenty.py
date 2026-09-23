@@ -7,9 +7,11 @@ que la pestaña Chats. Aquí vive solo lo propio de esa cara:
 
 - La paleta: el dueño fijó (22/09/2026) que cada cosa del negocio lleva EL
   MISMO color que su label de Twenty — retail/entrega verde, Eventos ·
-  Alquiler rojo, Mantenimiento azul. Como calendario.py hornea sus colores
-  dentro de los estilos ya resueltos, `repintar()` los traduce al vuelo sin
-  tocar el calendario de inventario.
+  Alquiler rojo, Mantenimiento azul. Los mapas viven en colores.py (la
+  paleta unica) y los armadores de calendario.py aceptan `color_de_tipo`,
+  asi que esta cara pinta directo con lo suyo sin tocar el calendario de
+  inventario (antes habia un `repintar()` por string-replace; murio en la
+  Fase 1 del plan de colores).
 - Un carril genérico de N días (la vista Día del CRM es una columna sola,
   no una columna por persona como en inventario).
 - La ficha del lead: teléfono, Person y la conversación de WhatsApp leídos
@@ -24,79 +26,20 @@ from urllib.parse import quote
 
 import httpx
 
-from . import calendario
+from . import calendario, colores
 
 # ---------------------------------------------------------------------------
 # Paleta: el color de cada cosa es el de su label en Twenty (dueño,
-# 22/09/2026: "usa los mismos colores por cada cosa como los label de
-# retail verde alquiler su color").
+# 22/09/2026). Los mapas viven en colores.py; aqui solo los resolvedores.
 # ---------------------------------------------------------------------------
-
-COLORES_CRM = {
-    "alquiler": "#dc2626",   # rojo del label "Eventos · Alquiler"
-    "recogida": "#7f1d1d",   # la recogida es parte del alquiler: mismo rojo, oscuro
-    "entrega": "#16a34a",    # verde del label "Plantas retail"
-    # mantenimiento ya es #2563eb (el azul del label) en calendario.TIPOS
-}
-
-# El color del chip (y del punto) de cada etiqueta del equipo LEAD, como los
-# pinta el select de Twenty. El fondo lo resuelve el CSS con color-mix para
-# que sirva en claro y oscuro.
-ETIQUETAS_CHIP = {
-    "Eventos · Alquiler": "#dc2626",
-    "Eventos · Bodas": "#db2777",
-    "Eventos · Ferias": "#d97706",
-    "Mantenimiento": "#2563eb",
-    "Plantas retail": "#16a34a",
-    "Mayorista": "#7c3aed",
-}
 
 
 def color_crm(tipo):
-    return COLORES_CRM.get(tipo, calendario.color_de(tipo))
+    return colores.COLORES_CRM_CALENDARIO.get(tipo, calendario.color_de(tipo))
 
 
 def color_etiqueta(etiqueta):
-    return ETIQUETAS_CHIP.get(etiqueta, "#6b6b70")
-
-
-_MAPA_PINTURA = None
-
-
-def _mapa_pintura():
-    """viejo hex -> nuevo hex, incluyendo las tintas que hornea calendario.py."""
-    mapa = {}
-    for clave, nuevo in COLORES_CRM.items():
-        viejo = calendario.color_de(clave)
-        if viejo == nuevo:
-            continue
-        mapa[viejo] = nuevo
-        for alfa in (0.07, 0.12, 0.3):
-            mapa[calendario._tinta(viejo, alfa)] = calendario._tinta(nuevo, alfa)
-    return mapa
-
-
-def repintar(cosa):
-    """Copia una estructura ya armada por calendario.py con los colores CRM.
-
-    Los carriles y la rejilla llegan con los colores resueltos dentro de
-    cadenas de estilo; traducirlos aquí evita duplicar los armadores o
-    tocar la paleta del calendario de inventario.
-    """
-    global _MAPA_PINTURA
-    if _MAPA_PINTURA is None:
-        _MAPA_PINTURA = _mapa_pintura()
-    if isinstance(cosa, str):
-        for viejo, nuevo in _MAPA_PINTURA.items():
-            cosa = cosa.replace(viejo, nuevo)
-        return cosa
-    if isinstance(cosa, dict):
-        return {k: repintar(v) for k, v in cosa.items()}
-    if isinstance(cosa, list):
-        return [repintar(x) for x in cosa]
-    if isinstance(cosa, tuple):
-        return tuple(repintar(x) for x in cosa)
-    return cosa
+    return colores.ETIQUETAS_CHIP_CRM.get(etiqueta, colores.CHIP_CRM_SIN_ETIQUETA)
 
 
 # ---------------------------------------------------------------------------
@@ -121,7 +64,8 @@ def carril_dias(actividades, dias, dia_hoy):
         })
         for actividad, columna, total in calendario._repartir(del_dia):
             bloques.append(calendario._bloque(
-                actividad, columna, total, i, n, dia_hoy, filas))
+                actividad, columna, total, i, n, dia_hoy, filas,
+                color_de_tipo=color_crm))
     return {"columnas": columnas, "bloques": bloques, "horas": filas,
             "ahora": calendario.linea_ahora(filas) if dia_hoy in dias else None}
 
@@ -154,6 +98,20 @@ def _twenty(ruta):
     respuesta = httpx.get(
         f"{base}/rest/{ruta}",
         headers={"Authorization": f"Bearer {_var('TWENTY_API_KEY')}"},
+        timeout=8.0,
+    )
+    respuesta.raise_for_status()
+    return respuesta.json()
+
+
+def _twenty_patch(ruta, datos):
+    """PATCH a un registro de Twenty (el respaldo directo de las escrituras
+    del CRM cuando la ruta del panel no está configurada)."""
+    base = _var("TWENTY_URL") or twenty_publico()
+    respuesta = httpx.patch(
+        f"{base}/rest/{ruta}",
+        headers={"Authorization": f"Bearer {_var('TWENTY_API_KEY')}"},
+        json=datos,
         timeout=8.0,
     )
     respuesta.raise_for_status()

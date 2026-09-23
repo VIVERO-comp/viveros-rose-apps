@@ -1,0 +1,32 @@
+# Plan: colores unificados de chips y etiquetas
+
+Todo el ecosistema (panel /admin, chats, apps internas, Linear, calendarios)
+usa las familias de color de Twenty CRM v2.39.5 (crm.plantaspanama.com) como
+unica referencia. La fuente de verdad es `paleta.json` (copias identicas en
+`viveros-rose-frontend/src/data/` y `viveros-rose-apps/apps/control-stock/app/`);
+`scripts/verificar_paleta.py` de viveros-rose-apps comprueba que nada se
+desalinee.
+
+## Fases
+
+1. **Fase 1 — Paleta unica compartida.** — HECHA (23/09/2026)
+   `paleta.json` con familias exactas de twenty-ui v2.39.5 + asignaciones;
+   tokens CSS generados (`src/styles/paleta.css`); `chips-lead.ts` habla en
+   familias; mueren las paletas duplicadas de admin/chats y las copias de
+   tonos; en las apps nace `app/colores.py` y muere `repintar()`.
+2. **Fase 2 — Panel /admin.** Chips de tipo, estado, etapa y motivo con la
+   familia correcta; los puntos de columna usan el tono fuerte de la MISMA
+   familia que el chip pastel (hoy son dos paletas sin relacion).
+3. **Fase 3 — Apps internas.** Calendario (los tipos que tienen label en
+   Twenty cambian, los tipos internos se quedan como estan), Retail
+   (Mayorista pasa a naranja), Vender/Compras/Proyectos (los tipos de
+   servicio estrenan su color), calendario con piel Twenty (3 chips
+   corregidos).
+4. **Fase 4 — Linear.** Labels de tipo con color por familia (hoy los 11
+   tienen el mismo verde) y etapas Cotizado/Facturado/Pagado alineadas a
+   Twenty (azul/morado/verde).
+5. **Fase 5 — Repartidor y Pedidos.** Mismos colores de estado en el panel
+   y en la app del repartidor (hoy "En camino" es ambar en uno y verde en
+   el otro).
+
+Cada fase se despliega por separado y con el OK de Abraham.

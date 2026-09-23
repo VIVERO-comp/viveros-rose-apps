@@ -2277,7 +2277,7 @@ async def calendario_nota(request: Request, id_actividad: str):
 # cara del CRM. El nginx del droplet del CRM lo proxya bajo
 # crm.plantaspanama.com y una pestaña inyectada en Twenty lo abre como
 # iframe, igual que la pestaña Chats. Los colores son los de los labels de
-# Twenty (dueño, 22/09/2026): crm_twenty.repintar los traduce.
+# Twenty (dueño, 22/09/2026): los armadores reciben crm_twenty.color_crm.
 # ---------------------------------------------------------------------------
 
 VISTAS_CRM = ("dia", "semana", "mes", "lista")
@@ -2404,8 +2404,7 @@ def crm_calendario_pantalla(request: Request):
     carril = mes = grupos = None
     if estado["vista"] in ("semana", "dia"):
         columnas = dias if estado["vista"] == "semana" else [estado["dia"]]
-        carril = crm_twenty.repintar(
-            crm_twenty.carril_dias(visibles, columnas, dia_hoy))
+        carril = crm_twenty.carril_dias(visibles, columnas, dia_hoy)
         for col in carril["columnas"]:
             # Tocar una hora vacía abre el formulario con fecha y hora puestas.
             col["celdas"] = [
@@ -2417,8 +2416,8 @@ def crm_calendario_pantalla(request: Request):
             bloque["liga"] = _liga_crm(estado, act=bloque["a"]["id"])
             bloque["rango"] = calendario._rango_bonito(bloque["a"])
     elif estado["vista"] == "mes":
-        mes = crm_twenty.repintar(
-            calendario.rejilla_mes(visibles, ancla, estado["dia"], dia_hoy))
+        mes = calendario.rejilla_mes(visibles, ancla, estado["dia"], dia_hoy,
+                                     color_de_tipo=crm_twenty.color_crm)
         for fila_mes in mes:
             for celda in fila_mes:
                 celda["liga_dia"] = _liga_crm(estado, vista="dia", dia=celda["iso"])
