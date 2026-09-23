@@ -63,7 +63,8 @@
   <div class="seccion-titulo" style="margin-top:16px">Cotizar un servicio</div>
   <div class="grid-servicios">
     {% for tipo, etiqueta in tipos_servicio %}
-    <a class="servicio-boton" href="/venta/servicio/{{ tipo }}">+ {{ etiqueta }}</a>
+    {# El color del tipo de negocio (paleta unica, Fase 3): pastel + texto de su familia. #}
+    <a class="servicio-boton" style="{{ colores.chip_servicio(tipo) }}" href="/venta/servicio/{{ tipo }}">+ {{ etiqueta }}</a>
     {% endfor %}
     <a class="servicio-boton" href="/venta/servicio-personalizada">+ Personalizado</a>
   </div>

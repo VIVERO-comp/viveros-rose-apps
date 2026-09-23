@@ -16,8 +16,8 @@
 .en-rojo { color:#ff8b7a }
 .chips-tipo { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px }
 .chip-tipo { font-size:.66rem; letter-spacing:.05em; padding:2px 8px;
-             border-radius:999px; background:rgba(212,175,55,.18);
-             border:1px solid rgba(212,175,55,.35) }
+             border-radius:999px; border:1px solid transparent }
+/* El color por tipo llega inline desde colores.chip_etiqueta_orden(). */
 .form-compra { display:grid; grid-template-columns:1fr auto auto; gap:6px;
                align-items:end; margin-top:8px }
 .form-compra input[name="monto"] { width:92px }
@@ -40,7 +40,7 @@
 
   {% if p.etiquetas %}
   <div class="chips-tipo">
-    {% for e in p.etiquetas %}<span class="chip-tipo">{{ e }}</span>{% endfor %}
+    {% for e in p.etiquetas %}<span class="chip-tipo" style="{{ colores.chip_etiqueta_orden(e) }}">{{ e }}</span>{% endfor %}
   </div>
   {% endif %}
 

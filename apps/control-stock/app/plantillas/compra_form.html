@@ -56,6 +56,8 @@
       <label class="chip {{ 'on' if (compra.categoria if compra else '') == clave else '' }}">
         <input type="radio" name="categoria" value="{{ clave }}"
                {% if (compra.categoria if compra else '') == clave %}checked{% endif %}>
+        {%- set punto = colores.COLOR_CATEGORIA_COMPRA.get(clave) %}
+        {%- if punto %}<i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:{{ punto }};margin-right:5px"></i>{% endif %}
         {{ etiqueta }}
       </label>
       {% endfor %}

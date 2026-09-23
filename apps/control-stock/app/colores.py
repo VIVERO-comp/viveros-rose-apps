@@ -66,6 +66,27 @@ def texto_hex(nombre):
     return hex_de(FAMILIAS[nombre]["texto_claro"])
 
 
+def pastel_hex(nombre):
+    """El fondo pastel claro de una familia, en hex."""
+    return hex_de(FAMILIAS[nombre]["bg_claro"])
+
+
+def _mezcla(hex_a, hex_b, parte_a):
+    """parte_a de hex_a sobre hex_b, canal a canal (el color-mix de Python)."""
+    a = [int(hex_a[i:i + 2], 16) for i in (1, 3, 5)]
+    b = [int(hex_b[i:i + 2], 16) for i in (1, 3, 5)]
+    return "#%02x%02x%02x" % tuple(
+        round(ca * parte_a + cb * (1 - parte_a)) for ca, cb in zip(a, b))
+
+
+def chip_estilo(nombre):
+    """El estilo inline de un chip pastel de la familia: fondo, texto y un
+    borde con el texto mezclado al 20% (como los k-chip del panel)."""
+    fondo, texto = pastel_hex(nombre), texto_hex(nombre)
+    return (f"background:{fondo};color:{texto};"
+            f"border-color:{_mezcla(texto, fondo, 0.2)}")
+
+
 # ---------------------------------------------------------------------------
 # Calendario (pestana Calendario de control-stock). Los 13 tipos del grupo
 # "Tipo de actividad" y los 4 filtros estilo Google Calendar.
@@ -132,3 +153,49 @@ ETIQUETAS_CHIP_CRM = {
     "Mayorista": texto_hex("orange"),
 }
 CHIP_CRM_SIN_ETIQUETA = "#6b6b70"
+
+# ---------------------------------------------------------------------------
+# Tipos de servicio (Vender, Proyectos, Compras). Cada tipo de negocio con
+# la familia de su label en Twenty; los chips salen con chip_estilo().
+# ---------------------------------------------------------------------------
+
+FAMILIA_TIPO_SERVICIO = {
+    "renta": "red",            # Eventos · Alquiler
+    "boda": "yellow",          # Eventos · Bodas
+    "evento": "pink",          # Eventos
+    "mantenimiento": "blue",
+    "paisajismo": "turquoise",
+    "proyecto": "sky",         # Servicios · Proyectos
+    "instalacion": "purple",   # Servicios · Instalación
+}
+
+# Los crm.tag de Odoo (etiqueta_orden) que pintan los chips de Proyectos.
+FAMILIA_ETIQUETA_ORDEN = {
+    "RENTAL": "red",
+    "BODA": "yellow",
+    "EVENTO": "pink",
+    "MANTENIMIENTO": "blue",
+    "PAISAJISMO": "turquoise",
+    "PROYECTO": "sky",
+    "INSTALACION": "purple",
+    "RETAIL VENTA": "green",
+    "SERVICIO": "gray",
+}
+
+
+def chip_servicio(tipo):
+    """Estilo del chip/boton de un tipo de servicio (gris si no tiene)."""
+    return chip_estilo(FAMILIA_TIPO_SERVICIO.get(tipo, "gray"))
+
+
+def chip_etiqueta_orden(nombre_tag):
+    """Estilo del chip de un crm.tag de Odoo (gris si no se conoce)."""
+    return chip_estilo(FAMILIA_ETIQUETA_ORDEN.get((nombre_tag or "").upper(), "gray"))
+
+
+# En Compras solo Paisajismo y Mantenimiento llevan punto de color (las
+# demas categorias no son tipos de negocio y se quedan neutras).
+COLOR_CATEGORIA_COMPRA = {
+    "paisajismo": texto_hex("turquoise"),
+    "mantenimiento": texto_hex("blue"),
+}

@@ -27,8 +27,8 @@
 .tarjeta-proyecto .fecha { font-size:.76rem; opacity:.6 }
 .chips-tipo { display:flex; flex-wrap:wrap; gap:4px }
 .chip-tipo { font-size:.66rem; letter-spacing:.05em; padding:2px 8px;
-             border-radius:999px; background:rgba(212,175,55,.18);
-             border:1px solid rgba(212,175,55,.35) }
+             border-radius:999px; border:1px solid transparent }
+/* El color por tipo llega inline desde colores.chip_etiqueta_orden(). */
 .columna-vacia { font-size:.8rem; opacity:.45; padding:10px 2px }
 </style>
 
@@ -65,7 +65,7 @@
         <div class="ref">{{ t.ref }}</div>
         <div class="cliente">{{ t.nombre }}</div>
         <div class="chips-tipo">
-          {% for e in t.etiquetas %}<span class="chip-tipo">{{ e }}</span>{% endfor %}
+          {% for e in t.etiquetas %}<span class="chip-tipo" style="{{ colores.chip_etiqueta_orden(e) }}">{{ e }}</span>{% endfor %}
         </div>
         <div class="pie">
           <span class="monto">{{ t.cotizado | dinero }}</span>
