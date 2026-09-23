@@ -32,35 +32,48 @@ from urllib.parse import quote
 
 import httpx
 
-from . import calendario, crm_twenty
+from . import calendario, colores, crm_twenty
 
 TTL_LEADS = 120
 
-# Mismo orden, nombres y colores que COLUMNAS_LEADS del admin
-# (viveros-rose-frontend/src/pages/api/crm/tablero.ts).
+# Mismo orden y nombres que COLUMNAS_LEADS del admin
+# (viveros-rose-frontend/src/pages/api/crm/tablero.ts); el punto de la
+# columna lleva el tono FUERTE de la familia del estado (paleta unica).
+def _col(clave, titulo):
+    familia = colores.ASIGNACIONES["estado_lead"][clave]
+    return {"clave": clave, "titulo": titulo,
+            "color": colores.FAMILIAS[familia]["solido_hex"]}
+
+
 COLUMNAS = [
-    {"clave": "NUEVO", "titulo": "Nuevo", "color": "#4b7bd6"},
-    {"clave": "CONTACTADO", "titulo": "Contactado", "color": "#c98a1e"},
-    {"clave": "EN_CONVERSACION", "titulo": "En conversación", "color": "#8a63d2"},
-    {"clave": "PEDIDO_PENDIENTE", "titulo": "Pedido pendiente", "color": "#c96a2a"},
-    {"clave": "GANADO", "titulo": "Ganado", "color": "#2f7d4f"},
-    {"clave": "PERDIDO", "titulo": "Perdido", "color": "#a4322a"},
+    _col("NUEVO", "Nuevo"),
+    _col("CONTACTADO", "Contactado"),
+    _col("EN_CONVERSACION", "En conversación"),
+    _col("PEDIDO_PENDIENTE", "Pedido pendiente"),
+    _col("GANADO", "Ganado"),
+    _col("PERDIDO", "Perdido"),
 ]
 
 # Vocabulario de chips compartido con el admin y los Chats
-# (viveros-rose-frontend/src/lib/chips-lead.ts): mismo texto, mismo color.
+# (viveros-rose-frontend/src/lib/chips-lead.ts): mismo texto, y el color de
+# la familia del tipo en la paleta unica (tono de texto: sirve como chip y
+# como fondo solido con texto blanco en la ficha).
+_NOMBRE_INTERES = {
+    "PLANTAS_RETAIL": "Plantas retail",
+    "MAYORISTA": "Mayorista",
+    "EVENTOS": "Eventos",
+    "EVENTOS_ALQUILER": "Eventos · Alquiler",
+    "EVENTOS_BODAS": "Eventos · Bodas",
+    "EVENTOS_FERIAS": "Eventos · Ferias",
+    "MANTENIMIENTO": "Mantenimiento",
+    "PAISAJISMO": "Paisajismo",
+    "SERVICIOS_PROYECTOS": "Servicios · Proyectos",
+    "SERVICIOS_INSTALACION": "Servicios · Instalación",
+    "CONSTRUCCION": "Construcción",
+}
 ETIQUETA_INTERES = {
-    "PLANTAS_RETAIL": ("Plantas retail", "#16a34a"),
-    "MAYORISTA": ("Mayorista", "#4b7bd6"),
-    "EVENTOS": ("Eventos", "#dc2626"),
-    "EVENTOS_ALQUILER": ("Eventos · Alquiler", "#dc2626"),
-    "EVENTOS_BODAS": ("Eventos · Bodas", "#db2777"),
-    "EVENTOS_FERIAS": ("Eventos · Ferias", "#dc2626"),
-    "MANTENIMIENTO": ("Mantenimiento", "#c98a1e"),
-    "PAISAJISMO": ("Paisajismo", "#8a63d2"),
-    "SERVICIOS_PROYECTOS": ("Servicios · Proyectos", "#4b7bd6"),
-    "SERVICIOS_INSTALACION": ("Servicios · Instalación", "#4b7bd6"),
-    "CONSTRUCCION": ("Construcción", "#a16207"),
+    clave: (nombre, colores.texto_hex(colores.ASIGNACIONES["tipo_interes"][clave]))
+    for clave, nombre in _NOMBRE_INTERES.items()
 }
 
 MOTIVOS = {
