@@ -19,11 +19,16 @@ desalinee.
    `asignaciones` de paleta.json); los puntos de columna (CRM, CRM pedidos,
    rail del Equipo, Inactivo/Sin estado) usan el tono fuerte de la MISMA
    familia que el chip pastel.
-3. **Fase 3 — Apps internas.** Calendario (los tipos que tienen label en
-   Twenty cambian, los tipos internos se quedan como estan), Retail
-   (Mayorista pasa a naranja), Vender/Compras/Proyectos (los tipos de
-   servicio estrenan su color), calendario con piel Twenty (3 chips
-   corregidos).
+3. **Fase 3 — Apps internas.** — HECHA en colores (23/09/2026); quedan 2 flecos
+   Todos los colores viven en app/colores.py leyendo la paleta: Calendario
+   (Alquiler rojo, Entrega verde, Instalacion morado, Proyecto celeste;
+   los tipos internos conservan sus tierras), filtros, Retail (Mayorista
+   naranja), y la piel Twenty ya no repinta nada (mismo color en las dos
+   caras; chips de Mayorista/Bodas/Ferias corregidos).
+   PENDIENTE (plantillas en uso por otra sesion, y el deploy de
+   control-stock que espera ese trabajo): la leyenda de retail.html trae
+   2 hex duros por actualizar, y el estreno de color de los tipos de
+   servicio en Vender/Compras/Proyectos.
 4. **Fase 4 — Linear.** — HECHA (23/09/2026)
    Las labels del team LEAD llevan el solido_hex de su familia: las 11 de
    tipo repintadas por API (compartian un solo verde) y las etapas
