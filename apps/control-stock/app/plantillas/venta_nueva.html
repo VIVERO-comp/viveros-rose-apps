@@ -165,6 +165,11 @@
        cobro se hace después con el "Cobrar" de la lista de Vender. #}
     <form method="post" action="/venta/cotizar" id="form-acciones">
       <div class="botones-venta">
+        {# Ver el PDF ANTES de generar (dueño, 23/09/2026). Mismo formulario:
+           el botón solo cambia a dónde se manda, así viajan los mismos
+           datos que usaría la cotización de verdad. #}
+        <button class="btn btn-linea btn-grande" type="submit"
+                formaction="/venta/vista-previa">VISTA PREVIA</button>
         <button class="btn btn-dorado btn-grande" type="submit">GENERAR COTIZACIÓN</button>
       </div>
     </form>

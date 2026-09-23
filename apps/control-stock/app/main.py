@@ -1189,6 +1189,64 @@ async def venta_quitar(request: Request):
     return RedirectResponse(_volver_del_carrito(form), status_code=303)
 
 
+def _ruta_vista_previa(usuario):
+    """El PDF del vistazo, uno por empleada. El usuario es su nombre de
+    acceso: se limpia antes de usarlo como nombre de archivo."""
+    seguro = re.sub(r"[^A-Za-z0-9_-]", "", str(usuario)) or "empleada"
+    return os.path.join(datos.ruta_archivos(), f"vista-previa-{seguro}.pdf")
+
+
+@app.post("/venta/vista-previa")
+async def venta_vista_previa(request: Request):
+    """Ver el PDF ANTES de generar la cotización (dueño, 23/09/2026). No
+    crea la venta: arma el documento con lo que hay en pantalla, lo deja
+    en la carpeta de archivos y lo muestra con un botón para salir."""
+    form = await request.form()
+    empleada = request.state.empleada
+    datos_cliente = _datos_cliente_del_form(form)
+    # Lo escrito se guarda antes de irse a Odoo: salir de la vista previa
+    # tiene que devolver el formulario tal cual estaba.
+    ventas.guardar_borrador(empleada["id"],
+                            (form.get("cliente") or "").strip()[:120],
+                            (form.get("celular") or "").strip()[:30],
+                            None, datos_cliente, None)
+    _amarrar_lead_del_form(request, form)
+    try:
+        pdf = ventas.pdf_vista_previa(
+            empleada, form.get("cliente", ""), form.get("celular", ""),
+            datos_cliente, _cargos_del_form(form))
+    except ValueError as error:
+        return _redirigir_venta(str(error), nueva=True)
+    except Exception as error:
+        return _redirigir_venta(
+            f"No se pudo armar la vista previa: {ventas._mensaje_de_error(error)}",
+            nueva=True)
+    with open(_ruta_vista_previa(empleada["id"]), "wb") as archivo:
+        archivo.write(pdf)
+    return plantillas.TemplateResponse(request, "venta_vista_previa.html", {
+        "empleada": empleada,
+        "borrador": ventas.borrador_de(empleada["id"]),
+        "lead_pendiente": ventas.lead_pendiente(empleada["id"]),
+        "campos_extra": ventas.CAMPOS_EXTRA,
+    })
+
+
+@app.get("/venta/vista-previa.pdf")
+def venta_vista_previa_pdf(request: Request):
+    """El PDF de la vista previa, ADENTRO de la pantalla (inline, no
+    descarga): en el celular una ventana nueva es justo lo que deja al
+    empleado sin poder salir."""
+    ruta = _ruta_vista_previa(request.state.empleada["id"])
+    if not os.path.exists(ruta):
+        return RedirectResponse("/venta/nueva", status_code=303)
+    with open(ruta, "rb") as archivo:
+        return Response(archivo.read(), media_type="application/pdf", headers={
+            "Content-Disposition": 'inline; filename="vista-previa.pdf"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        })
+
+
 @app.post("/venta/cotizar")
 async def venta_cotizar(request: Request):
     form = await request.form()

@@ -66,6 +66,20 @@ class OdooFalso:
         return [{"id": i, **p} for i, p in self.productos.items()
                 if texto in p["name"].lower() or texto in p["default_code"].lower()]
 
+    def product_product_search(self, args, kw):
+        """Los productos de los cargos (SV-ENVIO, SV-CARGO-INSTALACION) se
+        resuelven por su código y se crean si no están, como en Odoo."""
+        codigo = next((c[2] for c in args[0]
+                       if isinstance(c, (list, tuple)) and c[0] == "default_code"), None)
+        return [i for i, p in self.productos.items()
+                if p["default_code"] == codigo]
+
+    def product_product_create(self, args, kw):
+        nuevo = self._nuevo_id()
+        self.productos[nuevo] = {"default_code": args[0]["default_code"],
+                                 "name": args[0]["name"], "list_price": 0.0}
+        return nuevo
+
     def product_product_read(self, args, kw):
         if kw.get("fields") == ["image_128"]:
             return [{"id": i, "image_128": base64.b64encode(b"\xff\xd8foto").decode()}
@@ -104,10 +118,32 @@ class OdooFalso:
         total = sum(l["product_uom_qty"] * self._precio(l) for l in lineas)
         self.ordenes[nuevo] = {
             "name": f"S{nuevo}", "partner_id": vals["partner_id"],
-            "tag_ids": vals["tag_ids"], "lineas": lineas,
+            "tag_ids": vals.get("tag_ids"), "lineas": lineas,
+            "client_order_ref": vals.get("client_order_ref"),
             "amount_total": round(total, 2), "state": "draft", "invoice_ids": [],
         }
         return nuevo
+
+    def sale_order_search(self, args, kw):
+        """Solo lo que usa la vista previa: buscar SU orden por referencia."""
+        ref = next((c[2] for c in args[0] if c[0] == "client_order_ref"), None)
+        return [i for i, o in self.ordenes.items()
+                if (ref is None or o.get("client_order_ref") == ref)
+                and o["state"] == "draft"]
+
+    def sale_order_write(self, args, kw):
+        for orden_id in args[0]:
+            orden = self.ordenes[orden_id]
+            vals = args[1]
+            if "order_line" in vals:
+                lineas = [l[2] for l in vals["order_line"] if l[0] == 0]
+                orden["lineas"] = lineas
+                orden["amount_total"] = round(
+                    sum(l["product_uom_qty"] * self._precio(l) for l in lineas), 2)
+            for campo in ("partner_id", "client_order_ref"):
+                if campo in vals:
+                    orden[campo] = vals[campo]
+        return True
 
     def sale_order_read(self, args, kw):
         return [{"id": i, **{c: self.ordenes[i][c] for c in kw["fields"]}} for i in args[0]]
@@ -233,6 +269,9 @@ def odoo(monkeypatch, tmp_path, db_limpia):
     }.items():
         monkeypatch.setenv(variable, valor)
     monkeypatch.setattr(ventas, "_ejecutar", falso.ejecutar)
+    # Los ids de los productos de cargo se cachean por proceso: cada caso
+    # tiene su propio Odoo simulado, así que el caché arranca vacío.
+    ventas._cache_cargos.clear()
     return falso
 
 
@@ -672,3 +711,65 @@ def test_una_cotizacion_vieja_sigue_reconociendo_su_cargo():
     assert ventas.CODIGOS_CARGO["SV-INSTALACION"] == "instalacion"
     assert ventas.CODIGOS_CARGO["SV-CARGO-INSTALACION"] == "instalacion"
     assert ventas.CODIGOS_CARGO["SV-ENVIO"] == "envio"
+
+
+# --- Vista previa del PDF antes de generar la cotización (23/09/2026) -------
+
+def _pdf_falso(monkeypatch):
+    llamadas = []
+    monkeypatch.setattr(ventas, "descargar_pdf",
+                        lambda reporte, registro: llamadas.append((reporte, registro))
+                        or b"%PDF-1.4 vista previa")
+    return llamadas
+
+
+def test_la_vista_previa_no_crea_la_venta(cliente_venta, odoo, monkeypatch):
+    """Ver el PDF antes de generar NO puede cobrar ni comprometer nada: no
+    deja registro local, no vacía el carrito y no toca el CRM."""
+    _pdf_falso(monkeypatch)
+    _agregar(cliente_venta, 501, veces=2)
+    r = cliente_venta.post("/venta/vista-previa",
+                           data={"cliente": "Marta", "celular": "60000000",
+                                 "envio": "5", "instalacion": "40"},
+                           follow_redirects=False)
+    assert r.status_code == 200, r.headers.get("location")
+    assert "Vista previa" in r.text and "SALIR" in r.text
+    assert ventas.ventas_todas() == []              # ninguna venta creada
+    assert ventas.carrito_de("genesis")[0]          # el carrito sigue lleno
+    # Y el borrador guardó lo escrito: salir devuelve el formulario igual.
+    borrador = ventas.borrador_de("genesis")
+    assert borrador["nombre"] == "Marta" and borrador["envio"] == "5"
+
+
+def test_la_vista_previa_reusa_una_sola_orden_por_empleada(cliente_venta, odoo, monkeypatch):
+    """La orden del vistazo se reescribe, no se acumula: el usuario de la
+    app no puede borrar pedidos en Odoo."""
+    llamadas = _pdf_falso(monkeypatch)
+    _agregar(cliente_venta, 501)
+    cliente_venta.post("/venta/vista-previa", data={"cliente": "Marta"})
+    cliente_venta.post("/venta/vista-previa", data={"cliente": "Marta", "envio": "5"})
+    previas = [i for i, o in odoo.ordenes.items()
+               if (o.get("client_order_ref") or "").startswith(ventas.REF_VISTA_PREVIA)]
+    assert len(previas) == 1
+    # El segundo vistazo ya trae el cargo de envío.
+    assert len(odoo.ordenes[previas[0]]["lineas"]) == 2
+    assert [r for r, _ in llamadas] == ["sale.report_saleorder"] * 2
+
+
+def test_el_pdf_de_la_vista_previa_se_ve_dentro_de_la_pantalla(cliente_venta, odoo, monkeypatch):
+    _pdf_falso(monkeypatch)
+    _agregar(cliente_venta, 501)
+    cliente_venta.post("/venta/vista-previa", data={"cliente": "Marta"})
+    r = cliente_venta.get("/venta/vista-previa.pdf")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/pdf"
+    # inline, no attachment: una ventana nueva en el celular deja atrapado.
+    assert r.headers["content-disposition"].startswith("inline")
+
+
+def test_sin_carrito_la_vista_previa_avisa(cliente_venta, odoo, monkeypatch):
+    _pdf_falso(monkeypatch)
+    r = cliente_venta.post("/venta/vista-previa", data={"cliente": "Marta"},
+                           follow_redirects=False)
+    assert r.status_code == 303
+    assert "Agrega%20al%20menos%20una%20planta" in r.headers["location"]

@@ -776,6 +776,60 @@ def crear_cotizacion(empleada, nombre_cliente, celular="", datos=None,
     return obtener_venta(n)
 
 
+# ---------------------------------------------------------------------------
+# Vista previa del PDF (dueño, 23/09/2026: "antes de generar cotización haz
+# vista previa del pdf con botón de salida").
+#
+# El PDF lo arma Odoo desde una orden, así que la vista previa necesita una:
+# se usa UNA sola por empleada, marcada "VISTA PREVIA <usuario>", que se
+# reescribe en cada vistazo. No se borra al salir porque el usuario de la
+# app no tiene permiso para borrar pedidos en Odoo (lo mismo que se
+# descubrió con la cotización de muestra), y reusarla evita que se acumulen.
+#
+# Lo importante: NO es la cotización. No crea el registro local, no limpia
+# el carrito, no abre oportunidad en el CRM y no toca la pestaña Retail —
+# todo eso pasa recién cuando la empleada toca "Generar cotización".
+# ---------------------------------------------------------------------------
+
+REF_VISTA_PREVIA = "VISTA PREVIA"
+
+
+def _orden_vista_previa(usuario, partner, lineas):
+    ref = f"{REF_VISTA_PREVIA} {usuario}"
+    nuevas = [[0, 0, linea] for linea in lineas]
+    ids = _ejecutar("sale.order", "search",
+                    [[["client_order_ref", "=", ref], ["state", "=", "draft"]]],
+                    {"limit": 1})
+    if ids:
+        # El 5 borra las líneas del vistazo anterior antes de poner las de
+        # ahora: la orden es siempre la misma, el contenido no.
+        _ejecutar("sale.order", "write", [[ids[0]], {
+            "partner_id": partner, "order_line": [[5, 0, 0]] + nuevas}])
+        return ids[0]
+    orden = _ejecutar("sale.order", "create", [{
+        "partner_id": partner, "order_line": nuevas, "client_order_ref": ref,
+        "tag_ids": [[6, 0, [_id_config("VENTA_TAG_LOCAL")]]],
+    }])
+    return orden[0] if isinstance(orden, list) else orden
+
+
+def pdf_vista_previa(empleada, nombre_cliente, celular="", datos=None, cargos=None):
+    """El PDF de la cotización tal como saldría, sin crear la venta.
+
+    Mismas líneas que crear_cotizacion —las plantas del carrito con el
+    precio que ponga Odoo, más los cargos con monto— para que lo que se ve
+    sea lo que después se genera."""
+    usuario = empleada["id"]
+    lineas, _total = carrito_de(usuario)
+    if not lineas:
+        raise ValueError("Agrega al menos una planta para ver la cotización.")
+    partner = _cliente_id(nombre_cliente, celular, datos)
+    orden = _orden_vista_previa(usuario, partner, [
+        {"product_id": l["producto_id"], "product_uom_qty": l["cantidad"]}
+        for l in lineas] + lineas_de_cargos(cargos))
+    return descargar_pdf("sale.report_saleorder", orden)
+
+
 def _espejar_en_crm(empleada, nombre_cliente, celular, partner, orden_id,
                     orden, total):
     """El espejo de la venta en el CRM (decisión del 22/09/2026): el lead

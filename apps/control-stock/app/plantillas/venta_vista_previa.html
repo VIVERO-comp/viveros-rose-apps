@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block titulo %}Vista previa — Control Viverorose{% endblock %}
+
+{% block contenido %}
+{# Vista previa del PDF antes de generar la cotización (dueño, 23/09/2026:
+   "haz vista previa del pdf con botón de salida"). Nada se ha creado
+   todavía: SALIR devuelve el formulario tal cual quedó, y el botón de
+   generar manda los mismos datos que ya están guardados en el borrador. #}
+{% with bm_titulo='Vista previa', bm_volver='/venta/nueva' %}{% include '_barra_movil.html' %}{% endwith %}
+<main>
+  <div class="cab-previa">
+    <div>
+      <h1>Vista previa</h1>
+      <p class="tenue">Así va a salir la cotización. Todavía no se ha creado nada.</p>
+    </div>
+    <div class="botones-previa">
+      <a class="btn btn-linea btn-grande" href="/venta/nueva">SALIR</a>
+      <form method="post" action="/venta/cotizar" style="display:contents">
+        <input type="hidden" name="cliente" value="{{ borrador.nombre }}">
+        <input type="hidden" name="celular" value="{{ borrador.celular }}">
+        {% for campo in campos_extra %}
+        <input type="hidden" name="{{ campo }}" value="{{ borrador[campo] }}">
+        {% endfor %}
+        {% if lead_pendiente %}
+        <input type="hidden" name="lead_ref" value="{{ lead_pendiente.ref }}">
+        {% endif %}
+        <button class="btn btn-dorado btn-grande" type="submit">GENERAR COTIZACIÓN</button>
+      </form>
+    </div>
+  </div>
+
+  {# El PDF va DENTRO de la pantalla: en el celular una ventana nueva es
+     justo lo que deja sin poder salir. Si el navegador no sabe mostrarlo
+     embebido, queda el enlace de abajo. #}
+  <div class="marco-previa">
+    <iframe src="/venta/vista-previa.pdf" title="Vista previa de la cotización"></iframe>
+  </div>
+  <p class="tenue previa-pie">
+    ¿No se ve el documento?
+    <a href="/venta/vista-previa.pdf">Ábrelo aquí</a>.
+  </p>
+</main>
+{% endblock %}

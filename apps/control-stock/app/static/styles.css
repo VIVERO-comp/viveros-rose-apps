@@ -1391,3 +1391,19 @@ nav .hamb{display:none}
      de la lista aunque el contenido crezca. */
   main .botones-venta .btn-grande:first-child{position:sticky;bottom:10px;z-index:5}
 }
+
+/* Vista previa del PDF antes de generar la cotización (23/09/2026). El
+   documento se ve dentro de la pantalla y SALIR siempre queda arriba, a la
+   vista, para no quedar atrapado mirando el PDF. */
+.cab-previa{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between;margin-bottom:14px}
+.cab-previa h1{font-size:22px;font-weight:800}
+.botones-previa{display:flex;gap:8px;flex-wrap:wrap}
+.marco-previa{border:1px solid var(--borde);border-radius:16px;overflow:hidden;background:var(--crema)}
+.marco-previa iframe{display:block;width:100%;height:78vh;border:0;background:#fff}
+.previa-pie{margin-top:10px;font-size:12px}
+@media (max-width: 760px){
+  .cab-previa{align-items:stretch}
+  .botones-previa{width:100%}
+  .botones-previa .btn,.botones-previa form{flex:1 1 0}
+  .marco-previa iframe{height:66vh}
+}
