@@ -395,7 +395,7 @@ a{color:inherit}
    la app): un día a la vez, la tira de la semana para cambiar de fecha, y
    el "+" flotante. Todo lo demás de la pantalla grande (barra, chips,
    buscador, vistas, sidebar) se esconde. */
-.movil,.fab,body>nav{display:none}
+.movil,.fab,body>nav,.barra-m{display:none}
 
 @media (max-width:767.98px){
   /* Solo navbar + calendario: fuera la barra de controles, los chips, la
@@ -404,26 +404,63 @@ a{color:inherit}
      app). El error (div.franja) y el aviso verde sí se quedan: son la
      respuesta a lo que la empleada acaba de hacer. */
   .barra,.chips,a.franja,.zona,.lado{display:none}
-  .tablero{padding:10px 12px calc(104px + env(safe-area-inset-bottom));gap:10px}
+  .tablero{padding:10px 12px calc(24px + env(safe-area-inset-bottom));gap:10px}
 
-  /* El navbar de abajo, calcado del de styles.css (blanco, difuminado,
-     icono arriba y letra abajo, activo en dorado). Es el mismo componente
-     (_nav.html); aquí solo se pinta porque esta pantalla no carga
-     styles.css. */
-  body>nav{
-    display:flex;position:fixed;bottom:0;left:0;right:0;z-index:30;
+  /* ---------- la barra única de arriba (artefacto aprobado, 23/09/2026):
+     hamburguesa · título · acción. Nada flota sobre el contenido. ---------- */
+  .barra-m{
+    display:flex;align-items:center;gap:10px;
+    position:sticky;top:0;z-index:30;
+    margin:-10px -12px 2px;
+    padding:calc(12px + env(safe-area-inset-top)) 14px 10px;
     background:rgba(255,255,255,.94);backdrop-filter:blur(12px);
-    border-top:1px solid #e4e4e7;
-    padding:8px 14px calc(10px + env(safe-area-inset-bottom));gap:6px;
+    border-bottom:1px solid var(--borde);
   }
-  body>nav a{
-    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    gap:4px;font-size:10.5px;font-weight:600;color:#71717a;text-decoration:none;
-    padding:8px 0;border-radius:16px;min-height:44px;
+  .hamb-movil,.bm-volver{
+    display:flex;align-items:center;justify-content:center;flex:0 0 auto;
+    min-width:40px;height:40px;background:var(--lienzo);border:1px solid var(--borde);
+    border-radius:11px;color:var(--texto);cursor:pointer;text-decoration:none;
+    font-family:inherit;font-size:12.5px;font-weight:700;
+  }
+  .bm-volver{padding:0 12px}
+  .bm-titulo{
+    flex:1;min-width:0;font-size:16px;font-weight:800;letter-spacing:-.01em;
+    color:var(--texto);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .bm-titulo small{display:block;font-size:11px;font-weight:500;color:var(--muy-suave)}
+  .bm-negro{
+    flex:0 0 auto;background:var(--dorado);color:#fff;border:none;border-radius:11px;
+    font-family:inherit;font-size:12.5px;font-weight:700;padding:13px 15px;
+    cursor:pointer;text-decoration:none;white-space:nowrap;
+  }
+
+  /* El menú hamburguesa del teléfono (pedido del dueño, 23/09/2026: "en
+     celular haz que tenga el menú ese de hamburguesa"): el navbar de
+     abajo se reemplaza por un cajón que entra desde la izquierda, con
+     las mismas píldoras del sidebar de computadora. Lo abre el botón
+     flotante .hamb-movil (_nav.html) y menu.js voltea body.menu-abierto. */
+  body>nav{
+    display:flex;position:fixed;top:0;bottom:0;left:0;z-index:44;
+    width:min(78vw,270px);flex-direction:column;justify-content:flex-start;
+    gap:8px;padding:18px 14px calc(18px + env(safe-area-inset-bottom));
+    background:#fff;border-right:1px solid var(--borde);
+    transform:translateX(-105%);transition:transform .2s ease;
+    overflow-y:auto;overscroll-behavior:contain;
+  }
+  body.menu-abierto>nav{transform:translateX(0);box-shadow:var(--sombra)}
+  @media (prefers-reduced-motion: reduce){body>nav{transition:none}}
+  body>nav a, body>nav button:not(.hamb){
+    flex:0 0 auto;display:flex;flex-direction:row;align-items:center;
+    justify-content:flex-start;gap:11px;font-size:13px;font-weight:600;
+    color:var(--texto);text-decoration:none;background:var(--lienzo);
+    border:1px solid var(--borde);border-radius:12px;padding:12px 14px;
+    font-family:inherit;cursor:pointer;min-height:44px;
   }
   body>nav a .ic{display:flex;align-items:center;justify-content:center;height:20px}
-  body>nav a.on{color:var(--texto);background:var(--crema-2)}
-
+  body>nav a.on{color:var(--texto);background:var(--crema-2);border-color:transparent;font-weight:700}
+  body.menu-abierto::before{
+    content:'';position:fixed;inset:0;background:rgba(24,24,27,.35);z-index:43;
+  }
   .movil{display:flex;flex-direction:column;gap:10px}
   .mov-cab{display:flex;align-items:center;gap:8px}
   .mov-cab h3{font-size:17px;font-weight:800;flex:1}
@@ -447,17 +484,13 @@ a{color:inherit}
 
   .mov-sub{font-size:12px;font-weight:600;color:var(--suave)}
 
-  .mov-agenda{border:1px solid var(--borde);border-radius:14px;background:var(--lienzo);overflow:hidden}
-  .mov-fila{display:grid;grid-template-columns:54px 1fr;border-bottom:1px solid var(--borde-2)}
-  .mov-fila:last-child{border-bottom:0}
-  .mov-hora{
-    font-size:10.5px;font-weight:600;color:var(--muy-suave);text-align:right;
-    padding:9px 8px 0 0;border-right:1px solid var(--borde-2);
+  /* La agenda del día lista SOLO sus actividades (artefacto aprobado,
+     23/09/2026): sin rejilla de horas vacías. */
+  .mov-lista{display:flex;flex-direction:column;gap:8px}
+  .mov-vacio{
+    border:1px dashed var(--borde);border-radius:13px;padding:22px 14px;
+    text-align:center;color:var(--suave);font-size:12.5px;line-height:1.5;
   }
-  .mov-fila.ahora .mov-hora{color:var(--critico);font-weight:800}
-  .mov-celda{position:relative;min-height:48px;padding:6px;display:flex;flex-direction:column;gap:6px}
-  /* La hora vacía entera es el botón de "nueva actividad a esta hora". */
-  .mov-vacia{position:absolute;inset:0;display:block}
 
   .mov-act{
     display:block;border:1px solid var(--borde);border-left-width:3px;border-left-style:solid;
@@ -471,19 +504,13 @@ a{color:inherit}
   .mov-act.cancel{opacity:.5;filter:grayscale(1)}
   .mov-act.cancel .mov-tt{text-decoration:line-through}
 
-  .fab{
-    display:grid;place-items:center;position:fixed;right:16px;
-    bottom:calc(88px + env(safe-area-inset-bottom));width:52px;height:52px;border-radius:50%;
-    background:var(--dorado);color:#fff;font-size:26px;font-weight:500;line-height:1;
-    text-decoration:none;box-shadow:0 10px 26px rgba(0,0,0,.28);z-index:30;
-  }
-
-  /* El formulario y la ficha, como hoja que sube desde abajo: pantalla casi
-     completa, campos grandes (16px: así iOS no hace zoom al enfocar) y el
-     renglón de Guardar pegado abajo aunque salga el teclado. */
+  /* El formulario, PANTALLA COMPLETA (artefacto aprobado, 23/09/2026: ya
+     no es una hoja encima del calendario); campos grandes (16px: así iOS
+     no hace zoom al enfocar) y el renglón de Guardar pegado abajo aunque
+     salga el teclado. */
   .modal{
-    top:auto;left:0;right:0;bottom:0;transform:none;width:100%;max-height:94dvh;
-    border-radius:20px 20px 0 0;padding:16px 16px calc(10px + env(safe-area-inset-bottom));
+    top:0;left:0;right:0;bottom:0;transform:none;width:100%;max-height:none;
+    border-radius:0;padding:calc(10px + env(safe-area-inset-top)) 16px calc(10px + env(safe-area-inset-bottom));
     animation:sube .2s ease;
   }
   .panel-der{width:100%;border-left:0}
@@ -540,6 +567,42 @@ a{color:inherit}
 .ret-tarjeta.arrastrando{opacity:.4}
 .ret-tarjeta .t-cab{display:flex;align-items:center;gap:7px}
 .ret-tarjeta .t-cab b{font-size:13px;font-weight:700;line-height:1.3}
+.ret-tarjeta .t-cel{font-size:11px;color:var(--muy-suave);white-space:nowrap}
+/* La pestaña Control: tarjeta con el último mensaje (versión C), punto
+   rojo de "te debe respuesta", botón de responder y la burbuja de la
+   ficha. */
+.ret-tarjeta .eq-texto{display:block;margin-top:5px;color:var(--suave);font-size:11.5px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.eq-burbuja{background:var(--crema);border:1px solid var(--borde);border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.45;margin:12px 0}
+.eq-burbuja small{display:block;font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muy-suave);margin-bottom:3px}
+.eq-burbuja.eq-nuestra{background:#f3efe4}
+.ctl-zona{display:block;text-decoration:none;color:inherit}
+.ctl-alerta{width:8px;height:8px;border-radius:50%;background:var(--critico);flex:0 0 auto;margin-left:auto;box-shadow:0 0 0 3px rgba(220,38,38,.15)}
+.ctl-pie-tarjeta{justify-content:flex-start}
+.ctl-pie-tarjeta .ctl-wa{margin-left:auto;font-weight:700;color:var(--texto);text-decoration:none;white-space:nowrap}
+.ctl-pie-tarjeta .ctl-wa:hover{text-decoration:underline;text-underline-offset:2px}
+
+/* La pestaña CRM: el tablero del admin en espejo — 6 columnas anchas con
+   scroll de lado (así lo quiere el dueño en los kanban del panel). */
+.crm-tablero{overflow-x:auto;padding-bottom:8px}
+.crm-tablero .ret-col{flex:0 0 236px}
+.crm-tarjeta{display:block;text-decoration:none}
+.crm-chip{font-size:9.5px;font-weight:700;white-space:nowrap}
+.crm-chip-retail{font-size:9px;font-weight:700;white-space:nowrap;color:var(--suave);background:var(--crema-2);border-radius:99px;padding:1px 7px}
+.crm-inactivos{border-top:1px solid var(--borde);padding-top:10px}
+.crm-inactivos summary{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--muy-suave);cursor:pointer}
+.crm-inactivos-lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-top:10px}
+.crm-nota{background:var(--crema);border:1px solid var(--borde);border-radius:10px;padding:8px 10px;font-size:12.3px;line-height:1.45;white-space:pre-line}
+.crm-nota small{display:block;font-weight:700;font-size:10px;color:var(--muy-suave);margin-bottom:2px}
+.crm-forma-nota{display:flex;flex-direction:column;gap:7px;margin-top:4px}
+.crm-forma-nota .campo{resize:vertical;font-family:inherit}
+/* Las burbujas de la conversación: el mismo diseño del panel del admin
+   (cliente izquierda en blanco, vivero derecha en verde claro). */
+.crm-conversacion{display:grid;gap:6px;max-height:340px;overflow-y:auto;overscroll-behavior:contain;padding:2px}
+.crm-conversacion .msj{max-width:88%;border-radius:14px;padding:7px 10px;font-size:12.4px;line-height:1.45}
+.crm-conversacion .msj p{margin:0;overflow-wrap:anywhere;white-space:pre-line}
+.crm-conversacion .msj-hora{display:block;font-size:10px;color:var(--muy-suave);margin-top:2px}
+.crm-conversacion .msj-cliente{background:var(--lienzo);border:1px solid var(--borde);justify-self:start}
+.crm-conversacion .msj-vivero{background:#e8f2e8;border:1px solid #cfe3cf;justify-self:end}
 .ret-tarjeta .t-sub{display:flex;gap:6px;align-items:center;margin-top:4px;font-size:10.8px;color:var(--muy-suave);flex-wrap:wrap}
 .ret-mover{border-top:1px solid var(--borde);padding-top:12px;margin-top:auto}
 .ret-mover form{display:inline}
@@ -562,8 +625,20 @@ a{color:inherit}
 .lead-it .fecha-e{font-weight:700;color:var(--bajo);font-size:10px;display:block}
 .lead-it .fecha-e.roja{color:var(--critico)}
 
+/* En el teléfono el kanban es una lista por etapa (artefacto aprobado,
+   23/09/2026): etapas apiladas con su conteo, tarjetas blancas con borde y
+   el scroll es el de la página — nada de arrastrar ni de listas con su
+   propio scroll. Vale para Retail, Control y CRM (comparten piezas). */
 @media (max-width:767.98px){
-  .ret-tablero{flex-direction:column;overflow-x:hidden;overflow-y:auto}
-  .ret-col{flex:0 0 auto}
-  .ret-lista{max-height:290px}
+  .ret-tablero{flex-direction:column;overflow:visible;gap:14px}
+  .crm-tablero{overflow-x:visible;padding-bottom:0}
+  .ret-col, .crm-tablero .ret-col{
+    flex:0 0 auto;width:auto;background:none;border:none;border-radius:0;
+  }
+  .ret-cab{padding:0 2px 0;border-bottom:0}
+  .ret-cab b{font-size:13px;text-transform:none;letter-spacing:-.01em}
+  .ret-cuenta{margin-left:auto}
+  .ret-lista{max-height:none;overflow:visible;padding:8px 0 0;gap:8px}
+  .ret-tarjeta{cursor:pointer}
+  .ret-pie{padding:6px 2px 0}
 }

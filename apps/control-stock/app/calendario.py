@@ -1224,35 +1224,20 @@ def vista_movil(actividades, dia_iso, dia_hoy):
             "con_trabajo": bool(_del_dia(actividades, iso)),
         })
 
+    # La agenda del día lista SOLO las actividades, en orden de hora
+    # (artefacto aprobado el 23/09/2026: se fue la rejilla de horas vacías;
+    # crear a una hora concreta es el + de la barra y el campo Hora).
     del_dia = _del_dia(actividades, dia_iso)
-    desde, hasta = rango_horas(del_dia)
-    ahora = datetime.now(ZONA_PANAMA)
-    horas = []
-    for h in range(desde, hasta + 1):
-        # Cada actividad cae en la fila de la hora en que EMPIEZA (las que
-        # duran más lo dicen en su propio texto con el rango completo). Las
-        # de la misma hora se apilan una debajo de otra: nunca se enciman.
-        if h == desde:  # una actividad más temprana que la primera fila
-            suyas = [a for a in del_dia if _minutos(a["hora"]) // 60 <= h]
-        elif h == hasta:  # o más tarde que la última
-            suyas = [a for a in del_dia if _minutos(a["hora"]) // 60 >= h]
-        else:
-            suyas = [a for a in del_dia if _minutos(a["hora"]) // 60 == h]
-        horas.append({
-            "h": h, "etiqueta": hora_bonita(f"{h:02d}:00"),
-            "actividades": [dict(a, rango=_rango_bonito(a),
-                                 atrasada=esta_atrasada(a, dia_hoy),
-                                 color=color_de(a["tipo"]),
-                                 fondo=_tinta(color_de(a["tipo"]), 0.07))
-                            for a in suyas],
-            "vacia": not suyas,
-            "ahora": dia_iso == dia_hoy and ahora.hour == h,
-        })
+    lista = [dict(a, rango=_rango_bonito(a),
+                  atrasada=esta_atrasada(a, dia_hoy),
+                  color=color_de(a["tipo"]),
+                  fondo=_tinta(color_de(a["tipo"]), 0.07))
+             for a in sorted(del_dia, key=lambda a: _minutos(a["hora"]))]
     return {
         "titulo": f"{MESES[fecha.month - 1].capitalize()} {fecha.year}",
         "subtitulo": ("Hoy" if dia_iso == dia_hoy else DOW_LARGO[fecha.weekday()])
                      + " " + dmy(dia_iso),
-        "tira": tira, "horas": horas, "total": len(del_dia),
+        "tira": tira, "actividades": lista, "total": len(del_dia),
         "semana_ant": (inicio_semana - timedelta(days=7)).isoformat(),
         "semana_sig": (inicio_semana + timedelta(days=7)).isoformat(),
     }

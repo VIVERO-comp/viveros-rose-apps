@@ -296,6 +296,24 @@ main{position:relative;z-index:1;flex:1;overflow-y:auto;padding:6px 20px 110px}
 .historial-item .dif{font-size:11.5px;font-weight:700;color:var(--bajo)}
 .historial-item .dif.ok{color:var(--ok)}
 
+/* ---------- Ajustes como lista de entradas (artefacto, 23/09/2026):
+   cada sección es un <details>; en el teléfono arrancan cerradas (una
+   lista de filas con flecha) y en computadora app.js las abre todas. */
+.ajuste-d{border:1px solid var(--noche-3);border-radius:14px;margin-bottom:10px;background:#ffffff}
+.ajuste-d>summary{
+  list-style:none;display:flex;align-items:center;gap:12px;cursor:pointer;
+  padding:14px;user-select:none;
+}
+.ajuste-d>summary::-webkit-details-marker{display:none}
+.ajuste-d>summary .que{flex:1;min-width:0}
+.ajuste-d>summary .que b{display:block;font-size:13.5px}
+.ajuste-d>summary .que span{font-size:11.5px;color:var(--texto-suave)}
+.ajuste-d>summary .flecha{color:var(--texto-suave);font-size:16px;transition:transform .15s}
+.ajuste-d[open]>summary .flecha{transform:rotate(90deg)}
+@media (prefers-reduced-motion: reduce){.ajuste-d>summary .flecha{transition:none}}
+.ajuste-cuerpo{padding:2px 14px 14px}
+.ajuste-cuerpo .seccion-titulo:first-child{margin-top:4px}
+
 /* ---------- panel alertas (arriba) ---------- */
 .panel{
   position:absolute;inset:0;z-index:20;
@@ -564,6 +582,19 @@ nav button.on, nav a.on{color:var(--dorado);background:rgba(24,24,27,.06)}
   font-size:14px;color:var(--texto);margin:14px 2px;
 }
 .total-venta b{font-size:19px;color:var(--dorado-suave)}
+/* El desglose de Nueva venta (23/09/2026): plantas + envío + instalación,
+   espejando los renglones del PDF, y el total al final. */
+.total-venta.desglose{display:flex;flex-direction:column;gap:7px;align-items:stretch}
+.desglose .linea-total{
+  display:flex;justify-content:space-between;align-items:baseline;
+  font-size:13px;color:var(--texto-suave);
+}
+.desglose .linea-total b{font-size:14px;color:var(--texto);font-variant-numeric:tabular-nums}
+.desglose .total-final{
+  border-top:1px solid var(--noche-3);padding-top:9px;margin-top:2px;
+  font-size:14px;color:var(--texto);
+}
+.desglose .total-final b{font-size:19px;color:var(--dorado-suave)}
 
 /* ---------- renglones de servicio de una cotización (17/09/2026): en vez
    de campos de monto con etiqueta fija, cada servicio se describe en un
@@ -1278,4 +1309,77 @@ nav .hamb{display:none}
   body.menu-oculto nav button, body.menu-oculto nav a, body.menu-oculto nav .hamb{
     font-size:0;gap:0;justify-content:center;padding:13px 0;width:100%;
   }
+}
+
+/* ---------- el menú hamburguesa del teléfono (dueño, 23/09/2026) ----------
+   "En celular haz que tenga el menú ese de hamburguesa": el navbar de
+   abajo se reemplaza por un cajón que entra desde la izquierda con las
+   mismas píldoras del sidebar de computadora. Lo abre la hamburguesa de la
+   barra de arriba (_barra_movil.html) y menu.js voltea body.menu-abierto.
+   En computadora (≥900px) la barra no existe y el sidebar sigue igual. */
+.barra-m{display:none}
+@media (max-width: 899px){
+  nav{
+    position:fixed;top:0;bottom:0;left:0;right:auto;z-index:44;
+    width:min(78vw,270px);flex-direction:column;justify-content:flex-start;
+    gap:8px;padding:18px 14px calc(18px + env(safe-area-inset-bottom));
+    background:#ffffff;border-top:none;border-right:1px solid #e4e4e7;
+    backdrop-filter:none;transform:translateX(-105%);transition:transform .2s ease;
+    overflow-y:auto;overscroll-behavior:contain;
+  }
+  body.menu-abierto nav{transform:translateX(0);box-shadow:0 18px 50px rgba(0,0,0,.18)}
+  @media (prefers-reduced-motion: reduce){nav{transition:none}}
+  nav button, nav a{
+    flex:0 0 auto;flex-direction:row;justify-content:flex-start;gap:11px;
+    background:#ffffff;border:1px solid #e4e4e7;border-radius:12px;
+    padding:12px 14px;font-size:13px;color:var(--texto);min-height:44px;
+  }
+  nav button.on, nav a.on{background:rgba(24,24,27,.06);border-color:transparent;color:var(--texto);font-weight:700}
+  body.menu-abierto::before{
+    content:'';position:fixed;inset:0;background:rgba(24,24,27,.35);z-index:43;
+  }
+  /* ---------- la barra única de arriba (artefacto aprobado, 23/09/2026):
+     hamburguesa · título · acción. Nada flota sobre el contenido. ---------- */
+  .barra-m{
+    display:flex;align-items:center;gap:10px;flex:0 0 auto;
+    padding:calc(12px + env(safe-area-inset-top)) 14px 10px;
+    background:rgba(255,255,255,.94);backdrop-filter:blur(12px);
+    border-bottom:1px solid #e4e4e7;position:relative;z-index:20;
+  }
+  .hamb-movil,.bm-volver{
+    display:flex;align-items:center;justify-content:center;flex:0 0 auto;
+    min-width:40px;height:40px;background:#ffffff;border:1px solid #e4e4e7;
+    border-radius:11px;color:var(--texto);cursor:pointer;text-decoration:none;
+    font-family:inherit;font-size:12.5px;font-weight:700;
+  }
+  .bm-volver{padding:0 12px}
+  .bm-titulo{
+    flex:1;min-width:0;font-size:16px;font-weight:800;letter-spacing:-.01em;
+    color:var(--texto);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .bm-titulo small{display:block;font-size:11px;font-weight:500;color:var(--texto-suave)}
+  .bm-negro{
+    flex:0 0 auto;background:#18181b;color:#ffffff;border:none;border-radius:11px;
+    font-family:inherit;font-size:12.5px;font-weight:700;padding:13px 15px;
+    cursor:pointer;text-decoration:none;white-space:nowrap;
+  }
+  .barra-m.oculta{display:none}
+  /* Con la barra arriba, el encabezado grande con logo y el "← Volver"
+     viejo sobran en el teléfono (en computadora siguen). */
+  .barra-m ~ header, .barra-m ~ main > .volver, .solo-pc{display:none}
+  /* El botón flotante de Crear planta se muda a la barra. */
+  .fab{display:none}
+  /* Los formularios cortos (Modificar stock, Crear planta, foto) suben
+     como hoja desde abajo, no como tarjeta flotando al centro. */
+  .panel.centrado{align-items:flex-end;padding:0}
+  .panel.centrado .panel-hoja{
+    max-height:92dvh;border-radius:22px 22px 0 0;border:none;
+    padding:18px 16px calc(18px + env(safe-area-inset-bottom));
+    animation:sube-hoja .2s ease;
+  }
+  @keyframes sube-hoja{from{transform:translateY(30px);opacity:0}to{transform:none;opacity:1}}
+  @media (prefers-reduced-motion: reduce){.panel.centrado .panel-hoja{animation:none}}
+  /* El botón principal de un formulario largo queda a la vista al final
+     de la lista aunque el contenido crezca. */
+  main .botones-venta .btn-grande:first-child{position:sticky;bottom:10px;z-index:5}
 }

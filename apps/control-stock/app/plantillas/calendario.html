@@ -67,6 +67,12 @@
     <a class="pil" href="/retail">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7 12 3 4 7v10l8 4 8-4z"/><path d="M12 11 4 7"/><path d="m12 11 8-4"/><path d="M12 11v10"/></svg>Retail
     </a>
+    <a class="pil" href="/control">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Control
+    </a>
+    <a class="pil" href="/crm">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="10" rx="1.5"/><rect x="17" y="4" width="5" height="13" rx="1.5"/></svg>CRM
+    </a>
     {# Proyectos se apaga con PROYECTOS_ACTIVOS=0 (dueño, 22/09/2026: en el
        real queda escondida hasta que la dé por lista). #}
     {% if proyectos_activos %}
@@ -91,6 +97,11 @@
   </aside>
 
   <div class="tablero">
+    {# La barra única del teléfono (artefacto aprobado, 23/09/2026); en
+       computadora el CSS la esconde y manda la .barra de abajo. #}
+    {% with bm_titulo='Calendario',
+            bm_accion_url=(movil.ligas.nueva if puede_escribir else None),
+            bm_accion_texto='+ Actividad' %}{% include '_barra_movil.html' %}{% endwith %}
     {# Una sola fila de controles: antes eran dos (marca y buscador arriba,
        fechas y vistas abajo) y el calendario empezaba a media pantalla. #}
     <div class="barra">
@@ -174,33 +185,23 @@
         {% endfor %}
       </div>
       <div class="mov-sub">{{ movil.subtitulo }}{% if movil.total %} · {{ movil.total }} actividad{{ 'es' if movil.total > 1 }}{% endif %}</div>
-      <div class="mov-agenda">
-        {% for fila in movil.horas %}
-        <div class="mov-fila {{ 'ahora' if fila.ahora }}">
-          <span class="mov-hora">{{ fila.etiqueta }}</span>
-          <div class="mov-celda">
-            {% if fila.vacia %}
-              {% if puede_escribir %}
-              <a class="mov-vacia" href="{{ fila.liga_nueva }}"
-                 aria-label="Nueva actividad a las {{ fila.etiqueta }}"></a>
-              {% else %}<span class="mov-vacia"></span>{% endif %}
-            {% else %}
-              {% for a in fila.actividades %}
-              <a class="mov-act {{ 'hecha' if a.estado == 'hecha' }} {{ 'cancel' if a.estado == 'cancel' }}"
-                 style="border-left-color:{{ a.color }};background:{{ a.fondo }}"
-                 href="{{ ligas.cerrar }}&abrir={{ a.id }}">
-                <span class="mov-tt">{{ cal.nombre_de_tipo(a.tipo) }} — {{ a.cliente }}</span>
-                <span class="mov-det">{{ a.rango }}{% if a.lugar %} · {{ a.lugar }}{% endif %} · {{ a.resp }}</span>
-                <span class="etiquetas">
-                  {% if a.atrasada %}<span class="etq at">atrasada</span>{% endif %}
-                  {% if a.estado == 'hecha' %}<span class="etq ok">terminada</span>{% endif %}
-                  {% if a.estado == 'curso' %}<span class="etq curso">en curso</span>{% endif %}
-                </span>
-              </a>
-              {% endfor %}
-            {% endif %}
-          </div>
-        </div>
+      {# La agenda del día lista SOLO las actividades (artefacto aprobado,
+         23/09/2026): sin rejilla de horas vacías; el orden lo trae Python. #}
+      <div class="mov-lista">
+        {% for a in movil.actividades %}
+        <a class="mov-act {{ 'hecha' if a.estado == 'hecha' }} {{ 'cancel' if a.estado == 'cancel' }}"
+           style="border-left-color:{{ a.color }};background:{{ a.fondo }}"
+           href="{{ ligas.cerrar }}&abrir={{ a.id }}">
+          <span class="mov-tt">{{ cal.nombre_de_tipo(a.tipo) }} — {{ a.cliente }}</span>
+          <span class="mov-det">{{ a.rango }}{% if a.lugar %} · {{ a.lugar }}{% endif %} · {{ a.resp }}</span>
+          <span class="etiquetas">
+            {% if a.atrasada %}<span class="etq at">atrasada</span>{% endif %}
+            {% if a.estado == 'hecha' %}<span class="etq ok">terminada</span>{% endif %}
+            {% if a.estado == 'curso' %}<span class="etq curso">en curso</span>{% endif %}
+          </span>
+        </a>
+        {% else %}
+        <div class="mov-vacio">Nada agendado este día.{% if puede_escribir %}<br>El + de arriba crea una actividad.{% endif %}</div>
         {% endfor %}
       </div>
     </div>
@@ -364,10 +365,8 @@
    donde manda el sidebar .lado de esta pantalla. #}
 {% set activa = 'calendario' %}{% include '_nav.html' %}
 
-{% if puede_escribir and not nueva and not abierta %}
-{# El "+" flotante del teléfono (el CSS lo esconde en computadora). #}
-<a class="fab" href="{{ movil.ligas.nueva }}" aria-label="Nueva actividad">+</a>
-{% endif %}
+{# El "+" flotante del teléfono se fue (artefacto aprobado, 23/09/2026):
+   crear actividad es el botón negro de la barra de arriba. #}
 
 {% if abierta %}
 {# Ficha de la actividad: la pinta el servidor y cada acción es un formulario. #}
@@ -524,14 +523,9 @@ No se borra nada: el issue {{ abierta.ref }} queda en Linear marcado como Cancel
         </select>
       </span>
     </div>
-    <div class="campo-caja">
-      <label for="prioridad">Prioridad</label>
-      <select class="sel ancho" id="prioridad" name="prioridad">
-        {% for valor, nombre in [(3, 'Normal'), (2, 'Alta'), (1, 'Urgente')] %}
-        <option value="{{ valor }}" {{ 'selected' if valor == pre.prioridad|int(3) }}>{{ nombre }}</option>
-        {% endfor %}
-      </select>
-    </div>
+    {# Prioridad se fue del formulario (artefacto aprobado, 23/09/2026):
+       casi siempre quedaba en Normal; el servidor la pone en 3 y se puede
+       cambiar después en la ficha o en Linear. #}
     <div class="campo-caja">
       <label for="recogida">Fecha de recogida (alquiler)</label>
       <input class="campo" type="date" id="recogida" name="recogida" value="{{ pre.recogida }}">

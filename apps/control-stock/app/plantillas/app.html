@@ -9,6 +9,16 @@
    Stock" ni una fila propia para la campana. La campana vive dentro de la
    fila de pestañas Stock online / Stock global y el contenido arranca
    arriba del todo. #}
+{# La barra única del teléfono (artefacto aprobado, 23/09/2026). Esta
+   página cambia de pestaña con JS, así que el título lo pone tab()
+   (app.js) y Crear planta —el único botón negro— solo se ve en Stock. #}
+<div class="barra-m" id="barra-m">
+  <button class="hamb-movil" type="button" aria-label="Abrir el menú" aria-expanded="false">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+  </button>
+  <b class="bm-titulo" id="bm-titulo">Inicio</b>
+  <button class="bm-negro" id="bm-crear" type="button" onclick="abrirAgregar()" style="display:none">+ Crear planta</button>
+</div>
 <main>
   {% if sin_proxy %}
   <div class="aviso-error">No hay conexión con el stock: {{ sin_proxy }}. Vuelve a intentar en un momento.</div>
@@ -339,7 +349,10 @@
     {% elif aviso_ajustes == 'email-ocupado' %}<div class="aviso-error">Ese email ya está en uso por otra cuenta de la app.</div>
     {% elif aviso_ajustes == 'email' %}<div class="aviso-error">Ese email no se ve válido. Revísalo e intenta de nuevo.</div>{% endif %}
 
-    <div class="seccion-titulo">Mi cuenta</div>
+    <details class="ajuste-d">
+      <summary><span class="que"><b>Mi cuenta</b><span>Tu email de Google y tu usuario</span></span><span class="flecha">›</span></summary>
+      <div class="ajuste-cuerpo">
+<div class="seccion-titulo">Mi cuenta</div>
     <div class="historial-item acceso-item">
       <div><b>{{ empleada.nombre }}</b><small>usuario: {{ empleada.id }}{% if empleada.email and empleada.email_verificado %} · Google conectado{% endif %}</small></div>
     </div>
@@ -352,10 +365,16 @@
       <button class="boton" type="submit">Guardar email</button>
     </form>
 
+    </div>
+    </details>
+
     {# La hoja de inventario vivía en la pestaña Inventario (hoy fuera del
        menú): el dueño pidió tenerla aquí (16/09/2026). Solo imprime, no
        ajusta nada. #}
-    <div class="seccion-titulo">Hoja de inventario</div>
+    <details class="ajuste-d">
+      <summary><span class="que"><b>Hoja de inventario</b><span>Imprimir la hoja de conteo (PDF)</span></span><span class="flecha">›</span></summary>
+      <div class="ajuste-cuerpo">
+<div class="seccion-titulo">Hoja de inventario</div>
     <div class="inv-card">
       <h3>Imprimir hoja de conteo</h3>
       <p>PDF con todas las plantas y su stock del sistema, con columna vacía para anotar el conteo caminando el vivero. Solo revisión, no ajusta nada.</p>
@@ -367,9 +386,15 @@
       </div>
     </div>
 
+    </div>
+    </details>
+
     {# Sync del calendario con el teléfono (22/09/2026): el enlace ICS que
        se suscribe en iPhone/Mac o Google Calendar. Solo lectura. #}
-    <div class="seccion-titulo">Sync con iPhone o Google Calendar</div>
+    <details class="ajuste-d">
+      <summary><span class="que"><b>Tu calendario en el teléfono</b><span>iPhone, Mac o Google Calendar</span></span><span class="flecha">›</span></summary>
+      <div class="ajuste-cuerpo">
+<div class="seccion-titulo">Sync con iPhone o Google Calendar</div>
     {% if aviso_ajustes == 'enlace-nuevo' %}<div class="aviso-ok">Enlace nuevo. El anterior dejó de funcionar: vuelve a suscribir el teléfono con este.</div>{% endif %}
     <div class="inv-card">
       <h3>Tu calendario en el teléfono</h3>
@@ -420,7 +445,13 @@
     </div>
     {% endif %}
 
-    {% if es_admin %}
+    </div>
+    </details>
+
+    <details class="ajuste-d">
+      <summary><span class="que"><b>Equipo e invitaciones</b><span>Quién entra a la app · números de coworkers</span></span><span class="flecha">›</span></summary>
+      <div class="ajuste-cuerpo">
+{% if es_admin %}
     {% if aviso_ajustes == 'invitada' %}
     <div class="aviso-ok">Invitación creada. Comparte el link (por WhatsApp, por ejemplo): quien lo abra entra con su cuenta de Google.
       {% if inv_nueva %}<button class="btn btn-dorado btn-chico btn-copiar" type="button" data-link="{{ base_publica }}/invitacion/{{ inv_nueva }}" onclick="copiarLink(this)">Copiar link</button>{% endif %}
@@ -508,6 +539,9 @@
       <button class="boton" type="submit">Agregar número</button>
     </form>
     {% endif %}
+
+    </div>
+    </details>
 
     {# Cerrar sesión vive en Ajustes (pedido del dueño, 22/09/2026). #}
     <form method="post" action="/logout" style="margin-top:22px;text-align:center">
@@ -683,6 +717,8 @@
   <button data-tab="stock" onclick="tab('stock',this)"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M12 10C12 6 9 3 4 3c0 5 3 8 8 7z"/><path d="M12 13c0-3.5 2.5-6 7-6 0 4.5-2.5 7-7 6z"/><path d="M7 21h10"/></svg></span>Stock</button>
   <a href="/venta"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg></span>Vender</a>
   <a href="/retail" class="{{ 'on' if activa == 'retail' }}"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7 12 3 4 7v10l8 4 8-4z"/><path d="M12 11 4 7"/><path d="m12 11 8-4"/><path d="M12 11v10"/></svg></span>Retail</a>
+  <a href="/control"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>Control</a>
+  <a href="/crm"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="10" rx="1.5"/><rect x="17" y="4" width="5" height="13" rx="1.5"/></svg></span>CRM</a>
   {% if proyectos_en_nav() %}
   <a href="/proyecto"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h6l2 2h10v10H3z"/></svg></span>Proyectos</a>
   {% endif %}

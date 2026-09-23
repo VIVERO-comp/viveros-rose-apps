@@ -172,6 +172,16 @@ function tab(id, btn) {
   seccion.classList.add("activa");
   // El botón flotante de sugerir planta estorba encima del detalle.
   document.getElementById("fab-agregar").hidden = id === "detalle";
+  // La barra del teléfono: el título acompaña a la pestaña y Crear planta
+  // (el único botón negro) solo se ve en Stock. En el detalle la barra se
+  // esconde entera: ahí mandan ← Volver y Guardar ficha de .det-top.
+  const barra = document.getElementById("barra-m");
+  if (barra) {
+    barra.classList.toggle("oculta", id === "detalle");
+    document.getElementById("bm-titulo").textContent =
+      ({ home: "Inicio", stock: "Stock", inv: "Inventario", ajustes: "Ajustes" })[id] || "";
+    document.getElementById("bm-crear").style.display = id === "stock" ? "" : "none";
+  }
   document.querySelectorAll("nav button").forEach(b => b.classList.remove("on"));
   // Inventario ya no tiene botón en el menú pero su pestaña sigue viva
   // (?tab=inv): en ese caso el menú queda sin selección y ya.
@@ -235,9 +245,15 @@ function abrirEditar(sku) {
   // que ve la tienda.
   document.getElementById("edit-actual").textContent =
     "Físico: " + p.f + " · disponible para vender: " + p.q + " · " + p.c;
-  document.getElementById("edit-input").value = Math.max(p.f, 0);
+  const entrada = document.getElementById("edit-input");
+  entrada.value = Math.max(p.f, 0);
   mostrarErrorEdicion("");
   document.getElementById("modal-editar").classList.add("abierto");
+  // Directo a escribir con el teclado de números (dueño, 23/09/2026: "que
+  // todos se puedan editar con teclado de números para hacerlo más
+  // rápido"): el campo llega enfocado y con el valor seleccionado, así
+  // teclear lo reemplaza sin borrar a mano. Los − / + siguen ahí.
+  requestAnimationFrame(() => { entrada.focus(); entrada.select(); });
 }
 function cerrarEditar() {
   document.getElementById("modal-editar").classList.remove("abierto");
@@ -802,6 +818,13 @@ document.getElementById("lista").addEventListener("click", e => {
     abrirFoto(p.sku);
     return;
   }
+  // Tocar el NÚMERO abre Modificar stock de una (dueño, 23/09/2026: "si
+  // toco el número que modifique el stock de una"); la hoja llega con el
+  // nombre de la planta y el campo listo para teclear.
+  if (e.target.closest(".qty")) {
+    abrirEditar(p.sku);
+    return;
+  }
   // La tarjeta (o la fila, en el teléfono) abre la vista de detalle; el
   // ajuste rápido vive adentro, en el botón Modificar stock.
   abrirDetalle(p.sku);
@@ -920,6 +943,13 @@ const toastPendiente = sessionStorage.getItem("toast-pendiente");
 if (toastPendiente) {
   sessionStorage.removeItem("toast-pendiente");
   toast(toastPendiente);
+}
+
+// Ajustes: en computadora las secciones van abiertas de una; en el
+// teléfono quedan como lista de entradas que se abren al tocar
+// (artefacto aprobado, 23/09/2026).
+if (matchMedia("(min-width: 900px)").matches) {
+  document.querySelectorAll("#tab-ajustes details.ajuste-d").forEach(d => { d.open = true; });
 }
 
 // Los enlaces de la página /venta y la recarga tras guardar un ajuste

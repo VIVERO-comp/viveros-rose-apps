@@ -107,6 +107,68 @@ def diario_de(metodo):
 
 
 # ---------------------------------------------------------------------------
+# Cargos opcionales de una venta o cotización (dueño, 23/09/2026): envío a
+# domicilio (si nosotros le llevamos la planta) e instalación. Cada uno es
+# un producto de servicio en Odoo resuelto por su código —se crea la
+# primera vez que hace falta, como el SV-PERSONALIZADO de cotizaciones— y
+# entra como una línea más de la orden: así sale solo en la cotización, la
+# propuesta y la factura PDF sin tocar las plantillas de los reportes.
+# Sin impuestos, como todo lo del negocio (las plantas van exentas de ITBMS).
+# ---------------------------------------------------------------------------
+
+CARGOS = (
+    {"clave": "envio", "codigo": "SV-ENVIO", "nombre": "Envío a domicilio"},
+    {"clave": "instalacion", "codigo": "SV-INSTALACION", "nombre": "Instalación"},
+)
+CODIGOS_CARGO = {c["codigo"]: c["clave"] for c in CARGOS}
+_cache_cargos = {}
+
+
+def _id_producto_cargo(codigo, nombre):
+    if codigo in _cache_cargos:
+        return _cache_cargos[codigo]
+    ids = _ejecutar("product.product", "search",
+                    [[["default_code", "=", codigo]]],
+                    {"limit": 1, "context": {"active_test": False}})
+    producto_id = ids[0] if ids else _ejecutar("product.product", "create", [{
+        "name": nombre,
+        "default_code": codigo,
+        "type": "service",
+        "list_price": 0.0,
+        "taxes_id": [[6, 0, []]],
+        "invoice_policy": "order",
+    }])
+    if isinstance(producto_id, list):
+        producto_id = producto_id[0]
+    _cache_cargos[codigo] = producto_id
+    return producto_id
+
+
+def lineas_de_cargos(cargos):
+    """Las líneas de orden de los cargos con monto (> 0); {} o montos en
+    cero no agregan nada — son opcionales."""
+    lineas = []
+    for cargo in CARGOS:
+        try:
+            monto = float((cargos or {}).get(cargo["clave"]) or 0)
+        except (TypeError, ValueError):
+            monto = 0.0
+        if monto > 0:
+            lineas.append({
+                "product_id": _id_producto_cargo(cargo["codigo"], cargo["nombre"]),
+                "product_uom_qty": 1,
+                "price_unit": round(monto, 2),
+                # El nombre pelado ("Envío a domicilio", "Instalación") y no
+                # la descripción de venta del producto: el SV-INSTALACION
+                # que ya existía en Odoo promete "preparación de suelo,
+                # siembra…" y el rótulo no debe prometer lo que el cargo no
+                # es (regla de rótulos honestos).
+                "name": cargo["nombre"],
+            })
+    return lineas
+
+
+# ---------------------------------------------------------------------------
 # Catálogo: búsqueda en vivo y fotos cacheadas en disco
 # ---------------------------------------------------------------------------
 
@@ -314,7 +376,7 @@ def guardar_borrador(usuario, nombre, celular, servicios=None, datos=None,
     crudo = None if servicios is None else json.dumps(servicios, ensure_ascii=False)
     libres = None if renglones is None else json.dumps(renglones, ensure_ascii=False)
     extra = None if datos is None else json.dumps(
-        {campo: (datos.get(campo) or "") for campo in CAMPOS_CLIENTE},
+        {campo: (datos.get(campo) or "") for campo in CAMPOS_EXTRA},
         ensure_ascii=False)
     with _db() as con:
         con.execute(
@@ -342,14 +404,14 @@ def borrador_de(usuario):
         fila = con.execute(
             "SELECT nombre, celular, servicios, renglones, extra FROM venta_borrador"
             " WHERE usuario=?", (usuario,)).fetchone()
-    vacio = {campo: "" for campo in CAMPOS_CLIENTE}
+    vacio = {campo: "" for campo in CAMPOS_EXTRA}
     if not fila:
         return {"nombre": "", "celular": "", "servicios": [], "renglones": [], **vacio}
     extra = _json_o_defecto(fila["extra"], {})
     return {"nombre": fila["nombre"], "celular": fila["celular"],
             "servicios": _json_o_defecto(fila["servicios"], []),
             "renglones": _json_o_defecto(fila["renglones"], []),
-            **vacio, **{campo: (extra.get(campo) or "") for campo in CAMPOS_CLIENTE}}
+            **vacio, **{campo: (extra.get(campo) or "") for campo in CAMPOS_EXTRA}}
 
 
 def _limpiar_borrador(usuario):
@@ -537,6 +599,10 @@ def venta_por_token(token):
 # de la lista ese mismo día: no se imprime en la propuesta y su lugar en el
 # bloque lo ocupa ahora el proyecto de la cotización.
 CAMPOS_CLIENTE = ("ruc", "cedula", "correo", "direccion")
+# Lo que el borrador guarda además del nombre y el celular: los datos
+# opcionales del cliente Y los cargos opcionales (envío, instalación), que
+# también tienen que sobrevivir a los reloads de agregar/quitar plantas.
+CAMPOS_EXTRA = CAMPOS_CLIENTE + ("envio", "instalacion")
 
 
 def valores_de_cliente(datos):
@@ -593,28 +659,36 @@ def _cliente_id(nombre, celular="", datos=None):
     return _ejecutar("res.partner", "create", [valores])
 
 
-def crear_cotizacion(empleada, nombre_cliente, celular="", datos=None):
+def crear_cotizacion(empleada, nombre_cliente, celular="", datos=None,
+                     cargos=None):
     """Crea el sale.order borrador (etiqueta LOCAL, diario de ventas normal)
     y el registro local. Devuelve el registro. El carrito y el borrador se
-    limpian solo si Odoo aceptó la orden."""
+    limpian solo si Odoo aceptó la orden. `cargos` son los opcionales de
+    envío/instalación ({clave: monto}); entran como líneas de la orden."""
     usuario = empleada["id"]
     lineas, _total_visto = carrito_de(usuario)
     if not lineas:
         raise ValueError("Agrega al menos una planta a la venta.")
+    extras = lineas_de_cargos(cargos)
     partner = _cliente_id(nombre_cliente, celular, datos)
     orden_id = _ejecutar("sale.order", "create", [{
         "partner_id": partner,
         "tag_ids": [[6, 0, [_id_config("VENTA_TAG_LOCAL")]]],
-        # Sin price_unit: el precio lo pone Odoo (lista de precios vigente).
+        # Sin price_unit en las plantas: el precio lo pone Odoo (lista de
+        # precios vigente); los cargos sí lo traen (es el monto digitado).
         "order_line": [[0, 0, {"product_id": l["producto_id"],
                                "product_uom_qty": l["cantidad"]}]
-                       for l in lineas],
+                       for l in lineas] + [[0, 0, x] for x in extras],
     }])
     if isinstance(orden_id, list):
         orden_id = orden_id[0]
     leido = _ejecutar("sale.order", "read", [[orden_id]],
                       {"fields": ["name", "amount_total"]})[0]
     resumen = ", ".join(f"{l['cantidad']}× {l['nombre']}" for l in lineas)
+    if extras:
+        con_monto = [c["nombre"] for c in CARGOS
+                     if float((cargos or {}).get(c["clave"]) or 0) > 0]
+        resumen += ", " + ", ".join(n.lower() for n in con_monto)
     espejo, oportunidad_id = _espejar_en_crm(
         empleada, nombre_cliente, celular, partner, orden_id,
         leido["name"], leido["amount_total"])

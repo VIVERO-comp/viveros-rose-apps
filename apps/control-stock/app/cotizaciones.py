@@ -573,7 +573,7 @@ def _lineas_por_tipo(tipo, servicios, lineas_catalogo):
 
 def crear_cotizacion(empleada, tipo, nombre, celular, servicios,
                      lineas_catalogo=None, datos_cliente=None,
-                     proyecto_ref=None):
+                     proyecto_ref=None, cargos=None):
     """Crea la cotización de servicio en Odoo: cliente (por teléfono o
     nombre; se crea si no existe), sale.order con la plantilla del tipo y
     las líneas armadas con los servicios que la empleada describió (cada
@@ -589,6 +589,9 @@ def crear_cotizacion(empleada, tipo, nombre, celular, servicios,
         raise ValueError("El nombre del cliente es obligatorio.")
     meta = TIPOS[tipo]
     lineas = _lineas_por_tipo(tipo, servicios, lineas_catalogo)
+    # Los cargos opcionales (envío a domicilio, instalación) al final:
+    # líneas normales de la orden, así salen en la propuesta y la factura.
+    lineas += ventas.lineas_de_cargos(cargos)
 
     partner = _cliente_id(nombre, celular, datos_cliente)
     proyecto = (proyecto_ref or "").strip()
@@ -818,7 +821,8 @@ def _lineas_personalizada(servicios, renglones, lineas_catalogo):
 
 
 def crear_personalizada(empleada, nombre, celular, lineas_catalogo=None,
-                        renglones=None, datos_cliente=None, servicios=None):
+                        renglones=None, datos_cliente=None, servicios=None,
+                        cargos=None):
     """La cotización personalizada: todo lo escribe la empleada. Va en tres
     secciones separadas, como las plantillas de los otros tipos (pedido del
     dueño 17/09/2026): las plantas y materiales del catálogo (con el precio
@@ -830,6 +834,8 @@ def crear_personalizada(empleada, nombre, celular, lineas_catalogo=None,
     if not nombre:
         raise ValueError("El nombre del cliente es obligatorio.")
     lineas = _lineas_personalizada(servicios, renglones, lineas_catalogo)
+    # Los cargos opcionales (envío a domicilio, instalación) al final.
+    lineas += ventas.lineas_de_cargos(cargos)
     partner = _cliente_id(nombre, celular, datos_cliente)
     orden_id = ventas._ejecutar("sale.order", "create", [{
         "partner_id": partner,
@@ -1041,6 +1047,7 @@ def cargar_para_editar(n):
             "product.product", "read", [ids],
             {"fields": ["name", "type", "default_code"]})}
     servicios, plantas, renglones = [], [], []
+    cargos = {}
     seccion, ultimo = "", None
     for linea in lineas:
         tipo_linea = linea.get("display_type")
@@ -1053,6 +1060,13 @@ def cargar_para_editar(n):
                 ultimo["descripcion"] = linea.get("name") or ""
         elif not tipo_linea:
             producto = productos.get(linea["product_id"][0]) if linea.get("product_id") else None
+            # Los cargos opcionales (envío, instalación) van a sus propios
+            # campos del formulario, no a la lista de servicios.
+            if producto and producto.get("default_code") in ventas.CODIGOS_CARGO:
+                clave = ventas.CODIGOS_CARGO[producto["default_code"]]
+                cargos[clave] = _numero_form(linea.get("price_unit") or 0)
+                ultimo = None
+                continue
             if producto and producto.get("type") != "service":
                 plantas.append({
                     "producto_id": producto["id"],
@@ -1089,6 +1103,7 @@ def cargar_para_editar(n):
         "plantas": plantas,
         "renglones": renglones or [{"texto": "", "cantidad": "", "precio": "",
                                     "descripcion": ""}],
+        "cargos": cargos,
     }
 
 
@@ -1129,7 +1144,7 @@ def _plantas_limpias(plantas):
     return limpias
 
 
-def editar_cotizacion(n, servicios, plantas, renglones=None):
+def editar_cotizacion(n, servicios, plantas, renglones=None, cargos=None):
     """Reescribe los renglones de la cotización en Odoo (misma estructura
     que al crearla, descripciones incluidas) y actualiza el total local y
     el ingreso esperado de la oportunidad. Antes de escribir re-verifica
@@ -1157,6 +1172,9 @@ def editar_cotizacion(n, servicios, plantas, renglones=None):
         lineas = _lineas_por_tipo(registro["tipo"], servicios, lineas_catalogo)
     else:
         lineas = _lineas_personalizada(servicios, renglones, lineas_catalogo)
+    # Los cargos opcionales (envío, instalación) se reescriben con el resto:
+    # lo que diga el formulario manda (vacío = se quita el cargo).
+    lineas += ventas.lineas_de_cargos(cargos)
     # [5,0,0] vacía los renglones actuales y los [0,0,...] crean los nuevos,
     # en el mismo write: la orden nunca queda a medias.
     ventas._ejecutar("sale.order", "write", [[orden_id], {

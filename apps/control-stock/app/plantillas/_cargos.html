@@ -1,0 +1,28 @@
+{# Los cargos opcionales de la venta (dueño, 23/09/2026): envío a
+   domicilio —si nosotros le llevamos la planta— e instalación. Con monto
+   entran como una línea más de la orden en Odoo, así salen solos en la
+   cotización, la propuesta y la factura PDF; vacíos no cobran nada.
+
+   Variables (con {% with %} antes del include):
+   - form_cargos   id del <form> al que pertenecen los campos
+   - cargos        valores ya puestos: el borrador en los formularios de
+                   crear, o lo que la cotización tiene en Odoo al editar #}
+<div class="seccion-titulo" style="margin-top:16px">Envío e instalación (opcional)</div>
+<div class="campos-cliente">
+  <div class="campo">
+    <span>Envío a domicilio ($)</span>
+    <input class="dato-cliente" name="envio" form="{{ form_cargos }}"
+           value="{{ cargos.envio or '' }}" type="number" step="0.01" min="0"
+           inputmode="decimal" placeholder="0.00" autocomplete="off"
+           onfocus="this.select()">
+  </div>
+  <div class="campo">
+    <span>Instalación ($)</span>
+    <input class="dato-cliente" name="instalacion" form="{{ form_cargos }}"
+           value="{{ cargos.instalacion or '' }}" type="number" step="0.01" min="0"
+           inputmode="decimal" placeholder="0.00" autocomplete="off"
+           onfocus="this.select()">
+  </div>
+</div>
+<p class="nota-cliente">Con monto se suman al total (salen como una línea
+más en la cotización y la factura); vacíos no cobran nada.</p>

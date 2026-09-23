@@ -20,8 +20,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import (acceso_google, calculos, calendario, calendario_google, retail,
-               calendario_ics, compras, conteos, cotizaciones, coworkers,
-               crm_twenty, datos, fichas, fotos, proyectos, seguridad, ventas)
+               calendario_ics, compras, conteos, control, cotizaciones,
+               coworkers, crm_flujo, crm_twenty, datos, fichas, fotos,
+               proyectos, seguridad, ventas)
 
 app = FastAPI(title="Control Viverorose")
 
@@ -76,6 +77,7 @@ ventas.iniciar_tablas()
 cotizaciones.iniciar_tablas()
 proyectos.iniciar_tablas()
 retail.iniciar_tablas()
+control.iniciar_tablas()
 calendario_ics.iniciar_tablas()
 calendario_google.iniciar_tablas()
 calendario_google.arrancar_hilo()
@@ -885,15 +887,22 @@ def _enlace_whatsapp(request, venta):
 
 
 @app.get("/venta")
-def venta(request: Request, error: str = "", lead: str = "", cliente: str = ""):
+def venta(request: Request, error: str = "", lead: str = "",
+          cliente: str = "", cel: str = ""):
     # La pestaña: el botón grande "+ Nueva venta" y el historial local.
     usuario = request.state.empleada["id"]
     if lead:
         # "Cotizar en Vender" desde la ficha de Retail: queda anotado el
         # lead y la próxima cotización/venta de esta empleada nace
-        # vinculada a él. Redirige a la URL limpia (recargar no lo repone).
+        # vinculada a él. Directo al formulario de Nueva venta con el
+        # nombre y el celular del lead ya puestos (dueño, 23/09/2026:
+        # "debería abrir automáticamente venta de lo que es y el form con
+        # el nombre y número ya puestos"); los leads de Retail son ventas
+        # de plantas, así que "lo que es" siempre es Nueva venta.
         ventas.poner_lead_pendiente(usuario, lead, cliente)
-        return RedirectResponse("/venta", status_code=303)
+        ventas.guardar_borrador(usuario, cliente.strip()[:120],
+                                cel.strip()[:30])
+        return RedirectResponse("/venta/nueva", status_code=303)
     en_curso = 0
     if ventas.configurado():
         try:
@@ -942,10 +951,13 @@ def _cotizaciones_con_estado():
 
 
 @app.post("/venta/lead/quitar")
-def venta_lead_quitar(request: Request):
-    # "No es para este lead": la cotización que viene se crea suelta.
+async def venta_lead_quitar(request: Request):
+    # "No es para este lead": la cotización que viene se crea suelta. Se
+    # vuelve a la pantalla donde estaba el aviso (Vender o Nueva venta).
     ventas.quitar_lead_pendiente(request.state.empleada["id"])
-    return RedirectResponse("/venta", status_code=303)
+    form = await request.form()
+    destino = "/venta/nueva" if form.get("volver") == "nueva" else "/venta"
+    return RedirectResponse(destino, status_code=303)
 
 
 @app.post("/venta/cancelar/{n}")
@@ -968,6 +980,9 @@ def venta_nueva(request: Request, q: str = "", error: str = ""):
         "ventas_activo": ventas.configurado(), "q": q.strip(),
         "resultados": None, "carrito": [], "total_carrito": 0.0,
         "borrador": ventas.borrador_de(usuario),
+        # El aviso "quedará amarrada al lead X" también se ve aquí: llegar
+        # desde Retail aterriza directo en este formulario (23/09/2026).
+        "lead_pendiente": ventas.lead_pendiente(usuario),
         "error_venta": error or None,
     }
     if contexto["ventas_activo"]:
@@ -978,6 +993,12 @@ def venta_nueva(request: Request, q: str = "", error: str = ""):
         except Exception:
             contexto["error_venta"] = ("Sin conexión con Odoo en este momento. "
                                        "Vuelve a intentar en un rato.")
+    # El desglose del total (plantas + envío + instalación) sale pintado
+    # del servidor con lo que diga el borrador; venta.js solo lo refresca
+    # mientras se escribe. El total real lo confirma Odoo al crear.
+    contexto["cargos_montos"] = _cargos_del_form(contexto["borrador"])
+    contexto["total_con_cargos"] = (contexto["total_carrito"]
+                                    + sum(contexto["cargos_montos"].values()))
     return plantillas.TemplateResponse(request, "venta_nueva.html", contexto)
 
 
@@ -1008,13 +1029,26 @@ def venta_buscar(request: Request, q: str = ""):
 
 
 def _datos_cliente_del_form(form):
-    """Los datos opcionales del cliente (empresa, RUC, cédula, correo,
-    dirección) si el formulario los trae; None si no, para no borrar lo ya
-    guardado en el borrador."""
-    if not any(campo in form for campo in ventas.CAMPOS_CLIENTE):
+    """Los datos opcionales del formulario —los del cliente (RUC, cédula,
+    correo, dirección) y los cargos (envío, instalación)— si el formulario
+    los trae; None si no, para no borrar lo ya guardado en el borrador."""
+    if not any(campo in form for campo in ventas.CAMPOS_EXTRA):
         return None
     return {campo: (form.get(campo) or "").strip()[:120]
-            for campo in ventas.CAMPOS_CLIENTE}
+            for campo in ventas.CAMPOS_EXTRA}
+
+
+def _cargos_del_form(form):
+    """Los cargos opcionales (envío a domicilio, instalación) como montos.
+    Vacío o ilegible cuenta como 0: son opcionales, no motivo de error."""
+    cargos = {}
+    for cargo in ventas.CARGOS:
+        crudo = str(form.get(cargo["clave"]) or "").strip().replace(",", ".")
+        try:
+            cargos[cargo["clave"]] = max(float(crudo), 0.0) if crudo else 0.0
+        except ValueError:
+            cargos[cargo["clave"]] = 0.0
+    return cargos
 
 
 def _servicios_del_form(form):
@@ -1099,7 +1133,7 @@ async def venta_cotizar(request: Request):
     try:
         registro = ventas.crear_cotizacion(
             request.state.empleada, form.get("cliente", ""), form.get("celular", ""),
-            _datos_cliente_del_form(form))
+            _datos_cliente_del_form(form), _cargos_del_form(form))
     except ValueError as error:
         return _redirigir_venta(str(error), nueva=True)
     except Exception as error:
@@ -1204,7 +1238,7 @@ async def venta_servicio_crear(request: Request, tipo: str):
         registro = cotizaciones.crear_cotizacion(
             request.state.empleada, tipo, form.get("cliente", ""),
             form.get("celular", ""), servicios, lineas_catalogo, datos_cliente,
-            proyecto_ref)
+            proyecto_ref, cargos=_cargos_del_form(form))
     except ValueError as error:
         return plantillas.TemplateResponse(
             request, "venta_servicio.html",
@@ -1289,7 +1323,8 @@ async def venta_personalizada_crear(request: Request):
         registro = cotizaciones.crear_personalizada(
             request.state.empleada, form.get("cliente", ""),
             form.get("celular", ""), lineas_catalogo, renglones,
-            _datos_cliente_del_form(form), servicios)
+            _datos_cliente_del_form(form), servicios,
+            cargos=_cargos_del_form(form))
     except ValueError as error:
         return plantillas.TemplateResponse(
             request, "venta_personalizada.html",
@@ -1358,6 +1393,7 @@ def _contexto_editar(request, datos_edicion, error=None):
         "servicios": datos_edicion["servicios"],
         "plantas": datos_edicion["plantas"],
         "renglones": datos_edicion["renglones"],
+        "cargos": datos_edicion.get("cargos") or {},
         "error_venta": error or None,
     }
 
@@ -1377,7 +1413,8 @@ async def venta_servicio_editar_guardar(request: Request, n: int):
         [p[:20] for p in form.getlist("renglon_precio")],
         [d[:2000] for d in form.getlist("renglon_descripcion")])
     try:
-        cotizaciones.editar_cotizacion(n, servicios, plantas, renglones)
+        cotizaciones.editar_cotizacion(n, servicios, plantas, renglones,
+                                       cargos=_cargos_del_form(form))
     except ValueError as error:
         # El formulario vuelve con lo escrito, como al crear: un redirect
         # perdería lo que la empleada ya corrigió.
@@ -1427,7 +1464,7 @@ async def venta_pagar(request: Request):
     try:
         registro = ventas.crear_cotizacion(
             request.state.empleada, form.get("cliente", ""), form.get("celular", ""),
-            _datos_cliente_del_form(form))
+            _datos_cliente_del_form(form), _cargos_del_form(form))
     except ValueError as error:
         return _redirigir_venta(str(error), nueva=True)
     except Exception as error:
@@ -1926,10 +1963,6 @@ def calendario_pantalla(request: Request):
     movil = calendario.vista_movil(visibles, estado["dia"], dia_hoy)
     for dia_tira in movil["tira"]:
         dia_tira["liga"] = _liga(estado, dia=dia_tira["iso"], mes=dia_tira["iso"])
-    for fila in movil["horas"]:
-        # Tocar una hora vacía abre el formulario con esa fecha y hora puestas.
-        fila["liga_nueva"] = _liga(estado, nueva="1", fecha=estado["dia"],
-                                   hora=f"{fila['h']:02d}:00")
     movil["ligas"] = {
         "ant": _liga(estado, dia=movil["semana_ant"], mes=movil["semana_ant"]),
         "sig": _liga(estado, dia=movil["semana_sig"], mes=movil["semana_sig"]),
@@ -2126,6 +2159,142 @@ async def retail_fecha(request: Request):
     return RedirectResponse(
         "/retail?aviso=" + quote(
             f"Entrega el {calendario.dmy(entrega)} guardada y puesta en el calendario."),
+        status_code=303)
+
+
+@app.get("/control")
+def control_pantalla(request: Request):
+    """La pestaña Control: el kanban de chats de WhatsApp (versión C del
+    artefacto "Tablero Control", elegida por el dueño el 23/09/2026)."""
+    columnas, por_chat = control.tablero()
+    abierta = por_chat.get(request.query_params.get("abrir", ""))
+    con_motivo = por_chat.get(request.query_params.get("motivo", ""))
+    # La ficha completa del lead (la MISMA del CRM: datos, notas y la
+    # conversación entera) cuando el chat casa con uno; sin lead, la
+    # tarjeta se queda con su ficha corta.
+    ficha = None
+    if abierta and abierta.get("lead_crm_id"):
+        ficha = crm_flujo.detalle(abierta["lead_crm_id"])
+    return plantillas.TemplateResponse(request, "control.html", {
+        "empleada": request.state.empleada,
+        "modo": "muestra" if not crm_twenty.twenty_configurado() else "twenty",
+        "columnas": columnas,
+        "abierta": abierta,
+        "ficha": ficha,
+        "estados": {c["clave"]: c for c in crm_flujo.COLUMNAS},
+        "con_motivo": con_motivo,
+        "motivos": control.MOTIVOS,
+        "dias_ventana": control.DIAS_VENTANA,
+        "aviso": request.query_params.get("aviso"),
+        "error": request.query_params.get("error"),
+    })
+
+
+@app.post("/control/nota")
+async def control_nota(request: Request):
+    """Una nota desde la ficha de Control: el mismo historial del issue de
+    Linear que ven el panel y la pestaña CRM."""
+    form = await request.form()
+    chat, lead, texto = form.get("chat", ""), form.get("lead", ""), form.get("texto", "")
+    if crm_flujo.escribir_nota(lead, texto):
+        return RedirectResponse(
+            f"/control?abrir={quote(chat)}&aviso=" + quote("Nota guardada."),
+            status_code=303)
+    return RedirectResponse(
+        f"/control?abrir={quote(chat)}&error=" + quote(
+            "No se pudo guardar la nota; inténtalo de nuevo."),
+        status_code=303)
+
+
+@app.get("/equipo")
+def equipo_redirige():
+    """La pestaña se renombró a Control (23/09/2026); el enlace viejo vive."""
+    return RedirectResponse("/control", status_code=308)
+
+
+@app.post("/control/mover")
+async def control_mover(request: Request):
+    form = await request.form()
+    chat, columna = form.get("chat", ""), form.get("columna", "")
+    motivo = form.get("motivo", "")
+    # A Inactivo no se llega sin motivo: el drag (o el botón) redirige al
+    # modal que pregunta por qué, y el modal vuelve aquí con el motivo.
+    if columna == "inactivo" and motivo not in control.MOTIVOS:
+        return RedirectResponse(f"/control?motivo={quote(chat)}", status_code=303)
+    error = control.mover(chat, columna, motivo)
+    if error:
+        return RedirectResponse("/control?aviso=" + quote(error), status_code=303)
+    return RedirectResponse("/control", status_code=303)
+
+
+@app.get("/crm")
+def crm_pantalla(request: Request):
+    """La pestaña CRM: el espejo del CRM del admin (pedido del dueño,
+    23/09/2026: "mirror idéntico y sync"). El tablero no se arrastra — el
+    estado se mueve en Linear, igual que en el admin — pero la ficha trae
+    lo mismo que el panel: motivo, notas y la conversación completa."""
+    columnas, inactivos = crm_flujo.tablero()
+    abierta = None
+    if request.query_params.get("abrir"):
+        abierta = crm_flujo.detalle(request.query_params.get("abrir"))
+    return plantillas.TemplateResponse(request, "crm.html", {
+        "empleada": request.state.empleada,
+        "modo": "muestra" if not crm_twenty.twenty_configurado() else "twenty",
+        "columnas": columnas,
+        "inactivos": inactivos,
+        "abierta": abierta,
+        "motivos": crm_flujo.MOTIVOS,
+        "estados": {c["clave"]: c for c in crm_flujo.COLUMNAS},
+        "aviso": request.query_params.get("aviso"),
+        "error": request.query_params.get("error"),
+    })
+
+
+@app.post("/crm/mover")
+async def crm_mover(request: Request):
+    """El drag del kanban: solo hacia En conversación, Pedido pendiente o
+    Ganado (los otros estados los pone el sistema). Mueve el issue en
+    Linear y espeja Twenty, igual que el drag del panel /admin."""
+    form = await request.form()
+    lead, estado = form.get("lead", ""), form.get("estado", "")
+    if crm_flujo.mover_estado(lead, estado):
+        return RedirectResponse("/crm", status_code=303)
+    return RedirectResponse(
+        "/crm?error=" + quote("No se pudo mover el lead; inténtalo de nuevo."),
+        status_code=303)
+
+
+@app.post("/crm/motivo")
+async def crm_motivo(request: Request):
+    """El porqué del lead, como lo registra el panel /admin (mismo campo,
+    mismas labels de Linear y archivo en Odoo cuando la clave del admin
+    está configurada). motivo vacío = quitarlo."""
+    form = await request.form()
+    lead, motivo = form.get("lead", ""), form.get("motivo", "")
+    if crm_flujo.registrar_motivo(lead, motivo):
+        aviso = "Motivo quitado: el lead vuelve a su columna." if not motivo \
+            else "Motivo registrado; el lead pasa a Inactivos, aquí y en el admin."
+        return RedirectResponse(
+            f"/crm?abrir={quote(lead)}&aviso=" + quote(aviso), status_code=303)
+    return RedirectResponse(
+        f"/crm?abrir={quote(lead)}&error=" + quote(
+            "No se pudo escribir el motivo en el CRM; inténtalo de nuevo."),
+        status_code=303)
+
+
+@app.post("/crm/nota")
+async def crm_nota(request: Request):
+    """Una nota sobre el lead: cae como comentario del issue en Linear,
+    firmada — el mismo historial que ven el panel y Abraham en Linear."""
+    form = await request.form()
+    lead, texto = form.get("lead", ""), form.get("texto", "")
+    if crm_flujo.escribir_nota(lead, texto):
+        return RedirectResponse(
+            f"/crm?abrir={quote(lead)}&aviso=" + quote("Nota guardada."),
+            status_code=303)
+    return RedirectResponse(
+        f"/crm?abrir={quote(lead)}&error=" + quote(
+            "No se pudo guardar la nota; inténtalo de nuevo."),
         status_code=303)
 
 

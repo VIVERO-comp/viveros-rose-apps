@@ -13,7 +13,15 @@
   .aviso-lead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--crema);border:1px solid var(--noche-3);border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:10px}
   .aviso-lead form{display:inline;margin-left:auto}
   .btn-liga{background:none;border:0;padding:0;font:inherit;font-size:12.5px;font-weight:600;text-decoration:underline;text-underline-offset:2px;cursor:pointer;color:inherit}
+  /* El celular al lado del nombre (pedido de Abraham, 23/09/2026): para
+     estar seguro de a quién es la venta cuando los nombres se repiten. */
+  .cel-titulo{font-weight:600;color:var(--texto-suave);font-variant-numeric:tabular-nums}
 </style>
+{# La barra única del teléfono (artefacto aprobado, 23/09/2026): el botón
+   negro de Nueva venta vive aquí; el grande de abajo queda para computadora. #}
+{% with bm_titulo='Vender', bm_sub='Ventas locales del vivero',
+        bm_accion_url=('/venta/nueva' if ventas_activo else None),
+        bm_accion_texto='+ Nueva venta' %}{% include '_barra_movil.html' %}{% endwith %}
 <header>
   <div class="brand">
     <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
@@ -47,7 +55,8 @@
   {% else %}
   {# Pantalla simple (pedido del dueño, 22/09/2026): sin textos de ayuda y
      sin el botón "Ver PDF de ejemplo" con su párrafo. Solo las acciones. #}
-  <a class="btn btn-dorado btn-grande" href="/venta/nueva" style="margin-bottom:6px">
+  {# solo-pc: en el teléfono este botón vive en la barra de arriba. #}
+  <a class="btn btn-dorado btn-grande solo-pc" href="/venta/nueva" style="margin-bottom:6px">
     + NUEVA VENTA{% if en_curso %} ({{ en_curso }} planta{{ '' if en_curso == 1 else 's' }} en curso){% endif %}
   </a>
 
@@ -68,8 +77,8 @@
   <div class="venta-item {{ 'pagado' if v.estado == 'pagado' else ('cotizacion' if v.estado == 'cotizacion' else ('cancelada' if v.estado == 'cancelada' else 'parcial')) }}">
     <div class="fila1">
       <div>
-        <b class="titulo">{{ v.orden }} · {{ v.cliente }}</b>
-        <small>{{ v.fecha_texto }}{% if v.celular %} · {{ v.celular }}{% endif %}{% if v.factura %} · Factura {{ v.factura }}{% endif %}{% if v.metodo %} · {{ "Yappy" if v.metodo == "yappy" else "Efectivo" }}{% endif %}</small>
+        <b class="titulo">{{ v.orden }} · {{ v.cliente }}{% if v.celular %} <span class="cel-titulo">· {{ v.celular }}</span>{% endif %}</b>
+        <small>{{ v.fecha_texto }}{% if v.factura %} · Factura {{ v.factura }}{% endif %}{% if v.metodo %} · {{ "Yappy" if v.metodo == "yappy" else "Efectivo" }}{% endif %}</small>
         {% if v.resumen %}<small class="compra">{{ v.resumen }}</small>{% endif %}
       </div>
       {% if v.estado == "pagado" %}<span class="badge b-ok">Pagado</span>
@@ -83,10 +92,10 @@
     <div class="venta-acciones">
       <span>
         {% if v.estado == "cotizacion" %}
-          <a href="/venta/cobrar/{{ v.n }}">Cobrar</a>
-          {% if v.whatsapp %}
-          <a href="{{ v.whatsapp }}" target="_blank" rel="noopener">Mandar cotización</a>
-          {% endif %}
+          {# Solo Facturar (dueño, 23/09/2026: "pon facturar y mandar
+             factura y ya"); el Mandar de la cotización se fue — lo que se
+             manda es la factura, después de facturar. #}
+          <a href="/venta/cobrar/{{ v.n }}">Facturar</a>
           <form class="forma-cancelar" method="post" action="/venta/cancelar/{{ v.n }}"
                 onsubmit="return confirm('Cancela la cotización {{ v.orden }} también en Odoo y no tiene marcha atrás desde la app: para revivirla habría que crear la venta de nuevo. ¿Cancelar?')">
             <button type="submit" class="enlace-sub">Cancelar</button>
@@ -115,8 +124,8 @@
   <div class="venta-item cotizacion" id="cot-{{ c.n }}">
     <div class="fila1">
       <div>
-        <b class="titulo">{{ c.orden }} · {{ c.cliente }}</b>
-        <small>{{ c.fecha_texto }}{% if c.celular %} · {{ c.celular }}{% endif %} · {{ c.etiqueta_tipo }}</small>
+        <b class="titulo">{{ c.orden }} · {{ c.cliente }}{% if c.celular %} <span class="cel-titulo">· {{ c.celular }}</span>{% endif %}</b>
+        <small>{{ c.fecha_texto }} · {{ c.etiqueta_tipo }}</small>
       </div>
       {# El estado REAL en Odoo (una consulta para toda la lista). Editar
          solo mientras siga en cotización: facturada, ni el botón. #}

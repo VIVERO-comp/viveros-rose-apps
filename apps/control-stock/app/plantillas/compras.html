@@ -5,6 +5,8 @@
    18/09/2026): Proyectos, Ventas y Del vivero. En las dos primeras cada
    tarjeta lleva la cuenta del proyecto o de la venta y sus compras debajo. #}
 {% block contenido %}
+{# La barra única del teléfono (artefacto aprobado, 23/09/2026). #}
+{% with bm_titulo='Compras/Gastos', bm_accion_url='/compras/nueva', bm_accion_texto='+ Compra' %}{% include '_barra_movil.html' %}{% endwith %}
 <header>
   <div class="brand">
     <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
@@ -27,7 +29,7 @@
     servidor, así que Compras/Gastos está apagado. Avísale a Abraham.</div>
   {% else %}
 
-  <a class="btn btn-dorado btn-grande" href="/compras/nueva">+ NUEVA COMPRA</a>
+  <a class="btn btn-dorado btn-grande solo-pc" href="/compras/nueva">+ NUEVA COMPRA</a>
 
   <div class="totales" style="margin-top:12px">
     <div class="tot"><b>{{ resumen.proyectos | dinero }}</b><span>en proyectos</span></div>

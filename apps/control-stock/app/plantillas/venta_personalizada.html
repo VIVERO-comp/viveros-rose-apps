@@ -2,6 +2,8 @@
 {% block titulo %}Personalizado — Control Viverorose{% endblock %}
 
 {% block contenido %}
+{# La barra única del teléfono (artefacto aprobado, 23/09/2026). #}
+{% with bm_titulo='Cotización personalizada', bm_volver='/venta' %}{% include '_barra_movil.html' %}{% endwith %}
 <header>
   <div class="brand">
     <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
@@ -28,6 +30,8 @@
 
   {# ---- Cliente ---- #}
   {% with form_cliente="form-servicio" %}{% include "_cliente.html" %}{% endwith %}
+
+  {% with form_cargos="form-servicio", cargos={'envio': borrador.envio, 'instalacion': borrador.instalacion} %}{% include "_cargos.html" %}{% endwith %}
 
   {# ---- Plantas del catálogo (opcional): con el precio de Odoo ---- #}
   <div class="seccion-titulo" style="margin-top:16px">Plantas y materiales</div>
@@ -91,7 +95,7 @@
           <input type="hidden" name="volver" value="/venta/servicio-personalizada">
           <input class="valor" name="cantidad" type="number" min="0" step="1"
                  inputmode="numeric" value="{{ l.cantidad }}"
-                 aria-label="Cantidad" onchange="this.form.submit()">
+                 aria-label="Cantidad" onfocus="this.select()" onchange="this.form.submit()">
         </form>
         <form method="post" action="/venta/carrito/cantidad">
           <input type="hidden" name="producto_id" value="{{ l.producto_id }}">

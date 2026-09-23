@@ -468,7 +468,8 @@ def test_borrador_sobrevive_los_reloads(cliente_venta):
     cliente_venta.post("/venta/cotizar", data={"cliente": "María", "celular": "6567-3062"})
     assert ventas.borrador_de("genesis") == {
         "nombre": "", "celular": "", "servicios": [], "renglones": [],
-        "ruc": "", "cedula": "", "correo": "", "direccion": ""}
+        "ruc": "", "cedula": "", "correo": "", "direccion": "",
+        "envio": "", "instalacion": ""}
 
 
 def test_cancelar_cotizacion(cliente_venta, odoo):
@@ -540,8 +541,11 @@ def test_cotizacion_publica_por_whatsapp(cliente_venta, odoo):
     cliente_venta.post("/venta/cotizar",
                        data={"cliente": "María", "celular": "6123-4567"})
     pagina = cliente_venta.get("/venta")
-    assert "Mandar cotizaci\u00f3n" in pagina.text
-    assert "wa.me/50761234567" in pagina.text
+    # "Mandar cotización" se fue de las ventas locales (dueño, 23/09/2026:
+    # "pon facturar y mandar factura y ya"); la ruta pública /f/<token>
+    # sigue viva y se manda la FACTURA después de facturar.
+    assert "Mandar cotizaci\u00f3n" not in pagina.text
+    assert ">Facturar<" in pagina.text
     registro = ventas.ventas_todas()[0]
     token = ventas.obtener_venta(registro["n"])["token"]
     cliente_venta.cookies.clear()

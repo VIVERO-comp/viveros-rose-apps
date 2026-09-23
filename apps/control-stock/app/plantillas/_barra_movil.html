@@ -1,0 +1,24 @@
+{# La barra única del teléfono (diseño aprobado en el artefacto, 23/09/2026):
+   hamburguesa · título · acción. Es la ÚNICA pieza fija arriba en móvil y
+   reemplaza al botón flotante de la esquina; en computadora el CSS la
+   esconde y manda el sidebar de siempre.
+
+   Variables (con {% set %} antes del include):
+   - bm_titulo            el título de la pantalla
+   - bm_sub               subtítulo chico debajo (opcional)
+   - bm_volver            URL: pinta "← Volver" en vez de la hamburguesa
+                          (para los formularios de pantalla completa)
+   - bm_accion_url/texto  la acción principal, el único botón negro
+   - bm_accion_id         para acciones que maneja JS (app.html): pinta el
+                          botón sin href y con ese id #}
+<div class="barra-m">
+  {% if bm_volver %}
+  <a class="bm-volver" href="{{ bm_volver }}">← Volver</a>
+  {% else %}
+  <button class="hamb-movil" type="button" aria-label="Abrir el menú" aria-expanded="false">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+  </button>
+  {% endif %}
+  <b class="bm-titulo">{{ bm_titulo }}{% if bm_sub %}<small>{{ bm_sub }}</small>{% endif %}</b>
+  {% if bm_accion_url %}<a class="bm-negro" href="{{ bm_accion_url }}">{{ bm_accion_texto }}</a>{% endif %}
+</div>

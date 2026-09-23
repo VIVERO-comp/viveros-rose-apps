@@ -2,6 +2,8 @@
 {% block titulo %}{{ p.ref }} — Control Viverorose{% endblock %}
 
 {% block contenido %}
+{# La barra única del teléfono (artefacto aprobado, 23/09/2026). #}
+{% with bm_titulo=p.nombre, bm_volver='/proyecto' %}{% include '_barra_movil.html' %}{% endwith %}
 <style>
 .resumen-plata { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:4px 0 14px }
 .dato-plata { background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1);

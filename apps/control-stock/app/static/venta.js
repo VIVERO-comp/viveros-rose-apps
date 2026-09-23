@@ -129,13 +129,13 @@ function sincronizarCliente() {
     const datos = new FormData();
     datos.append("cliente", nombre);
     datos.append("celular", celular);
-    // Los datos opcionales del cliente (empresa, RUC, cédula, correo,
-    // dirección) y los renglones ya escritos viajan también: agregar o
-    // quitar una planta recarga la página y sin esto se perderían.
-    if (camposCliente) {
-      for (const campo of camposCliente.querySelectorAll(".dato-cliente")) {
-        datos.append(campo.name, campo.value);
-      }
+    // Los datos opcionales del cliente (RUC, cédula, correo, dirección),
+    // los cargos (envío, instalación) y los renglones ya escritos viajan
+    // también: agregar o quitar una planta recarga la página y sin esto se
+    // perderían. Se recorren TODOS los .dato-cliente de la página, no solo
+    // los del bloque Cliente: los cargos viven en su propia sección.
+    for (const campo of document.querySelectorAll(".dato-cliente")) {
+      datos.append(campo.name, campo.value);
     }
     if (contenedorServicios) {
       datos.append("servicios", "1");
@@ -166,9 +166,35 @@ function sincronizarCliente() {
 for (const entrada of [entradaNombre, entradaCelular]) {
   if (entrada) entrada.addEventListener("input", sincronizarCliente);
 }
-if (camposCliente) {
-  for (const campo of camposCliente.querySelectorAll(".dato-cliente")) {
-    campo.addEventListener("input", sincronizarCliente);
+for (const campo of document.querySelectorAll(".dato-cliente")) {
+  campo.addEventListener("input", sincronizarCliente);
+}
+
+/* El desglose de Nueva venta (23/09/2026): mientras se escribe un cargo,
+   su renglón aparece y el total lo suma — el mismo desglose que va a
+   imprimir el PDF. Lo inicial lo pinta el servidor (con el borrador); el
+   monto que manda es el que confirma Odoo al crear la orden. */
+const desglose = document.getElementById("desglose");
+function pintarDesglose() {
+  if (!desglose) return;
+  let total = parseFloat(desglose.dataset.plantas) || 0;
+  for (const clave of ["envio", "instalacion"]) {
+    const campo = document.querySelector(`.dato-cliente[name="${clave}"]`);
+    const fila = document.getElementById("linea-" + clave);
+    const monto = campo ? Math.max(parseFloat(campo.value) || 0, 0) : 0;
+    if (fila) {
+      fila.style.display = monto > 0 ? "" : "none";
+      fila.querySelector("b").textContent = "$" + monto.toFixed(2);
+    }
+    total += monto;
+  }
+  const totalFinal = document.getElementById("total-final");
+  if (totalFinal) totalFinal.textContent = "$" + total.toFixed(2);
+}
+if (desglose) {
+  for (const clave of ["envio", "instalacion"]) {
+    const campo = document.querySelector(`.dato-cliente[name="${clave}"]`);
+    if (campo) campo.addEventListener("input", pintarDesglose);
   }
 }
 

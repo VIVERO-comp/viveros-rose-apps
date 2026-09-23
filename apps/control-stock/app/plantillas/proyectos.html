@@ -2,6 +2,8 @@
 {% block titulo %}Proyectos — Control Viverorose{% endblock %}
 
 {% block contenido %}
+{# La barra única del teléfono (artefacto aprobado, 23/09/2026). #}
+{% with bm_titulo='Proyectos', bm_accion_url='/proyecto/nuevo', bm_accion_texto='+ Proyecto' %}{% include '_barra_movil.html' %}{% endwith %}
 {# El CSS del tablero vive aquí y no en styles.css a propósito: es lo único
    de la app con scroll horizontal por columnas y no lo usa ninguna otra
    pantalla. #}
@@ -49,7 +51,7 @@
   <div class="aviso-error">La conexión con Odoo no está configurada en este
     servidor, así que Proyectos está apagado. Avísale a Abraham.</div>
   {% else %}
-  <a class="btn btn-dorado btn-grande" href="/proyecto/nuevo">+ CREAR PROYECTO</a>
+  <a class="btn btn-dorado btn-grande solo-pc" href="/proyecto/nuevo">+ CREAR PROYECTO</a>
 
   <div class="tablero">
     {% for columna in columnas %}

@@ -2,6 +2,9 @@
 {% block titulo %}Nueva venta — Control Viverorose{% endblock %}
 
 {% block contenido %}
+{# Formulario largo = pantalla completa con ← Volver arriba (artefacto
+   aprobado, 23/09/2026); el encabezado grande queda para computadora. #}
+{% with bm_titulo='Nueva venta', bm_volver='/venta' %}{% include '_barra_movil.html' %}{% endwith %}
 <header>
   <div class="brand">
     <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
@@ -17,6 +20,20 @@
 
   {% if error_venta %}
   <div class="aviso-error">{{ error_venta }}</div>
+  {% endif %}
+
+  {# Vino de la ficha de un lead en Retail: esta venta nace amarrada a ese
+     lead; los estilos .aviso-lead viven en venta.html, aquí va la versión
+     con las clases de base.html. #}
+  {% if lead_pendiente %}
+  <div class="aviso-ok" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <span>Esta venta quedará amarrada al lead
+      <b>{{ lead_pendiente.ref }}{% if lead_pendiente.nombre %} · {{ lead_pendiente.nombre }}{% endif %}</b>.</span>
+    <form method="post" action="/venta/lead/quitar" style="margin-left:auto">
+      <input type="hidden" name="volver" value="nueva">
+      <button class="enlace-sub" type="submit" style="background:none;border:0;cursor:pointer">No es para este lead</button>
+    </form>
+  </div>
   {% endif %}
 
   {% if not ventas_activo %}
@@ -90,7 +107,7 @@
           <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
           <input class="valor" name="cantidad" type="number" min="0" step="1"
                  inputmode="numeric" value="{{ l.cantidad }}"
-                 aria-label="Cantidad" onchange="this.form.submit()">
+                 aria-label="Cantidad" onfocus="this.select()" onchange="this.form.submit()">
         </form>
         <form method="post" action="/venta/carrito/cantidad">
           <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
@@ -101,15 +118,32 @@
     </div>
     {% endfor %}
 
-    <div class="total-venta">
-      <span>Total (precios de Odoo)</span>
-      <b>{{ total_carrito | dinero }}</b>
+    {# Los cargos van pegados al total (dueño, 23/09/2026: "no veo lo de
+       envío ni instalación"): se escriben aquí y el desglose de abajo los
+       suma en vivo. #}
+    {% with form_cargos="form-acciones", cargos={'envio': borrador.envio, 'instalacion': borrador.instalacion} %}{% include "_cargos.html" %}{% endwith %}
+
+    {# El desglose espeja los renglones del PDF: cada cargo es una línea.
+       Lo inicial lo pinta el servidor (borrador); venta.js solo lo
+       refresca mientras se escribe. El total real lo confirma Odoo. #}
+    <div class="total-venta desglose" id="desglose"
+         data-plantas="{{ '%.2f' | format(total_carrito) }}">
+      <div class="linea-total"><span>Plantas (precios de Odoo)</span><b>{{ total_carrito | dinero }}</b></div>
+      <div class="linea-total" id="linea-envio"
+           {% if not cargos_montos.envio %}style="display:none"{% endif %}>
+        <span>Envío a domicilio</span><b>{{ cargos_montos.envio | dinero }}</b></div>
+      <div class="linea-total" id="linea-instalacion"
+           {% if not cargos_montos.instalacion %}style="display:none"{% endif %}>
+        <span>Instalación</span><b>{{ cargos_montos.instalacion | dinero }}</b></div>
+      <div class="linea-total total-final"><span>Total</span><b id="total-final">{{ total_con_cargos | dinero }}</b></div>
     </div>
 
+    {# Un solo botón (dueño, 23/09/2026: "lo de pagado quítalo, solo pon
+       generar cotización y ya"): toda venta nace como cotización y el
+       cobro se hace después con el "Cobrar" de la lista de Vender. #}
     <form method="post" action="/venta/cotizar" id="form-acciones">
       <div class="botones-venta">
-        <button class="btn btn-dorado btn-grande" formaction="/venta/pagar" type="submit">PAGADO Y CONFIRMAR PEDIDO</button>
-        <button class="btn btn-linea btn-grande" type="submit">GENERAR COTIZACIÓN</button>
+        <button class="btn btn-dorado btn-grande" type="submit">GENERAR COTIZACIÓN</button>
       </div>
     </form>
   {% endif %}

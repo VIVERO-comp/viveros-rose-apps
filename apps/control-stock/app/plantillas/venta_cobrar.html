@@ -1,20 +1,22 @@
 {% extends "base.html" %}
-{% block titulo %}Cobrar venta — Control Viverorose{% endblock %}
+{% block titulo %}Facturar — Control Viverorose{% endblock %}
 
 {% block contenido %}
+{# La barra única del teléfono (artefacto aprobado, 23/09/2026). #}
+{% with bm_titulo='Facturar', bm_volver='/venta' %}{% include '_barra_movil.html' %}{% endwith %}
 <header>
   <div class="brand">
     <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
     <div>
-      <h1>Cobrar venta</h1>
+      <h1>Facturar</h1>
       <small>{{ v.orden }} · {{ v.cliente }}</small>
     </div>
   </div>
-  <a class="x-salir" href="/venta" aria-label="Salir sin cobrar">✕</a>
+  <a class="x-salir" href="/venta" aria-label="Salir sin facturar">✕</a>
 </header>
 
 <main class="angosto">
-  <a class="volver" href="/venta">← Volver a Crear venta</a>
+  <a class="volver" href="/venta">← Volver a Vender</a>
 
   <div class="inv-card resumen-cobro">
     <div class="fila"><span>Creada</span><b>{{ v.fecha_texto }}</b></div>
@@ -51,9 +53,9 @@
     </div>
     <div class="botones-venta">
       <button class="btn btn-dorado btn-grande" type="submit">
-        {% if v.ultimo_error %}REINTENTAR COBRO{% else %}CONFIRMAR PAGO Y PEDIDO{% endif %}
+        {% if v.ultimo_error %}REINTENTAR FACTURACIÓN{% else %}FACTURAR{% endif %}
       </button>
-      <a class="btn btn-linea btn-grande" href="/venta">Volver sin cobrar</a>
+      <a class="btn btn-linea btn-grande" href="/venta">Volver sin facturar</a>
     </div>
     <p class="edit-nota" style="margin-top:14px">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>

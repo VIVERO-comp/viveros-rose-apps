@@ -2,6 +2,8 @@
 {% block titulo %}Editar {{ registro.orden }} — Control Viverorose{% endblock %}
 
 {% block contenido %}
+{# La barra única del teléfono (artefacto aprobado, 23/09/2026). #}
+{% with bm_titulo='Editar ' ~ registro.orden, bm_volver='/venta#cot-' ~ registro.n %}{% include '_barra_movil.html' %}{% endwith %}
 <header>
   <div class="brand">
     <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
@@ -24,6 +26,8 @@
      solo se muestra de quién es la cotización. #}
   <div class="seccion-titulo" style="margin-top:16px">Cliente</div>
   <p class="nada-venta">{{ registro.cliente }}{% if registro.celular %} · {{ registro.celular }}{% endif %}</p>
+
+  {% with form_cargos="form-servicio", cargos=cargos %}{% include "_cargos.html" %}{% endwith %}
 
   <form id="form-servicio" method="post"
         action="/venta/servicio/{{ registro.n }}/editar" style="display:none"></form>

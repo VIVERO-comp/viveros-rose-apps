@@ -306,14 +306,17 @@ def test_proyectos_se_esconde_con_la_bandera(cliente, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_la_pagina_trae_la_vista_del_telefono(cliente):
-    """La misma página trae la tira de la semana, la agenda del día, el
-    navbar de abajo compartido y el "+" flotante; el CSS decide qué se ve."""
+    """La misma página trae la barra del teléfono, la tira de la semana, la
+    lista del día y el cajón del menú; el CSS decide qué se ve. El "+"
+    flotante se fue: crear actividad es el botón negro de la barra
+    (artefacto aprobado, 23/09/2026)."""
     cuerpo = _abrir(cliente).text
+    assert "barra-m" in cuerpo
     assert "mov-tira" in cuerpo
-    assert "mov-agenda" in cuerpo
+    assert "mov-lista" in cuerpo
     assert cuerpo.count("mov-dia") >= 7  # los siete días de la semana
-    assert 'class="fab"' in cuerpo
-    assert "<nav>" in cuerpo  # el navbar de _nav.html
+    assert 'class="fab"' not in cuerpo
+    assert "<nav>" in cuerpo  # el cajón de _nav.html
 
 
 def test_vista_movil_un_dia_a_la_vez():
@@ -322,23 +325,15 @@ def test_vista_movil_un_dia_a_la_vez():
     movil = calendario.vista_movil(actividades, dia, dia)
     assert len(movil["tira"]) == 7
     assert [d for d in movil["tira"] if d["sel"]][0]["iso"] == dia
-    # Todas las actividades DEL DÍA caen en alguna fila de hora (listar
-    # también trae atrasadas de otros días; esas no son de esta agenda).
+    # La agenda del día lista SOLO las actividades del día, en orden de
+    # hora y con su rango legible (sin rejilla de horas vacías; artefacto
+    # aprobado el 23/09/2026).
     del_dia = [a for a in actividades if a["fecha"] == dia]
-    en_filas = sum(len(f["actividades"]) for f in movil["horas"])
-    assert en_filas == movil["total"] == len(del_dia)
-    # Y las de la misma hora se apilan (traen su rango legible, no posición).
-    for fila in movil["horas"]:
-        for a in fila["actividades"]:
-            assert "–" in a["rango"]
-
-
-def test_tocar_una_hora_vacia_preselecciona_fecha_y_hora(cliente):
-    import re
-    cuerpo = _abrir(cliente).text
-    # Cada fila VACÍA de la agenda enlaza al formulario con fecha y hora ya
-    # puestas (las ocupadas muestran sus tarjetas, no un enlace de crear).
-    assert re.search(r'nueva=1&(?:amp;)?fecha=[^"&]+&(?:amp;)?hora=\d{2}%3A00', cuerpo)
+    assert len(movil["actividades"]) == movil["total"] == len(del_dia)
+    horas = [a["hora"] for a in movil["actividades"]]
+    assert horas == sorted(horas)
+    for a in movil["actividades"]:
+        assert "–" in a["rango"]
 
 
 def test_error_al_crear_conserva_lo_escrito(cliente, monkeypatch):

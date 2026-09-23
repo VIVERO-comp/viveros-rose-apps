@@ -10,6 +10,8 @@
    proyecto: las plantas de un proyecto vienen en un contenedor comprado
    para ese proyecto y nunca fueron stock del vivero. #}
 {% block contenido %}
+{# La barra única del teléfono (artefacto aprobado, 23/09/2026). #}
+{% with bm_titulo=('Editar compra' if compra else 'Nueva compra'), bm_volver='/compras?vista=' ~ vista %}{% include '_barra_movil.html' %}{% endwith %}
 <header>
   <div class="brand">
     <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
