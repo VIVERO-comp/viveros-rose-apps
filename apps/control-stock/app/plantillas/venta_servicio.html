@@ -32,6 +32,25 @@
      dentro de forms). #}
   <form id="form-servicio" method="post" action="/venta/servicio/{{ tipo }}" style="display:none"></form>
 
+  {# ---- Cómo se cobra (solo el Alquiler, 23/09/2026) ----
+     Dos botones: el que está puesto se ve marcado. Es un POST y no un
+     interruptor de navegador porque el modo se guarda en el servidor: al
+     agregar una planta la pantalla se recarga y tiene que seguir igual. #}
+  {% if meta.cobro_elegible %}
+  <div class="seccion-titulo">Cómo se cobra</div>
+  <form class="cobro-modos" method="post" action="/venta/cobro">
+    <input type="hidden" name="volver" value="/venta/servicio/{{ tipo }}">
+    <input type="hidden" name="proyecto" value="{{ proyecto or '' }}">
+    <button type="submit" name="cobro" value="total"
+            class="{{ 'puesto' if not por_planta }}">Total del evento</button>
+    <button type="submit" name="cobro" value="planta"
+            class="{{ 'puesto' if por_planta }}">Precio por planta</button>
+  </form>
+  <p class="nota-cliente">{% if por_planta %}Cada planta lleva su precio de
+    alquiler y eso es lo que se cobra.{% else %}Un solo monto por el alquiler
+    completo; las plantas se listan sin precio.{% endif %}</p>
+  {% endif %}
+
   {# ---- Cliente ---- #}
   {% with form_cliente="form-servicio" %}{% include "_cliente.html" %}{% endwith %}
 
@@ -42,7 +61,8 @@
        "+ Añadir otro servicio" clona el renglón (venta.js). Cada uno sale
        como una línea del producto de servicio del tipo. #}
     {% if seccion.servicios %}
-    <div class="seccion-titulo" style="margin-top:16px">{{ seccion.titulo }}</div>
+    <div class="seccion-titulo" style="margin-top:16px">{{
+      "Transporte y montaje (opcional)" if por_planta else seccion.titulo }}</div>
     <div id="servicios" data-ejemplo="{{ seccion.servicios.ejemplo }}">
       {% for s in servicios %}
       <div class="servicio">
@@ -75,9 +95,13 @@
 
     {% if seccion.catalogo %}
     <div class="seccion-titulo" style="margin-top:16px">{{ seccion.titulo }}</div>
-    {% if seccion.catalogo == "informativo" %}
+    {% if seccion.catalogo == "informativo" and not por_planta %}
     <p class="nada-venta">Se listan en la propuesta sin precio: lo que se
       cobra son los montos de arriba.</p>
+    {% endif %}
+    {% if por_planta %}
+    <p class="nada-venta">Ponle a cada planta su precio de alquiler. La que
+      dejes sin precio sale en la propuesta de referencia, sin cobrar.</p>
     {% endif %}
     {# Buscador compacto (pedido del dueño, 22/09/2026): solo el campo de
        texto, sin la caja grande con lupa. #}
@@ -122,8 +146,12 @@
         <div class="foto">🪴<img src="/venta/foto/{{ l.producto_id }}" alt="" loading="lazy" onerror="this.remove()"></div>
         <div class="info">
           <b>{{ l.nombre }}</b>
-          <span>{{ l.sku }}{% if seccion.catalogo == "precio" %} · {{ l.precio | dinero }} c/u{% endif %}</span>
-          {% if seccion.catalogo == "precio" %}<span class="precio"><b>{{ l.importe | dinero }}</b></span>{% endif %}
+          <span>{{ l.sku }}</span>
+          {% if seccion.catalogo == "precio" or por_planta %}
+          {% with linea=l, volver='/venta/servicio/' ~ tipo, proyecto=proyecto,
+                  alquiler=por_planta %}{% include "_precio_carrito.html" %}{% endwith %}
+          <span class="precio"><b>{{ l.importe | dinero }}</b></span>
+          {% endif %}
           <form method="post" action="/venta/carrito/quitar" class="sin-margen">
             <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
             <input type="hidden" name="volver" value="/venta/servicio/{{ tipo }}">
@@ -159,9 +187,9 @@
         </div>
       </div>
       {% endfor %}
-      {% if seccion.catalogo == "precio" %}
+      {% if seccion.catalogo == "precio" or por_planta %}
       <div class="total-venta">
-        <span>Subtotal plantas y materiales</span>
+        <span>{{ "Alquiler de las plantas" if por_planta else "Subtotal plantas y materiales" }}</span>
         <b>{{ total_carrito | dinero }}</b>
       </div>
       {% endif %}

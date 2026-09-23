@@ -620,8 +620,23 @@ def test_los_demas_tipos_lo_muestran_fijo_solo_si_vienen_de_la_ficha(odoo, clien
 
 def test_el_campo_proyecto_esta_aunque_no_haya_ninguno(odoo, cliente):
     # Sin proyectos en Odoo el campo NO puede desaparecer: si no, parece que
-    # la pantalla no lo tuviera (fue justo lo que pasó en producción).
+    # la pantalla no lo tuviera (fue justo lo que pasó en producción). El
+    # aviso "todavía no hay proyectos" se quitó el 23/09/2026: queda el
+    # botón de crear uno, que es lo que hay que hacer.
     pagina = cliente.get("/venta/servicio/proyecto")
     assert 'name="proyecto"' in pagina.text
-    assert "Todavía no hay proyectos." in pagina.text
+    assert "+ Crear proyecto" in pagina.text
     assert "/proyecto/nuevo" in pagina.text
+
+
+def test_sin_lista_de_proyectos_no_se_avisa_de_odoo_caido(odoo, cliente, monkeypatch):
+    # Que no se pueda listar los proyectos no es que Odoo esté caído: la
+    # pantalla no puede pintar el aviso rojo por eso (23/09/2026).
+    def revienta():
+        raise RuntimeError("Odoo dijo que no")
+
+    monkeypatch.setattr(proyectos, "para_elegir", revienta)
+    pagina = cliente.get("/venta/servicio/proyecto")
+    assert pagina.status_code == 200
+    assert "Sin conexión con Odoo" not in pagina.text
+    assert "+ Crear proyecto" in pagina.text

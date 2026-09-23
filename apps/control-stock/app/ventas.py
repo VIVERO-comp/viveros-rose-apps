@@ -318,7 +318,8 @@ def iniciar_tablas():
                 celular TEXT NOT NULL DEFAULT '',
                 servicios TEXT,             -- JSON de los renglones de servicio
                 renglones TEXT,             -- JSON de los renglones libres (personalizada)
-                extra TEXT                  -- JSON de los datos opcionales del cliente
+                extra TEXT,                 -- JSON de los datos opcionales del cliente
+                cobro TEXT                  -- 'total' | 'planta' (alquiler)
             );
             CREATE TABLE IF NOT EXISTS ventas_locales (
                 n INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -353,6 +354,9 @@ def iniciar_tablas():
             con.execute("ALTER TABLE venta_borrador ADD COLUMN renglones TEXT")
         if "extra" not in columnas_borrador:
             con.execute("ALTER TABLE venta_borrador ADD COLUMN extra TEXT")
+        # Migración suave: cómo se cobra el alquiler (23/09/2026).
+        if "cobro" not in columnas_borrador:
+            con.execute("ALTER TABLE venta_borrador ADD COLUMN cobro TEXT")
         # Migración suave: la tabla pudo nacer sin la columna celular.
         columnas = [fila[1] for fila in con.execute("PRAGMA table_info(ventas_locales)")]
         if "celular" not in columnas:
@@ -384,6 +388,14 @@ def iniciar_tablas():
                 nombre TEXT NOT NULL DEFAULT ''
             )
         """)
+
+
+# Cómo se cobra una cotización de alquiler (decisión del dueño,
+# 23/09/2026): por el total del evento, como desde el 14/09/2026, o con el
+# precio de alquiler de cada planta. Por defecto, el de siempre.
+COBRO_TOTAL = "total"
+COBRO_PLANTA = "planta"
+COBROS = (COBRO_TOTAL, COBRO_PLANTA)
 
 
 def guardar_borrador(usuario, nombre, celular, servicios=None, datos=None,
@@ -421,16 +433,31 @@ def _json_o_defecto(crudo, defecto):
 def borrador_de(usuario):
     with _db() as con:
         fila = con.execute(
-            "SELECT nombre, celular, servicios, renglones, extra FROM venta_borrador"
-            " WHERE usuario=?", (usuario,)).fetchone()
+            "SELECT nombre, celular, servicios, renglones, extra, cobro"
+            " FROM venta_borrador WHERE usuario=?", (usuario,)).fetchone()
     vacio = {campo: "" for campo in CAMPOS_EXTRA}
     if not fila:
-        return {"nombre": "", "celular": "", "servicios": [], "renglones": [], **vacio}
+        return {"nombre": "", "celular": "", "servicios": [], "renglones": [],
+                "cobro": COBRO_TOTAL, **vacio}
     extra = _json_o_defecto(fila["extra"], {})
     return {"nombre": fila["nombre"], "celular": fila["celular"],
             "servicios": _json_o_defecto(fila["servicios"], []),
             "renglones": _json_o_defecto(fila["renglones"], []),
+            "cobro": fila["cobro"] if fila["cobro"] in COBROS else COBRO_TOTAL,
             **vacio, **{campo: (extra.get(campo) or "") for campo in CAMPOS_EXTRA}}
+
+
+def guardar_cobro(usuario, modo):
+    """Cómo se cobra el alquiler que la empleada está armando: por el
+    total del evento (como siempre) o con el precio de alquiler de cada
+    planta. Vive en el borrador y no en el formulario porque agregar una
+    planta recarga la pantalla; el modo tiene que sobrevivir a eso."""
+    modo = modo if modo in COBROS else COBRO_TOTAL
+    with _db() as con:
+        con.execute(
+            "INSERT INTO venta_borrador (usuario, cobro) VALUES (?,?)"
+            " ON CONFLICT (usuario) DO UPDATE SET cobro=?",
+            (usuario, modo, modo))
 
 
 def _limpiar_borrador(usuario):
@@ -505,7 +532,7 @@ def sin_lead(limite=6):
     return [dict(f) for f in filas]
 
 
-def carrito_de(usuario):
+def carrito_de(usuario, base_cero=False):
     """[{producto_id, cantidad, sku, nombre, precio, precio_odoo,
     precio_editado, importe}] con precios frescos de Odoo, más el total. Un
     producto que ya no existe en Odoo se descarta del carrito en silencio.
@@ -528,7 +555,11 @@ def carrito_de(usuario):
             continue
         precio_odoo = producto["precio"]
         a_mano = fila["precio"]
-        precio = round(float(a_mano), 2) if a_mano is not None else precio_odoo
+        # `base_cero` es el alquiler: ahí el precio de venta no sirve de
+        # base (rentar una planta no cuesta lo que comprarla), así que una
+        # línea sin precio escrito vale $0 y sale de referencia.
+        base = 0.0 if base_cero else precio_odoo
+        precio = round(float(a_mano), 2) if a_mano is not None else base
         lineas.append({
             "producto_id": fila["producto_id"], "cantidad": fila["cantidad"],
             **producto, "precio": precio, "precio_odoo": precio_odoo,

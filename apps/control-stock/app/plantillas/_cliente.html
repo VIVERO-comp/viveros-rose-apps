@@ -34,10 +34,11 @@
         {{ p.ref }} · {{ p.nombre }}</option>
       {% endfor %}
     </select>
-    {% if not proyectos %}
-    <small class="nota-campo">Todavía no hay proyectos.
-      <a href="/proyecto/nuevo">Crear uno</a></small>
-    {% endif %}
+  </div>
+  <div class="campo campo-ancho">
+    {# Un botón de verdad para crear el proyecto (pedido del dueño,
+       23/09/2026), en vez del enlace chiquito con su aviso al lado. #}
+    <a class="anadir-servicio boton-enlace" href="/proyecto/nuevo">+ Crear proyecto</a>
   </div>
   {% elif proyecto_nombre %}
   <div class="campo">

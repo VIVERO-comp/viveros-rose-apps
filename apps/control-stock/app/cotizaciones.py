@@ -40,6 +40,10 @@ from . import crm_leads, ventas
 TIPOS = {
     "renta": {
         "etiqueta": "Alquiler",
+        # El alquiler se cobra por el total del evento (lo de siempre) o
+        # con el precio de alquiler de cada planta (23/09/2026): el
+        # formulario muestra el selector solo en los tipos con esto.
+        "cobro_elegible": True,
         "etiqueta_cliente": "Renta / Alquiler",
         "etiqueta_orden": "RENTAL",
         "plantilla": "vivero_rose_pedidos.plantilla_servicio_renta",
@@ -524,16 +528,43 @@ def _servicios_limpios(servicios):
     return limpios
 
 
-def _lineas_por_tipo(tipo, servicios, lineas_catalogo):
+def _linea_catalogo(linea):
+    """El renglón de Odoo de una planta del catálogo. price_unit solo va
+    si el precio se escribió a mano (23/09/2026, "por si le vendo más
+    caro"); sin él manda la lista de precios de Odoo."""
+    renglon = {"product_id": linea["producto_id"],
+               "product_uom_qty": linea["cantidad"]}
+    if linea.get("precio") is not None:
+        renglon["price_unit"] = linea["precio"]
+    return renglon
+
+
+# Los tipos que el addon cobra por el TOTAL (vivero_rose_pedidos,
+# servicio.py: TIPOS_COBRO_TOTAL): sus plantas van informativas en $0.
+COBRO_POR_TOTAL = ("renta", "mantenimiento")
+
+
+def cobra_por_planta(tipo, cobro):
+    """Si esta cotización cobra las plantas una por una en vez de por el
+    total del evento. Solo el alquiler lo permite (23/09/2026)."""
+    return bool(TIPOS.get(tipo, {}).get("cobro_elegible")
+                and cobro == ventas.COBRO_PLANTA)
+
+
+def _lineas_por_tipo(tipo, servicios, lineas_catalogo, cobro=None):
     meta = TIPOS[tipo]
     servicios = _servicios_limpios(servicios)
+    por_planta = cobra_por_planta(tipo, cobro)
     lineas = []
     secuencia = 1
     for seccion in meta["secciones"]:
         cuerpo = []
         config = seccion.get("servicios")
         if config:
-            if not servicios and config["requerido"]:
+            # Cobrando por planta, el renglón de servicio es opcional: lo
+            # que se cobra son las plantas y el servicio queda para el
+            # transporte y el montaje, si los hay.
+            if not servicios and config["requerido"] and not por_planta:
                 raise ValueError("Agrega al menos un servicio con su monto.")
             for renglon in servicios:
                 linea = {
@@ -556,8 +587,7 @@ def _lineas_por_tipo(tipo, servicios, lineas_catalogo):
             # Sin mínimo de plantas (pedido del dueño 17/09/2026): una
             # cotización puede ser solo de servicio, con 0 plantas.
             for linea in lineas_catalogo or []:
-                cuerpo.append({"product_id": linea["producto_id"],
-                               "product_uom_qty": linea["cantidad"]})
+                cuerpo.append(_linea_catalogo(linea))
         if not cuerpo:
             continue
         lineas.append({"display_type": "line_section",
@@ -573,7 +603,7 @@ def _lineas_por_tipo(tipo, servicios, lineas_catalogo):
 
 def crear_cotizacion(empleada, tipo, nombre, celular, servicios,
                      lineas_catalogo=None, datos_cliente=None,
-                     proyecto_ref=None, cargos=None):
+                     proyecto_ref=None, cargos=None, cobro=None):
     """Crea la cotización de servicio en Odoo: cliente (por teléfono o
     nombre; se crea si no existe), sale.order con la plantilla del tipo y
     las líneas armadas con los servicios que la empleada describió (cada
@@ -588,7 +618,8 @@ def crear_cotizacion(empleada, tipo, nombre, celular, servicios,
     if not nombre:
         raise ValueError("El nombre del cliente es obligatorio.")
     meta = TIPOS[tipo]
-    lineas = _lineas_por_tipo(tipo, servicios, lineas_catalogo)
+    por_planta = cobra_por_planta(tipo, cobro)
+    lineas = _lineas_por_tipo(tipo, servicios, lineas_catalogo, cobro)
     # Los cargos opcionales (envío a domicilio, instalación) al final:
     # líneas normales de la orden, así salen en la propuesta y la factura.
     lineas += ventas.lineas_de_cargos(cargos)
@@ -616,6 +647,11 @@ def crear_cotizacion(empleada, tipo, nombre, celular, servicios,
     }
     if oportunidad_id:
         valores_orden["opportunity_id"] = oportunidad_id
+    if por_planta:
+        # El addon fuerza a $0 las plantas de un alquiler (cobro por
+        # evento); esta bandera le dice que en esta cotización no, que el
+        # precio de cada planta es el que se cobra.
+        valores_orden["alquiler_por_planta"] = True
     orden_id = ventas._ejecutar("sale.order", "create", [valores_orden])
     if isinstance(orden_id, list):
         orden_id = orden_id[0]
@@ -779,8 +815,7 @@ def _lineas_personalizada(servicios, renglones, lineas_catalogo):
     creada."""
     cuerpos = [
         ("Plantas y materiales",
-         [{"product_id": linea["producto_id"], "product_uom_qty": linea["cantidad"]}
-          for linea in lineas_catalogo or []]),
+         [_linea_catalogo(linea) for linea in lineas_catalogo or []]),
         ("Servicios",
          [linea
           for servicio in _servicios_limpios(servicios)
@@ -1003,6 +1038,18 @@ def estados_en_odoo(orden_ids):
     return estados
 
 
+def por_planta_en_odoo(orden_id):
+    """Si esa orden quedó marcada como alquiler cobrado por planta. Se
+    pregunta aparte y a prueba de fallos: un Odoo todavía sin la bandera
+    del addon responde que no, que es el comportamiento de siempre."""
+    try:
+        fila = ventas._ejecutar("sale.order", "read", [[orden_id]],
+                                {"fields": ["alquiler_por_planta"]})
+    except Exception:
+        return False
+    return bool(fila and fila[0].get("alquiler_por_planta"))
+
+
 def _titulo_de_linea(linea, producto):
     """El texto que la empleada escribió en una línea de servicio, limpio
     del nombre enlatado del producto (Odoo antepone "[SV-...] Nombre" a lo
@@ -1072,6 +1119,9 @@ def cargar_para_editar(n):
                     "producto_id": producto["id"],
                     "nombre": producto.get("name") or "",
                     "cantidad": _numero_form(linea.get("product_uom_qty") or 0),
+                    # El precio de la cotización, editable igual que la
+                    # cantidad (23/09/2026): puede no ser el de la lista.
+                    "precio": _numero_form(linea.get("price_unit") or 0),
                 })
                 # Una descripción después de una planta no es de nadie.
                 ultimo = None
@@ -1094,9 +1144,16 @@ def cargar_para_editar(n):
                     "monto": _numero_form(linea.get("price_unit") or 0),
                 }
                 servicios.append(ultimo)
+    # Las plantas llevan precio editable salvo en un cobro por total
+    # (alquiler por evento, mantenimiento): ahí Odoo las deja en $0 igual,
+    # así que el campo solo confundiría.
+    por_planta = por_planta_en_odoo(orden_id)
+    cobra_total = registro["tipo"] in COBRO_POR_TOTAL and not por_planta
     return {
         "registro": registro,
         "editable": estado["editable"],
+        "precio_editable": not cobra_total,
+        "cobro": ventas.COBRO_PLANTA if por_planta else ventas.COBRO_TOTAL,
         "facturada": estado["facturada"],
         "cancelada": estado["cancelada"],
         "servicios": servicios or [{"texto": "", "monto": "", "descripcion": ""}],
@@ -1107,23 +1164,26 @@ def cargar_para_editar(n):
     }
 
 
-def plantas_del_formulario(ids, cantidades):
+def plantas_del_formulario(ids, cantidades, precios=None):
     """Las filas de plantas del form de edición (planta_id[] +
-    planta_cantidad[]) emparejadas."""
+    planta_cantidad[] + planta_precio[]) emparejadas."""
     ids, cantidades = list(ids or []), list(cantidades or [])
+    precios = list(precios or [])
     total = max(len(ids), len(cantidades))
 
     def dato(lista, i):
         return lista[i] if i < len(lista) else ""
 
-    return [{"producto_id": dato(ids, i), "cantidad": dato(cantidades, i)}
+    return [{"producto_id": dato(ids, i), "cantidad": dato(cantidades, i),
+             "precio": dato(precios, i)}
             for i in range(total)]
 
 
 def _plantas_limpias(plantas):
-    """[{producto_id, cantidad}] listos para Odoo. Cantidad 0 o vacía
-    QUITA la planta (así se quita sin más botones); una cantidad ilegible
-    avisa en vez de adivinar."""
+    """[{producto_id, cantidad, precio}] listos para Odoo. Cantidad 0 o
+    vacía QUITA la planta (así se quita sin más botones); una cantidad o
+    un precio ilegibles avisan en vez de adivinar. Precio vacío = el que
+    ponga Odoo con su lista de precios."""
     limpias = []
     for planta in plantas or []:
         try:
@@ -1139,8 +1199,19 @@ def _plantas_limpias(plantas):
             raise ValueError("Cantidad inválida en una planta.")
         if cantidad < 0:
             raise ValueError("La cantidad de una planta no puede ser negativa.")
+        precio = str(planta.get("precio") or "").strip().replace(",", ".")
+        if precio:
+            try:
+                precio = round(float(precio), 2)
+            except ValueError:
+                raise ValueError("Precio inválido en una planta.")
+            if precio < 0:
+                raise ValueError("El precio de una planta no puede ser negativo.")
+        else:
+            precio = None
         if cantidad > 0:
-            limpias.append({"producto_id": producto_id, "cantidad": cantidad})
+            limpias.append({"producto_id": producto_id, "cantidad": cantidad,
+                            "precio": precio})
     return limpias
 
 
@@ -1169,7 +1240,9 @@ def editar_cotizacion(n, servicios, plantas, renglones=None, cargos=None):
                 s.get("catalogo") for s in TIPOS[registro["tipo"]]["secciones"]):
             raise ValueError(
                 "Este tipo de cotización no lleva plantas; edítalas en Odoo.")
-        lineas = _lineas_por_tipo(registro["tipo"], servicios, lineas_catalogo)
+        lineas = _lineas_por_tipo(
+            registro["tipo"], servicios, lineas_catalogo,
+            ventas.COBRO_PLANTA if por_planta_en_odoo(orden_id) else None)
     else:
         lineas = _lineas_personalizada(servicios, renglones, lineas_catalogo)
     # Los cargos opcionales (envío, instalación) se reescriben con el resto:

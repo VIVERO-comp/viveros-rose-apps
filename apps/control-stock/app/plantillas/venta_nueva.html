@@ -110,7 +110,9 @@
       <div class="foto">🪴<img src="/venta/foto/{{ l.producto_id }}" alt="" loading="lazy" onerror="this.remove()"></div>
       <div class="info">
         <b>{{ l.nombre }}</b>
-        <span>{{ l.sku }} · {{ l.precio | dinero }} c/u</span>
+        <span>{{ l.sku }}</span>
+        {# El precio se escribe a mano cuando se vende más caro (23/09/2026). #}
+        {% with linea=l, volver='/venta/nueva' %}{% include "_precio_carrito.html" %}{% endwith %}
         <span class="precio"><b>{{ l.importe | dinero }}</b></span>
         <form method="post" action="/venta/carrito/quitar" class="sin-margen">
           <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
@@ -150,7 +152,10 @@
        refresca mientras se escribe. El total real lo confirma Odoo. #}
     <div class="total-venta desglose" id="desglose"
          data-plantas="{{ '%.2f' | format(total_carrito) }}">
-      <div class="linea-total"><span>Plantas (precios de Odoo)</span><b>{{ total_carrito | dinero }}</b></div>
+      {# El rótulo dice la verdad: si alguna línea lleva precio escrito a
+         mano, ya no son "los precios de Odoo" (23/09/2026). #}
+      {% set a_mano = carrito | selectattr('precio_editado') | list %}
+      <div class="linea-total"><span>Plantas{{ ' (con precios a mano)' if a_mano else ' (precios de Odoo)' }}</span><b>{{ total_carrito | dinero }}</b></div>
       <div class="linea-total" id="linea-envio"
            {% if not cargos_montos.envio %}style="display:none"{% endif %}>
         <span>Envío a domicilio</span><b>{{ cargos_montos.envio | dinero }}</b></div>

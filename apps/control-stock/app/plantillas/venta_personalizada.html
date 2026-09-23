@@ -73,7 +73,8 @@
       <div class="foto">🪴<img src="/venta/foto/{{ l.producto_id }}" alt="" loading="lazy" onerror="this.remove()"></div>
       <div class="info">
         <b>{{ l.nombre }}</b>
-        <span>{{ l.sku }} · {{ l.precio | dinero }} c/u</span>
+        <span>{{ l.sku }}</span>
+        {% with linea=l, volver='/venta/servicio-personalizada' %}{% include "_precio_carrito.html" %}{% endwith %}
         <span class="precio"><b>{{ l.importe | dinero }}</b></span>
         <form method="post" action="/venta/carrito/quitar" class="sin-margen">
           <input type="hidden" name="producto_id" value="{{ l.producto_id }}">

@@ -644,6 +644,105 @@ def test_carrito_de_servicio_reusa_el_de_nueva_venta(cliente, odoo):
     assert ventas.carrito_de("genesis") == ([], 0.0)
 
 
+def test_precio_a_mano_viaja_a_la_cotizacion_de_servicio(cliente, odoo):
+    # El mismo precio escrito en el carrito (23/09/2026) vale para las
+    # cotizaciones de servicio que llevan catálogo.
+    cliente.post("/venta/carrito/agregar",
+                 data={"producto_id": 601, "cantidad": 2,
+                       "volver": "/venta/servicio/paisajismo"},
+                 follow_redirects=False)
+    cliente.post("/venta/carrito/precio",
+                 data={"producto_id": 601, "precio": "60",
+                       "volver": "/venta/servicio/paisajismo"},
+                 follow_redirects=False)
+    r = cliente.post("/venta/servicio/paisajismo",
+                     data={"cliente": "Ana", "servicio_texto": "Diseño",
+                           "servicio_monto": "500"})
+    assert "Cotización de servicio creada" in r.text
+    orden = list(odoo.ordenes.values())[-1]
+    planta = next(l for l in orden["lineas"] if l.get("product_id") == 601)
+    assert planta["price_unit"] == 60.0          # el escrito, no los $45 de Odoo
+    assert orden["amount_total"] == 500 + 2 * 60.0
+
+
+# ---------------------------------------------------------------------------
+# El alquiler elige cómo se cobra (decisión del dueño, 23/09/2026): por el
+# total del evento, como desde el 14/09/2026, o con el precio de alquiler
+# de cada planta.
+# ---------------------------------------------------------------------------
+
+def _alquiler_con_planta(cliente, modo, precio=None):
+    """Deja el carrito con una planta y el modo de cobro puesto."""
+    cliente.post("/venta/cobro", data={"cobro": modo,
+                                       "volver": "/venta/servicio/renta"},
+                 follow_redirects=False)
+    cliente.post("/venta/carrito/agregar",
+                 data={"producto_id": 601, "cantidad": 2,
+                       "volver": "/venta/servicio/renta"},
+                 follow_redirects=False)
+    if precio is not None:
+        cliente.post("/venta/carrito/precio",
+                     data={"producto_id": 601, "precio": precio,
+                           "volver": "/venta/servicio/renta"},
+                     follow_redirects=False)
+
+
+def test_alquiler_por_planta_cobra_las_plantas(cliente, odoo):
+    _alquiler_con_planta(cliente, "planta", precio="8")
+    # Sin renglón de servicio: cobrando por planta deja de ser obligatorio.
+    r = cliente.post("/venta/servicio/renta",
+                     data={"cliente": "María", "servicio_texto": "",
+                           "servicio_monto": ""})
+    assert "Cotización de servicio creada" in r.text
+    orden = list(odoo.ordenes.values())[-1]
+    assert orden["vals"]["alquiler_por_planta"] is True
+    planta = next(l for l in orden["lineas"] if l.get("product_id") == 601)
+    assert planta["price_unit"] == 8.0
+    assert orden["amount_total"] == 16.0
+
+
+def test_alquiler_por_evento_sigue_igual(cliente, odoo):
+    _alquiler_con_planta(cliente, "total")
+    # Por evento el servicio sigue siendo obligatorio...
+    r = cliente.post("/venta/servicio/renta",
+                     data={"cliente": "María", "servicio_texto": "",
+                           "servicio_monto": ""})
+    assert "Agrega al menos un servicio" in r.text
+    r = cliente.post("/venta/servicio/renta",
+                     data={"cliente": "María",
+                           "servicio_texto": "Alquiler de 20 plantas",
+                           "servicio_monto": "850"})
+    assert "Cotización de servicio creada" in r.text
+    orden = list(odoo.ordenes.values())[-1]
+    # ...y la planta va sin precio: el addon la deja informativa en $0.
+    assert "alquiler_por_planta" not in orden["vals"]
+    planta = next(l for l in orden["lineas"] if l.get("product_id") == 601)
+    assert "price_unit" not in planta
+
+
+def test_el_modo_de_cobro_sobrevive_a_agregar_una_planta(cliente, odoo):
+    _alquiler_con_planta(cliente, "planta")
+    pagina = cliente.get("/venta/servicio/renta").text
+    assert 'class="puesto">Precio por planta' in pagina
+    assert "Transporte y montaje (opcional)" in pagina
+    # El precio de alquiler arranca VACÍO: los $45 de venta no sirven de base.
+    assert 'value=""' in pagina.split('name="precio"')[1][:200]
+    assert "$45.00" not in pagina.split('id="plantas"')[1]
+
+
+def test_planta_sin_precio_de_alquiler_no_cobra(cliente, odoo):
+    _alquiler_con_planta(cliente, "planta")
+    r = cliente.post("/venta/servicio/renta",
+                     data={"cliente": "María",
+                           "servicio_texto": "Transporte y montaje",
+                           "servicio_monto": "120"})
+    assert "Cotización de servicio creada" in r.text
+    orden = list(odoo.ordenes.values())[-1]
+    planta = next(l for l in orden["lineas"] if l.get("product_id") == 601)
+    assert planta["price_unit"] == 0.0     # de referencia, no cobra
+    assert orden["amount_total"] == 120.0
+
+
 def test_personalizada_por_http(cliente, odoo):
     cliente.post("/venta/carrito/agregar",
                  data={"producto_id": 601, "cantidad": 3,
@@ -786,8 +885,9 @@ def test_cargar_para_editar_reconstruye_el_formulario(odoo):
     assert datos["servicios"] == [{"texto": "Alquiler de 20 plantas",
                                    "descripcion": "Incluye transporte y montaje",
                                    "monto": "850"}]
+    # La planta trae su precio para poder editarlo (23/09/2026).
     assert datos["plantas"] == [{"producto_id": 601, "nombre": "CROTO",
-                                 "cantidad": "10"}]
+                                 "cantidad": "10", "precio": "45"}]
 
 
 def test_editar_reescribe_los_renglones_y_el_total(odoo):
@@ -810,6 +910,48 @@ def test_editar_reescribe_los_renglones_y_el_total(odoo):
     # El ingreso esperado de la oportunidad acompaña al nuevo total.
     oportunidad = odoo.oportunidades[orden["opportunity_id"]]
     assert oportunidad["expected_revenue"] == 1200.0 + 5 * 45.0
+
+
+def test_editar_un_alquiler_por_evento_no_edita_precios(odoo):
+    registro = _cotizacion_de_renta(odoo)
+    datos = cotizaciones.cargar_para_editar(registro["n"])
+    assert datos["precio_editable"] is False
+    assert datos["cobro"] == "total"
+
+
+def test_editar_un_alquiler_por_planta_si_edita_precios(odoo):
+    registro = cotizaciones.crear_cotizacion(
+        {"id": "g", "nombre": "Génesis"}, "renta", "María", "",
+        [], [{"producto_id": 601, "cantidad": 10, "precio": 8.0}],
+        cobro="planta")
+    datos = cotizaciones.cargar_para_editar(registro["n"])
+    assert datos["precio_editable"] is True
+    assert datos["plantas"][0]["precio"] == "8"
+
+
+def test_editar_cambia_el_precio_de_una_planta(odoo):
+    # Pedido del dueño (23/09/2026): el precio de la planta también se
+    # edita, por si esa cotización se vendió más cara que la lista.
+    registro = _cotizacion_de_renta(odoo)
+    editado = cotizaciones.editar_cotizacion(
+        registro["n"],
+        [{"texto": "Alquiler", "monto": "850"}],
+        [{"producto_id": "601", "cantidad": "10", "precio": "60"}])
+    planta = next(l for l in odoo.ordenes[registro["orden_id"]]["lineas"]
+                  if l.get("product_id") == 601)
+    assert planta["price_unit"] == 60.0
+    assert editado["total"] == 850 + 10 * 60.0
+
+
+def test_editar_sin_precio_deja_el_de_odoo(odoo):
+    registro = _cotizacion_de_renta(odoo)
+    cotizaciones.editar_cotizacion(
+        registro["n"],
+        [{"texto": "Alquiler", "monto": "850"}],
+        [{"producto_id": "601", "cantidad": "10", "precio": ""}])
+    planta = next(l for l in odoo.ordenes[registro["orden_id"]]["lineas"]
+                  if l.get("product_id") == 601)
+    assert "price_unit" not in planta
 
 
 def test_planta_en_cero_se_quita(odoo):

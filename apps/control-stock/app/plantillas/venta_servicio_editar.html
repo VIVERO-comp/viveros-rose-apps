@@ -99,8 +99,8 @@
 
   {% if plantas %}
   <div class="seccion-titulo" style="margin-top:16px">Plantas</div>
-  <p class="nada-venta">Cambia la cantidad; en 0 la planta se quita de la
-    cotización.</p>
+  <p class="nada-venta">Cambia la cantidad{% if precio_editable %} o el
+    precio{% endif %}; en cantidad 0 la planta se quita de la cotización.</p>
   {% for p in plantas %}
   <div class="servicio">
     <div class="servicio-pie" style="border-top:none;margin-top:0;padding-top:0">
@@ -111,6 +111,17 @@
                type="number" step="1" min="0" inputmode="numeric"
                value="{{ p.cantidad }}">
       </label>
+      {# El precio también se edita (23/09/2026): una planta puede haberse
+         vendido más cara que el precio de la lista de Odoo. En una
+         cotización que se cobra por el total (alquiler por evento,
+         mantenimiento) no aparece: ahí Odoo deja las plantas en $0 igual. #}
+      {% if precio_editable %}
+      <label class="servicio-monto">Precio
+        <input name="planta_precio" form="form-servicio" type="number"
+               step="0.01" min="0" inputmode="decimal" placeholder="0.00"
+               value="{{ p.precio }}">
+      </label>
+      {% endif %}
     </div>
   </div>
   {% endfor %}

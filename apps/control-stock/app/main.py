@@ -1178,6 +1178,31 @@ async def venta_cantidad(request: Request):
     return RedirectResponse(_volver_del_carrito(form), status_code=303)
 
 
+@app.post("/venta/carrito/precio")
+async def venta_precio(request: Request):
+    """El precio unitario escrito a mano en una línea del carrito (pedido
+    del dueño, 23/09/2026: "por si acaso le vendo más caro"). Vacío —o el
+    botón "precio de Odoo"— devuelve la línea a la lista de precios."""
+    form = await request.form()
+    precio = "" if form.get("odoo") else form.get("precio", "")
+    try:
+        ventas.cambiar_precio(request.state.empleada["id"],
+                              int(form.get("producto_id", "")), precio[:20])
+    except (TypeError, ValueError):
+        pass
+    return RedirectResponse(_volver_del_carrito(form), status_code=303)
+
+
+@app.post("/venta/cobro")
+async def venta_cobro(request: Request):
+    """El selector "Cómo se cobra" del Alquiler (23/09/2026). Se guarda en
+    el borrador del servidor: agregar una planta recarga la pantalla y el
+    modo tiene que seguir donde estaba."""
+    form = await request.form()
+    ventas.guardar_cobro(request.state.empleada["id"], form.get("cobro", ""))
+    return RedirectResponse(_volver_del_carrito(form), status_code=303)
+
+
 @app.post("/venta/carrito/quitar")
 async def venta_quitar(request: Request):
     form = await request.form()
@@ -1293,9 +1318,14 @@ def _contexto_servicio(request, tipo, q="", error=None, servicios=None,
     borrador = ventas.borrador_de(usuario)
     if servicios is None:
         servicios = borrador["servicios"]
+    # El Alquiler elige cómo se cobra (total del evento o precio de
+    # alquiler por planta); los demás tipos no muestran el selector.
+    cobro = borrador["cobro"]
+    por_planta = cotizaciones.cobra_por_planta(tipo, cobro)
     contexto = {
         "ventas_activo": ventas.configurado(), "tipo": tipo,
         "meta": cotizaciones.TIPOS[tipo], "q": (q or "").strip(),
+        "cobro": cobro, "por_planta": por_planta,
         "resultados": None, "carrito": [], "total_carrito": 0.0,
         "borrador": borrador, "servicios": servicios or [{"texto": "", "monto": "", "descripcion": ""}],
         "error_venta": error or None,
@@ -1309,7 +1339,8 @@ def _contexto_servicio(request, tipo, q="", error=None, servicios=None,
         try:
             if contexto["q"]:
                 contexto["resultados"] = ventas.buscar_productos(contexto["q"])
-            contexto["carrito"], contexto["total_carrito"] = ventas.carrito_de(usuario)
+            contexto["carrito"], contexto["total_carrito"] = ventas.carrito_de(
+                usuario, base_cero=por_planta)
             if contexto["proyecto"]:
                 proyecto = proyectos.buscar(contexto["proyecto"])
                 if proyecto:
@@ -1319,15 +1350,23 @@ def _contexto_servicio(request, tipo, q="", error=None, servicios=None,
                     contexto["error_venta"] = contexto["error_venta"] or (
                         "Ese proyecto ya no existe: la cotización va a quedar "
                         "suelta.")
-            if tipo == "proyecto":
-                # En "Cotizar Proyecto" el selector está siempre, aunque se
-                # entre desde la ficha de un proyecto: así se puede cambiar
-                # de proyecto sin volver atrás. En los demás tipos el
-                # proyecto solo llega desde su ficha y se muestra fijo.
-                contexto["proyectos"] = proyectos.para_elegir()
         except Exception:
             contexto["error_venta"] = ("Sin conexión con Odoo en este momento. "
                                        "Vuelve a intentar en un rato.")
+        if tipo == "proyecto":
+            # En "Cotizar Proyecto" el selector está siempre, aunque se
+            # entre desde la ficha de un proyecto: así se puede cambiar
+            # de proyecto sin volver atrás. En los demás tipos el
+            # proyecto solo llega desde su ficha y se muestra fijo.
+            #
+            # Va en su propio try (23/09/2026): que no se pueda listar los
+            # proyectos no es que Odoo esté caído, y pintar el aviso rojo
+            # de "sin conexión" por eso asustaba sin motivo. Sin lista, el
+            # selector queda en "Ninguno" y el botón de crear sigue ahí.
+            try:
+                contexto["proyectos"] = proyectos.para_elegir()
+            except Exception:
+                contexto["proyectos"] = []
     return contexto
 
 
@@ -1352,14 +1391,21 @@ async def venta_servicio_crear(request: Request, tipo: str):
         form.getlist("servicio_descripcion"))
     datos_cliente = _datos_cliente_del_form(form)
     proyecto_ref = (form.get("proyecto") or "").strip()
-    carrito, _total = ventas.carrito_de(usuario)
-    lineas_catalogo = [{"producto_id": l["producto_id"], "cantidad": l["cantidad"]}
+    cobro = ventas.borrador_de(usuario)["cobro"]
+    por_planta = cotizaciones.cobra_por_planta(tipo, cobro)
+    carrito, _total = ventas.carrito_de(usuario, base_cero=por_planta)
+    # "precio" solo cuando se escribió a mano: si no, lo pone Odoo. En un
+    # alquiler por planta viaja siempre, incluso el $0 de la que no lleva
+    # precio: ahí no hay precio de lista que valga.
+    lineas_catalogo = [{"producto_id": l["producto_id"], "cantidad": l["cantidad"],
+                        "precio": l["precio"] if (l["precio_editado"] or por_planta)
+                        else None}
                        for l in carrito]
     try:
         registro = cotizaciones.crear_cotizacion(
             request.state.empleada, tipo, form.get("cliente", ""),
             form.get("celular", ""), servicios, lineas_catalogo, datos_cliente,
-            proyecto_ref, cargos=_cargos_del_form(form))
+            proyecto_ref, cargos=_cargos_del_form(form), cobro=cobro)
     except ValueError as error:
         return plantillas.TemplateResponse(
             request, "venta_servicio.html",
@@ -1438,7 +1484,9 @@ async def venta_personalizada_crear(request: Request):
         form.getlist("servicio_texto"), form.getlist("servicio_monto"),
         form.getlist("servicio_descripcion"))
     carrito, _total = ventas.carrito_de(usuario)
-    lineas_catalogo = [{"producto_id": l["producto_id"], "cantidad": l["cantidad"]}
+    # "precio" solo cuando se escribió a mano: si no, lo pone Odoo.
+    lineas_catalogo = [{"producto_id": l["producto_id"], "cantidad": l["cantidad"],
+                        "precio": l["precio"] if l["precio_editado"] else None}
                        for l in carrito]
     try:
         registro = cotizaciones.crear_personalizada(
@@ -1527,7 +1575,8 @@ async def venta_servicio_editar_guardar(request: Request, n: int):
         [m[:20] for m in form.getlist("servicio_monto")],
         [d[:2000] for d in form.getlist("servicio_descripcion")])
     plantas = cotizaciones.plantas_del_formulario(
-        form.getlist("planta_id"), form.getlist("planta_cantidad"))
+        form.getlist("planta_id"), form.getlist("planta_cantidad"),
+        [p[:20] for p in form.getlist("planta_precio")])
     renglones = cotizaciones.renglones_del_formulario(
         [t[:2000] for t in form.getlist("renglon_texto")],
         [c[:20] for c in form.getlist("renglon_cantidad")],

@@ -568,6 +568,7 @@ def test_borrador_sobrevive_los_reloads(cliente_venta):
     cliente_venta.post("/venta/cotizar", data={"cliente": "María", "celular": "6567-3062"})
     assert ventas.borrador_de("genesis") == {
         "nombre": "", "celular": "", "servicios": [], "renglones": [],
+        "cobro": "total",
         "ruc": "", "cedula": "", "correo": "", "direccion": "",
         "envio": "", "instalacion": ""}
 
