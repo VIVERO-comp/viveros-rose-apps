@@ -24,9 +24,14 @@ desalinee.
    (Mayorista pasa a naranja), Vender/Compras/Proyectos (los tipos de
    servicio estrenan su color), calendario con piel Twenty (3 chips
    corregidos).
-4. **Fase 4 — Linear.** Labels de tipo con color por familia (hoy los 11
-   tienen el mismo verde) y etapas Cotizado/Facturado/Pagado alineadas a
-   Twenty (azul/morado/verde).
+4. **Fase 4 — Linear.** — HECHA (23/09/2026)
+   Las labels del team LEAD llevan el solido_hex de su familia: las 11 de
+   tipo repintadas por API (compartian un solo verde) y las etapas
+   Cotizado/Facturado/Pagado en azul/morado/verde como en Twenty
+   (script vivero-rose-crm/scripts/pintar_labels_linear.py, idempotente).
+   El pipeline (tarjeta.ts) y el addon de Odoo ya crean las que falten con
+   su color; el addon se despliega en su proxima tanda (solo cambia el
+   color de creacion, sin logica).
 5. **Fase 5 — Repartidor y Pedidos.** Mismos colores de estado en el panel
    y en la app del repartidor (hoy "En camino" es ambar en uno y verde en
    el otro).

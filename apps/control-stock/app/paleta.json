@@ -1,68 +1,77 @@
 {
-  "_fuente": "twenty-ui de Twenty v2.39.5 (repo twentyhq/twenty, tag twenty/v2.39.5): packages/twenty-ui/src/theme-constants/theme-light.css y theme-dark.css. bg/texto = --t-tag-background-*/--t-tag-text-* de cada tema; solido = --t-color-<familia>. Valores exactos en display-p3, sin convertir. Las asignaciones salen de los selects vivos de crm.plantaspanama.com (leidos por API el 23/09/2026); las marcadas en _propuestas no existen en Twenty.",
+  "_fuente": "twenty-ui de Twenty v2.39.5 (repo twentyhq/twenty, tag twenty/v2.39.5): packages/twenty-ui/src/theme-constants/theme-light.css y theme-dark.css. bg/texto = --t-tag-background-*/--t-tag-text-* de cada tema; solido = --t-color-<familia>. Valores exactos en display-p3, sin convertir. Las asignaciones salen de los selects vivos de crm.plantaspanama.com (leidos por API el 23/09/2026); las marcadas en _propuestas no existen en Twenty. El campo solido_hex es DERIVADO: la conversion colorimetrica exacta del solido display-p3 a sRGB (matrices P3->XYZ D65->sRGB, recorte al gamut), para herramientas que solo aceptan hex, como los colores de label de Linear.",
   "familias": {
     "green": {
       "bg_claro": "color(display-p3 0.913 0.964 0.925)",
       "texto_claro": "color(display-p3 0.19 0.5 0.32)",
       "bg_oscuro": "color(display-p3 0.1 0.173 0.133)",
       "texto_oscuro": "color(display-p3 0.434 0.828 0.573)",
-      "solido": "color(display-p3 0.332 0.634 0.442)"
+      "solido": "color(display-p3 0.332 0.634 0.442)",
+      "solido_hex": "#30a46c"
     },
     "orange": {
       "bg_claro": "color(display-p3 0.989 0.938 0.85)",
       "texto_claro": "color(display-p3 0.76 0.34 0)",
       "bg_oscuro": "color(display-p3 0.189 0.12 0.056)",
       "texto_oscuro": "color(display-p3 1 0.63 0.38)",
-      "solido": "color(display-p3 0.9 0.45 0.2)"
+      "solido": "color(display-p3 0.9 0.45 0.2)",
+      "solido_hex": "#f76a15"
     },
     "blue": {
       "bg_claro": "color(display-p3 0.933 0.948 0.992)",
       "texto_claro": "color(display-p3 0.256 0.354 0.755)",
       "bg_oscuro": "color(display-p3 0.105 0.141 0.275)",
       "texto_oscuro": "color(display-p3 0.63 0.69 1)",
-      "solido": "color(display-p3 0.276 0.384 0.837)"
+      "solido": "color(display-p3 0.276 0.384 0.837)",
+      "solido_hex": "#3e63dd"
     },
     "turquoise": {
       "bg_claro": "color(display-p3 0.895 0.971 0.952)",
       "texto_claro": "color(display-p3 0.08 0.5 0.43)",
       "bg_oscuro": "color(display-p3 0.087 0.175 0.165)",
       "texto_oscuro": "color(display-p3 0.388 0.835 0.719)",
-      "solido": "color(display-p3 0.297 0.637 0.581)"
+      "solido": "color(display-p3 0.297 0.637 0.581)",
+      "solido_hex": "#12a594"
     },
     "sky": {
       "bg_claro": "color(display-p3 0.899 0.963 0.989)",
       "texto_claro": "color(display-p3 0.193 0.448 0.605)",
       "bg_oscuro": "color(display-p3 0.089 0.154 0.244)",
       "texto_oscuro": "color(display-p3 0.536 0.772 0.924)",
-      "solido": "color(display-p3 0.585 0.877 0.983)"
+      "solido": "color(display-p3 0.585 0.877 0.983)",
+      "solido_hex": "#7ce2fe"
     },
     "purple": {
       "bg_claro": "color(display-p3 0.963 0.931 0.989)",
       "texto_claro": "color(display-p3 0.473 0.281 0.687)",
       "bg_oscuro": "color(display-p3 0.175 0.112 0.224)",
       "texto_oscuro": "color(display-p3 0.8 0.62 1)",
-      "solido": "color(display-p3 0.523 0.318 0.751)"
+      "solido": "color(display-p3 0.523 0.318 0.751)",
+      "solido_hex": "#8e4ec6"
     },
     "pink": {
       "bg_claro": "color(display-p3 0.981 0.917 0.96)",
       "texto_claro": "color(display-p3 0.698 0.219 0.528)",
       "bg_oscuro": "color(display-p3 0.198 0.098 0.179)",
       "texto_oscuro": "color(display-p3 1 0.535 0.78)",
-      "solido": "color(display-p3 0.775 0.297 0.61)"
+      "solido": "color(display-p3 0.775 0.297 0.61)",
+      "solido_hex": "#d6409f"
     },
     "red": {
       "bg_claro": "color(display-p3 0.985 0.925 0.925)",
       "texto_claro": "color(display-p3 0.744 0.234 0.222)",
       "bg_oscuro": "color(display-p3 0.211 0.081 0.099)",
       "texto_oscuro": "color(display-p3 1 0.57 0.55)",
-      "solido": "color(display-p3 0.83 0.329 0.324)"
+      "solido": "color(display-p3 0.83 0.329 0.324)",
+      "solido_hex": "#e5484d"
     },
     "yellow": {
       "bg_claro": "color(display-p3 0.997 0.982 0.749)",
       "texto_claro": "color(display-p3 0.6 0.44 0)",
       "bg_oscuro": "color(display-p3 0.168 0.137 0.039)",
       "texto_oscuro": "color(display-p3 0.948 0.885 0.392)",
-      "solido": "color(display-p3 1 0.92 0.22)"
+      "solido": "color(display-p3 1 0.92 0.22)",
+      "solido_hex": "#ffea00"
     },
     "gray": {
       "bg_claro": "color(display-p3 0.976 0.976 0.976)",
@@ -70,21 +79,24 @@
       "bg_oscuro": "color(display-p3 0.098 0.098 0.098)",
       "texto_oscuro": "color(display-p3 0.702 0.702 0.702)",
       "solido": "color(display-p3 0.6 0.6 0.6)",
-      "solido_oscuro": "color(display-p3 0.298 0.298 0.298)"
+      "solido_oscuro": "color(display-p3 0.298 0.298 0.298)",
+      "solido_hex": "#999999"
     },
     "brown": {
       "bg_claro": "color(display-p3 0.959 0.936 0.909)",
       "texto_claro": "color(display-p3 0.485 0.374 0.288)",
       "bg_oscuro": "color(display-p3 0.151 0.13 0.115)",
       "texto_oscuro": "color(display-p3 0.835 0.715 0.597)",
-      "solido": "color(display-p3 0.651 0.505 0.368)"
+      "solido": "color(display-p3 0.651 0.505 0.368)",
+      "solido_hex": "#ad7f58"
     },
     "ruby": {
       "bg_claro": "color(display-p3 0.983 0.92 0.928)",
       "texto_claro": "color(display-p3 0.728 0.211 0.311)",
       "bg_oscuro": "color(display-p3 0.208 0.088 0.117)",
       "texto_oscuro": "color(display-p3 1 0.57 0.59)",
-      "solido": "color(display-p3 0.83 0.323 0.408)"
+      "solido": "color(display-p3 0.83 0.323 0.408)",
+      "solido_hex": "#e54666"
     }
   },
   "asignaciones": {
