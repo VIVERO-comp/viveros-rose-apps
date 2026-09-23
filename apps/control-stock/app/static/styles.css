@@ -792,6 +792,14 @@ button.enlace-sub{
 .boton-google{border:1px solid #dadce0}
 .panel{background:rgba(58,50,36,.35)}
 .campo input{background:#ffffff;border-color:#e4e4e7}
+/* El selector de tarjeta de Retail en Nueva venta (23/09/2026) y cualquier
+   select suelto de un .campo: misma caja que los inputs. */
+.campo > select{
+  width:100%;background:#ffffff;border:1px solid #e4e4e7;border-radius:14px;
+  color:var(--texto);font-family:inherit;font-size:14px;padding:12px 14px;
+  outline:none;
+}
+.campo > select:focus{border-color:var(--dorado)}
 .buscador{border:1px solid #e4e4e7;background:#ffffff}
 .separador-login{color:#71717a}
 

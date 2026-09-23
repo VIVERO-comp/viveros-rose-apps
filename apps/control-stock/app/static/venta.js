@@ -170,6 +170,20 @@ for (const campo of document.querySelectorAll(".dato-cliente")) {
   campo.addEventListener("input", sincronizarCliente);
 }
 
+/* La tarjeta de Retail elegida (23/09/2026): al escogerla se llenan el
+   nombre y el celular del lead (el amarre real lo hace el servidor con
+   lead_ref al crear la venta). */
+const leadRetail = document.getElementById("lead-retail");
+if (leadRetail) {
+  leadRetail.addEventListener("change", () => {
+    const opcion = leadRetail.selectedOptions[0];
+    if (!opcion || !opcion.value) return;
+    if (entradaNombre && opcion.dataset.nombre) entradaNombre.value = opcion.dataset.nombre;
+    if (entradaCelular) entradaCelular.value = opcion.dataset.cel || "";
+    sincronizarCliente();
+  });
+}
+
 /* El desglose de Nueva venta (23/09/2026): mientras se escribe un cargo,
    su renglón aparece y el total lo suma — el mismo desglose que va a
    imprimir el PDF. Lo inicial lo pinta el servidor (con el borrador); el

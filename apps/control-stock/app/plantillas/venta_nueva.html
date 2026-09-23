@@ -41,6 +41,28 @@
     servidor. Avísale a Abraham.</div>
   {% else %}
 
+  {# ---- Tarjeta de Retail (dueño, 23/09/2026: "pon la opción de elegir
+     una tarjeta en Retail") ---- La venta nace amarrada al lead elegido;
+     con "Ninguna", el espejo crea el lead o lo casa solo por celular. #}
+  {% if leads_retail or lead_pendiente %}
+  <div class="seccion-titulo">Tarjeta de Retail</div>
+  <div class="campo">
+    <select id="lead-retail" name="lead_ref" form="form-acciones">
+      <option value="">Ninguna · el lead se crea o se casa solo por celular</option>
+      {% for l in leads_retail %}
+      <option value="{{ l.ref }}" data-nombre="{{ l.nombre }}" data-cel="{{ l.cel }}"
+              {{ 'selected' if lead_pendiente and lead_pendiente.ref == l.ref }}>
+        {{ l.ref }} · {{ l.nombre }} — {{ l.etapa }}</option>
+      {% endfor %}
+      {% if lead_pendiente and lead_pendiente.ref not in (leads_retail | map(attribute='ref') | list) %}
+      <option value="{{ lead_pendiente.ref }}" selected>
+        {{ lead_pendiente.ref }}{% if lead_pendiente.nombre %} · {{ lead_pendiente.nombre }}{% endif %}</option>
+      {% endif %}
+    </select>
+    <span class="nota-campo">Elegirla amarra esta venta a ese lead y llena su nombre y celular.</span>
+  </div>
+  {% endif %}
+
   {# ---- Cliente ---- #}
   {% with form_cliente="form-acciones", nombre_opcional=True %}{% include "_cliente.html" %}{% endwith %}
 

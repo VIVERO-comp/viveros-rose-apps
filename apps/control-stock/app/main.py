@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse,
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import (acceso_google, calculos, calendario, calendario_google, retail,
+from . import (acceso_google, calculos, calendario, calendario_google, colores, retail,
                calendario_ics, compras, conteos, control, cotizaciones,
                coworkers, crm_flujo, crm_twenty, datos, fichas, fotos,
                proyectos, seguridad, ventas)
@@ -67,6 +67,7 @@ plantillas.env.filters["dinero"] = dinero_venta
 # El Inicio pinta el calendario con el color y el nombre que decide
 # app/calendario.py; la plantilla no conoce los tipos.
 plantillas.env.globals["cal_color"] = calendario.color_de
+plantillas.env.globals["colores"] = colores  # la paleta unica en las plantillas
 plantillas.env.globals["cal_tipo"] = calendario.nombre_de_tipo
 plantillas.env.filters["fecha_dmy"] = calendario.dmy
 
@@ -996,6 +997,7 @@ def venta_nueva(request: Request, q: str = "", error: str = ""):
     # El desglose del total (plantas + envío + instalación) sale pintado
     # del servidor con lo que diga el borrador; venta.js solo lo refresca
     # mientras se escribe. El total real lo confirma Odoo al crear.
+    contexto["leads_retail"] = _leads_retail_para_elegir()
     contexto["cargos_montos"] = _cargos_del_form(contexto["borrador"])
     contexto["total_con_cargos"] = (contexto["total_carrito"]
                                     + sum(contexto["cargos_montos"].values()))
@@ -1036,6 +1038,43 @@ def _datos_cliente_del_form(form):
         return None
     return {campo: (form.get(campo) or "").strip()[:120]
             for campo in ventas.CAMPOS_EXTRA}
+
+
+def _leads_retail_para_elegir():
+    """Los leads del kanban Retail para el selector de Nueva venta (dueño,
+    23/09/2026: "pon la opción de elegir una tarjeta en Retail"): ref,
+    nombre, celular y etapa, sin los ya entregados. Vive aquí y no en
+    retail.py para no tocar ese módulo (tiene trabajo en curso de otra
+    tanda); vacío si Linear no responde — el selector no ofrece nada."""
+    try:
+        columnas, _por_ref = retail.tablero()
+    except Exception:
+        return []
+    filas = []
+    for columna in columnas:
+        if columna["clave"] == "entregado":
+            continue
+        for lead in columna["leads"]:
+            filas.append({"ref": lead["ref"], "nombre": lead["nombre"],
+                          "cel": lead.get("cel") or "",
+                          "etapa": columna["titulo"]})
+    return filas
+
+
+def _amarrar_lead_del_form(request, form):
+    """La tarjeta de Retail elegida en el formulario manda: se vuelve el
+    lead pendiente (la venta que viene nace amarrada a ella). "Ninguna"
+    suelta el amarre que hubiera. Formularios sin el selector no tocan
+    nada."""
+    if "lead_ref" not in form:
+        return
+    usuario = request.state.empleada["id"]
+    lead_ref = (form.get("lead_ref") or "").strip()[:40]
+    if lead_ref:
+        ventas.poner_lead_pendiente(usuario, lead_ref,
+                                    (form.get("cliente") or "").strip())
+    else:
+        ventas.quitar_lead_pendiente(usuario)
 
 
 def _cargos_del_form(form):
@@ -1130,6 +1169,7 @@ async def venta_quitar(request: Request):
 @app.post("/venta/cotizar")
 async def venta_cotizar(request: Request):
     form = await request.form()
+    _amarrar_lead_del_form(request, form)
     try:
         registro = ventas.crear_cotizacion(
             request.state.empleada, form.get("cliente", ""), form.get("celular", ""),
@@ -1461,6 +1501,7 @@ async def venta_pagar(request: Request):
     # El botón grande "PAGADO Y CONFIRMAR PEDIDO": crea la orden desde el
     # carrito y pasa a elegir el método de pago (el cobro corre después).
     form = await request.form()
+    _amarrar_lead_del_form(request, form)
     try:
         registro = ventas.crear_cotizacion(
             request.state.empleada, form.get("cliente", ""), form.get("celular", ""),
