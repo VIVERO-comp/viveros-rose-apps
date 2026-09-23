@@ -591,6 +591,26 @@ a{color:inherit}
 .crm-inactivos{border-top:1px solid var(--borde);padding-top:10px}
 .crm-inactivos summary{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--muy-suave);cursor:pointer}
 .crm-inactivos-lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-top:10px}
+/* El tipo de interés de la ficha del CRM: el chip es GRANDE y se toca para
+   cambiarlo (pedido del dueño, 23/09/2026). Es un <details>: el desplegable
+   es HTML, no JavaScript. */
+.tipo-lead{position:relative;min-width:0}
+.tipo-lead .tipo-actual{
+  font-size:13.5px;padding:7px 13px;gap:7px;cursor:pointer;list-style:none;
+  display:inline-flex;align-items:center;max-width:100%;
+}
+.tipo-lead .tipo-actual::-webkit-details-marker{display:none}
+.tipo-lead .tipo-actual .pt{width:8px;height:8px}
+.tipo-flecha{font-size:10px;opacity:.75;margin-left:1px}
+.tipo-opciones{
+  position:absolute;z-index:6;top:calc(100% + 7px);left:0;width:min(330px,78vw);
+  display:flex;flex-wrap:wrap;gap:6px;padding:12px;background:#fff;
+  border:1px solid var(--borde);border-radius:16px;box-shadow:var(--sombra);
+}
+.tipo-ayuda{width:100%;font-size:11px;line-height:1.4}
+.tipo-opcion{font-size:12px;padding:5px 10px}
+.tipo-opcion.puesto{background:var(--crema-2);border-color:var(--borde);font-weight:700;opacity:1}
+.tipo-opcion.puesto::before{content:"✓ ";font-weight:700}
 .crm-nota{background:var(--crema);border:1px solid var(--borde);border-radius:10px;padding:8px 10px;font-size:12.3px;line-height:1.45;white-space:pre-line}
 .crm-nota small{display:block;font-weight:700;font-size:10px;color:var(--muy-suave);margin-bottom:2px}
 .crm-forma-nota{display:flex;flex-direction:column;gap:7px;margin-top:4px}

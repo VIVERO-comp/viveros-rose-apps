@@ -32,7 +32,7 @@ from urllib.parse import quote
 
 import httpx
 
-from . import calendario, colores, crm_twenty
+from . import calendario, colores, crm_leads, crm_twenty
 
 TTL_LEADS = 120
 
@@ -75,6 +75,10 @@ ETIQUETA_INTERES = {
     clave: (nombre, colores.texto_hex(colores.ASIGNACIONES["tipo_interes"][clave]))
     for clave, nombre in _NOMBRE_INTERES.items()
 }
+# El mismo vocabulario, como catálogo del selector de la ficha: desde el
+# 23/09/2026 el tipo de interés se CORRIGE desde aquí (pedido de Abraham),
+# porque lo pone el clasificador leyendo el mensaje y a veces se equivoca.
+INTERESES = dict(_NOMBRE_INTERES)
 
 MOTIVOS = {
     "NO_CONTESTO": "No contestó",
@@ -164,9 +168,13 @@ def _tarjeta(fila, etapas_retail=None):
         if tipo in ETIQUETA_INTERES:
             texto, color = ETIQUETA_INTERES[tipo]
             chips.append({"texto": texto, "color": color})
+    tipos = fila.get("tipoInteres") or []
     ref_retail = _ref_de(fila.get("linearIssueUrl") or "")
     return {
         "id": fila.get("id") or "",
+        # La clave del tipo (no el texto): la usa el selector de la ficha
+        # para marcar cuál está puesto.
+        "interes": tipos[0] if tipos else "",
         "titulo": fila.get("name") or "Lead sin código",
         "estado": fila.get("estado") or "",
         "motivo": MOTIVOS.get(fila.get("motivoNoAvance") or "", ""),
@@ -445,6 +453,43 @@ def registrar_motivo(lead_id, motivo):
         refrescar()
         _refrescar_retail()
     return ok
+
+
+def cambiar_interes(lead_id, interes):
+    """Corrige el tipo de interés del lead (Abraham, 23/09/2026).
+
+    El tipo lo pone el sistema al nacer el lead leyendo su mensaje de
+    WhatsApp, y de él cuelgan los dos tableros: la pestaña Retail solo lista
+    los de venta y el log del calendario solo los de servicio. Por eso la
+    corrección NO se escribe aquí a medias: va por el puente del frontend
+    (/api/crm/lead-interes), que mueve Twenty, la label de Linear y la
+    etiqueta de la oportunidad en Odoo de una sola vez.
+
+    En modo muestra (sin Twenty) se cambia la fila de ejemplo, para poder
+    probar la pantalla en local. Devuelve None si no se pudo, o un dict con
+    lo que de verdad quedó escrito ({"en_linear", "en_odoo"}) para que el
+    aviso de la pantalla no prometa de más."""
+    if interes not in INTERESES:
+        return None
+    hecho = {"en_linear": False, "en_odoo": False}
+    if not crm_twenty.twenty_configurado():
+        fila = next((f for f in _MUESTRA if f["id"] == lead_id), None)
+        if fila is None:
+            return None
+        fila["tipoInteres"] = [interes]
+    else:
+        cuerpo = crm_leads.cambiar_tipo_de_interes(lead_id, interes)
+        if not cuerpo:
+            return None
+        hecho = {"en_linear": bool(cuerpo.get("enLinear")),
+                 "en_odoo": bool(cuerpo.get("enOdoo"))}
+    refrescar()
+    _refrescar_retail()
+    # El log de leads de servicio del calendario se arma con las labels de
+    # Linear: se tira su caché para que el lead aparezca (o desaparezca) de
+    # una vez, sin esperar los 2 minutos del TTL.
+    calendario._leads_cache.update({"en": 0, "dato": None})
+    return hecho
 
 
 # ---------------------------------------------------------------------------

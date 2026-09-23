@@ -31,13 +31,15 @@ def configurado():
     return bool(_var("CRM_LEADS_URL") and _var("CRM_LEADS_SECRETO"))
 
 
-def _llamar(datos, contexto):
-    """POST al puente. Devuelve el cuerpo si vino ok, o None (fail-soft)."""
+def _llamar_ruta(ruta, datos, contexto):
+    """POST a una ruta del puente. Devuelve el cuerpo si vino ok, o None
+    (fail-soft). El secreto compartido va en el cuerpo, como lo espera el
+    frontend (INVENTARIO_LEAD_SECRET)."""
     if not configurado():
         return None
     try:
         respuesta = httpx.post(
-            _var("CRM_LEADS_URL").rstrip("/") + "/api/crm/lead-inventario",
+            _var("CRM_LEADS_URL").rstrip("/") + ruta,
             json={"secreto": _var("CRM_LEADS_SECRETO"), **datos},
             timeout=TIEMPO_MAXIMO)
         cuerpo = respuesta.json() if respuesta.status_code == 200 else {}
@@ -48,6 +50,27 @@ def _llamar(datos, contexto):
     except Exception as error:  # el espejo jamás tumba la venta
         print(f"crm_leads: {contexto} falló: {error!r}", flush=True)
     return None
+
+
+def _llamar(datos, contexto):
+    """El puente de siempre: el espejo de una venta de Vender."""
+    return _llamar_ruta("/api/crm/lead-inventario", datos, contexto)
+
+
+def cambiar_tipo_de_interes(lead_id, interes):
+    """Corrige el tipo de interés de un lead (pedido de Abraham,
+    23/09/2026: el chip de la ficha del CRM se toca y se cambia).
+
+    Va por el MISMO puente que el espejo de ventas, a /api/crm/lead-interes:
+    así la corrección hace en un solo lugar todo lo que cuelga del tipo
+    —Twenty, la label de Linear (y con ella los tableros Retail y el log de
+    servicio del calendario) y la etiqueta de la oportunidad en Odoo— sin
+    repetir aquí ese pipeline. Devuelve el cuerpo de la respuesta (trae
+    `enLinear` y `enOdoo`, que son best-effort del otro lado) o None si el
+    puente no está configurado o rechazó el cambio."""
+    return _llamar_ruta("/api/crm/lead-interes",
+                        {"leadId": lead_id, "interes": interes},
+                        f"cambio de tipo de {lead_id}")
 
 
 def espejar_venta(nombre, celular, tipo, orden, total, empleada, issue=""):

@@ -113,13 +113,28 @@
 {% if abierta %}
 <a class="telon" href="/crm" aria-label="Cerrar"></a>
 <aside class="panel-der" role="dialog" aria-label="Ficha del lead">
+  {# El tipo de interés se CAMBIA desde aquí (pedido del dueño, 23/09/2026:
+     "aquí mismo y en grande que lo pueda cambiar"): el chip es el resumen
+     de un <details> y adentro están los 11 tipos como botones de un form.
+     Sin JS: HTML y un POST que vuelve a la misma ficha. #}
   <div class="cab-panel">
-    {% if abierta.chips %}
-    <span class="chip on" style="background:{{ abierta.chips[0].color }};color:#fff">
-      <span class="pt" style="background:#fff"></span>{{ abierta.chips[0].texto }}</span>
-    {% else %}
-    <span class="chip on"><span class="pt"></span>Lead</span>
-    {% endif %}
+    <details class="tipo-lead">
+      <summary class="chip on tipo-actual"
+        {% if abierta.chips %}style="background:{{ abierta.chips[0].color }};color:#fff"{% endif %}>
+        <span class="pt" {% if abierta.chips %}style="background:#fff"{% endif %}></span>
+        {{ abierta.chips[0].texto if abierta.chips else 'Sin tipo' }}
+        <span class="tipo-flecha" aria-hidden="true">▾</span>
+      </summary>
+      <form class="tipo-opciones" method="post" action="/crm/interes">
+        <input type="hidden" name="lead" value="{{ abierta.id }}">
+        <div class="tenue tipo-ayuda">El tipo lo puso el sistema leyendo su mensaje. Cámbialo y se corrige en Twenty, en Linear (y con eso en Retail y en el calendario) y en Odoo.</div>
+        {% for clave, texto in intereses.items() %}
+        <button class="btn tipo-opcion{{ ' puesto' if clave == abierta.interes }}"
+          type="submit" name="interes" value="{{ clave }}"
+          {{ 'disabled' if clave == abierta.interes }}>{{ texto }}</button>
+        {% endfor %}
+      </form>
+    </details>
     <a class="btn chico" href="/crm">Cerrar</a>
   </div>
   <h4>{{ abierta.titulo }}</h4>

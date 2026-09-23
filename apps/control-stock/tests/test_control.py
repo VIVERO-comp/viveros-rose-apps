@@ -15,9 +15,13 @@ def muestra_limpia(monkeypatch):
     # cada caso arranca con el tablero de fábrica (solo Monica inactiva).
     de_fabrica = {"L1": "NUEVO", "L2": "EN_CONVERSACION", "L3": "CONTACTADO",
                   "L4": "GANADO", "L5": "CONTACTADO"}
+    tipo_de_fabrica = {"L1": "PLANTAS_RETAIL", "L2": "PLANTAS_RETAIL",
+                       "L3": "MAYORISTA", "L4": "PLANTAS_RETAIL",
+                       "L5": "PLANTAS_RETAIL"}
     for fila in crm_flujo._MUESTRA:
         fila["motivoNoAvance"] = "SOLO_PREGUNTABA" if fila["id"] == "L5" else ""
         fila["estado"] = de_fabrica[fila["id"]]
+        fila["tipoInteres"] = [tipo_de_fabrica[fila["id"]]]
 
 
 def test_el_semaforo_reparte_las_columnas(cliente):
@@ -194,3 +198,51 @@ def test_el_motivo_del_admin_llega_a_control(cliente):
     assert por_chat["m2"]["motivo"] == "No contestó"
     # Y el Ganado del CRM ya mandaba a Soledad a Terminado (mismo espejo).
     assert por_chat["m4"]["columna"] == "terminado"
+
+
+# --- El tipo de interés se corrige desde la ficha (Abraham, 23/09/2026) ----
+
+def test_la_ficha_ofrece_los_tipos_para_corregir_el_de_ahora(cliente):
+    cuerpo = cliente.get("/crm?abrir=L1").text
+    assert 'action="/crm/interes"' in cuerpo
+    # El que tiene puesto sale marcado (y sin poder tocarse otra vez).
+    assert 'value="PLANTAS_RETAIL"' in cuerpo and "puesto" in cuerpo
+    # Y están los otros diez para elegir, con el nombre que se ve en Twenty.
+    assert "Eventos · Alquiler" in cuerpo and "Mantenimiento" in cuerpo
+
+
+def test_cambiar_el_tipo_lo_deja_puesto_en_la_ficha(cliente):
+    respuesta = cliente.post("/crm/interes",
+                             data={"lead": "L1", "interes": "EVENTOS_ALQUILER"},
+                             follow_redirects=False)
+    assert respuesta.status_code == 303
+    assert crm_flujo.detalle("L1")["interes"] == "EVENTOS_ALQUILER"
+    assert crm_flujo.detalle("L1")["chips"][0]["texto"] == "Eventos · Alquiler"
+
+
+def test_un_tipo_inventado_no_toca_nada(cliente):
+    assert crm_flujo.cambiar_interes("L1", "PLANTAS_DE_MENTIRA") is None
+    assert crm_flujo.detalle("L1")["interes"] == "PLANTAS_RETAIL"
+
+
+def test_con_twenty_de_verdad_el_cambio_va_por_el_puente(monkeypatch):
+    """Con Twenty configurado NO se escribe a medias desde aquí: la
+    corrección viaja a /api/crm/lead-interes, que mueve Twenty, la label de
+    Linear y la etiqueta de Odoo de una sola vez."""
+    llamadas = []
+    monkeypatch.setattr(crm_flujo.crm_twenty, "twenty_configurado", lambda: True)
+    monkeypatch.setattr(
+        crm_flujo.crm_leads, "cambiar_tipo_de_interes",
+        lambda lead, interes: (llamadas.append((lead, interes))
+                               or {"ok": True, "enLinear": True, "enOdoo": True}))
+    monkeypatch.setattr(crm_flujo, "refrescar", lambda: None)
+    monkeypatch.setattr(crm_flujo, "_refrescar_retail", lambda: None)
+    assert crm_flujo.cambiar_interes("L9", "MANTENIMIENTO") == {"en_linear": True, "en_odoo": True}
+    assert llamadas == [("L9", "MANTENIMIENTO")]
+
+
+def test_si_el_puente_falla_el_cambio_no_se_da_por_hecho(monkeypatch):
+    monkeypatch.setattr(crm_flujo.crm_twenty, "twenty_configurado", lambda: True)
+    monkeypatch.setattr(crm_flujo.crm_leads, "cambiar_tipo_de_interes",
+                        lambda lead, interes: None)
+    assert crm_flujo.cambiar_interes("L9", "MANTENIMIENTO") is None

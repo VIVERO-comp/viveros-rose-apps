@@ -2308,6 +2308,7 @@ def crm_pantalla(request: Request):
         "inactivos": inactivos,
         "abierta": abierta,
         "motivos": crm_flujo.MOTIVOS,
+        "intereses": crm_flujo.INTERESES,
         "estados": {c["clave"]: c for c in crm_flujo.COLUMNAS},
         "aviso": request.query_params.get("aviso"),
         "error": request.query_params.get("error"),
@@ -2343,6 +2344,34 @@ async def crm_motivo(request: Request):
     return RedirectResponse(
         f"/crm?abrir={quote(lead)}&error=" + quote(
             "No se pudo escribir el motivo en el CRM; inténtalo de nuevo."),
+        status_code=303)
+
+
+@app.post("/crm/interes")
+async def crm_interes(request: Request):
+    """Corrige el tipo de interés del lead (Abraham, 23/09/2026): lo pone el
+    clasificador leyendo el mensaje y, cuando se equivoca, se cambia desde
+    el chip de la ficha. Va por el puente del frontend, que lo escribe en
+    Twenty, en la label de Linear —y con ella se mueven la pestaña Retail y
+    el log de servicio del calendario— y en la oportunidad de Odoo."""
+    form = await request.form()
+    lead, interes = form.get("lead", ""), form.get("interes", "")
+    hecho = crm_flujo.cambiar_interes(lead, interes)
+    if hecho:
+        nombre = crm_flujo.INTERESES.get(interes, interes)
+        # El aviso dice lo que DE VERDAD quedó: Linear y Odoo son
+        # best-effort del otro lado del puente y pueden no haber entrado.
+        faltaron = [donde for donde, ok in
+                    (("Linear", hecho["en_linear"]), ("Odoo", hecho["en_odoo"]))
+                    if not ok]
+        aviso = f"Tipo cambiado a {nombre}."
+        if faltaron and crm_twenty.twenty_configurado():
+            aviso += " Ojo: no entró en " + " ni en ".join(faltaron) + "."
+        return RedirectResponse(
+            f"/crm?abrir={quote(lead)}&aviso=" + quote(aviso), status_code=303)
+    return RedirectResponse(
+        f"/crm?abrir={quote(lead)}&error=" + quote(
+            "No se pudo cambiar el tipo; inténtalo de nuevo."),
         status_code=303)
 
 
