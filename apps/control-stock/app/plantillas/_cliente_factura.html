@@ -1,0 +1,27 @@
+{# Los datos opcionales de facturación del cliente. Salen sueltos dentro
+   del bloque Cliente o plegados detrás del + , según lo pida la pantalla
+   (`factura_plegada`). #}
+  <div class="campo">
+    <span>RUC</span>
+    <input class="dato-cliente" name="ruc" form="{{ form_cliente }}"
+           value="{{ borrador.ruc }}" autocomplete="off"
+           placeholder="Ej: 155712345-2-2021">
+  </div>
+  <div class="campo">
+    <span>Cédula</span>
+    <input class="dato-cliente" name="cedula" form="{{ form_cliente }}"
+           value="{{ borrador.cedula }}" autocomplete="off"
+           placeholder="Ej: 8-123-4567">
+  </div>
+  <div class="campo">
+    <span>Correo</span>
+    <input class="dato-cliente" name="correo" form="{{ form_cliente }}"
+           value="{{ borrador.correo }}" autocomplete="off" inputmode="email"
+           placeholder="Para enviarle la cotización">
+  </div>
+  <div class="campo campo-ancho">
+    <span>Dirección</span>
+    <input class="dato-cliente" name="direccion" form="{{ form_cliente }}"
+           value="{{ borrador.direccion }}" autocomplete="off"
+           placeholder="Dónde se entrega o instala">
+  </div>

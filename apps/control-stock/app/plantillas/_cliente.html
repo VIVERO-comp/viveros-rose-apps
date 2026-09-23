@@ -48,29 +48,24 @@
            value="{{ proyecto }}">
   </div>
   {% endif %}
-  <div class="campo">
-    <span>RUC</span>
-    <input class="dato-cliente" name="ruc" form="{{ form_cliente }}"
-           value="{{ borrador.ruc }}" autocomplete="off"
-           placeholder="Ej: 155712345-2-2021">
-  </div>
-  <div class="campo">
-    <span>Cédula</span>
-    <input class="dato-cliente" name="cedula" form="{{ form_cliente }}"
-           value="{{ borrador.cedula }}" autocomplete="off"
-           placeholder="Ej: 8-123-4567">
-  </div>
-  <div class="campo">
-    <span>Correo</span>
-    <input class="dato-cliente" name="correo" form="{{ form_cliente }}"
-           value="{{ borrador.correo }}" autocomplete="off" inputmode="email"
-           placeholder="Para enviarle la cotización">
-  </div>
-  <div class="campo campo-ancho">
-    <span>Dirección</span>
-    <input class="dato-cliente" name="direccion" form="{{ form_cliente }}"
-           value="{{ borrador.direccion }}" autocomplete="off"
-           placeholder="Dónde se entrega o instala">
-  </div>
+  {% if not factura_plegada %}
+  {% include "_cliente_factura.html" %}
+  {% endif %}
 </div>
+{% if factura_plegada %}
+{# Los datos de factura (pedido del dueño, 23/09/2026): en COMPUTADORA
+   van todos a la vista, sin + ni −, que ahí sobra la pantalla. En el
+   teléfono se pliegan detrás del + para no hacer la pantalla eterna; el
+   que ya tiene algo escrito nace abierto, para que nadie lo dé por
+   perdido. Nace abierto del servidor y venta.js lo cierra en el teléfono:
+   si el JS no corre, se ven todos, que es lo seguro. #}
+<details class="pliegue" open
+         {% if borrador.ruc or borrador.cedula or borrador.correo or borrador.direccion %}data-lleno="1"{% endif %}>
+  <summary>Datos de factura</summary>
+  <div class="campos-cliente">
+    {% include "_cliente_factura.html" %}
+  </div>
+</details>
+{% else %}
 <p class="nota-cliente">Todo menos el nombre es opcional.</p>
+{% endif %}

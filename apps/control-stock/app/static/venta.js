@@ -170,6 +170,15 @@ for (const campo of document.querySelectorAll(".dato-cliente")) {
   campo.addEventListener("input", sincronizarCliente);
 }
 
+/* Los datos de factura vienen ABIERTOS del servidor. En computadora se
+   quedan así; en el teléfono se pliegan al cargar, salvo que ya tengan
+   algo escrito (pedido del dueño, 23/09/2026). */
+const pliegueFactura = document.querySelector("details.pliegue");
+if (pliegueFactura && !pliegueFactura.dataset.lleno &&
+    window.matchMedia("(max-width: 899px)").matches) {
+  pliegueFactura.open = false;
+}
+
 /* La tarjeta de Retail elegida (23/09/2026): al escogerla se llenan el
    nombre y el celular del lead (el amarre real lo hace el servidor con
    lead_ref al crear la venta). */
@@ -204,6 +213,9 @@ function pintarDesglose() {
   }
   const totalFinal = document.getElementById("total-final");
   if (totalFinal) totalFinal.textContent = "$" + total.toFixed(2);
+  // El mismo total en la barra pegada abajo (rediseño del 23/09/2026).
+  const totalFijo = document.getElementById("total-fijo");
+  if (totalFijo) totalFijo.textContent = "$" + total.toFixed(2);
 }
 if (desglose) {
   for (const clave of ["envio", "instalacion"]) {

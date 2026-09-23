@@ -3,7 +3,13 @@
 
 {% block contenido %}
 {# Formulario largo = pantalla completa con ← Volver arriba (artefacto
-   aprobado, 23/09/2026); el encabezado grande queda para computadora. #}
+   aprobado, 23/09/2026); el encabezado grande queda para computadora.
+
+   Orden de la pantalla (maqueta A aprobada por el dueño el 23/09/2026):
+   de quién es la venta (cliente con TODOS sus datos a la vista y el
+   nombre arriba), de dónde viene (la tarjeta de Retail), qué lleva
+   (plantas), los cargos, la cuenta. El total y el botón viajan pegados
+   abajo. #}
 {% with bm_titulo='Nueva venta', bm_volver='/venta' %}{% include '_barra_movil.html' %}{% endwith %}
 <header>
   <div class="brand">
@@ -15,25 +21,11 @@
   </div>
 </header>
 
-<main class="angosto">
+<main class="angosto forma-venta">
   <a class="volver" href="/venta">← Volver a Vender</a>
 
   {% if error_venta %}
   <div class="aviso-error">{{ error_venta }}</div>
-  {% endif %}
-
-  {# Vino de la ficha de un lead en Retail: esta venta nace amarrada a ese
-     lead; los estilos .aviso-lead viven en venta.html, aquí va la versión
-     con las clases de base.html. #}
-  {% if lead_pendiente %}
-  <div class="aviso-ok" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-    <span>Esta venta quedará amarrada al lead
-      <b>{{ lead_pendiente.ref }}{% if lead_pendiente.nombre %} · {{ lead_pendiente.nombre }}{% endif %}</b>.</span>
-    <form method="post" action="/venta/lead/quitar" style="margin-left:auto">
-      <input type="hidden" name="volver" value="nueva">
-      <button class="enlace-sub" type="submit" style="background:none;border:0;cursor:pointer">No es para este lead</button>
-    </form>
-  </div>
   {% endif %}
 
   {% if not ventas_activo %}
@@ -41,33 +33,26 @@
     servidor. Avísale a Abraham.</div>
   {% else %}
 
-  {# ---- Tarjeta de Retail (dueño, 23/09/2026: "pon la opción de elegir
-     una tarjeta en Retail") ---- La venta nace amarrada al lead elegido;
-     con "Ninguna", el espejo crea el lead o lo casa solo por celular. #}
-  {% if leads_retail or lead_pendiente %}
-  <div class="seccion-titulo">Tarjeta de Retail</div>
-  <div class="campo">
-    <select id="lead-retail" name="lead_ref" form="form-acciones">
-      <option value="">Ninguna · el lead se crea o se casa solo por celular</option>
-      {% for l in leads_retail %}
-      <option value="{{ l.ref }}" data-nombre="{{ l.nombre }}" data-cel="{{ l.cel }}"
-              {{ 'selected' if lead_pendiente and lead_pendiente.ref == l.ref }}>
-        {{ l.ref }} · {{ l.nombre }} — {{ l.etapa }}</option>
-      {% endfor %}
-      {% if lead_pendiente and lead_pendiente.ref not in (leads_retail | map(attribute='ref') | list) %}
-      <option value="{{ lead_pendiente.ref }}" selected>
-        {{ lead_pendiente.ref }}{% if lead_pendiente.nombre %} · {{ lead_pendiente.nombre }}{% endif %}</option>
-      {% endif %}
-    </select>
-    <span class="nota-campo">Elegirla amarra esta venta a ese lead y llena su nombre y celular.</span>
-  </div>
-  {% endif %}
+  {# El envío completo va por este form aunque los campos vivan repartidos
+     por la pantalla (atributo form=): así el buscador y las filas de abajo
+     pueden tener sus propios <form> sin anidar. #}
+  <form id="form-acciones" method="post" action="/venta/cotizar" style="display:none"></form>
 
-  {# ---- Cliente ---- #}
-  {% with form_cliente="form-acciones", nombre_opcional=True %}{% include "_cliente.html" %}{% endwith %}
+  {# Dos columnas en computadora (maqueta aprobada por el dueño,
+     23/09/2026): a la izquierda el trabajo —cliente, plantas, cargos— y a
+     la derecha, pegada, de dónde viene la venta y la cuenta con el botón.
+     En el teléfono se apila y el total vuelve a la barra de abajo. #}
+  <div class="venta-dos">
+  <div class="col-trabajo">
 
-  {# ---- Añadir plantas ---- #}
-  <div class="seccion-titulo" style="margin-top:16px">Añadir plantas</div>
+  {# ---- 1. Cliente: primero, con los datos de factura ---- #}
+  {% with form_cliente="form-acciones", nombre_opcional=True, factura_plegada=True %}
+    {% include "_cliente.html" %}
+  {% endwith %}
+
+  {# ---- 3. Plantas ---- #}
+  <div class="seccion-titulo" id="plantas" style="margin-top:18px">Plantas
+    <span class="cuenta-seccion">{{ carrito | length }}</span></div>
   {# Buscador compacto (pedido del dueño, 22/09/2026): solo el campo de
      texto, sin la caja grande con lupa. #}
   <form class="buscador buscador-compacto" method="get" action="/venta/nueva">
@@ -97,87 +82,153 @@
   {% endif %}
   </div>
 
-  {# ---- Plantas de la venta ---- #}
-  {# id="plantas": el ancla a la que vuelven agregar/quitar/cantidad, para
-     no saltar al tope de la página (pedido del dueño, 22/09/2026). #}
-  <div class="seccion-titulo" id="plantas" style="margin-top:14px">Plantas de la venta · {{ carrito | length }}</div>
   {% if not carrito %}
   <p class="nada-venta">Todavía no has añadido plantas: búscalas arriba y
     tócalas para sumarlas a la venta.</p>
   {% else %}
-    {% for l in carrito %}
-    <div class="planta fila-carrito" style="cursor:default">
-      <div class="foto">🪴<img src="/venta/foto/{{ l.producto_id }}" alt="" loading="lazy" onerror="this.remove()"></div>
-      <div class="info">
-        <b>{{ l.nombre }}</b>
-        <span>{{ l.sku }}</span>
+    {# Una planta por renglón: nombre, precio escribible, cantidad e
+       importe. El ancla #plantas de arriba es a donde vuelven agregar,
+       quitar y cambiar cantidad, para no saltar al tope de la página. #}
+    <div class="lista-plantas">
+      {% for l in carrito %}
+      <div class="fila-planta">
+        <div class="nombre">
+          <b>{{ l.nombre }}</b>
+          <span>{{ l.sku }}</span>
+          <form method="post" action="/venta/carrito/quitar" class="sin-margen">
+            <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
+            <button class="quitar-venta" type="submit">Quitar</button>
+          </form>
+        </div>
         {# El precio se escribe a mano cuando se vende más caro (23/09/2026). #}
         {% with linea=l, volver='/venta/nueva' %}{% include "_precio_carrito.html" %}{% endwith %}
-        <span class="precio"><b>{{ l.importe | dinero }}</b></span>
-        <form method="post" action="/venta/carrito/quitar" class="sin-margen">
-          <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
-          <button class="quitar-venta" type="submit">Quitar</button>
-        </form>
+        <div class="qty-mini">
+          <form method="post" action="/venta/carrito/cantidad">
+            <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
+            <input type="hidden" name="cantidad" value="{{ l.cantidad - 1 }}">
+            <button type="submit" aria-label="Menos">−</button>
+          </form>
+          {# La cantidad también se escribe a mano (pedido del dueño,
+             22/09/2026): al cambiarla o dar Enter se guarda sola. #}
+          <form method="post" action="/venta/carrito/cantidad" class="sin-margen">
+            <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
+            <input class="valor" name="cantidad" type="number" min="0" step="1"
+                   inputmode="numeric" value="{{ l.cantidad }}"
+                   aria-label="Cantidad" onfocus="this.select()" onchange="this.form.submit()">
+          </form>
+          <form method="post" action="/venta/carrito/cantidad">
+            <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
+            <input type="hidden" name="cantidad" value="{{ l.cantidad + 1 }}">
+            <button type="submit" aria-label="Más">+</button>
+          </form>
+        </div>
+        <div class="importe">{{ l.importe | dinero }}</div>
       </div>
-      <div class="qty-mini">
-        <form method="post" action="/venta/carrito/cantidad">
-          <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
-          <input type="hidden" name="cantidad" value="{{ l.cantidad - 1 }}">
-          <button type="submit" aria-label="Menos">−</button>
-        </form>
-        {# La cantidad también se escribe a mano (pedido del dueño,
-           22/09/2026): al cambiarla o dar Enter se guarda sola. #}
-        <form method="post" action="/venta/carrito/cantidad" class="sin-margen">
-          <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
-          <input class="valor" name="cantidad" type="number" min="0" step="1"
-                 inputmode="numeric" value="{{ l.cantidad }}"
-                 aria-label="Cantidad" onfocus="this.select()" onchange="this.form.submit()">
-        </form>
-        <form method="post" action="/venta/carrito/cantidad">
-          <input type="hidden" name="producto_id" value="{{ l.producto_id }}">
-          <input type="hidden" name="cantidad" value="{{ l.cantidad + 1 }}">
-          <button type="submit" aria-label="Más">+</button>
-        </form>
-      </div>
+      {% endfor %}
     </div>
-    {% endfor %}
 
-    {# Los cargos van pegados al total (dueño, 23/09/2026: "no veo lo de
-       envío ni instalación"): se escriben aquí y el desglose de abajo los
-       suma en vivo. #}
+    {# ---- 5. Envío e instalación, de último (pedido del dueño,
+       23/09/2026) ---- Lo que se escriba acá se suma solo en la cuenta de
+       arriba, sin recargar. #}
     {% with form_cargos="form-acciones", cargos={'envio': borrador.envio, 'instalacion': borrador.instalacion} %}{% include "_cargos.html" %}{% endwith %}
 
-    {# El desglose espeja los renglones del PDF: cada cargo es una línea.
-       Lo inicial lo pinta el servidor (borrador); venta.js solo lo
-       refresca mientras se escribe. El total real lo confirma Odoo. #}
-    <div class="total-venta desglose" id="desglose"
-         data-plantas="{{ '%.2f' | format(total_carrito) }}">
-      {# El rótulo dice la verdad: si alguna línea lleva precio escrito a
-         mano, ya no son "los precios de Odoo" (23/09/2026). #}
-      {% set a_mano = carrito | selectattr('precio_editado') | list %}
-      <div class="linea-total"><span>Plantas{{ ' (con precios a mano)' if a_mano else ' (precios de Odoo)' }}</span><b>{{ total_carrito | dinero }}</b></div>
-      <div class="linea-total" id="linea-envio"
-           {% if not cargos_montos.envio %}style="display:none"{% endif %}>
-        <span>Envío a domicilio</span><b>{{ cargos_montos.envio | dinero }}</b></div>
-      <div class="linea-total" id="linea-instalacion"
-           {% if not cargos_montos.instalacion %}style="display:none"{% endif %}>
-        <span>Instalación</span><b>{{ cargos_montos.instalacion | dinero }}</b></div>
-      <div class="linea-total total-final"><span>Total</span><b id="total-final">{{ total_con_cargos | dinero }}</b></div>
+    {# Ver el PDF ANTES de generar (dueño, 23/09/2026). Mismo formulario: el
+       botón solo cambia a dónde se manda, así viajan los mismos datos que
+       usaría la cotización de verdad. Va aquí, en gris: el negro de la
+       pantalla es uno solo y es GENERAR COTIZACIÓN. #}
+    <button class="btn btn-linea btn-grande" type="submit" form="form-acciones"
+            formaction="/venta/vista-previa">VISTA PREVIA</button>
+
+  {% endif %}
+
+  </div>{# col-trabajo #}
+
+  {# ---- La columna de la derecha: de dónde viene y la cuenta ---- #}
+  <aside class="col-lado">
+    {# Quién es el cliente en el CRM: su tarjeta de Retail, el chat de
+       WhatsApp por donde entró y la referencia que viajó en tinta
+       invisible dentro del mensaje. #}
+    {% set lead_puesto = (leads_retail | selectattr('ref', 'equalto', lead_pendiente.ref) | first) if lead_pendiente else none %}
+    <div class="tarjeta-lado">
+      <div class="rotulo-lado">De dónde viene</div>
+      <select id="lead-retail" name="lead_ref" form="form-acciones">
+        <option value="">Ninguna · el lead se crea o se casa solo por celular</option>
+        {% for l in leads_retail %}
+        <option value="{{ l.ref }}" data-nombre="{{ l.nombre }}" data-cel="{{ l.cel }}"
+                {{ 'selected' if lead_pendiente and lead_pendiente.ref == l.ref }}>
+          {{ l.ref }} · {{ l.nombre }} — {{ l.etapa }}{% if not l.cel %} · sin chat disponible{% endif %}</option>
+        {% endfor %}
+        {% if lead_pendiente and not lead_puesto %}
+        <option value="{{ lead_pendiente.ref }}" selected>
+          {{ lead_pendiente.ref }}{% if lead_pendiente.nombre %} · {{ lead_pendiente.nombre }}{% endif %}</option>
+        {% endif %}
+      </select>
+      {% if lead_pendiente %}
+      <div class="chips-lead">
+        {% if lead_puesto and lead_puesto.cel %}
+        <span class="chip-lead">WhatsApp {{ lead_puesto.cel }}</span>
+        {% else %}
+        <span class="chip-lead suave">sin chat disponible</span>
+        {% endif %}
+        {% if lead_puesto and lead_puesto.etapa %}
+        <span class="chip-lead suave">Retail · {{ lead_puesto.etapa }}</span>
+        {% endif %}
+      </div>
+      <p class="dicho-lead">
+        {% if lead_puesto and lead_puesto.cel %}
+        Su chat entró por el <b>6099-1459</b> con la referencia
+        <b>{{ lead_pendiente.ref }}</b> adentro del mensaje, en tinta invisible.
+        {% endif %}
+        Al generar la cotización, la tarjeta pasa a <b>Cotizado</b> en Retail y
+        su issue de Linear se mueve con ella.</p>
+      <form method="post" action="/venta/lead/quitar" class="sin-margen">
+        <input type="hidden" name="volver" value="nueva">
+        <button class="quitar-lead" type="submit">No es para este lead</button>
+      </form>
+      {% else %}
+      <p class="dicho-lead">Elegirla amarra esta venta a ese lead y llena su
+        nombre y celular. Sin tarjeta, el lead se crea o se casa solo por el
+        celular del cliente.</p>
+      {% endif %}
     </div>
 
-    {# Un solo botón (dueño, 23/09/2026: "lo de pagado quítalo, solo pon
-       generar cotización y ya"): toda venta nace como cotización y el
-       cobro se hace después con el "Cobrar" de la lista de Vender. #}
-    <form method="post" action="/venta/cotizar" id="form-acciones">
-      <div class="botones-venta">
-        {# Ver el PDF ANTES de generar (dueño, 23/09/2026). Mismo formulario:
-           el botón solo cambia a dónde se manda, así viajan los mismos
-           datos que usaría la cotización de verdad. #}
-        <button class="btn btn-linea btn-grande" type="submit"
-                formaction="/venta/vista-previa">VISTA PREVIA</button>
-        <button class="btn btn-dorado btn-grande" type="submit">GENERAR COTIZACIÓN</button>
+    {% if carrito %}
+    <div class="tarjeta-lado">
+      <div class="rotulo-lado">Cuenta</div>
+      {# Espeja los renglones del PDF: cada cargo es una línea. Lo inicial lo
+         pinta el servidor (borrador); venta.js solo lo refresca mientras se
+         escribe. El total real lo confirma Odoo. #}
+      <div class="total-venta desglose" id="desglose"
+           data-plantas="{{ '%.2f' | format(total_carrito) }}">
+        {% set a_mano = carrito | selectattr('precio_editado') | list %}
+        <div class="linea-total"><span>Plantas{{ ' (con precios a mano)' if a_mano else ' (precios de Odoo)' }}</span><b>{{ total_carrito | dinero }}</b></div>
+        <div class="linea-total" id="linea-envio"
+             {% if not cargos_montos.envio %}style="display:none"{% endif %}>
+          <span>Envío a domicilio</span><b>{{ cargos_montos.envio | dinero }}</b></div>
+        <div class="linea-total" id="linea-instalacion"
+             {% if not cargos_montos.instalacion %}style="display:none"{% endif %}>
+          <span>Instalación</span><b>{{ cargos_montos.instalacion | dinero }}</b></div>
+        <div class="linea-total total-final"><span>Total</span><b id="total-final">{{ total_con_cargos | dinero }}</b></div>
       </div>
-    </form>
+
+      <button class="btn btn-dorado btn-generar" type="submit" form="form-acciones">GENERAR COTIZACIÓN</button>
+    </div>
+    {% endif %}
+  </aside>
+  </div>{# venta-dos #}
+
+  {% if carrito %}
+  {# En el teléfono el total y la acción viajan pegados abajo; en
+     computadora viven en la tarjeta de la derecha. #}
+  <div class="piso-venta">
+    <div class="adentro">
+      <div class="suma">
+        <span>Total</span>
+        <b id="total-fijo">{{ total_con_cargos | dinero }}</b>
+      </div>
+      <button class="btn btn-dorado" type="submit" form="form-acciones">GENERAR COTIZACIÓN</button>
+    </div>
+  </div>
   {% endif %}
 
   {% endif %}{# ventas_activo #}

@@ -1444,3 +1444,154 @@ nav .hamb{display:none}
   .botones-previa .btn,.botones-previa form{flex:1 1 0}
   .marco-previa iframe{height:66vh}
 }
+
+
+/* ==========================================================================
+   Nueva venta, rediseño del 23/09/2026 (maqueta A aprobada por el dueño):
+   la pantalla va en el orden del mostrador —cliente, de dónde viene,
+   plantas, cargos, cuenta— y el total con su botón viajan pegados abajo.
+   Todo vive bajo .forma-venta para no tocar las demás pantallas.
+   ========================================================================== */
+.forma-venta{padding-bottom:96px}
+/* Los datos de factura, plegados detrás del + (23/09/2026). */
+.pliegue{border-top:1px solid var(--noche-3);margin-top:11px;padding-top:11px}
+.pliegue > summary{
+  list-style:none;cursor:pointer;display:flex;align-items:center;gap:9px;
+  font-size:13px;font-weight:700;color:var(--texto-suave);padding:2px 0;
+}
+.pliegue > summary::-webkit-details-marker{display:none}
+.pliegue > summary::before{
+  content:"+";width:22px;height:22px;border-radius:8px;background:var(--noche-2);
+  color:var(--texto);display:grid;place-items:center;font-size:15px;font-weight:800;
+  line-height:1;
+}
+.pliegue[open] > summary::before{content:"−"}
+@media (min-width:900px){
+  /* En computadora no hay nada que plegar: los datos van a la vista. */
+  .pliegue{border-top:0;margin-top:0;padding-top:0}
+  .pliegue > summary{display:none}
+  .pliegue > .campos-cliente{margin-top:9px}
+}
+.pliegue > .campos-cliente{margin-top:11px}
+/* ---- Las dos columnas: el trabajo a la izquierda, de dónde viene y la
+   cuenta a la derecha (maqueta aprobada el 23/09/2026). En el teléfono
+   se apila y el total vuelve a la barra de abajo. ---- */
+.venta-dos{display:block}
+.col-lado{display:flex;flex-direction:column;gap:14px;margin-top:18px}
+.tarjeta-lado{display:flex;flex-direction:column;gap:9px}
+.rotulo-lado{
+  font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--texto-suave);
+}
+.col-lado select{
+  width:100%;box-sizing:border-box;font-family:inherit;font-size:13px;
+  padding:11px 12px;border-radius:12px;
+  border:1px solid var(--borde);background:#fff;color:inherit;
+}
+.dicho-lead{font-size:12px;color:var(--texto-suave);line-height:1.5;margin:0}
+.dicho-lead b{color:var(--texto);font-weight:700}
+.col-lado .total-venta.desglose{margin:0}
+@media (min-width:900px){
+  main.angosto.forma-venta{max-width:1180px}
+  .venta-dos{display:grid;grid-template-columns:minmax(0,1fr) 340px;
+    gap:26px;align-items:start}
+  .col-lado{position:sticky;top:10px;margin-top:0;gap:16px}
+  .tarjeta-lado{
+    border:1px solid var(--noche-3);border-radius:18px;padding:16px;
+    background:#fff;
+  }
+  .piso-venta{display:none}
+}
+@media (max-width:899px){
+  /* En el teléfono el botón vive en la barra de abajo, no en la tarjeta. */
+  .col-lado .btn-generar{display:none}
+  .col-lado select{font-size:16px}
+}
+/* El selector de la tarjeta de Retail: mismo campo que los del cliente. */
+.forma-venta > .campo > select{
+  width:100%;box-sizing:border-box;font-family:inherit;font-size:13px;
+  padding:11px 12px;border-radius:12px;
+  border:1px solid var(--borde);background:#fff;color:inherit;
+}
+/* El número de plantas, al lado del título de la sección. */
+.cuenta-seccion{
+  display:inline-block;margin-left:7px;padding:1px 8px;border-radius:999px;
+  background:var(--noche-2);color:var(--texto-suave);
+  font-size:11.5px;font-weight:700;vertical-align:middle;
+}
+/* La tarjeta de Retail ya elegida: de quién es esta venta. */
+.lead-puesto{
+  border:1px solid var(--noche-3);border-radius:14px;padding:12px 14px;
+  margin-top:9px;display:flex;flex-direction:column;gap:7px;
+}
+.chips-lead{display:flex;gap:6px;flex-wrap:wrap}
+.chip-lead{
+  font-size:11.5px;font-weight:700;border-radius:999px;padding:3px 10px;
+  background:var(--texto);color:#fff;
+}
+.chip-lead.suave{background:var(--noche-2);color:var(--texto)}
+.lead-puesto .nota-campo{margin:0}
+.quitar-lead{
+  background:none;border:0;padding:0;color:var(--texto-suave);
+  font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;
+  text-decoration:underline;align-self:flex-start;
+}
+/* La lista de plantas de la venta: un renglón por planta, sin fotos —lo
+   que hace falta ahí es el nombre, el precio, la cantidad y el importe. */
+.lista-plantas{
+  display:flex;flex-direction:column;gap:1px;margin-top:10px;
+  background:var(--noche-3);border:1px solid var(--noche-3);
+  border-radius:16px;overflow:hidden;
+}
+.fila-planta{
+  background:#fff;display:grid;align-items:center;gap:12px;
+  grid-template-columns:1fr auto auto auto;padding:11px 13px;
+}
+.fila-planta .nombre{min-width:0}
+.fila-planta .nombre b{
+  display:block;font-size:14.5px;font-weight:650;letter-spacing:-.01em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.fila-planta .nombre > span{font-size:11.5px;color:var(--texto-suave)}
+.fila-planta .importe{
+  font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;
+  min-width:76px;text-align:right;
+}
+.fila-planta .precio-unit{margin-top:0}
+.forma-venta .desglose{margin-top:10px}
+/* El total y la acción, pegados abajo. */
+.piso-venta{
+  position:fixed;left:0;right:0;bottom:0;z-index:40;
+  background:rgba(255,255,255,.94);backdrop-filter:blur(8px);
+  border-top:1px solid var(--noche-3);
+  padding:10px 16px calc(10px + env(safe-area-inset-bottom));
+}
+.piso-venta .adentro{
+  max-width:940px;margin:0 auto;display:flex;align-items:center;gap:14px;
+}
+.piso-venta .suma{flex:1;min-width:0;line-height:1.15}
+.piso-venta .suma span{display:block;font-size:11px;color:var(--texto-suave)}
+.piso-venta .suma b{
+  font-size:21px;font-weight:800;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;
+}
+.piso-venta .btn{flex-shrink:0;padding:14px 20px;font-size:13.5px}
+@media (max-width:899px){
+  /* En el teléfono la barra de abajo se sienta encima del menú. */
+  .forma-venta > .campo > select{font-size:16px}
+  .pliegue > summary{font-size:14px;padding:6px 0}
+  .piso-venta{bottom:64px}
+  .forma-venta{padding-bottom:150px}
+  .fila-planta{grid-template-columns:1fr auto;gap:8px 10px}
+  .fila-planta .nombre{grid-column:1/-1}
+  .fila-planta .precio-unit{grid-column:1}
+  .fila-planta .qty-mini{grid-column:2;justify-self:end}
+  .fila-planta .importe{
+    grid-column:1/-1;text-align:right;font-size:14px;
+    border-top:1px dashed var(--noche-3);padding-top:7px;
+  }
+}
+@media (min-width:900px){
+  /* En computadora la barra respeta el sidebar y el lienzo redondeado. */
+  .piso-venta{left:258px;right:22px;bottom:18px;border-radius:0 0 26px 26px}
+}
