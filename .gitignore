@@ -29,3 +29,4 @@ apps/control-stock/datos/
 # Sistema y logs
 .DS_Store
 *.log
+apps/control-stock/fotos_productos/

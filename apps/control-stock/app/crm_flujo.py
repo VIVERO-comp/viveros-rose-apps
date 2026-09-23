@@ -1,0 +1,570 @@
+"""La pestaña CRM: el espejo del CRM del admin, dentro de inventario.
+
+Pedido del dueño (23/09/2026, ampliado el mismo día): "que tenga las
+mismas funciones que el CRM de admin, un mirror idéntico y sync". O sea:
+
+- El mismo kanban "Por estado" (columnas, nombres y colores calcados del
+  /admin). El ESTADO sigue moviéndose en Linear (regla del 11/09/2026):
+  el tablero no se arrastra, igual que en el admin.
+- La ficha del lead al abrir la tarjeta: motivo, notas (los comentarios
+  del issue de Linear) y la conversación COMPLETA de WhatsApp — lo mismo
+  que carga /api/crm/lead-detalle en el panel.
+- Escribir el "porqué" (motivoNoAvance) y las notas, EN SINCRONÍA con el
+  admin: la escritura va por LAS MISMAS rutas del panel
+  (/api/crm/lead-motivo y /api/crm/lead-nota, con la credencial
+  X-Clave-Admin en CRM_ADMIN_CLAVE), así un motivo puesto aquí dispara
+  exactamente lo mismo que en el admin — Twenty, las labels de Linear
+  ("Motivo: …" + "Desactivado") y el archivo de la oportunidad en Odoo.
+  Sin la clave configurada cae al respaldo directo (Twenty PATCH y el
+  comentario en Linear): los tableros quedan igual sincronizados y solo
+  se pierden los extras hasta poner la clave.
+
+Los leads salen del objeto `leads` del Twenty real (los mismos que pinta
+/api/crm/tablero en el frontend). Los que tienen motivoNoAvance no van en
+columnas: van en la sección "Inactivos" de abajo, igual que en el admin.
+Sin TWENTY_API_KEY corre con leads de muestra.
+"""
+
+import os
+import re
+import time
+from urllib.parse import quote
+
+import httpx
+
+from . import calendario, crm_twenty
+
+TTL_LEADS = 120
+
+# Mismo orden, nombres y colores que COLUMNAS_LEADS del admin
+# (viveros-rose-frontend/src/pages/api/crm/tablero.ts).
+COLUMNAS = [
+    {"clave": "NUEVO", "titulo": "Nuevo", "color": "#4b7bd6"},
+    {"clave": "CONTACTADO", "titulo": "Contactado", "color": "#c98a1e"},
+    {"clave": "EN_CONVERSACION", "titulo": "En conversación", "color": "#8a63d2"},
+    {"clave": "PEDIDO_PENDIENTE", "titulo": "Pedido pendiente", "color": "#c96a2a"},
+    {"clave": "GANADO", "titulo": "Ganado", "color": "#2f7d4f"},
+    {"clave": "PERDIDO", "titulo": "Perdido", "color": "#a4322a"},
+]
+
+# Vocabulario de chips compartido con el admin y los Chats
+# (viveros-rose-frontend/src/lib/chips-lead.ts): mismo texto, mismo color.
+ETIQUETA_INTERES = {
+    "PLANTAS_RETAIL": ("Plantas retail", "#16a34a"),
+    "MAYORISTA": ("Mayorista", "#4b7bd6"),
+    "EVENTOS": ("Eventos", "#dc2626"),
+    "EVENTOS_ALQUILER": ("Eventos · Alquiler", "#dc2626"),
+    "EVENTOS_BODAS": ("Eventos · Bodas", "#db2777"),
+    "EVENTOS_FERIAS": ("Eventos · Ferias", "#dc2626"),
+    "MANTENIMIENTO": ("Mantenimiento", "#c98a1e"),
+    "PAISAJISMO": ("Paisajismo", "#8a63d2"),
+    "SERVICIOS_PROYECTOS": ("Servicios · Proyectos", "#4b7bd6"),
+    "SERVICIOS_INSTALACION": ("Servicios · Instalación", "#4b7bd6"),
+    "CONSTRUCCION": ("Construcción", "#a16207"),
+}
+
+MOTIVOS = {
+    "NO_CONTESTO": "No contestó",
+    "DEJO_DE_RESPONDER": "Dejó de responder",
+    "DIJO_QUE_NO": "Dijo que no / precio",
+    "SOLO_PREGUNTABA": "Solo preguntaba",
+}
+
+_cache = {"en": 0, "dato": None}
+
+# En modo muestra las escrituras (motivo) caen sobre estas filas, para que
+# el tablero y Control se muevan igual que con el Twenty real.
+_MUESTRA = [
+    {"name": "PP-70211 · Tamara", "estado": "NUEVO", "tipoInteres": ["PLANTAS_RETAIL"],
+     "motivoNoAvance": "", "createdAt": "2026-09-23T14:40:00+00:00", "id": "L1",
+     "personaId": "p1", "leadWebId": "", "linearIssueUrl": ""},
+    {"name": "PP-70208 · Kev", "estado": "EN_CONVERSACION", "tipoInteres": ["PLANTAS_RETAIL"],
+     "motivoNoAvance": "", "createdAt": "2026-09-22T10:00:00+00:00", "id": "L2",
+     "personaId": "p2", "leadWebId": "",
+     "linearIssueUrl": "https://linear.app/viverorose/issue/LEAD-45/kev"},
+    {"name": "PP-70202 · NC Renovando Vidas", "estado": "CONTACTADO", "tipoInteres": ["MAYORISTA"],
+     "motivoNoAvance": "", "createdAt": "2026-09-21T09:30:00+00:00", "id": "L3",
+     "personaId": "p3", "leadWebId": "",
+     "linearIssueUrl": "https://linear.app/viverorose/issue/LEAD-34/nc-renovando-vidas"},
+    {"name": "PP-70195 · Soledad", "estado": "GANADO", "tipoInteres": ["PLANTAS_RETAIL"],
+     "motivoNoAvance": "", "createdAt": "2026-09-19T15:00:00+00:00", "id": "L4",
+     "personaId": "p4", "leadWebId": "",
+     "linearIssueUrl": "https://linear.app/viverorose/issue/LEAD-44/soledad"},
+    {"name": "PP-70190 · Monica Gama", "estado": "CONTACTADO", "tipoInteres": ["PLANTAS_RETAIL"],
+     "motivoNoAvance": "SOLO_PREGUNTABA", "createdAt": "2026-09-18T12:00:00+00:00", "id": "L5",
+     "personaId": "p5", "leadWebId": "",
+     "linearIssueUrl": "https://linear.app/viverorose/issue/LEAD-42/monica-gama"},
+]
+
+
+def _crudos():
+    if not crm_twenty.twenty_configurado():
+        return [dict(f) for f in _MUESTRA]
+    if _cache["dato"] is not None:
+        if time.time() - _cache["en"] >= TTL_LEADS:
+            calendario._en_fondo("crm-flujo", _buscar)
+        return [dict(f) for f in _cache["dato"]]
+    try:
+        return [dict(f) for f in _buscar()]
+    except Exception:
+        return []
+
+
+def _buscar():
+    filas = []
+    cursor = None
+    for _ in range(4):  # hasta 240 leads: de sobra para el tablero
+        ruta = "leads?order_by=createdAt[DescNullsLast]&limit=60"
+        if cursor:
+            ruta += "&starting_after=" + cursor
+        j = crm_twenty._twenty(ruta)
+        filas.extend((j.get("data") or {}).get("leads") or [])
+        pagina = j.get("pageInfo") or (j.get("data") or {}).get("pageInfo") or {}
+        cursor = pagina.get("endCursor") if pagina.get("hasNextPage") else None
+        if not cursor:
+            break
+    _cache.update({"en": time.time(), "dato": filas})
+    return filas
+
+
+def refrescar():
+    _cache.update({"en": 0, "dato": None})
+
+
+def _hace_bonito(iso_texto):
+    from datetime import datetime
+    from .datos import ZONA_PANAMA
+    try:
+        cuando = datetime.fromisoformat(str(iso_texto).replace("Z", "+00:00"))
+        dias = (datetime.now(ZONA_PANAMA).date()
+                - cuando.astimezone(ZONA_PANAMA).date()).days
+    except (ValueError, TypeError):
+        return ""
+    if dias <= 0:
+        return "hoy"
+    return f"hace {dias} día" + ("s" if dias > 1 else "")
+
+
+def _tarjeta(fila, etapas_retail=None):
+    chips = []
+    for tipo in (fila.get("tipoInteres") or []):
+        if tipo in ETIQUETA_INTERES:
+            texto, color = ETIQUETA_INTERES[tipo]
+            chips.append({"texto": texto, "color": color})
+    ref_retail = _ref_de(fila.get("linearIssueUrl") or "")
+    return {
+        "id": fila.get("id") or "",
+        "titulo": fila.get("name") or "Lead sin código",
+        "estado": fila.get("estado") or "",
+        "motivo": MOTIVOS.get(fila.get("motivoNoAvance") or "", ""),
+        "motivo_clave": fila.get("motivoNoAvance") or "",
+        "chips": chips,
+        "hace": _hace_bonito(fila.get("fechaLead") or fila.get("createdAt") or ""),
+        "canal": fila.get("canal") or "",
+        "pagina": fila.get("paginaContacto") or fila.get("primeraPagina") or "",
+        "persona_id": fila.get("personaId") or "",
+        "twenty_url": (f"{crm_twenty.twenty_publico()}/object/lead/{fila['id']}"
+                       if fila.get("id") else ""),
+        "linear_url": fila.get("linearIssueUrl") or "",
+        # El label chiquito "dónde está en Retail" (dueño, 23/09/2026).
+        "retail_ref": ref_retail,
+        "retail_etapa": (etapas_retail or {}).get(ref_retail, ""),
+    }
+
+
+def tablero():
+    """([columnas], [inactivos]) igual repartido que el tablero del admin:
+    un lead con motivo no va en columnas, va en Inactivos."""
+    etapas_retail = _etapas_retail()
+    tarjetas = [_tarjeta(f, etapas_retail) for f in _crudos()]
+    inactivos = [t for t in tarjetas if t["motivo"]]
+    activas = [t for t in tarjetas if not t["motivo"]]
+    columnas = [dict(col, tarjetas=[t for t in activas if t["estado"] == col["clave"]])
+                for col in COLUMNAS]
+    return columnas, inactivos
+
+
+def por_persona():
+    """{personaId: fila cruda} — con esto Control casa cada chat con su
+    lead (los mensajes de Twenty traen el personaId) y hereda Ganado y el
+    motivo de la MISMA fuente que el admin."""
+    filas = {}
+    for f in _crudos():
+        if f.get("personaId"):
+            filas.setdefault(f["personaId"], f)
+    return filas
+
+
+# ---------------------------------------------------------------------------
+# El amarre con la pestaña Retail (pedido de Abraham, 23/09/2026): los dos
+# tableros son el mismo negocio, así que "Facturado · por entregar" es
+# "Pedido pendiente" y "Entregado" es "Ganado". Retail casa sus leads
+# (LEAD-NN) con estas filas por la URL del issue de Linear.
+# ---------------------------------------------------------------------------
+
+_REF_LINEAR = re.compile(r"/([A-Z]+-\d+)(?:/|$)")
+
+# estado del CRM -> etapa MÍNIMA del kanban Retail que ese estado impone.
+_ESTADO_A_ETAPA_RETAIL = {"PEDIDO_PENDIENTE": "entregar", "GANADO": "entregado"}
+
+
+def _ref_de(url):
+    """El identificador LEAD-NN dentro de una URL de issue de Linear."""
+    encontrado = _REF_LINEAR.search(url or "")
+    return encontrado.group(1) if encontrado else ""
+
+
+def lead_por_ref(ref):
+    """La fila cruda del lead cuyo issue de Linear es `ref` (LEAD-NN), o
+    None si ningún lead del espejo apunta a ese issue."""
+    ref = (ref or "").strip()
+    if not ref:
+        return None
+    for f in _crudos():
+        if _ref_de(f.get("linearIssueUrl") or "") == ref:
+            return f
+    return None
+
+
+def senales_retail():
+    """{LEAD-NN: {"piso", "inactivo"}}: lo que el espejo del CRM le dicta
+    al tablero Retail — la etapa mínima que el estado impone y si el lead
+    está inactivo (tiene motivo). En vivo Retail saca estas señales de su
+    propia consulta a Linear (estado y label "Desactivado" del issue);
+    esta función alimenta el modo muestra."""
+    senales = {}
+    for f in _crudos():
+        ref = _ref_de(f.get("linearIssueUrl") or "")
+        if ref:
+            senales[ref] = {
+                "piso": _ESTADO_A_ETAPA_RETAIL.get(f.get("estado") or ""),
+                "inactivo": bool(f.get("motivoNoAvance")),
+            }
+    return senales
+
+
+def _refrescar_retail():
+    """Tras una escritura del CRM (drag, motivo) el tablero Retail no puede
+    quedarse 2 minutos (su TTL) enseñando lo viejo: un lead recién ganado
+    debe caer en Entregado y un inactivo debe salir del tablero ya."""
+    from . import retail  # aquí abajo para no ciclar imports
+    retail.refrescar()
+
+
+# El label chiquito de la tarjeta (pedido del dueño, 23/09/2026): dónde
+# está el lead dentro del kanban Retail.
+ETAPA_RETAIL_ETIQUETA = {
+    "cotizar": "Retail · por cotizar",
+    "facturar": "Retail · por facturar",
+    "entregar": "Retail · por entregar",
+    "entregado": "Retail · entregado",
+}
+
+
+def _etapas_retail():
+    """{LEAD-NN: etiqueta chiquita} — la etapa de cada lead en el kanban
+    Retail. Best-effort: sin tablero Retail (Linear caído), sin labels."""
+    from . import retail  # aquí abajo para no ciclar imports
+    try:
+        _cols, por_ref = retail.tablero()
+    except Exception:
+        return {}
+    return {ref: ETAPA_RETAIL_ETIQUETA.get(l.get("etapa"), "")
+            for ref, l in por_ref.items()}
+
+
+# ---------------------------------------------------------------------------
+# La ficha del lead (lo mismo que carga /api/crm/lead-detalle en el panel)
+# ---------------------------------------------------------------------------
+
+_MENSAJES_MUESTRA = {
+    "p1": [{"texto": "¿Tienen calatheas grandes?", "salida": False,
+            "cuando": "23/09 · 09:40"}],
+    "p5": [{"texto": "Gracias, era solo por saber 🙏", "salida": False,
+            "cuando": "18/09 · 12:00"}],
+}
+
+
+def _fila_por_id(lead_id):
+    for f in _crudos():
+        if f.get("id") == lead_id:
+            return f
+    return None
+
+
+def _issue_de(fila):
+    """El id del issue de Linear del lead (vía su leadWeb), o ""."""
+    if not fila.get("leadWebId") or not crm_twenty.twenty_configurado():
+        return ""
+    try:
+        j = crm_twenty._twenty(f"leadsWeb/{quote(fila['leadWebId'])}")
+        return ((j.get("data") or {}).get("leadWeb") or {}).get("linearIssueId") or ""
+    except Exception:
+        return ""
+
+
+def _conversacion(persona_id):
+    """La conversación completa de WhatsApp de la Person, vieja→nueva."""
+    mensajes = []
+    cursor = None
+    for _ in range(5):
+        ruta = ('mensajesWhatsapp?filter=personaId[eq]:"' + quote(persona_id)
+                + '"&order_by=fecha[AscNullsFirst]&limit=60')
+        if cursor:
+            ruta += "&starting_after=" + quote(cursor)
+        j = crm_twenty._twenty(ruta)
+        mensajes.extend((j.get("data") or {}).get("mensajesWhatsapp") or [])
+        pagina = j.get("pageInfo") or (j.get("data") or {}).get("pageInfo") or {}
+        cursor = pagina.get("endCursor") if pagina.get("hasNextPage") else None
+        if not cursor:
+            break
+    mensajes.sort(key=lambda m: str(m.get("fecha") or ""))
+    return [{"texto": m.get("texto") or "",
+             "salida": (m.get("direccion") or "") == "SALIENTE",
+             "cuando": crm_twenty._cuando_bonito(m.get("fecha") or m.get("createdAt") or "")}
+            for m in mensajes[-300:]]
+
+
+CONSULTA_NOTAS = """
+query Comentarios($id: String!) {
+  issue(id: $id) { comments(first: 50) { nodes { body createdAt user { name } } } }
+}
+"""
+
+
+def _notas(issue_id):
+    """Los comentarios del issue de Linear (las notas del panel viven ahí,
+    firmadas), del más viejo al más nuevo. Best-effort."""
+    if not issue_id:
+        return []
+    try:
+        datos = calendario._pedir(CONSULTA_NOTAS, {"id": issue_id})
+        nodos = ((datos.get("issue") or {}).get("comments") or {}).get("nodes") or []
+    except Exception:
+        return []
+    notas = [{"texto": n.get("body") or "",
+              "cuando": crm_twenty._cuando_bonito(n.get("createdAt") or ""),
+              "fecha": n.get("createdAt") or "",
+              "autor": (n.get("user") or {}).get("name") or ""}
+             for n in nodos]
+    notas.sort(key=lambda n: n["fecha"])
+    return notas
+
+
+def detalle(lead_id):
+    """La ficha completa: fila + persona + notas + conversación. None si el
+    lead no existe."""
+    fila = _fila_por_id(lead_id)
+    if fila is None:
+        return None
+    ficha = _tarjeta(fila, _etapas_retail())
+    if not crm_twenty.twenty_configurado():
+        ficha.update({"telefono": "", "wa": "", "notas": [],
+                      "mensajes": _MENSAJES_MUESTRA.get(fila.get("personaId"), [])})
+        return ficha
+    telefono = wa = ""
+    mensajes = []
+    if fila.get("personaId"):
+        try:
+            p = (crm_twenty._twenty(f"people/{quote(fila['personaId'])}")
+                 .get("data") or {}).get("person") or {}
+            telefono = crm_twenty.telefono_legible(p.get("phones"))
+            wa = crm_twenty.telefono_wame(p.get("phones"))
+        except Exception:
+            pass
+        try:
+            mensajes = _conversacion(fila["personaId"])
+        except Exception:
+            mensajes = []
+    ficha.update({"telefono": telefono, "wa": wa,
+                  "notas": _notas(_issue_de(fila)), "mensajes": mensajes})
+    return ficha
+
+
+# ---------------------------------------------------------------------------
+# Escrituras EN SINCRONÍA con el admin: por las mismas rutas del panel
+# (X-Clave-Admin), con respaldo directo si la clave no está configurada
+# ---------------------------------------------------------------------------
+
+def _admin_url():
+    return (os.environ.get("CRM_ADMIN_URL") or "https://www.plantaspanama.com").rstrip("/")
+
+
+def _admin_clave():
+    return (os.environ.get("CRM_ADMIN_CLAVE") or "").strip()
+
+
+def _ruta_admin(ruta, cuerpo):
+    respuesta = httpx.post(
+        f"{_admin_url()}{ruta}", json=cuerpo,
+        headers={"X-Clave-Admin": _admin_clave()}, timeout=12.0)
+    return respuesta.status_code < 300
+
+
+def registrar_motivo(lead_id, motivo):
+    """Pone (o con "" quita) el porqué del lead, como lo haría el panel.
+    Con CRM_ADMIN_CLAVE va por /api/crm/lead-motivo (Twenty + labels de
+    Linear + archivo en Odoo, todo el pipeline del admin); sin clave, el
+    respaldo escribe motivoNoAvance directo en Twenty — los tableros
+    quedan igual. Vuelve True si se escribió."""
+    if motivo and motivo not in MOTIVOS:
+        return False
+    ok = False
+    if not crm_twenty.twenty_configurado():
+        fila = next((f for f in _MUESTRA if f["id"] == lead_id), None)
+        if fila is not None:
+            fila["motivoNoAvance"] = motivo
+            ok = True
+    elif _admin_clave():
+        try:
+            ok = _ruta_admin("/api/crm/lead-motivo",
+                             {"leadId": lead_id, "motivo": motivo})
+        except httpx.HTTPError:
+            ok = False
+    else:
+        try:
+            crm_twenty._twenty_patch(f"leads/{quote(lead_id)}",
+                                     {"motivoNoAvance": motivo or None})
+            ok = True
+        except Exception:
+            ok = False
+    if ok:
+        refrescar()
+        _refrescar_retail()
+    return ok
+
+
+# ---------------------------------------------------------------------------
+# El drag del kanban (decisión del dueño, 23/09/2026): las tarjetas se
+# arrastran, pero SOLO caen en En conversación, Pedido pendiente y Ganado —
+# Nuevo lo pone el sistema al nacer el lead, Contactado lo pone el flujo al
+# responderle, y Perdido va por el porqué. El movimiento va a Linear (la
+# fuente del pipeline) y se espeja a Twenty al instante, igual que hace la
+# ruta /api/crm/lead-estado del panel.
+# ---------------------------------------------------------------------------
+
+DESTINOS_DRAG = {"EN_CONVERSACION", "PEDIDO_PENDIENTE", "GANADO"}
+
+# nombre del estado en Linear (sin acentos, minúsculas) -> valor de Twenty;
+# el mismo mapa de lib/server/estados.ts del frontend.
+_NOMBRES_LINEAR = {
+    "nuevo": "NUEVO", "contactado": "CONTACTADO",
+    "en conversacion": "EN_CONVERSACION",
+    "pedido pendiente": "PEDIDO_PENDIENTE",
+    "ganado": "GANADO", "perdido": "PERDIDO",
+}
+
+CONSULTA_ESTADOS_LEAD = """
+query { teams(filter: { key: { eq: "LEAD" } })
+  { nodes { states { nodes { id name } } } } }
+"""
+
+MUTACION_ESTADO = """
+mutation Mover($id: String!, $state: String!) {
+  issueUpdate(id: $id, input: { stateId: $state }) { success }
+}
+"""
+
+
+def _sin_acentos(texto):
+    import unicodedata
+    plano = unicodedata.normalize("NFD", texto or "")
+    return "".join(c for c in plano if not unicodedata.combining(c)).strip().lower()
+
+
+def _estado_linear(valor):
+    """El id del estado de Linear (team LEAD) que corresponde al valor de
+    Twenty, o ""."""
+    datos = calendario._pedir(CONSULTA_ESTADOS_LEAD)
+    equipos = (datos.get("teams") or {}).get("nodes") or []
+    estados = ((equipos[0] if equipos else {}).get("states") or {}).get("nodes") or []
+    for e in estados:
+        if _NOMBRES_LINEAR.get(_sin_acentos(e.get("name"))) == valor:
+            return e.get("id") or ""
+    return ""
+
+
+def mover_estado(lead_id, estado):
+    """Mueve el lead de columna como lo haría el drag del admin. Con
+    CRM_ADMIN_CLAVE va por /api/crm/lead-estado (la misma ruta del panel);
+    sin clave, el respaldo mueve el issue en Linear directo y espeja el
+    estado en Twenty. Vuelve True si quedó."""
+    if estado not in DESTINOS_DRAG:
+        return False
+    if not crm_twenty.twenty_configurado():
+        fila = next((f for f in _MUESTRA if f["id"] == lead_id), None)
+        if fila is None:
+            return False
+        fila["estado"] = estado
+        refrescar()
+        _refrescar_retail()
+        return True
+    if _admin_clave():
+        try:
+            ok = _ruta_admin("/api/crm/lead-estado",
+                             {"leadId": lead_id, "estado": estado})
+        except httpx.HTTPError:
+            ok = False
+        if ok:
+            refrescar()
+            _refrescar_retail()
+        return ok
+    fila = _fila_por_id(lead_id)
+    if fila is None:
+        return False
+    # Linear primero (la fuente); un lead sin issue solo espeja Twenty.
+    issue = _issue_de(fila)
+    if issue:
+        try:
+            destino = _estado_linear(estado)
+            if not destino:
+                return False
+            datos = calendario._pedir(MUTACION_ESTADO,
+                                      {"id": issue, "state": destino})
+            if not (datos.get("issueUpdate") or {}).get("success"):
+                return False
+        except Exception:
+            return False
+    try:
+        crm_twenty._twenty_patch(f"leads/{quote(lead_id)}", {"estado": estado})
+    except Exception:
+        return False
+    refrescar()
+    _refrescar_retail()
+    return True
+
+
+MUTACION_NOTA = """
+mutation Comentar($issueId: String!, $body: String!) {
+  commentCreate(input: { issueId: $issueId, body: $body }) { success }
+}
+"""
+
+
+def escribir_nota(lead_id, texto):
+    """Una nota sobre el lead, como la del panel: comentario en el issue de
+    Linear (firmado). Con CRM_ADMIN_CLAVE va por /api/crm/lead-nota; sin
+    clave, el respaldo comenta el issue directo con la conexión a Linear
+    que ya existe. Vuelve True si quedó."""
+    texto = (texto or "").strip()[:2000]
+    if not texto:
+        return False
+    if not crm_twenty.twenty_configurado():
+        return True  # en muestra no hay dónde anotar; la pantalla sigue
+    if _admin_clave():
+        try:
+            return _ruta_admin("/api/crm/lead-nota",
+                               {"leadId": lead_id, "texto": texto})
+        except httpx.HTTPError:
+            return False
+    fila = _fila_por_id(lead_id)
+    issue = _issue_de(fila) if fila else ""
+    if not issue:
+        return False
+    try:
+        datos = calendario._pedir(MUTACION_NOTA,
+                                  {"issueId": issue,
+                                   "body": f"{texto}\n\n_— desde inventario_"})
+        return bool((datos.get("commentCreate") or {}).get("success"))
+    except Exception:
+        return False
