@@ -470,6 +470,43 @@
       {% endif %}
     </div>
     {% endfor %}
+
+    {# Números de coworkers (23/09/2026): el dueño chatea con el jefe desde
+       el celular del trabajo y esos chats NO son de clientes. El receptor de
+       WhatsApp del frontend consulta esta lista (base tienda, vía order-api)
+       y los descarta antes de crear el lead. #}
+    <div class="seccion-titulo">Números de coworkers</div>
+    {% if aviso_ajustes == 'coworker-agregado' %}<div class="aviso-ok">Número guardado. Los chats de ese número ya no se vuelven leads.</div>
+    {% elif aviso_ajustes == 'coworker-quitado' %}<div class="aviso-ok">Número quitado. Si vuelve a escribir, entrará al CRM como lead normal.</div>
+    {% elif aviso_ajustes == 'coworker-invalido' %}<div class="aviso-error">Ese número no se ve válido: solo dígitos, como 66752380.</div>
+    {% elif aviso_ajustes == 'coworker-error' %}<div class="aviso-error">No se pudo guardar en la base del droplet. Prueba de nuevo en un momento.</div>{% endif %}
+    {% if coworkers_error %}
+    <div class="aviso-error">La lista vive en la base del droplet y ahora mismo no responde. Recarga en un momento.</div>
+    {% else %}
+    {% for c in coworkers %}
+    <div class="historial-item acceso-item">
+      <div><b>{{ c.numero }}</b><small>{{ c.nota or 'coworker' }} · sus chats no generan leads</small></div>
+      <form method="post" action="/ajustes/coworkers/quitar"
+            onsubmit="return confirm('¿Quitar el {{ c.numero }}? Si ese número vuelve a escribir al WhatsApp del negocio, entrará al CRM como lead de cliente.')">
+        <input type="hidden" name="numero" value="{{ c.numero }}">
+        <button class="btn btn-linea btn-chico" type="submit">Quitar</button>
+      </form>
+    </div>
+    {% else %}
+    <p class="sin-filas">No hay números guardados.</p>
+    {% endfor %}
+    {% endif %}
+    <form class="form-invitar" method="post" action="/ajustes/coworkers/agregar">
+      <label class="campo">
+        <span>Número de WhatsApp de un coworker (sus chats no se vuelven leads)</span>
+        <input name="numero" type="tel" inputmode="numeric" maxlength="20" placeholder="Ej: 66752380">
+      </label>
+      <label class="campo">
+        <span>Quién es (opcional)</span>
+        <input name="nota" type="text" maxlength="60" placeholder="Ej: Jefe">
+      </label>
+      <button class="boton" type="submit">Agregar número</button>
+    </form>
     {% endif %}
 
     {# Cerrar sesión vive en Ajustes (pedido del dueño, 22/09/2026). #}

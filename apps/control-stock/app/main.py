@@ -20,8 +20,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import (acceso_google, calculos, calendario, calendario_google, retail,
-               calendario_ics, compras, conteos, cotizaciones, crm_twenty,
-               datos, fichas, fotos, proyectos, seguridad, ventas)
+               calendario_ics, compras, conteos, cotizaciones, coworkers,
+               crm_twenty, datos, fichas, fotos, proyectos, seguridad, ventas)
 
 app = FastAPI(title="Control Viverorose")
 
@@ -391,12 +391,23 @@ def inicio(request: Request, refrescar: int = 0):
     # La pestaña Ajustes la ven todos (cada quien guarda su email en Mi
     # cuenta); las invitaciones y accesos, solo los admins (AJUSTES_ADMINS).
     es_admin = _es_admin(request.state.empleada)
+    # Números de coworkers (chats internos que no se vuelven leads): la lista
+    # vive en la base `tienda` del droplet; si no responde, Ajustes lo dice
+    # sin tumbar el resto de la pestaña.
+    lista_coworkers, coworkers_error = [], None
+    if es_admin:
+        try:
+            lista_coworkers = coworkers.listar()
+        except Exception:
+            coworkers_error = True
     return plantillas.TemplateResponse(request, "app.html", {
         "empleada": request.state.empleada,
         "puede_fichas": puede_fichas,
         "es_admin": es_admin,
         "empleadas": seguridad.listar() if es_admin else [],
         "invitaciones": seguridad.invitaciones_pendientes() if es_admin else [],
+        "coworkers": lista_coworkers,
+        "coworkers_error": coworkers_error,
         "aviso_ajustes": request.query_params.get("aviso"),
         "inv_nueva": request.query_params.get("inv") if es_admin else None,
         # Para armar los links /invitacion/{token} que se comparten.
@@ -651,6 +662,44 @@ async def ajustes_cancelar_invitacion(request: Request):
     form = await request.form()
     seguridad.cancelar_invitacion(form.get("token") or "")
     return RedirectResponse("/?tab=ajustes", status_code=303)
+
+
+@app.post("/ajustes/coworkers/agregar")
+async def ajustes_coworker_agregar(request: Request):
+    """Números de coworkers: chats internos (el jefe, el equipo) que el
+    receptor de WhatsApp descarta para que no nazcan como leads. La lista
+    vive en la base `tienda` del droplet (migración 018 del order-api)."""
+    if (rechazo := _solo_admin(request)) is not None:
+        return rechazo
+    form = await request.form()
+    numero = coworkers.normalizar(form.get("numero"))
+    if not numero:
+        return RedirectResponse("/?tab=ajustes&aviso=coworker-invalido",
+                                status_code=303)
+    try:
+        coworkers.agregar(numero, (form.get("nota") or "").strip()[:60],
+                          request.state.empleada["id"])
+    except Exception:
+        return RedirectResponse("/?tab=ajustes&aviso=coworker-error",
+                                status_code=303)
+    return RedirectResponse("/?tab=ajustes&aviso=coworker-agregado",
+                            status_code=303)
+
+
+@app.post("/ajustes/coworkers/quitar")
+async def ajustes_coworker_quitar(request: Request):
+    if (rechazo := _solo_admin(request)) is not None:
+        return rechazo
+    form = await request.form()
+    numero = coworkers.normalizar(form.get("numero"))
+    if numero:
+        try:
+            coworkers.quitar(numero)
+        except Exception:
+            return RedirectResponse("/?tab=ajustes&aviso=coworker-error",
+                                    status_code=303)
+    return RedirectResponse("/?tab=ajustes&aviso=coworker-quitado",
+                            status_code=303)
 
 
 @app.post("/ajustes/revocar")
