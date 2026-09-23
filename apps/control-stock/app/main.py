@@ -16,6 +16,7 @@ from urllib.parse import quote
 
 from fastapi import FastAPI, Request, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse, Response
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -28,6 +29,23 @@ app = FastAPI(title="Control Viverorose")
 
 RUTA_APP = os.path.dirname(__file__)
 app.mount("/static", StaticFiles(directory=os.path.join(RUTA_APP, "static")), name="static")
+
+# Velocidad (23/09/2026): las respuestas viajan comprimidas y los estáticos
+# versionados (?v=mtime) se cachean un año — el v_estaticos ya cambia solo
+# en cada deploy, así que el navegador nunca ve una versión vieja. Los que
+# van sin versión (logo) se cachean una hora.
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
+
+@app.middleware("http")
+async def cachear_estaticos(request, siguiente):
+    respuesta = await siguiente(request)
+    if request.url.path.startswith("/static/"):
+        if "v=" in (request.url.query or ""):
+            respuesta.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        else:
+            respuesta.headers["Cache-Control"] = "public, max-age=3600"
+    return respuesta
 
 plantillas = Jinja2Templates(directory=os.path.join(RUTA_APP, "plantillas"))
 
@@ -1046,6 +1064,11 @@ def _leads_retail_para_elegir():
     nombre, celular y etapa, sin los ya entregados. Vive aquí y no en
     retail.py para no tocar ese módulo (tiene trabajo en curso de otra
     tanda); vacío si Linear no responde — el selector no ofrece nada."""
+    if calendario.configurado() and retail._cache["dato"] is None:
+        # Caché frío: la pantalla no espera a Linear (regla de pestañas
+        # rápidas); se pide en el fondo y el selector sale en la próxima.
+        calendario._en_fondo("retail", retail._buscar)
+        return []
     try:
         columnas, _por_ref = retail.tablero()
     except Exception:

@@ -2,6 +2,8 @@
 {% block titulo %}Revisar conteo · Control Viverorose{% endblock %}
 
 {% block contenido %}
+{# La barra única del teléfono (mismo estilo de todas las pestañas). #}
+{% with bm_titulo='Revisar conteo', bm_volver='/' %}{% include '_barra_movil.html' %}{% endwith %}
 <header>
   <div class="brand">
     <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
