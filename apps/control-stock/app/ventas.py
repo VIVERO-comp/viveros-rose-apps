@@ -118,9 +118,22 @@ def diario_de(metodo):
 
 CARGOS = (
     {"clave": "envio", "codigo": "SV-ENVIO", "nombre": "Envío a domicilio"},
-    {"clave": "instalacion", "codigo": "SV-INSTALACION", "nombre": "Instalación"},
+    # Producto PROPIO del cargo (23/09/2026). Antes esto reusaba el
+    # SV-INSTALACION de las cotizaciones de servicio, que en Odoo se llama
+    # "Instalación, transporte y mantenimiento inicial": ese nombre es el
+    # correcto para alquiler, mantenimiento y paisajismo —ahí sí se vende
+    # ese trabajo— pero la FACTURA imprime el nombre del producto, así que
+    # a un cliente que solo pagó que le pusieran la planta la factura le
+    # prometía transporte y mantenimiento inicial. Con producto propio la
+    # cotización y la factura dicen las dos "Instalación", y las facturas
+    # de servicio no cambian en nada.
+    {"clave": "instalacion", "codigo": "SV-CARGO-INSTALACION", "nombre": "Instalación"},
 )
 CODIGOS_CARGO = {c["codigo"]: c["clave"] for c in CARGOS}
+# El código viejo sigue reconociéndose al RELEER una cotización hecha antes
+# del cambio: su cargo tiene que volver a su casilla del formulario y no
+# aparecer como un servicio suelto.
+CODIGOS_CARGO["SV-INSTALACION"] = "instalacion"
 _cache_cargos = {}
 
 
@@ -158,11 +171,10 @@ def lineas_de_cargos(cargos):
                 "product_id": _id_producto_cargo(cargo["codigo"], cargo["nombre"]),
                 "product_uom_qty": 1,
                 "price_unit": round(monto, 2),
-                # El nombre pelado ("Envío a domicilio", "Instalación") y no
-                # la descripción de venta del producto: el SV-INSTALACION
-                # que ya existía en Odoo promete "preparación de suelo,
-                # siembra…" y el rótulo no debe prometer lo que el cargo no
-                # es (regla de rótulos honestos).
+                # El nombre pelado ("Envío a domicilio", "Instalación") y
+                # no la descripción de venta del producto, que en Odoo
+                # promete "preparación de suelo, siembra…": el rótulo no
+                # debe prometer lo que el cargo no es (rótulos honestos).
                 "name": cargo["nombre"],
             })
     return lineas
@@ -297,6 +309,7 @@ def iniciar_tablas():
                 usuario TEXT NOT NULL,
                 producto_id INTEGER NOT NULL,
                 cantidad INTEGER NOT NULL,
+                precio REAL,                -- precio a mano; NULL = el de Odoo
                 PRIMARY KEY (usuario, producto_id)
             );
             CREATE TABLE IF NOT EXISTS venta_borrador (
@@ -324,6 +337,12 @@ def iniciar_tablas():
             );
             """
         )
+        # Migración suave: el carrito pudo nacer sin el precio a mano
+        # (venderle más caro a un cliente, 23/09/2026).
+        columnas_carrito = [fila[1] for fila in con.execute(
+            "PRAGMA table_info(venta_carrito)")]
+        if "precio" not in columnas_carrito:
+            con.execute("ALTER TABLE venta_carrito ADD COLUMN precio REAL")
         # Migración suave: el borrador pudo nacer sin los renglones de
         # servicio (cotizaciones de servicio, 17/09/2026).
         columnas_borrador = [fila[1] for fila in con.execute(
@@ -487,13 +506,17 @@ def sin_lead(limite=6):
 
 
 def carrito_de(usuario):
-    """[{producto_id, cantidad, sku, nombre, precio, importe}] con precios
-    frescos de Odoo, más el total. Un producto que ya no existe en Odoo se
-    descarta del carrito en silencio."""
+    """[{producto_id, cantidad, sku, nombre, precio, precio_odoo,
+    precio_editado, importe}] con precios frescos de Odoo, más el total. Un
+    producto que ya no existe en Odoo se descarta del carrito en silencio.
+
+    El precio de cada línea puede estar escrito a mano (pedido del dueño,
+    23/09/2026: "por si acaso le vendo más caro"): cuando lo está, manda
+    ese y el de Odoo queda a la vista para poder volver a él."""
     with _db() as con:
         filas = con.execute(
-            "SELECT producto_id, cantidad FROM venta_carrito WHERE usuario=? ORDER BY rowid",
-            (usuario,)).fetchall()
+            "SELECT producto_id, cantidad, precio FROM venta_carrito"
+            " WHERE usuario=? ORDER BY rowid", (usuario,)).fetchall()
     if not filas:
         return [], 0.0
     datos_odoo = productos_por_id([f["producto_id"] for f in filas])
@@ -503,9 +526,14 @@ def carrito_de(usuario):
         if producto is None:
             quitar_del_carrito(usuario, fila["producto_id"])
             continue
+        precio_odoo = producto["precio"]
+        a_mano = fila["precio"]
+        precio = round(float(a_mano), 2) if a_mano is not None else precio_odoo
         lineas.append({
             "producto_id": fila["producto_id"], "cantidad": fila["cantidad"],
-            **producto, "importe": round(fila["cantidad"] * producto["precio"], 2),
+            **producto, "precio": precio, "precio_odoo": precio_odoo,
+            "precio_editado": a_mano is not None,
+            "importe": round(fila["cantidad"] * precio, 2),
         })
     return lineas, round(sum(l["importe"] for l in lineas), 2)
 
@@ -528,6 +556,28 @@ def cambiar_cantidad(usuario, producto_id, cantidad):
         con.execute(
             "UPDATE venta_carrito SET cantidad=? WHERE usuario=? AND producto_id=?",
             (min(cantidad, 999), usuario, int(producto_id)))
+
+
+def cambiar_precio(usuario, producto_id, precio):
+    """Fija el precio unitario de una línea del carrito. Un precio vacío
+    devuelve la línea al precio de Odoo (el botón "precio de Odoo"). Un
+    precio ilegible avisa en vez de adivinar."""
+    crudo = str(precio if precio is not None else "").strip().replace(",", ".")
+    crudo = crudo.lstrip("$").strip()
+    if not crudo:
+        valor = None
+    else:
+        try:
+            valor = round(float(crudo), 2)
+        except ValueError:
+            raise ValueError("Ese precio no es un número.")
+        if valor < 0:
+            raise ValueError("El precio no puede ser negativo.")
+        valor = min(valor, 999999.0)
+    with _db() as con:
+        con.execute(
+            "UPDATE venta_carrito SET precio=? WHERE usuario=? AND producto_id=?",
+            (valor, usuario, int(producto_id)))
 
 
 def quitar_del_carrito(usuario, producto_id):
@@ -659,6 +709,17 @@ def _cliente_id(nombre, celular="", datos=None):
     return _ejecutar("res.partner", "create", [valores])
 
 
+def _linea_de_planta(linea):
+    """El renglón de Odoo de una planta del carrito. Solo lleva price_unit
+    si el precio se escribió a mano (23/09/2026): sin él, Odoo aplica su
+    lista de precios, que es lo normal."""
+    renglon = {"product_id": linea["producto_id"],
+               "product_uom_qty": linea["cantidad"]}
+    if linea.get("precio_editado"):
+        renglon["price_unit"] = linea["precio"]
+    return renglon
+
+
 def crear_cotizacion(empleada, nombre_cliente, celular="", datos=None,
                      cargos=None):
     """Crea el sale.order borrador (etiqueta LOCAL, diario de ventas normal)
@@ -674,11 +735,11 @@ def crear_cotizacion(empleada, nombre_cliente, celular="", datos=None,
     orden_id = _ejecutar("sale.order", "create", [{
         "partner_id": partner,
         "tag_ids": [[6, 0, [_id_config("VENTA_TAG_LOCAL")]]],
-        # Sin price_unit en las plantas: el precio lo pone Odoo (lista de
-        # precios vigente); los cargos sí lo traen (es el monto digitado).
-        "order_line": [[0, 0, {"product_id": l["producto_id"],
-                               "product_uom_qty": l["cantidad"]}]
-                       for l in lineas] + [[0, 0, x] for x in extras],
+        # El precio lo pone Odoo (lista de precios vigente), salvo que la
+        # empleada lo haya escrito a mano en el carrito — ahí manda el
+        # suyo. Los cargos siempre lo traen (es el monto digitado).
+        "order_line": [[0, 0, _linea_de_planta(l)] for l in lineas]
+                      + [[0, 0, x] for x in extras],
     }])
     if isinstance(orden_id, list):
         orden_id = orden_id[0]

@@ -44,6 +44,13 @@ class OdooFalso:
         self.siguiente += 1
         return self.siguiente
 
+    def _precio(self, linea):
+        """El precio del renglón, como en Odoo: el escrito a mano
+        (price_unit) manda; sin él, el de la lista de precios."""
+        if linea.get("price_unit") is not None:
+            return linea["price_unit"]
+        return self.productos.get(linea.get("product_id"), {}).get("list_price", 0.0)
+
     def ejecutar(self, modelo, metodo, args, kw=None):
         kw = kw or {}
         if self.fallar_una_vez == (modelo, metodo):
@@ -94,8 +101,7 @@ class OdooFalso:
         vals = args[0]
         nuevo = self._nuevo_id()
         lineas = [l[2] for l in vals["order_line"]]
-        total = sum(l["product_uom_qty"] * self.productos[l["product_id"]]["list_price"]
-                    for l in lineas)
+        total = sum(l["product_uom_qty"] * self._precio(l) for l in lineas)
         self.ordenes[nuevo] = {
             "name": f"S{nuevo}", "partner_id": vals["partner_id"],
             "tag_ids": vals["tag_ids"], "lineas": lineas,
@@ -123,12 +129,10 @@ class OdooFalso:
         orden_id = args[0][0][2]
         return [{
             "id": indice,
-            "name": self.productos[l["product_id"]]["name"],
+            "name": self.productos.get(l.get("product_id"), {}).get("name", ""),
             "product_uom_qty": l["product_uom_qty"],
-            "price_unit": self.productos[l["product_id"]]["list_price"],
-            "price_subtotal": round(
-                l["product_uom_qty"]
-                * self.productos[l["product_id"]]["list_price"], 2),
+            "price_unit": self._precio(l),
+            "price_subtotal": round(l["product_uom_qty"] * self._precio(l), 2),
         } for indice, l in enumerate(self.ordenes[orden_id]["lineas"], start=1)]
 
     def sale_order_action_cancel(self, args, kw):
@@ -176,12 +180,10 @@ class OdooFalso:
             "name": f"INV/2026/{factura}", "state": "draft",
             "amount_total": orden["amount_total"], "payment_state": "not_paid",
             "lineas": [{
-                "name": self.productos[l["product_id"]]["name"],
+                "name": self.productos.get(l.get("product_id"), {}).get("name", ""),
                 "quantity": l["product_uom_qty"],
-                "price_unit": self.productos[l["product_id"]]["list_price"],
-                "price_subtotal": round(
-                    l["product_uom_qty"]
-                    * self.productos[l["product_id"]]["list_price"], 2),
+                "price_unit": self._precio(l),
+                "price_subtotal": round(l["product_uom_qty"] * self._precio(l), 2),
             } for l in orden["lineas"]],
         }
         orden["invoice_ids"].append(factura)
@@ -296,6 +298,65 @@ def test_precio_manda_el_de_odoo(cliente_venta, odoo):
     r = cliente_venta.post("/venta/cotizar", data={"cliente": ""})
     assert r.status_code == 200
     assert "$9.99" in r.text
+
+
+# ---------------------------------------------------------------------------
+# Precio escrito a mano en el carrito (pedido del dueño, 23/09/2026: "por
+# si acaso le vendo más caro"). Solo esa línea cambia, el resto sigue con
+# el precio de Odoo, y la orden se crea con el precio escrito.
+# ---------------------------------------------------------------------------
+
+def test_precio_a_mano_manda_en_el_carrito_y_en_la_orden(cliente_venta, odoo):
+    _agregar(cliente_venta, 501, veces=2)
+    r = cliente_venta.post("/venta/carrito/precio",
+                           data={"producto_id": 501, "precio": "9.00"},
+                           follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/venta/nueva#plantas"
+    pagina = cliente_venta.get("/venta/nueva")
+    assert "$18.00" in pagina.text                 # 2 × 9.00, no 2 × 3.50
+    assert "↺ Odoo $3.50" in pagina.text           # el de Odoo, a un toque
+    cliente_venta.post("/venta/cotizar", data={"cliente": ""})
+    orden = next(iter(odoo.ordenes.values()))
+    assert orden["lineas"][0]["price_unit"] == 9.0
+    assert orden["amount_total"] == 18.0
+
+
+def test_precio_a_mano_vuelve_al_de_odoo(cliente_venta):
+    _agregar(cliente_venta, 501)
+    cliente_venta.post("/venta/carrito/precio",
+                       data={"producto_id": 501, "precio": "9.00"},
+                       follow_redirects=False)
+    # El ↺ de la fila: manda odoo=1 y el precio escrito se descarta.
+    cliente_venta.post("/venta/carrito/precio",
+                       data={"producto_id": 501, "precio": "9.00", "odoo": "1"},
+                       follow_redirects=False)
+    lineas, total = ventas.carrito_de("genesis")
+    assert total == 3.5 and not lineas[0]["precio_editado"]
+
+
+def test_precio_a_mano_solo_toca_su_linea(cliente_venta, odoo):
+    _agregar(cliente_venta, 501)
+    _agregar(cliente_venta, 502)
+    cliente_venta.post("/venta/carrito/precio",
+                       data={"producto_id": 501, "precio": "9"},
+                       follow_redirects=False)
+    cliente_venta.post("/venta/cotizar", data={"cliente": ""})
+    orden = next(iter(odoo.ordenes.values()))
+    caro = next(l for l in orden["lineas"] if l["product_id"] == 501)
+    normal = next(l for l in orden["lineas"] if l["product_id"] == 502)
+    assert caro["price_unit"] == 9.0
+    assert "price_unit" not in normal      # ese lo sigue poniendo Odoo
+    assert orden["amount_total"] == 14.25  # 9.00 + 5.25
+
+
+def test_precio_ilegible_no_rompe_el_carrito(cliente_venta):
+    _agregar(cliente_venta, 501)
+    r = cliente_venta.post("/venta/carrito/precio",
+                           data={"producto_id": 501, "precio": "carísimo"},
+                           follow_redirects=False)
+    assert r.status_code == 303
+    lineas, total = ventas.carrito_de("genesis")
+    assert total == 3.5 and not lineas[0]["precio_editado"]
 
 
 def test_cotizar_usa_cliente_local_y_etiqueta(cliente_venta, odoo):
@@ -583,3 +644,31 @@ def test_un_reporte_que_no_existe_se_usa_tal_cual(monkeypatch):
                         lambda *a, **k: [])  # sin coincidencia en ir.model.data
     ventas._cache_plantillas.clear()
     assert ventas._plantilla_de_reporte("sale.report_saleorder") == "sale.report_saleorder"
+
+
+# --- Los cargos opcionales y el producto con que se cobran ------------------
+
+def test_el_cargo_de_instalacion_usa_su_propio_producto(monkeypatch):
+    """El cargo de instalación NO se cobra con el SV-INSTALACION de las
+    cotizaciones de servicio: ese producto se llama "Instalación,
+    transporte y mantenimiento inicial" en Odoo y la FACTURA imprime el
+    nombre del producto, así que le prometía al cliente un trabajo que no
+    pagó. Con producto propio, cotización y factura dicen "Instalación"."""
+    pedidos = []
+    monkeypatch.setattr(ventas, "_id_producto_cargo",
+                        lambda codigo, nombre: pedidos.append((codigo, nombre)) or 7000)
+    lineas = ventas.lineas_de_cargos({"envio": 5, "instalacion": 40})
+    assert pedidos == [("SV-ENVIO", "Envío a domicilio"),
+                       ("SV-CARGO-INSTALACION", "Instalación")]
+    # Y el renglón lleva el rótulo pelado, no la descripción de venta.
+    assert [l["name"] for l in lineas] == ["Envío a domicilio", "Instalación"]
+    assert [l["price_unit"] for l in lineas] == [5.0, 40.0]
+
+
+def test_una_cotizacion_vieja_sigue_reconociendo_su_cargo():
+    """Las cotizaciones hechas antes del cambio llevan el cargo sobre el
+    producto viejo: al reabrirlas, el monto tiene que volver a su casilla
+    del formulario y no aparecer como un servicio suelto."""
+    assert ventas.CODIGOS_CARGO["SV-INSTALACION"] == "instalacion"
+    assert ventas.CODIGOS_CARGO["SV-CARGO-INSTALACION"] == "instalacion"
+    assert ventas.CODIGOS_CARGO["SV-ENVIO"] == "envio"
