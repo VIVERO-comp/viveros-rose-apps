@@ -601,7 +601,11 @@ a{color:inherit}
 }
 .tipo-lead .tipo-actual::-webkit-details-marker{display:none}
 .tipo-lead .tipo-actual .pt{width:8px;height:8px}
-.tipo-flecha{font-size:10px;opacity:.75;margin-left:1px}
+.tipo-caja{display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0}
+/* La pista chiquita debajo del chip y la flecha más grande: el dueño probó
+   el cambio de tipo y no se veía que el chip se pudiera tocar (23/09/2026). */
+.tipo-pista{font-size:10px;font-weight:600;color:var(--muy-suave);padding-left:3px}
+.tipo-flecha{font-size:15px;line-height:1;opacity:.95;margin-left:3px}
 .tipo-opciones{
   position:absolute;z-index:6;top:calc(100% + 7px);left:0;width:min(330px,78vw);
   display:flex;flex-wrap:wrap;gap:6px;padding:12px;background:#fff;

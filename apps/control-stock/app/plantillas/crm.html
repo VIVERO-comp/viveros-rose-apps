@@ -118,6 +118,7 @@
      de un <details> y adentro están los 11 tipos como botones de un form.
      Sin JS: HTML y un POST que vuelve a la misma ficha. #}
   <div class="cab-panel">
+    <div class="tipo-caja">
     <details class="tipo-lead">
       <summary class="chip on tipo-actual"
         {% if abierta.chips %}style="background:{{ abierta.chips[0].color }};color:#fff"{% endif %}>
@@ -135,6 +136,8 @@
         {% endfor %}
       </form>
     </details>
+    <span class="tipo-pista">toca el chip para cambiar el tipo</span>
+    </div>
     <a class="btn chico" href="/crm">Cerrar</a>
   </div>
   <h4>{{ abierta.titulo }}</h4>
