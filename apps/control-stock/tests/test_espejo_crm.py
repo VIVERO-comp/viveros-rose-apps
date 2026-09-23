@@ -65,7 +65,8 @@ def _espejo_fijo(monkeypatch, respuesta):
 
 def _marcas_odoo(monkeypatch):
     marcas = []
-    monkeypatch.setattr(crm_leads, "marcar_odoo", marcas.append)
+    monkeypatch.setattr(crm_leads, "marcar_odoo",
+                        lambda ref, etapa="": marcas.append((ref, etapa)))
     return marcas
 
 
@@ -98,7 +99,7 @@ def test_espejo_reusa_la_oportunidad_por_lead_ref(odoo_servicios, monkeypatch):
     assert oportunidad["partner_id"] == orden["vals"]["partner_id"]
     assert odoo.tags[oportunidad["tag_ids"][0]] == "BODA"
     assert oportunidad["expected_revenue"] == 300.0
-    assert marcas == ["PP-AAAAA"]  # la label "Odoo" se avisa tras el amarre
+    assert marcas == [("PP-AAAAA", "COTIZADO")]  # label Odoo + avance, tras el amarre
     assert registro["lead_ref"] == "PP-AAAAA"
     assert registro["lead_issue"] == "LEAD-9"
     assert registro["lead_url"].endswith("LEAD-9")
@@ -119,7 +120,7 @@ def test_espejo_sin_oportunidad_crea_y_graba_lead_ref(odoo_servicios, monkeypatc
     oportunidad = odoo.oportunidades[orden["opportunity_id"]]
     assert oportunidad["lead_ref"] == "PP-BBBBB"
     assert oportunidad["stage_id"] == 7001
-    assert marcas == ["PP-BBBBB"]
+    assert marcas == [("PP-BBBBB", "COTIZADO")]
     assert registro["lead_ref"] == "PP-BBBBB"
 
 

@@ -67,12 +67,17 @@ def espejar_venta(nombre, celular, tipo, orden, total, empleada, issue=""):
     return cuerpo if cuerpo and cuerpo.get("codigoRef") else None
 
 
-def marcar_odoo(codigo_ref):
-    """Le pone al issue del lead la label "Odoo" (pedido de Abraham,
-    22/09/2026): la señal de que su oportunidad del Flujo ya quedó
-    sincronizada. Se llama después de amarrar la oportunidad por lead_ref.
+def marcar_odoo(codigo_ref, etapa=""):
+    """Le pone al issue del lead la label "Odoo" (la señal de que su
+    oportunidad del Flujo ya quedó sincronizada) y, con `etapa`
+    (COTIZADO/FACTURADO/PAGADO), registra el avance de venta: la label de
+    etapa en Linear y el espejo etapaVenta en Twenty — es lo que pintan
+    los chips de la lista de Chats (23/09/2026). Se llama después de
+    amarrar por lead_ref (etapa COTIZADO) y al cobrar (FACTURADO).
     Best-effort, como todo el espejo."""
     if not (codigo_ref or "").strip():
         return
-    _llamar({"accion": "odoo", "codigoRef": codigo_ref.strip()},
-            f"label Odoo de {codigo_ref}")
+    datos = {"accion": "odoo", "codigoRef": codigo_ref.strip()}
+    if (etapa or "").strip():
+        datos["etapa"] = etapa.strip().upper()
+    _llamar(datos, f"label Odoo de {codigo_ref}")

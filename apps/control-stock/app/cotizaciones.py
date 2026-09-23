@@ -385,13 +385,13 @@ def _oportunidad_espejada(partner_id, nombre, etiqueta_tipo, espejo):
                 "stage_id": _id_ref("vivero_rose_pedidos.etapa_flujo_cotizado"),
             }])
             _etiquetar_oportunidad(oportunidad_id, etiqueta_tipo)
-            crm_leads.marcar_odoo(ref)
+            crm_leads.marcar_odoo(ref, etapa="COTIZADO")
             return oportunidad_id
     oportunidad_id = _crear_oportunidad(partner_id, nombre, etiqueta_tipo)
     if ref:
         ventas._ejecutar("crm.lead", "write",
                          [[oportunidad_id], {"lead_ref": ref}])
-        crm_leads.marcar_odoo(ref)
+        crm_leads.marcar_odoo(ref, etapa="COTIZADO")
     return oportunidad_id
 
 

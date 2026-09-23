@@ -815,6 +815,10 @@ def _avanzar_crm_pagada(venta):
         except Exception as error:
             print(f"ventas: Flujo de {venta.get('orden')} falló: {error!r}",
                   flush=True)
+    if venta.get("lead_ref"):
+        # El avance tambien viaja al CRM: label Facturado en el issue y
+        # etapaVenta en Twenty (los chips de Chats, 23/09/2026).
+        crm_leads.marcar_odoo(venta["lead_ref"], etapa="FACTURADO")
     if venta.get("lead_issue"):
         try:
             retail.mover(venta["lead_issue"], "entregar")
