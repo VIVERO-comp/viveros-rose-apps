@@ -1,10 +1,17 @@
-# Control de Stock
+# Control de Stock (Control Viverorose)
 
-App interna del empleado encargado del inventario del vivero. Hermana de
-[Recepción de Supermercados](../supermercado-recepcion/): misma
-arquitectura, mismo login, mismo despliegue.
+La app interna del equipo del vivero, en `inventario.plantaspanama.com`.
+Nació para el inventario y hoy es la app de operar el negocio: **Calendario**
+(la pestaña de entrada), **Stock**, **Vender**, **Retail**, **Proyectos**,
+**Compras/Gastos**, **Fichas** y **Ajustes** — y además sirve la **cara CRM**
+(`/crm/calendario`), el mismo calendario con piel de Twenty que se ve como
+pestaña dentro del Twenty real. En producción desde septiembre 2026.
 
-## Propósito
+Menú vigente (22/09/2026): sin "Inicio" y con Calendario de primero — entrar
+a la app (`/`) abre `/calendario`; el tablero del home vive solo como lienzo
+de `/?tab=stock` y `/?tab=ajustes`.
+
+## Propósito original (Stock)
 
 Que el vivero no vuelva a quedarse sin stock sin darse cuenta:
 
@@ -19,24 +26,73 @@ Que el vivero no vuelva a quedarse sin stock sin darse cuenta:
    caminando el vivero, y ciclo quincenal con Excel (plantilla → contar →
    importar → revisar diferencias → confirmar).
 
-## Usuarios
+## Usuarios y acceso
 
-Los mismos de Recepción (Génesis, Rubén) más el encargado de stock
-(stockmaster). Altas por consola:
+El acceso vigente es **login con Google + invitaciones**:
 
-```bash
-python -m app.usuarias crear <usuario> "<Nombre>"    # pide la contraseña
-python -m app.usuarias clave <usuario>               # cambiarla
-python -m app.usuarias desactivar <usuario>          # revocar acceso
-python -m app.usuarias lista
-```
+- `/auth/google` — el botón "Continuar con Google" del login.
+- `/invitacion/{token}` — link compartible de un solo uso; se crea desde la
+  pestaña Ajustes (`/ajustes/invitar`) y se revoca con `/ajustes/revocar`.
+- `AJUSTES_ADMINS` (emails por coma) decide quién ve Ajustes e invita.
+- En desarrollo local, `SIN_LOGIN=<usuario>` salta la pantalla de login
+  (la variable no existe en el droplet).
 
-En producción: `docker compose exec control-stock python -m app.usuarias …`
+El esquema viejo de usuario+contraseña por consola sigue disponible como
+respaldo (`python -m app.usuarias crear|clave|desactivar|lista`; en
+producción con `docker compose exec control-stock …`).
 
-## Flujo
+## Pestañas que no son Stock
 
-- **Inicio**: score (100 − 6 por crítico − 2 por bajo − 15 si el conteo
-  quincenal está vencido, >15 días), totales y tarjetas por categoría.
+- **Calendario** (`/calendario`, `app/calendario.py`) — el calendario del
+  equipo. Linear es el dueño de los datos (proyecto CALENDARIO ROSE, equipo
+  Viverorose): cada actividad es un issue, con los 13 tipos del grupo "Tipo
+  de actividad". Vista principal: semana por horas; también día, mes y lista,
+  y una vista de celular propia (un día a la vez). Se crea, se abre, se
+  termina, se mueve y se cancela desde la pantalla (cancelar nunca borra el
+  issue). El menú lateral lleva el log "Leads de servicio por agendar"
+  (equipo LEAD de Linear, solo etiquetas de servicio). Sync con teléfonos:
+  feed ICS por empleada (`/calendario.ics?t=<token>`, `app/calendario_ics.py`)
+  y empuje a Google Calendar (`app/calendario_google.py`, conexión por
+  empleada en Ajustes). Sin `LINEAR_API_KEY` corre en modo muestra.
+- **Retail** (`/retail`, `app/retail.py`) — kanban de leads retail/mayorista
+  amarrado a las ventas de la app.
+- **Proyectos** (`/proyecto*`, `app/proyectos.py`) — un "Proyecto" de
+  paisajismo agrupa varias cotizaciones sueltas de un mismo cliente
+  (encendido con `PROYECTOS_ACTIVOS`).
+- **Compras/Gastos** (`/compras*`, `app/compras.py`) — compras del negocio;
+  una compra de proyecto NO sube el stock y una normal sí (encendido con
+  `COMPRAS_ACTIVAS`).
+- **Vender** y **Cotizaciones de servicio** — abajo tienen sección propia.
+
+## La cara CRM (`/crm/calendario`)
+
+El MISMO calendario, con la piel de Twenty, para verse como pestaña dentro
+del Twenty real (`crm.plantaspanama.com`): el nginx del droplet CRM proxya
+`/crm/` hacia esta app y `chats-nav.js` (repo `viveros-rose-crm`) lo abre
+como iframe, igual que la pestaña Chats.
+
+- Rutas: `GET /crm/calendario` (semana/día/mes/lista + ficha de actividad,
+  ficha de lead y formulario, todo server-rendered), `POST
+  /crm/calendario/actividad` (crear) y `POST
+  /crm/calendario/actividad/{id}/estado` (terminar/reabrir/cancelar) — las
+  escrituras van por las mismas funciones de `app/calendario.py`.
+- Colores: los de los **labels de Twenty** (retail/entrega verde, alquiler
+  rojo, mantenimiento azul), traducidos por `app/crm_twenty.py::repintar()`
+  sin tocar la paleta del calendario de inventario.
+- La **ficha del lead** se abre como un registro de Twenty: teléfono, fecha
+  de llegada y la conversación de WhatsApp completa, leídos del Twenty real
+  por su API REST (`TWENTY_URL` + `TWENTY_API_KEY`, solo lectura y
+  fail-soft: sin clave la ficha muestra lo que da Linear).
+- Login propio de esa cara: `/crm/login` + `/crm/auth/google*` (el OAuth no
+  corre dentro de un iframe: el botón sale con `target=_top`). El callback
+  `CRM_PUBLIC_BASE_URL/crm/auth/google/callback` debe estar autorizado en el
+  OAuth Client de Google.
+
+## Flujo (Stock)
+
+- **Tablero** (`/?tab=stock`): score (100 − 6 por crítico − 2 por bajo − 15
+  si el conteo quincenal está vencido, >15 días), totales y tarjetas por
+  categoría.
 - **Stock**: dos vistas del mismo inventario (18/09/2026), con buscador,
   filtros, detalle y modal de ajuste compartidos:
   - **Stock online** — solo las plantas que el cliente ve hoy en
@@ -137,9 +193,12 @@ empleado revise y confirme.**
 ## Tecnología
 
 FastAPI + Jinja2 + SQLite (stdlib) + httpx, servida con uvicorn; PDF con
-fpdf2 y Excel con openpyxl. Sin Node y sin build. El diseño es el del
-prototipo aprobado (azul noche + dorado, tarjetas crema, intro animada de la
-rosa): el CSS/JS del prototipo vive casi intacto en `app/static/`.
+fpdf2, Excel con openpyxl, `psycopg` para las fichas en la base `tienda` e
+`icalendar` para el feed ICS. Sin Node y sin build. El diseño es el del
+prototipo aprobado (blanco y dorado en escritorio, azul noche en el
+teléfono); el CSS/JS vive en `app/static/`. Los clientes de Linear, Twenty,
+Google y Odoo son módulos propios (`app/calendario.py`, `app/crm_twenty.py`,
+`app/calendario_google.py`, `app/ventas.py`), todos con httpx/stdlib.
 
 ## Desarrollo local
 
@@ -148,14 +207,30 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 .venv/bin/uvicorn app.main:app --reload --port 8092
 ```
 
-Sin `.env` la app corre con datos de prueba y ajustes simulados. Pruebas:
-`.venv/bin/pytest`.
+Sin `.env` la app corre con datos de prueba, ajustes simulados y el
+calendario en modo muestra. Con `SIN_LOGIN=<usuario>` no hay pantalla de
+login (solo local). Pruebas: `.venv/bin/pytest`.
 
 ## Variables de entorno
 
-Ver [.env.example](.env.example): `STOCK_PROXY_URL` + `STOCK_API_KEY`
-(lecturas), `ORDER_API_URL` + `ORDER_API_KEY` (ajustes), `COOKIE_SEGURA`,
-`CONTROL_STOCK_DB`, `CONTROL_STOCK_ARCHIVOS`.
+**La referencia completa y comentada es [.env.example](.env.example)** (unas
+25 variables). Por grupos:
+
+- Lecturas/escrituras de stock: `STOCK_PROXY_URL` + `STOCK_API_KEY`,
+  `ORDER_API_URL` + `ORDER_API_KEY`, `CATALOGO_PUBLICADO_URL`.
+- App: `COOKIE_SEGURA`, `CONTROL_STOCK_DB`, `CONTROL_STOCK_ARCHIVOS`,
+  `PUBLIC_BASE_URL`.
+- Acceso: `GOOGLE_CLIENT_ID/SECRET`, `AJUSTES_ADMINS`, `SIN_LOGIN` (solo local).
+- Vender/Odoo (XML-RPC): `ODOO_URL/DB/USER/PASSWORD`,
+  `VENTA_DIARIO_YAPPY/EFECTIVO`, `VENTA_TAG_LOCAL`, `VENTA_CLIENTE_LOCAL`,
+  `VENTA_FOTOS_DIR`.
+- Fotos internas: `CLOUDINARY_*`.
+- Fichas: `TIENDA_DSN`, `FICHAS_EDITORES`.
+- Calendario: `LINEAR_API_KEY`, `LINEAR_TEAM_CALENDARIO_ID`,
+  `LINEAR_PROJECT_CALENDARIO_ID`, `CALENDARIO_ESCRITURA`.
+- Pestañas con interruptor: `COMPRAS_ACTIVAS`, `PROYECTOS_ACTIVOS`.
+- Espejo de ventas al CRM: `CRM_LEADS_URL`, `CRM_LEADS_SECRETO`.
+- Cara CRM: `CRM_PUBLIC_BASE_URL`, `TWENTY_URL`, `TWENTY_API_KEY`.
 
 ## Integraciones
 
@@ -185,12 +260,24 @@ Ver [.env.example](.env.example): `STOCK_PROXY_URL` + `STOCK_API_KEY`
   inventario absolutos en Odoo (`stock.quant` + `action_apply_inventory`),
   con candado de cantidad esperada y auditoría en la base tienda
   (migración 012). Exige `X-API-Key`.
+- **Linear (GraphQL)** — el calendario entero (proyecto CALENDARIO ROSE) y
+  el log de leads de servicio (equipo LEAD). Lecturas con caché y refresco
+  en fondo; escrituras solo con `CALENDARIO_ESCRITURA=1`.
+- **Twenty (REST, solo lectura)** — la ficha del lead de la cara CRM
+  (`app/crm_twenty.py`): leadWeb por `linearIssueId` → Person → mensajes de
+  WhatsApp. Fail-soft: sin `TWENTY_API_KEY` la ficha muestra lo de Linear.
+- **Google Calendar API** — el empuje del calendario al Google Calendar de
+  cada empleada (`app/calendario_google.py`), one-way: Linear manda.
+- **Puente CRM del frontend** — `POST /api/crm/lead-inventario`
+  (`app/crm_leads.py`, con `CRM_LEADS_SECRETO`): las ventas/cotizaciones
+  hechas aquí nacen también como lead en Linear/Twenty.
 - La app **nunca** toca Odoo ni su base directamente, con UNA excepción
   aprobada por el dueño (08/09/2026): la página **Crear Venta** (abajo).
 
 ## Crear Venta (página /venta, pestaña "Vender")
 
-Ventas locales del vivero, aparte por completo del flujo Super Extra: la
+Ventas locales del vivero (el flujo de supermercados quedó retirado con el
+corte de Super Extra, 18/09/2026): la
 empleada busca plantas PL- (nombre o SKU, con foto `image_128` de Odoo
 cacheada 24h en disco), arma un carrito y elige entre **Generar cotización**
 (`sale.order` borrador) o **Pagado y confirmar pedido** (elige
@@ -256,9 +343,21 @@ fallos intermitentes en el checkout). La instancia de pruebas se llama
 
 ```bash
 ./scripts/actualizar_fotos.sh   # refresca la copia del mapa de fotos del catálogo
-rsync -a --exclude .venv --exclude datos . hermes@143.244.167.222:control-stock/
-ssh hermes@143.244.167.222 'cd control-stock && docker compose up -d --build'
+rsync -a --exclude .venv --exclude datos --exclude .env --exclude archivos \
+      --exclude 'control-stock.db*' --exclude '__pycache__' \
+      -e "ssh -p 2222" . hermes@143.244.167.222:control-stock/
+ssh -p 2222 hermes@143.244.167.222 'cd control-stock && docker compose up -d --build'
 ```
+
+Mejor todavía: rsyncar desde un checkout limpio del commit a desplegar
+(`git worktree add /tmp/deploy-apps <commit>`), para no arrastrar trabajo a
+medias del árbol local. El `.env` del droplet no se pisa nunca (por eso el
+`--exclude .env`); las variables nuevas se agregan a mano allá.
+
+La cara CRM necesita además, en el `.env` del droplet: `CRM_PUBLIC_BASE_URL`,
+`TWENTY_URL` y `TWENTY_API_KEY`, y el callback
+`https://crm.plantaspanama.com/crm/auth/google/callback` autorizado en el
+OAuth Client de Google (hecho el 22/09/2026).
 
 Las fotos de las tarjetas salen de Cloudinary con el mapa sku → hash de
 `app/datos_fotos/fotos.json` (copia del `src/data/fotos.json` de
@@ -272,12 +371,11 @@ Rollback: `docker compose down` (la base y los PDFs quedan en `./datos`).
 
 ## Estado actual
 
-Fase 1 completa contra la instancia de pruebas. Pendiente fase 2:
-recordatorio semanal, aviso diario fuera de la app, umbral por producto.
+**En producción** en `inventario.plantaspanama.com`, con todas las pestañas
+del menú y la cara CRM dentro de Twenty (22/09/2026).
 
 ## Próximos pasos
 
-- Recordatorio semanal (día configurable) y notificación quincenal.
 - Aviso diario por correo/WhatsApp con el resumen de críticos.
 - Umbral por producto.
 - Usuario de Odoo dedicado para los ajustes (`ODOO_STOCK_USERNAME` /

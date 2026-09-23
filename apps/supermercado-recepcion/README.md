@@ -1,6 +1,12 @@
 # Recepción de Supermercados
 
-App interna con la que la empleada que reparte a supermercados registra
+> **EN RETIRO desde el 18/09/2026.** El negocio cortó la relación con Super
+> Extra y todo lo de supermercados se va a retirar. Esta app no recibe
+> desarrollo nuevo; se conserva mientras haga falta consultar el historial
+> (las facturas ya emitidas se conservan). Los "Próximos pasos" del final
+> quedan cancelados. Lo que sigue abajo describe la app como operaba.
+
+App interna con la que la empleada que reparte a supermercados registraba
 desde el celular lo que pasó con cada entrega. Server-rendered en Python;
 el prototipo React que le dio el diseño vive congelado en
 [`prototipo-react/`](prototipo-react/).

@@ -1,3 +1,8 @@
+> **DESACTUALIZADO (23/09/2026).** Recepción dejó de usar datos simulados
+> hace semanas (lee en vivo por stock-proxy) y quedó EN RETIRO con el corte
+> de Super Extra (18/09/2026); las secciones de Super Extra ya no aplican.
+> Los contratos vigentes de Control de Stock están en su README.
+
 # Integración con Odoo
 
 ## Estado

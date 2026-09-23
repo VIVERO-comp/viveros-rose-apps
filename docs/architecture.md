@@ -1,3 +1,7 @@
+> **DESACTUALIZADO (23/09/2026).** Se escribió cuando el repo tenía una sola
+> app y Recepción era React+Vite; hoy hay dos apps y ambas son
+> FastAPI+Jinja2. La referencia viva es el README raíz y el de cada app.
+
 # Arquitectura
 
 ## Principio central

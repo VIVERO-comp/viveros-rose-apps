@@ -1,3 +1,9 @@
+> **DESACTUALIZADO (23/09/2026).** Describe la etapa de 09/2026 temprano:
+> falta el menú vigente de Control de Stock (Calendario, Retail, Proyectos,
+> Compras, la cara CRM /crm/calendario) y Recepción de Supermercados quedó
+> EN RETIRO tras el corte con Super Extra (18/09/2026). La referencia viva
+> es el README de cada app.
+
 # Aplicaciones internas — detalle
 
 Índice: [Recepción de Supermercados](#recepción-de-supermercados) ·
