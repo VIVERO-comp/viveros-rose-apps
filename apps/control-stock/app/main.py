@@ -65,6 +65,12 @@ plantillas.env.globals["v_estaticos"] = VERSION_ESTATICOS
 # vio que al pasar a Stock "se escondía", 22/09/2026).
 from . import proyectos as _proyectos_nav
 plantillas.env.globals["proyectos_en_nav"] = _proyectos_nav.activos
+# Igual para Retail y CRM, pero solo del MENÚ: el dueño las sacó de la
+# vista el 24/09/2026 ("que no se vea en el inventario pero dejalo
+# activo"), así que RETAIL_EN_MENU=0 / CRM_EN_MENU=0 esconden la pestaña
+# y las pantallas siguen vivas y funcionando en /retail y /crm.
+plantillas.env.globals["retail_en_nav"] = retail.en_menu
+plantillas.env.globals["crm_en_nav"] = crm_flujo.en_menu
 
 
 def fecha_bonita(iso):

@@ -22,12 +22,23 @@ Sin credenciales de Linear la pestaña corre con leads de muestra, igual
 que el calendario.
 """
 
+import os
 import re
 import time
 from datetime import datetime
 
 from . import calendario, colores
 from .datos import ZONA_PANAMA, _db
+
+def en_menu():
+    """RETAIL_EN_MENU=0 saca la pestaña Retail de TODOS los menús (dueño,
+    24/09/2026: "que no se vea en el inventario pero dejalo activo").
+
+    A diferencia de Proyectos y Compras, esto es SOLO visibilidad: la
+    pantalla sigue viva y funcionando en /retail para quien entre con la
+    URL; nada se apaga por dentro. Sin la variable, la pestaña se ve."""
+    return os.environ.get("RETAIL_EN_MENU", "1") != "0"
+
 
 # Etiqueta del equipo LEAD -> clave de tipo (color de la pantalla).
 # Los colores viven en colores.py (la paleta unica).

@@ -36,6 +36,16 @@ from . import calendario, colores, crm_leads, crm_twenty
 
 TTL_LEADS = 120
 
+def en_menu():
+    """CRM_EN_MENU=0 saca la pestaña CRM de TODOS los menús (dueño,
+    24/09/2026: "que no se vea en el inventario pero dejalo activo").
+
+    Es SOLO visibilidad: /crm sigue vivo y funcionando para quien entre
+    con la URL, y la piel del calendario dentro de Twenty
+    (/crm/calendario y su login) nunca se tocó. Sin la variable, se ve."""
+    return os.environ.get("CRM_EN_MENU", "1") != "0"
+
+
 # Mismo orden y nombres que COLUMNAS_LEADS del admin
 # (viveros-rose-frontend/src/pages/api/crm/tablero.ts); el punto de la
 # columna lleva el tono FUERTE de la familia del estado (paleta unica).

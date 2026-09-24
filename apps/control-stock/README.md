@@ -354,6 +354,13 @@ Mejor todavía: rsyncar desde un checkout limpio del commit a desplegar
 medias del árbol local. El `.env` del droplet no se pisa nunca (por eso el
 `--exclude .env`); las variables nuevas se agregan a mano allá.
 
+Retail y CRM están **fuera del menú** en producción desde el 24/09/2026
+(`RETAIL_EN_MENU=0` y `CRM_EN_MENU=0` en el `.env` del droplet; pedido del
+dueño: "que no se vea en el inventario pero dejalo activo"). Es solo
+visibilidad — distinto de `COMPRAS_ACTIVAS` / `PROYECTOS_ACTIVOS`, que sí
+apagan las rutas: `/retail` y `/crm` siguen vivos y funcionando para quien
+entre con la URL, y Control quedó encendido en el menú.
+
 La cara CRM necesita además, en el `.env` del droplet: `CRM_PUBLIC_BASE_URL`,
 `TWENTY_URL` y `TWENTY_API_KEY`, y el callback
 `https://crm.plantaspanama.com/crm/auth/google/callback` autorizado en el
