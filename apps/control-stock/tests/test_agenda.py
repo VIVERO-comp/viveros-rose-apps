@@ -57,14 +57,22 @@ def test_los_cinco_tipos_existen_en_el_calendario():
         "entrega", "instalacion", "mantenimiento", "visita", "recogida"]
 
 
-def test_la_recogida_es_la_unica_que_no_cierra_la_entrega():
-    # «Retiro» = recoger las plantas de alquiler DESPUÉS del evento: es solo
-    # actividad, el lead ya se entregó (decisión del dueño, 24/09/2026).
-    assert agenda.cierra_la_entrega("recogida") is False
-    assert agenda.cierra_la_entrega("entrega") is True
-    assert agenda.cierra_la_entrega("instalacion") is True
-    # Un tipo que no se agenda desde un lead nunca mueve el embudo.
-    assert agenda.cierra_la_entrega("compra") is False
+@pytest.mark.parametrize("tipo, entrega", [
+    # Las tres que dejan el trabajo hecho (regla del dueño, 24/09/2026).
+    ("entrega", True),
+    ("instalacion", True),
+    ("mantenimiento", True),
+    # Una Visita es ir a ver el sitio: el trabajo todavía no se hizo.
+    ("visita", False),
+    # Una Recogida es retirar las plantas del alquiler DESPUÉS del evento:
+    # el lead ya se entregó.
+    ("recogida", False),
+    # Y un tipo que no se agenda desde un lead nunca mueve el embudo.
+    ("compra", False),
+    ("reunion", False),
+])
+def test_solo_tres_tipos_cierran_la_entrega(tipo, entrega):
+    assert agenda.cierra_la_entrega(tipo) is entrega
 
 
 # ---------------------------------------------------------------------------
@@ -189,9 +197,10 @@ def test_hecha_sin_saldo_sigue_sola_a_ganado():
     assert "Ganado" in aviso
 
 
-def test_una_recogida_hecha_no_mueve_el_estado():
-    actividad = _actividad_de("LEAD-91", tipo="recogida")
-    # Agendar sí movió el lead a Agendado; marcar la recogida, no.
+@pytest.mark.parametrize("tipo", ["recogida", "visita"])
+def test_lo_que_no_entrega_hecho_no_mueve_el_estado(tipo):
+    actividad = _actividad_de("LEAD-91", tipo=tipo)
+    # Agendar sí movió el lead a Agendado; marcar la actividad, no.
     assert linear_leads.uno("LEAD-91")["estado"] == "AGENDADO"
     assert agenda.al_marcar_hecha(actividad, autor="Ruben") == ""
     assert linear_leads.uno("LEAD-91")["estado"] == "AGENDADO"

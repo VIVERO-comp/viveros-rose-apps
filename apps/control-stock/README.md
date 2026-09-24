@@ -123,8 +123,11 @@ etiqueta `Resp:` y comenta firmado. Reglas que respeta y no se negocian:
   pago que salda, `cerrar_los_que_ya_pagaron()` lo pasa a Ganado (corre en
   fondo al abrir el calendario: el addon de Odoo solo empuja hasta «Por
   agendar», y a un Entregado la escalera no lo degrada).
-- **Una Recogida no mueve el estado**: retirar las plantas de alquiler después
-  del evento es solo una actividad, el lead ya se entregó.
+- **Solo tres tipos entregan** (regla del dueño, 24/09/2026): Entrega,
+  Instalación y Mantenimiento. Una **Visita** (ir a ver el sitio: el trabajo
+  todavía no se hizo) y una **Recogida** (retirar las plantas del alquiler
+  después del evento: el lead ya se entregó) son solo actividades y no tocan
+  el estado.
 - **Reprogramar** mueve la fecha sin tocar el estado.
 - **Cualquier empleado con acceso al calendario puede marcar «Hecha»**, no
   solo el responsable.

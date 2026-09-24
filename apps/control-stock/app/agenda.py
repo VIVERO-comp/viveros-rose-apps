@@ -33,8 +33,9 @@ Reglas y decisiones que este módulo cumple:
   de Linear.
 - **Un lead sin responsable que se marca «Hecha» hereda el del empleado
   que la marcó** (decisión del 24/09/2026).
-- **Una Recogida no mueve el estado.** Retirar las plantas de alquiler
-  después del evento es solo una actividad: el lead ya se entregó.
+- **Solo tres tipos entregan**: Entrega, Instalación y Mantenimiento. Una
+  Visita (ir a ver el sitio) y una Recogida (retirar las plantas de
+  alquiler después del evento) son solo actividades y no tocan el estado.
 - **Reprogramar mueve la fecha sin tocar el estado.**
 """
 
@@ -55,13 +56,18 @@ TTL_SALDOS = 60
 # «Recogida», que además ya vive en el filtro Eventos del calendario.
 #
 # `entrega` dice si marcar la actividad como Hecha mueve el lead a
-# Entregado. La Recogida no: es el retiro de las plantas de alquiler
-# DESPUÉS del evento, cuando el lead ya se entregó.
+# Entregado. Regla del dueño (24/09/2026): solo entregan las tres que
+# dejan el trabajo hecho —Entrega, Instalación y Mantenimiento—. Las otras
+# dos NO tocan el estado:
+#
+#   Visita   se va a ver el sitio; el trabajo no se hizo todavía.
+#   Recogida es el retiro de las plantas de alquiler DESPUÉS del evento,
+#            cuando el lead ya se entregó.
 TIPOS = [
     {"clave": "entrega", "entrega": True},
     {"clave": "instalacion", "entrega": True},
     {"clave": "mantenimiento", "entrega": True},
-    {"clave": "visita", "entrega": True},
+    {"clave": "visita", "entrega": False},
     {"clave": "recogida", "entrega": False},
 ]
 for _t in TIPOS:
