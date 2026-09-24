@@ -722,28 +722,6 @@ def vincular_lead(n, issue):
                     (issue or None, n))
 
 
-def vinculadas_por_lead():
-    """{LEAD-NN: [cotizaciones vinculadas, la más nueva primero]}."""
-    with _db() as con:
-        filas = con.execute(
-            "SELECT * FROM cotizaciones_servicio WHERE lead_issue IS NOT NULL"
-            " ORDER BY n DESC").fetchall()
-    resultado = {}
-    for fila in filas:
-        resultado.setdefault(fila["lead_issue"], []).append(dict(fila))
-    return resultado
-
-
-def sin_lead(limite=6):
-    """Las cotizaciones recientes sin lead (candidatas a vincular desde la
-    ficha de Retail)."""
-    with _db() as con:
-        filas = con.execute(
-            "SELECT * FROM cotizaciones_servicio WHERE lead_issue IS NULL"
-            " ORDER BY n DESC LIMIT ?", (limite,)).fetchall()
-    return [dict(f) for f in filas]
-
-
 def cotizaciones_todas():
     with _db() as con:
         filas = con.execute(

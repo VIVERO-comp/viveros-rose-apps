@@ -154,13 +154,14 @@ if (pliegueFactura && !pliegueFactura.dataset.lleno &&
   pliegueFactura.open = false;
 }
 
-/* La tarjeta de Retail elegida (23/09/2026): al escogerla se llenan el
-   nombre y el celular del lead (el amarre real lo hace el servidor con
-   lead_ref al crear la venta). */
-const leadRetail = document.getElementById("lead-retail");
-if (leadRetail) {
-  leadRetail.addEventListener("change", () => {
-    const opcion = leadRetail.selectedOptions[0];
+/* El lead elegido (23/09/2026): al escogerlo se llenan el nombre y el
+   celular (el amarre real lo hace el servidor con lead_ref al crear la
+   venta). La lista sale del embudo de Linear; antes salia del kanban
+   Retail, que murio en la Fase 5. */
+const leadCrm = document.getElementById("lead-crm");
+if (leadCrm) {
+  leadCrm.addEventListener("change", () => {
+    const opcion = leadCrm.selectedOptions[0];
     if (!opcion || !opcion.value) return;
     if (entradaNombre && opcion.dataset.nombre) entradaNombre.value = opcion.dataset.nombre;
     if (entradaCelular) entradaCelular.value = opcion.dataset.cel || "";

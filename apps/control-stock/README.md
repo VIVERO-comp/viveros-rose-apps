@@ -2,7 +2,7 @@
 
 La app interna del equipo del vivero, en `inventario.plantaspanama.com`.
 Nació para el inventario y hoy es la app de operar el negocio: **Calendario**
-(la pestaña de entrada), **Stock**, **Vender**, **Retail**, **Fichas** y
+(la pestaña de entrada), **Stock**, **Vender**, **Control**, **Fichas** y
 **Ajustes** — y además sirve la **cara CRM**
 (`/crm/calendario`), el mismo calendario con piel de Twenty que se ve como
 pestaña dentro del Twenty real. En producción desde septiembre 2026.
@@ -59,13 +59,14 @@ producción con `docker compose exec control-stock …`).
 - **Control** (`/control`, `app/control.py`) — reparte el trabajo del equipo:
   dos vistas sobre el tablero de Linear (por empleado / por estado). Sección
   propia abajo.
-- **Retail** (`/retail`, `app/retail.py`) — kanban de leads retail/mayorista
-  amarrado a las ventas de la app. Fuera del menú con `RETAIL_EN_MENU=0`,
-  esperando el OK del dueño para borrarse.
-- ~~**CRM** (`/crm`)~~ — **murió en la Fase 5** (24/09/2026): era el embudo
-  viejo. Su trabajo lo hace Control. `crm_flujo.py` sobrevive solo como
-  trastienda de Retail, y se va con ella. La piel del calendario dentro de
-  Twenty (`/crm/calendario`) no se tocó.
+- ~~**Retail** (`/retail`)~~ y ~~**CRM** (`/crm`)~~ — **borradas en la
+  Fase 5** (24/09/2026), con `app/retail.py` y `app/crm_flujo.py`: eran el
+  embudo viejo y un kanban con estado propio que podía discrepar del
+  tablero. Su trabajo lo hacen Control (repartir y corregir) y el
+  calendario (cerrar la entrega). El selector de lead de *Nueva venta*, que
+  antes leía el kanban Retail, ahora lee el embudo de Linear — y de paso
+  ofrece todos los leads vivos, no solo los retail/mayorista. La piel del
+  calendario dentro de Twenty (`/crm/calendario`) no se tocó.
 - **Vender** y **Cotizaciones de servicio** — abajo tienen sección propia.
 
 ## El embudo de leads y la Fase 4 (`app/linear_leads.py`, `app/agenda.py`)
@@ -475,12 +476,9 @@ nuevas se agregan a mano allá.
 El `up -d --build` no es opcional: la app corre como imagen Docker horneada,
 así que copiar archivos y reiniciar no cambia nada.
 
-Retail está **fuera del menú** en producción desde el 24/09/2026
-(`RETAIL_EN_MENU=0` en el `.env` del droplet; pedido del dueño: "que no se
-vea en el inventario pero dejalo activo"). Es solo visibilidad — distinto de
-`COMPRAS_ACTIVAS` / `PROYECTOS_ACTIVOS`, que sí apagan las rutas: `/retail`
-sigue vivo para quien entre con la URL. `CRM_EN_MENU` ya no hace nada: la
-pestaña CRM se borró en la Fase 5, no se esconde.
+`RETAIL_EN_MENU` y `CRM_EN_MENU` **ya no hacen nada**: las dos pestañas se
+borraron en la Fase 5 (24/09/2026), no se esconden. Se pueden sacar del
+`.env` del droplet cuando se toque.
 
 La cara CRM necesita además, en el `.env` del droplet: `CRM_PUBLIC_BASE_URL`,
 `TWENTY_URL` y `TWENTY_API_KEY`, y el callback

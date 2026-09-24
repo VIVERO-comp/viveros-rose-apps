@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import (acceso_google, agenda, avisos, calculos, calendario,
-               calendario_google, colores, retail,
+               calendario_google, colores,
                calendario_ics, conteos, control, cotizaciones,
                coworkers, crm_twenty, datos, fichas, fotos,
                linear_leads, seguridad, ventas)
@@ -64,11 +64,9 @@ plantillas.env.globals["v_estaticos"] = VERSION_ESTATICOS
 # pinta el parcial _cargos.html en las cuatro pantallas de venta: va como
 # global para no pasarlo por contexto en cada una.
 plantillas.env.globals["cargos_catalogo"] = ventas.CARGOS
-# Igual para Retail y CRM, pero solo del MENÚ: el dueño las sacó de la
-# vista el 24/09/2026 ("que no se vea en el inventario pero dejalo
-# activo"), así que RETAIL_EN_MENU=0 / CRM_EN_MENU=0 esconden la pestaña
-# y las pantallas siguen vivas y funcionando en /retail y /crm.
-plantillas.env.globals["retail_en_nav"] = retail.en_menu
+# Retail y CRM se BORRARON en la Fase 5 (24/09/2026): no quedan pantallas
+# ni banderas que las escondan. `RETAIL_EN_MENU` y `CRM_EN_MENU` ya no
+# hacen nada y se pueden sacar del .env del droplet.
 
 
 def fecha_bonita(iso):
@@ -99,7 +97,6 @@ plantillas.env.filters["fecha_dmy"] = calendario.dmy
 datos.iniciar_db()
 ventas.iniciar_tablas()
 cotizaciones.iniciar_tablas()
-retail.iniciar_tablas()
 control.iniciar_tablas()
 avisos.iniciar_tablas()
 calendario_ics.iniciar_tablas()
@@ -1028,7 +1025,7 @@ def venta_nueva(request: Request, q: str = "", error: str = ""):
     # El desglose del total (plantas + envío + instalación) sale pintado
     # del servidor con lo que diga el borrador; venta.js solo lo refresca
     # mientras se escribe. El total real lo confirma Odoo al crear.
-    contexto["leads_retail"] = _leads_retail_para_elegir()
+    contexto["leads_crm"] = _leads_para_elegir()
     contexto["cargos_montos"] = _cargos_del_form(contexto["borrador"])
     contexto["total_con_cargos"] = (
         contexto["total_carrito"]
@@ -1073,29 +1070,31 @@ def _datos_cliente_del_form(form):
             for campo in ventas.CAMPOS_EXTRA}
 
 
-def _leads_retail_para_elegir():
-    """Los leads del kanban Retail para el selector de Nueva venta (dueño,
-    23/09/2026: "pon la opción de elegir una tarjeta en Retail"): ref,
-    nombre, celular y etapa, sin los ya entregados. Vive aquí y no en
-    retail.py para no tocar ese módulo (tiene trabajo en curso de otra
-    tanda); vacío si Linear no responde — el selector no ofrece nada."""
-    if calendario.configurado() and retail._cache["dato"] is None:
-        # Caché frío: la pantalla no espera a Linear (regla de pestañas
-        # rápidas); se pide en el fondo y el selector sale en la próxima.
-        calendario._en_fondo("retail", retail._buscar)
-        return []
+def _leads_para_elegir():
+    """Los leads del embudo para el selector de Nueva venta (dueño,
+    23/09/2026: "pon la opción de elegir una tarjeta").
+
+    Salen del equipo LEAD de Linear —la única fuente del estado— y no del
+    kanban Retail, que murió en la Fase 5. Cambio de alcance a favor: antes
+    solo ofrecía los leads retail/mayorista; ahora ofrece todos los que
+    siguen en juego, así que una venta de un lead de servicio también se
+    puede amarrar. Los cerrados (Ganado, Perdido) no se ofrecen: a un lead
+    cerrado no se le hace una venta nueva.
+
+    Vacío si Linear no responde — el selector no ofrece nada, y la pantalla
+    nunca espera (regla de pestañas rápidas, 22/09/2026).
+    """
     try:
-        columnas, _por_ref = retail.tablero()
-    except Exception:
+        leads = linear_leads.listar()
+    except linear_leads.ErrorLeads:
         return []
     filas = []
-    for columna in columnas:
-        if columna["clave"] == "entregado":
+    for lead in leads:
+        if lead["estado"] in linear_leads.CERRADOS:
             continue
-        for lead in columna["leads"]:
-            filas.append({"ref": lead["ref"], "nombre": lead["nombre"],
-                          "cel": lead.get("cel") or "",
-                          "etapa": columna["titulo"]})
+        filas.append({"ref": lead["ref"], "nombre": lead["nombre"],
+                      "cel": lead.get("celular") or "",
+                      "etapa": lead["estado_nombre"]})
     return filas
 
 
@@ -2128,98 +2127,6 @@ def calendario_pantalla(request: Request):
         },
         "volver": _liga(estado),
     })
-
-
-@app.get("/retail")
-def retail_pantalla(request: Request):
-    """La pestaña Retail: kanban de leads de venta (diseño del artefacto)."""
-    columnas, por_ref = retail.tablero()
-    abierta = por_ref.get(request.query_params.get("abrir", ""))
-    candidatas = []
-    if abierta:
-        abierta["etapa_titulo"] = next(
-            e["titulo"] for e in retail.ETAPAS if e["clave"] == abierta["etapa"])
-        for c in abierta["cotizaciones"]:
-            c["fecha_texto"] = _fecha_venta(c["creado_en"])
-        # Las cotizaciones/ventas de Vender que aún no son de ningún lead
-        # y que PERTENECEN a este cliente (mismo celular o nombre):
-        # candidatas a amarrar desde la ficha. Corrección de Abraham
-        # (22/09/2026): nunca se ofrecen cotizaciones de otros clientes.
-        candidatas = retail.candidatas_para(abierta)
-        for c in candidatas:
-            c["fecha_texto"] = _fecha_venta(c["creado_en"])
-    con_fecha = por_ref.get(request.query_params.get("fecha", ""))
-    dia_hoy = calendario.hoy()
-    return plantillas.TemplateResponse(request, "retail.html", {
-        "empleada": request.state.empleada,
-        "cal": calendario,
-        "modo": calendario.modo(),
-        "columnas": columnas,
-        "etapas": retail.ETAPAS,
-        "abierta": abierta,
-        "candidatas": candidatas,
-        "con_fecha": con_fecha,
-        "hoy": dia_hoy.isoformat(),
-        "manana": (dia_hoy + timedelta(days=1)).isoformat(),
-        "error": request.query_params.get("error") or None,
-        "aviso": request.query_params.get("aviso"),
-    })
-
-
-@app.post("/retail/mover")
-async def retail_mover(request: Request):
-    form = await request.form()
-    retail.mover(form.get("ref", ""), form.get("etapa", ""))
-    return RedirectResponse("/retail", status_code=303)
-
-
-@app.post("/retail/vincular")
-async def retail_vincular(request: Request):
-    """Amarra una cotización/venta existente de Vender al lead abierto; con
-    el vínculo la tarjeta cae sola en su columna (mínimo Cotizado)."""
-    form = await request.form()
-    ref = form.get("ref", "")
-    try:
-        n = int(form.get("n", ""))
-    except ValueError:
-        return RedirectResponse("/retail", status_code=303)
-    if form.get("clase") == "servicio":
-        cotizaciones.vincular_lead(n, ref)
-    else:
-        ventas.vincular_lead(n, ref)
-    return RedirectResponse(f"/retail?abrir={quote(ref)}", status_code=303)
-
-
-@app.post("/retail/desvincular")
-async def retail_desvincular(request: Request):
-    form = await request.form()
-    ref = form.get("ref", "")
-    try:
-        n = int(form.get("n", ""))
-    except ValueError:
-        return RedirectResponse("/retail", status_code=303)
-    if form.get("clase") == "servicio":
-        cotizaciones.vincular_lead(n, None)
-    else:
-        ventas.vincular_lead(n, None)
-    return RedirectResponse(f"/retail?abrir={quote(ref)}", status_code=303)
-
-
-@app.post("/retail/fecha")
-async def retail_fecha(request: Request):
-    form = await request.form()
-    ref, entrega = form.get("ref", ""), form.get("entrega", "")
-    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", entrega):
-        return RedirectResponse(
-            f"/retail?fecha={quote(ref)}&error=" + quote("Esa fecha no se ve válida."),
-            status_code=303)
-    retail.poner_fecha(ref, form.get("nombre", ""), entrega)
-    # El empuje rápido a Google Calendar, como cualquier otra escritura.
-    calendario_google.sincronizar_en_fondo()
-    return RedirectResponse(
-        "/retail?aviso=" + quote(
-            f"Entrega el {calendario.dmy(entrega)} guardada y puesta en el calendario."),
-        status_code=303)
 
 
 @app.get("/control")

@@ -540,28 +540,6 @@ def vincular_lead(n, issue):
                     (issue or None, n))
 
 
-def vinculadas_por_lead():
-    """{LEAD-NN: [ventas locales vinculadas, la más nueva primero]}."""
-    with _db() as con:
-        filas = con.execute(
-            "SELECT * FROM ventas_locales WHERE lead_issue IS NOT NULL"
-            " ORDER BY n DESC").fetchall()
-    resultado = {}
-    for fila in filas:
-        resultado.setdefault(fila["lead_issue"], []).append(dict(fila))
-    return resultado
-
-
-def sin_lead(limite=6):
-    """Las ventas locales recientes que aún no pertenecen a ningún lead
-    (candidatas a vincular desde la ficha de Retail)."""
-    with _db() as con:
-        filas = con.execute(
-            "SELECT * FROM ventas_locales WHERE lead_issue IS NULL"
-            " ORDER BY n DESC LIMIT ?", (limite,)).fetchall()
-    return [dict(f) for f in filas]
-
-
 def carrito_de(usuario, base_cero=False):
     """[{producto_id, cantidad, sku, nombre, precio, precio_odoo,
     precio_editado, importe}] con precios frescos de Odoo, más el total. Un
@@ -900,7 +878,7 @@ def _espejar_en_crm(empleada, nombre_cliente, celular, partner, orden_id,
     Odoo (etiqueta RETAIL VENTA, etapa Cotizado) amarrada a la orden, y la
     tarjeta del kanban Retail en su columna. Todo best-effort: si algo
     falla, la venta ya está creada y sale igual."""
-    from . import cotizaciones, retail  # diferidos: cotizaciones importa este módulo
+    from . import cotizaciones  # diferido: cotizaciones importa este módulo
     pendiente = tomar_lead_pendiente(empleada["id"])
     espejo = crm_leads.espejar_venta(nombre_cliente, celular, "venta",
                                      orden, total, empleada["nombre"],
@@ -923,13 +901,10 @@ def _espejar_en_crm(empleada, nombre_cliente, celular, partner, orden_id,
                       [[oportunidad_id], {"expected_revenue": total}])
     except Exception as error:
         print(f"ventas: oportunidad de {orden} falló: {error!r}", flush=True)
-    identificador = (espejo or {}).get("identifier")
-    if identificador:
-        try:
-            retail.mover(identificador, "facturar")
-            retail.refrescar()
-        except Exception as error:
-            print(f"ventas: kanban Retail de {orden} falló: {error!r}", flush=True)
+    # Aquí iba el empujón al kanban Retail (murió en la Fase 5). No se
+    # reemplaza por nada: el embudo de Linear ya se mueve solo —Cotizado lo
+    # pone la cotización y Por agendar lo pone el pago real en Odoo—, así
+    # que empujarlo desde aquí era contar la misma cosa dos veces.
     return espejo, oportunidad_id
 
 
@@ -1057,7 +1032,7 @@ def _avanzar_crm_pagada(venta):
     Facturado (regla de Abraham, 22/09/2026): Abono lo mueve él a mano,
     Pagado no se pone solo y "Entregado" existe solo en el kanban.
     Best-effort: el cobro ya quedó sellado y nada de esto lo tumba."""
-    from . import cotizaciones, retail  # diferidos
+    from . import cotizaciones  # diferido
     if venta.get("oportunidad_id"):
         try:
             _ejecutar("crm.lead", "write", [[venta["oportunidad_id"]], {
@@ -1071,13 +1046,6 @@ def _avanzar_crm_pagada(venta):
         # El avance tambien viaja al CRM: label Facturado en el issue y
         # etapaVenta en Twenty (los chips de Chats, 23/09/2026).
         crm_leads.marcar_odoo(venta["lead_ref"], etapa="FACTURADO")
-    if venta.get("lead_issue"):
-        try:
-            retail.mover(venta["lead_issue"], "entregar")
-            retail.refrescar()
-        except Exception as error:
-            print(f"ventas: kanban Retail de {venta.get('orden')} falló: "
-                  f"{error!r}", flush=True)
 
 
 def cancelar(n):

@@ -14,7 +14,7 @@ kanban "Cotizado · por facturar", y cobrar pone Odoo "Facturado" ↔ kanban
 """
 import pytest
 
-from app import cotizaciones, crm_leads, retail, ventas
+from app import cotizaciones, crm_leads, ventas
 from test_cotizaciones import OdooServicios
 from test_ventas import OdooFalso
 
@@ -190,13 +190,16 @@ def test_venta_espejada_marca_el_kanban_y_guarda_el_vinculo(odoo_venta, monkeypa
     assert registro["lead_ref"] == "PP-CCCCC"
     assert registro["lead_issue"] == "LEAD-7"
     assert registro["oportunidad_id"] == 321
-    assert retail._estados()["LEAD-7"]["etapa"] == "facturar"
 
 
-def test_cobrar_avanza_flujo_a_facturado_y_kanban_a_entregar(odoo_venta, monkeypatch):
+def test_cobrar_avanza_el_flujo_a_facturado(odoo_venta, monkeypatch):
     """El sync solo vive en Cotizado y Facturado: al cobrar, la oportunidad
-    pasa a Facturado (no a Pagado — Abono y Pagado los mueve Abraham) y la
-    tarjeta del kanban a "Facturado · por entregar"."""
+    pasa a Facturado (no a Pagado — Abono y Pagado los mueve Abraham).
+
+    El empujón al kanban Retail que esta prueba también cuidaba se fue con
+    la Fase 5: el embudo de Linear se mueve solo, y quien lo empuja al
+    cobrar es el pago real en Odoo, no esta función.
+    """
     _espejo_fijo(monkeypatch, {
         "ok": True, "existente": False, "codigoRef": "PP-DDDDD",
         "identifier": "LEAD-8", "url": "u"})
@@ -216,4 +219,3 @@ def test_cobrar_avanza_flujo_a_facturado_y_kanban_a_entregar(odoo_venta, monkeyp
 
     assert venta["estado"] == "pagado"
     assert any(args[1].get("stage_id") == 7003 for args in escrituras_lead)
-    assert retail._estados()["LEAD-8"]["etapa"] == "entregar"

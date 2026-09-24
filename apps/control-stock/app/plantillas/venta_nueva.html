@@ -150,15 +150,15 @@
   {# ---- De dónde viene: a la derecha en computadora, arriba de todo
        cuando la pantalla es angosta (pedido del dueño, 24/09/2026) ---- #}
   <aside class="col-lead{% if not lead_pendiente %} col-lead-corta{% endif %}">
-    {# Quién es el cliente en el CRM: su tarjeta de Retail, el chat de
+    {# Quién es el cliente en el CRM: su lead del embudo, el chat de
        WhatsApp por donde entró y la referencia que viajó en tinta
        invisible dentro del mensaje. #}
-    {% set lead_puesto = (leads_retail | selectattr('ref', 'equalto', lead_pendiente.ref) | first) if lead_pendiente else none %}
+    {% set lead_puesto = (leads_crm | selectattr('ref', 'equalto', lead_pendiente.ref) | first) if lead_pendiente else none %}
     <div class="tarjeta-lado">
       <div class="rotulo-lado">De dónde viene</div>
-      <select id="lead-retail" name="lead_ref" form="form-acciones">
+      <select id="lead-crm" name="lead_ref" form="form-acciones">
         <option value="">Ninguna</option>
-        {% for l in leads_retail %}
+        {% for l in leads_crm %}
         <option value="{{ l.ref }}" data-nombre="{{ l.nombre }}" data-cel="{{ l.cel }}"
                 {{ 'selected' if lead_pendiente and lead_pendiente.ref == l.ref }}>
           {{ l.ref }} · {{ l.nombre }} — {{ l.etapa }}{% if not l.cel %} · sin chat disponible{% endif %}</option>
@@ -176,7 +176,7 @@
         <span class="chip-lead suave">sin chat disponible</span>
         {% endif %}
         {% if lead_puesto and lead_puesto.etapa %}
-        <span class="chip-lead suave">Retail · {{ lead_puesto.etapa }}</span>
+        <span class="chip-lead suave">{{ lead_puesto.etapa }}</span>
         {% endif %}
       </div>
       <p class="dicho-lead">
