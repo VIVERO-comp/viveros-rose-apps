@@ -337,22 +337,31 @@
           {% endfor %}
         </div>
 
-        {# El bloque "Por entregar" (pestaña Retail): TODOS los facturados —
-           sin fecha primero, en rojo; tocarlos lleva a ponerles fecha. #}
+        {# El bloque "Por agendar" (Fase 4, 24/09/2026): los leads que ya
+           pagaron, con su etiqueta de pago y el SALDO que trae Odoo. El
+           saldo no se inventa: si Odoo no contesta, aquí se dice — un $0
+           falso hace que alguien entregue sin cobrar. Un toque abre el
+           formulario de fecha · tipo · responsable. #}
         <div class="leads-lado">
-          <div class="leads-tit">Por entregar<span>de la pestaña Retail</span></div>
-          {% for l in por_entregar %}
-          <a class="lead-it" href="{{ l.liga }}">
-            <span class="pt" style="background:{{ l.color }}"></span>
+          <div class="leads-tit">Por agendar<span>ya pagaron{% if por_agendar %} · {{ por_agendar|length }}{% endif %}</span></div>
+          {% if saldo_error %}
+          <div class="saldo-roto">No se pudo leer el saldo en Odoo. Los montos no se muestran para no mentir.</div>
+          {% endif %}
+          {% for l in por_agendar %}
+          <a class="lead-it" href="{{ l.liga }}" title="Agendar a {{ l.nombre }}">
+            <span class="pt" style="background:{{ l.estado_ficha.color }}"></span>
             <span class="ln"><b>{{ l.nombre }}</b>
-              {% if l.entrega %}
-              <small class="fecha-e {{ 'roja' if l.entrega <= hoy }}">entregar el {{ cal.dmy(l.entrega) }}</small>
-              {% else %}
-              <small class="fecha-e roja">sin fecha · ponla</small>
-              {% endif %}</span>
+              <small>
+                {% if l.pago %}<span class="etq-pago">{{ l.pago }}</span>{% endif %}
+                {% if l.saldo_conocido %}
+                  {% if l.saldo > 0 %}saldo {{ l.saldo_texto }}{% else %}sin saldo{% endif %}
+                {% else %}
+                  <span class="sin-saldo">saldo: no se pudo leer</span>
+                {% endif %}
+              </small></span>
           </a>
           {% else %}
-          <div class="lead-vacio">Nada facturado pendiente.</div>
+          <div class="lead-vacio">Ninguno esperando fecha.</div>
           {% endfor %}
         </div>
       </aside>
@@ -429,6 +438,40 @@
 
   {% if abierta.nota %}<div class="nota-it">{{ abierta.nota }}</div>{% endif %}
 
+  {# Fase 4: el lead que esta actividad cierra, y su plata. El saldo va
+     ARRIBA del boton, nunca escondido: quien entrega lo ve ANTES de marcar
+     "Hecha". Si Odoo no contesto, aqui se dice — no se pinta $0.00. #}
+  {% if lead_abierta %}
+  <div class="cobro {{ 'cobrar' if lead_abierta.saldo_conocido and lead_abierta.saldo > 0 }}">
+    <div class="cobro-tit">
+      {% if lead_abierta.saldo_conocido and lead_abierta.saldo > 0 %}
+        Cobrar {{ lead_abierta.saldo_texto }} antes de entregar
+      {% elif lead_abierta.saldo_conocido %}
+        Sin saldo: ya está pagado
+      {% else %}
+        El saldo no se pudo leer
+      {% endif %}
+    </div>
+    <div class="cobro-pie">
+      {% if lead_abierta.saldo_conocido %}
+        {{ lead_abierta.orden }} · {{ lead_abierta.total_texto }} en total,
+        {{ lead_abierta.pagado_texto }} pagado.
+      {% else %}
+        {{ lead_abierta.saldo_aviso }}
+      {% endif %}
+      {% if lead_abierta.pago %}<span class="etq-pago">{{ lead_abierta.pago }}</span>{% endif %}
+    </div>
+    <div class="cobro-pie">
+      Lead {{ lead_abierta.ref }} · {{ lead_abierta.estado_nombre }}
+      {% if lead_abierta.resp %} · {{ lead_abierta.resp }}{% endif %}
+      {% if lead_abierta.url %} · <a href="{{ lead_abierta.url }}" target="_blank" rel="noopener">abrir en Linear</a>{% endif %}
+    </div>
+    {% if not cierra_entrega %}
+    <div class="cobro-pie">Esta {{ cal.nombre_de_tipo(abierta.tipo)|lower }} no mueve el estado del lead.</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
   {% if puede_tocar_abierta %}
   <div class="acciones">
     {% if abierta.estado == 'hecha' %}
@@ -436,9 +479,14 @@
         <input type="hidden" name="estado" value="pend">
         <button class="btn" type="submit">Reabrir</button></form>
     {% else %}
-      <form method="post" action="/calendario/actividad/{{ abierta.id }}/estado?volver={{ volver|urlencode }}">
+      <form method="post" action="/calendario/actividad/{{ abierta.id }}/estado?volver={{ volver|urlencode }}"
+            {% if lead_abierta and cierra_entrega and lead_abierta.saldo_conocido and lead_abierta.saldo > 0 %}
+            data-confirmar="{{ lead_abierta.nombre }} debe {{ lead_abierta.saldo_texto }}.
+
+Marcar Hecha manda el lead a Entregado con la etiqueta «Cobrar saldo»: NO pasa a Ganado hasta que entre ese pago."
+            {% endif %}>
         <input type="hidden" name="estado" value="hecha">
-        <button class="btn oro" type="submit">✓ Marcar terminada</button></form>
+        <button class="btn oro" type="submit">✓ {{ 'Hecha · entregado' if (lead_abierta and cierra_entrega) else 'Marcar terminada' }}</button></form>
     {% endif %}
     {% if abierta.estado not in ('curso', 'hecha') %}
       <form method="post" action="/calendario/actividad/{{ abierta.id }}/estado?volver={{ (volver ~ '&abrir=' ~ abierta.id)|urlencode }}">
@@ -477,6 +525,96 @@ No se borra nada: el issue {{ abierta.ref }} queda en Linear marcado como Cancel
   </div>
   <p class="pie-nota">Desde aquí no se borra nada: una actividad se cancela y el issue queda en Linear con su historial.</p>
 </aside>
+{% endif %}
+
+{# ----- Fase 4: "Agendar" un lead que ya pago (24/09/2026) -----------------
+   Fecha · tipo · responsable, y nada mas: al guardar nace la actividad
+   amarrada al lead y el lead pasa a Agendado. El responsable viene
+   SUGERIDO del lead y se puede cambiar (decision del dueno). #}
+{% if agendando and puede_escribir %}
+<a class="telon" href="{{ ligas.cerrar }}" aria-label="Cerrar"></a>
+<form class="modal" method="post" action="/calendario/agendar?volver={{ volver|urlencode }}">
+  <input type="hidden" name="lead" value="{{ agendando.ref }}">
+  <div class="cab-panel">
+    <div><span class="tenue">POR AGENDAR · {{ agendando.ref }}</span><h4>Agendar a {{ agendando.nombre }}</h4></div>
+    <a class="btn chico" href="{{ ligas.cerrar }}">Cerrar</a>
+  </div>
+  {% if error %}<div class="franja"><b>Ups.</b> <span>{{ error }}</span></div>{% endif %}
+
+  {# La plata del lead, arriba: quien agenda sabe con que se va a topar el
+     dia de la entrega. #}
+  <div class="cobro {{ 'cobrar' if agendando.saldo_conocido and agendando.saldo > 0 }}">
+    <div class="cobro-tit">
+      {% if agendando.saldo_conocido and agendando.saldo > 0 %}
+        Queda {{ agendando.saldo_texto }} por cobrar
+      {% elif agendando.saldo_conocido %}
+        Pagado completo
+      {% else %}
+        El saldo no se pudo leer
+      {% endif %}
+    </div>
+    <div class="cobro-pie">
+      {% if agendando.saldo_conocido %}
+        {{ agendando.orden }} · {{ agendando.total_texto }} en total, {{ agendando.pagado_texto }} pagado.
+      {% else %}
+        {{ agendando.saldo_aviso }}
+      {% endif %}
+      {% if agendando.pago %}<span class="etq-pago">{{ agendando.pago }}</span>{% endif %}
+      {% if agendando.interes %} · {{ agendando.interes }}{% endif %}
+    </div>
+  </div>
+
+  <div class="form-red">
+    <div class="campo-caja">
+      <label for="ag-tipo">Tipo de actividad</label>
+      <select class="sel ancho" id="ag-tipo" name="tipo">
+        {% for t in tipos_agenda %}
+        <option value="{{ t.clave }}">{{ t.nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="campo-caja">
+      <label for="ag-resp">Responsable</label>
+      <select class="sel ancho" id="ag-resp" name="resp">
+        <option value="">Sin asignar</option>
+        {% for r in responsables_lead %}
+        <option value="{{ r }}" {{ 'selected' if r == agendando.resp_sugerido }}>{{ r }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="campo-caja">
+      <label for="ag-fecha">Fecha</label>
+      <input class="campo" type="date" id="ag-fecha" name="fecha" required value="{{ pre.fecha }}">
+    </div>
+    <div class="campo-caja">
+      <label for="ag-hora">Hora</label>
+      <input class="campo" type="time" id="ag-hora" name="hora" value="{{ cal.HORA_POR_DEFECTO }}">
+    </div>
+    <div class="campo-caja">
+      <label for="ag-dur">Cuánto dura</label>
+      <select class="sel" id="ag-dur" name="dur">
+        {% for m in [30, 60, 90, 120, 180, 240] %}
+        <option value="{{ m }}" {{ 'selected' if m == 60 }}>{{ (m ~ ' min') if m < 60 else ((m // 60) ~ ' h') }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="campo-caja ancho">
+      <label for="ag-lugar">Lugar</label>
+      <input class="campo" id="ag-lugar" name="lugar" placeholder="Obarrio, Costa del Este…">
+    </div>
+    <div class="campo-caja ancho">
+      <label for="ag-nota">Nota</label>
+      <textarea class="campo" id="ag-nota" name="nota" rows="2"
+                placeholder="Ej: entrar por el sótano, preguntar por Marta."></textarea>
+    </div>
+  </div>
+  <div class="acciones">
+    <button class="btn oro" type="submit" data-guardando="Agendando…">Agendar y pasar a Agendado</button>
+    <a class="btn" href="{{ ligas.cerrar }}">Cancelar</a>
+  </div>
+  <p class="pie-nota">Al guardar nace la actividad en el CALENDARIO ROSE amarrada a
+    {{ agendando.ref }}, y el lead pasa de <b>Por agendar</b> a <b>Agendado</b>.</p>
+</form>
 {% endif %}
 
 {% if nueva and puede_escribir %}

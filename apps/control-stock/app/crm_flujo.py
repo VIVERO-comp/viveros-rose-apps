@@ -50,7 +50,12 @@ def en_menu():
 # (viveros-rose-frontend/src/pages/api/crm/tablero.ts); el punto de la
 # columna lleva el tono FUERTE de la familia del estado (paleta unica).
 def _col(clave, titulo):
-    familia = colores.ASIGNACIONES["estado_lead"][clave]
+    # Con `.get`: desde el 24/09/2026 la paleta unica lleva los 8 estados
+    # del embudo NUEVO, y estas columnas son las del embudo viejo (con
+    # Contactado y En conversacion, que dejaron de existir). Esta pantalla
+    # muere en la Fase 5; hasta entonces pinta en gris lo que ya no esta en
+    # la paleta, en vez de reventar.
+    familia = colores.ASIGNACIONES["estado_lead"].get(clave, "gray")
     return {"clave": clave, "titulo": titulo,
             "color": colores.FAMILIAS[familia]["solido_hex"]}
 

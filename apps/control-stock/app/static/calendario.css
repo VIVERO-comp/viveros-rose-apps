@@ -666,3 +666,38 @@ a{color:inherit}
   .ret-tarjeta{cursor:pointer}
   .ret-pie{padding:6px 2px 0}
 }
+
+/* ---------- Fase 4: el calendario cierra el embudo (24/09/2026) ----------
+   El bloque "Por agendar" reusa la piel del log de leads; lo nuevo es la
+   etiqueta de pago, el aviso de saldo ilegible y la tarjeta de cobro que
+   va ARRIBA del boton "Hecha" — quien entrega tiene que ver lo que falta
+   cobrar antes de marcar, no despues. */
+
+.lead-it .etq-pago, .cobro .etq-pago{
+  display:inline-block;font-size:9.5px;font-weight:700;padding:1px 5px;
+  border-radius:999px;background:var(--crema-2);border:1px solid var(--borde);
+  color:var(--suave);margin-right:4px;
+}
+.lead-it .sin-saldo{color:var(--critico);font-weight:700}
+.saldo-roto{
+  font-size:10.5px;line-height:1.35;color:var(--critico);font-weight:600;
+  background:rgba(220,38,38,.07);border:1px solid rgba(220,38,38,.25);
+  border-radius:8px;padding:6px 8px;margin:2px 0 4px;
+}
+
+/* La tarjeta de cobro de la ficha (y del formulario de agendar). Sin saldo
+   es informativa; con saldo se pone en rojo, porque es plata en la calle. */
+.cobro{
+  margin:12px 0;padding:11px 13px;border-radius:12px;
+  background:var(--crema);border:1px solid var(--borde);
+}
+.cobro.cobrar{
+  background:rgba(220,38,38,.06);border-color:rgba(220,38,38,.3);
+}
+.cobro-tit{font-size:14px;font-weight:800;line-height:1.25;color:var(--texto)}
+.cobro.cobrar .cobro-tit{color:var(--critico)}
+.cobro-pie{
+  font-size:11px;color:var(--muy-suave);line-height:1.45;margin-top:4px;
+  display:flex;flex-wrap:wrap;gap:4px;align-items:center;
+}
+.cobro-pie a{color:var(--texto);font-weight:600;text-decoration:underline;text-underline-offset:2px}

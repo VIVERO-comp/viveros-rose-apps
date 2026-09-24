@@ -114,10 +114,12 @@
       "CONSTRUCCION": "brown"
     },
     "estado_lead": {
-      "NUEVO": "blue",
-      "CONTACTADO": "orange",
-      "EN_CONVERSACION": "purple",
-      "PEDIDO_PENDIENTE": "orange",
+      "NUEVO": "gray",
+      "HABLANDO": "blue",
+      "COTIZADO": "purple",
+      "POR_AGENDAR": "orange",
+      "AGENDADO": "yellow",
+      "ENTREGADO": "turquoise",
       "GANADO": "green",
       "PERDIDO": "red"
     },
@@ -135,11 +137,12 @@
       "PAGADO": "green"
     },
     "motivo_no_avance": {
-      "NO_CONTESTO": "red",
-      "DEJO_DE_RESPONDER": "orange",
-      "DIJO_QUE_NO": "purple",
-      "SOLO_PREGUNTABA": "gray",
-      "DESACTIVADO": "gray"
+      "PRECIO": "red",
+      "NO_RESPONDIO": "orange",
+      "SIN_STOCK": "yellow",
+      "FUERA_DE_ZONA": "gray",
+      "COMPRO_EN_OTRO_LADO": "purple",
+      "SOLO_PREGUNTABA": "gray"
     },
     "estado_pedido": {
       "PEDIDO": "gray",

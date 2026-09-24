@@ -20,11 +20,11 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import (acceso_google, avisos, calculos, calendario, calendario_google,
-               colores, retail,
+from . import (acceso_google, agenda, avisos, calculos, calendario,
+               calendario_google, colores, retail,
                calendario_ics, conteos, control, cotizaciones,
                coworkers, crm_flujo, crm_twenty, datos, fichas, fotos,
-               seguridad, ventas)
+               linear_leads, seguridad, ventas)
 
 app = FastAPI(title="Control Viverorose")
 
@@ -2030,11 +2030,29 @@ def calendario_pantalla(request: Request):
     for lead in leads_servicio:
         lead["liga"] = _liga(estado, nueva="1", tipo=lead["tipo"], cliente=lead["nombre"])
 
-    # Y debajo, el bloque "Por entregar": TODOS los facturados de la
-    # pestaña Retail — sin fecha primero (a ponerla), luego por fecha.
-    por_entregar = retail.por_entregar()
-    for lead in por_entregar:
-        lead["liga"] = ("/retail?abrir=" if lead["entrega"] else "/retail?fecha=") + lead["ref"]
+    # Y debajo, el bloque "Por agendar" (Fase 4, 24/09/2026): los leads que
+    # ya pagaron, con su etiqueta de pago y el saldo que trae Odoo. Antes
+    # este bloque decía "Por entregar" y lo armaba la pestaña Retail; ahora
+    # sale del embudo de Linear, que es donde vive el estado.
+    bloque = agenda.por_agendar()
+    for lead in bloque["leads"]:
+        lead["liga"] = _liga(estado, agendar=lead["ref"])
+    # Los Entregado que ya no deben nada pasan a Ganado, por detrás: el
+    # pago que salda entra en Odoo y nadie más cierra ese círculo.
+    agenda.cerrar_en_fondo()
+
+    # El formulario de "Agendar" (fecha · tipo · responsable), si el
+    # empleado tocó un lead del bloque.
+    agendando = None
+    ref_agendar = request.query_params.get("agendar", "")
+    if ref_agendar:
+        agendando = agenda.lead_con_saldo(ref_agendar)
+        if agendando:
+            # El responsable se SUGIERE del lead y queda editable (decisión
+            # del 24/09/2026); sin Resp: en el lead, el de la sesión.
+            agendando["resp_sugerido"] = (
+                agendando.get("resp")
+                or agenda.responsable_de_empleada(empleada))
 
     abierta = None
     id_abierta = request.query_params.get("abrir", "")
@@ -2055,7 +2073,18 @@ def calendario_pantalla(request: Request):
         "grupos": grupos,
         "movil": movil,
         "leads_servicio": leads_servicio,
-        "por_entregar": por_entregar,
+        "por_agendar": bloque["leads"],
+        "saldo_error": bloque["error"],
+        "agendando": agendando,
+        "tipos_agenda": agenda.TIPOS,
+        "responsables_lead": linear_leads.responsables(),
+        "agenda": agenda,
+        # El saldo de la actividad abierta: va ARRIBA del botón "Hecha",
+        # nunca escondido — quien entrega lo ve antes de marcarla.
+        "lead_abierta": (agenda.lead_con_saldo(abierta["lead"])
+                         if abierta and abierta.get("lead") else None),
+        "cierra_entrega": (agenda.cierra_la_entrega(abierta["tipo"])
+                           if abierta else False),
         "filtros": filtros,
         "dias": dias,
         "ligas_vista": ligas_vista,
@@ -2525,11 +2554,67 @@ async def calendario_mover(request: Request, id_actividad: str):
 @app.post("/calendario/actividad/{id_actividad}/estado")
 async def calendario_estado(request: Request, id_actividad: str):
     form = await request.form()
+    autor = (request.state.empleada.get("nombre")
+             or request.state.empleada["id"])
 
-    def hacer(_yo, _actividad):
+    def hacer(_yo, actividad):
         nuevo = form.get("estado", "")
         calendario.cambiar_estado(id_actividad, nuevo)
-        return calendario.nombre_de_estado(nuevo) + "."
+        texto = calendario.nombre_de_estado(nuevo) + "."
+        # Fase 4: marcar Hecha cierra el embudo — el lead pasa a Entregado
+        # y, si el saldo quedó en cero, sigue solo a Ganado. Una Recogida
+        # (el retiro del alquiler) no mueve nada: el lead ya se entregó.
+        if nuevo == "hecha" and actividad:
+            try:
+                extra = agenda.al_marcar_hecha(actividad, autor=autor)
+            except (calendario.ErrorCalendario, linear_leads.ErrorLeads) as fallo:
+                # La actividad YA quedó hecha: el embudo es lo que falló, y
+                # eso se dice en vez de tragárselo.
+                extra = f"La actividad quedó hecha, pero el embudo no se movió: {fallo}"
+            if extra:
+                texto += " " + extra
+        return texto
+
+    return await _accion_calendario(request, id_actividad, hacer)
+
+
+@app.post("/calendario/agendar")
+async def calendario_agendar(request: Request):
+    """Fase 4: la fecha de un lead «Por agendar» crea su actividad y lo
+    manda a «Agendado». Es el único camino: poner la fecha ES agendar."""
+    form = await request.form()
+    ref = form.get("lead", "")
+    autor = (request.state.empleada.get("nombre")
+             or request.state.empleada["id"])
+    try:
+        if not (calendario.escritura_activa() or not calendario.configurado()):
+            raise calendario.ErrorCalendario(
+                "Esta instancia mira el calendario real pero no escribe en Linear.")
+        aviso = agenda.agendar(
+            ref_lead=ref, tipo=form.get("tipo", ""), fecha=form.get("fecha", ""),
+            hora=form.get("hora") or None, resp=form.get("resp", ""),
+            dur=form.get("dur") or None, lugar=form.get("lugar", ""),
+            nota=form.get("nota", ""), autor=autor)
+    except (calendario.ErrorCalendario, linear_leads.ErrorLeads) as fallo:
+        # Se vuelve al formulario abierto, para no perder lo escrito.
+        destino = request.query_params.get("volver") or "/calendario"
+        if not destino.startswith("/calendario"):
+            destino = "/calendario"
+        destino += ("&" if "?" in destino else "?") + "&".join([
+            f"agendar={quote(ref)}", "error=" + quote(str(fallo))])
+        return RedirectResponse(destino, status_code=303)
+    calendario_google.sincronizar_en_fondo()
+    return _volver_a(request, aviso=aviso)
+
+
+@app.post("/calendario/actividad/{id_actividad}/reprogramar")
+async def calendario_reprogramar(request: Request, id_actividad: str):
+    """Mover la fecha SIN tocar el estado del lead (regla del plan)."""
+    form = await request.form()
+
+    def hacer(_yo, _actividad):
+        return agenda.reprogramar(
+            id_actividad, form.get("fecha", ""), form.get("hora") or None)
 
     return await _accion_calendario(request, id_actividad, hacer)
 

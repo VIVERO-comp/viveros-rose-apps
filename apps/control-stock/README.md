@@ -54,9 +54,75 @@ producción con `docker compose exec control-stock …`).
   feed ICS por empleada (`/calendario.ics?t=<token>`, `app/calendario_ics.py`)
   y empuje a Google Calendar (`app/calendario_google.py`, conexión por
   empleada en Ajustes). Sin `LINEAR_API_KEY` corre en modo muestra.
+  Desde la **Fase 4** (24/09/2026) el calendario además CIERRA el embudo:
+  ver la sección propia abajo.
 - **Retail** (`/retail`, `app/retail.py`) — kanban de leads retail/mayorista
-  amarrado a las ventas de la app.
+  amarrado a las ventas de la app. Fuera del menú con `RETAIL_EN_MENU=0`.
 - **Vender** y **Cotizaciones de servicio** — abajo tienen sección propia.
+
+## El embudo de leads y la Fase 4 (`app/linear_leads.py`, `app/agenda.py`)
+
+El estado de un lead vive en **un solo tablero: el equipo LEAD de Linear**.
+Twenty es la ficha del cliente, Odoo es solo dinero y el calendario son solo
+fechas. Esta app no guarda estado de leads en ninguna tabla.
+
+### Los 8 estados
+
+| # | Estado | Lo mueve |
+|---|---|---|
+| 1 | Nuevo | solo, al nacer el lead |
+| 2 | Hablando | solo, cuando **el cliente** escribe |
+| 3 | Cotizado | solo, al generar la cotización |
+| 4 | Por agendar | solo, cuando entra un **pago real** en Odoo |
+| 5 | Agendado | **esta app**: al crear la actividad del calendario |
+| 6 | Entregado | **esta app**: un toque en «Hecha» |
+| 7 | Ganado | **esta app**: entregado + saldo 0 |
+| — | Perdido | barrido de 14 días, o a mano con motivo |
+
+`app/linear_leads.py` es la única puerta a ese tablero: lee los issues con su
+estado, sus etiquetas y sus comentarios, mueve el estado, intercambia la
+etiqueta `Resp:` y comenta firmado. Reglas que respeta y no se negocian:
+
+- **Las etiquetas nunca se crean solas**: `_label_id()` solo busca. Si el
+  nombre no existe, queda el aviso en el log y el issue va sin ella.
+- **El responsable va por etiqueta `Resp: <nombre>`, nunca por `assignee`**
+  (para no pagar un asiento de Linear por empleado). Sumar a alguien al
+  equipo es crear su etiqueta en Linear: sin tocar código.
+- **La escalera no degrada**: un movimiento automático solo avanza. Ir hacia
+  atrás exige `manual=True` **con motivo**, que queda como comentario firmado
+  en el issue.
+- El interruptor de escritura es el MISMO del calendario
+  (`CALENDARIO_ESCRITURA`): es la misma cuenta de Linear y la misma pregunta.
+
+### Fase 4: el calendario cierra el embudo (`app/agenda.py`)
+
+- El bloque **«Por agendar»** del calendario lista los leads que ya pagaron,
+  con su etiqueta de pago y **el saldo que trae Odoo** (`sale.order.
+  saldo_pendiente`, el campo de la Fase 3b).
+- **«Agendar»** pide fecha · tipo · responsable. Los 5 tipos son etiquetas que
+  YA existen en Linear: Entrega · Instalación (el «montaje») · Mantenimiento ·
+  Visita · Recogida (el «retiro»). Al guardar nace la actividad amarrada al
+  lead y el lead pasa a **Agendado**. El responsable se **sugiere** del lead y
+  es editable.
+- El amarre actividad↔lead viaja en la marca de la descripción del issue,
+  junto a la hora: `<!-- rose hora=10:00|dur=60|lugar=…|lead=LEAD-91|resp=Ruben -->`.
+  Sin tabla nueva, y sobrevive a mover, editar y reprogramar.
+- En la actividad, **el saldo va arriba del botón**, nunca escondido: quien
+  entrega lo ve antes de marcar «Hecha».
+- **«Hecha»** manda el lead a **Entregado**. Si el saldo quedó en cero, sigue
+  solo a **Ganado**; si entregó debiendo, se queda en Entregado con la
+  etiqueta «Cobrar saldo» y sale en la vista Cobrar de Linear. Cuando entra el
+  pago que salda, `cerrar_los_que_ya_pagaron()` lo pasa a Ganado (corre en
+  fondo al abrir el calendario: el addon de Odoo solo empuja hasta «Por
+  agendar», y a un Entregado la escalera no lo degrada).
+- **Una Recogida no mueve el estado**: retirar las plantas de alquiler después
+  del evento es solo una actividad, el lead ya se entregó.
+- **Reprogramar** mueve la fecha sin tocar el estado.
+- **Cualquier empleado con acceso al calendario puede marcar «Hecha»**, no
+  solo el responsable.
+- **El saldo no se inventa**: si Odoo no contesta, la pantalla lo dice en vez
+  de mostrar $0 y mentir — un $0 falso hace que alguien entregue sin cobrar.
+  Y sin saldo confiable, un lead nunca pasa a Ganado.
 
 ## La cara CRM (`/crm/calendario`)
 

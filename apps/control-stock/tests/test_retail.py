@@ -54,12 +54,15 @@ def test_poner_fecha_crea_la_entrega_en_el_calendario(cliente):
             if a["tipo"] == "entrega" and a["cliente"] == "Soledad"]
 
 
-def test_el_bloque_por_entregar_sale_en_el_calendario(cliente):
+def test_el_lead_por_entregar_sin_fecha_se_ve_en_retail(cliente):
+    # El bloque "Por entregar" del CALENDARIO se fue en la Fase 4
+    # (24/09/2026): en su lugar va "Por agendar", que sale del embudo de
+    # Linear y no de esta pestaña (ver tests/test_agenda.py). Lo que esta
+    # prueba cuida sigue vivo aquí: a quién le falta la fecha de entrega.
     cliente.post("/retail/mover", data={"ref": "LEAD-43", "etapa": "entregar"})
-    cuerpo = cliente.get("/calendario").text
-    assert "Por entregar" in cuerpo
+    cuerpo = cliente.get("/retail").text
     assert "Diana Caballero" in cuerpo
-    assert "sin fecha · ponla" in cuerpo
+    assert "sin fecha de entrega" in cuerpo
 
 
 def test_los_de_servicio_no_entran_a_retail():

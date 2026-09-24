@@ -227,7 +227,8 @@ MARCA = re.compile(r"<!--\s*rose\s+([^>]*?)-->\s*", re.I)
 def _leer_marca(descripcion):
     texto = descripcion or ""
     encontrada = MARCA.search(texto)
-    datos = {"hora": HORA_POR_DEFECTO, "dur": DURACION_POR_DEFECTO, "lugar": ""}
+    datos = {"hora": HORA_POR_DEFECTO, "dur": DURACION_POR_DEFECTO,
+             "lugar": "", "lead": "", "resp": ""}
     if encontrada:
         for parte in encontrada.group(1).split("|"):
             if "=" in parte:
@@ -241,12 +242,34 @@ def _leer_marca(descripcion):
         dur = int(datos.get("dur") or DURACION_POR_DEFECTO)
     except (TypeError, ValueError):
         dur = DURACION_POR_DEFECTO
+    # `lead` es la referencia LEAD-NN del lead que esta actividad cierra
+    # (Fase 4, 24/09/2026): es lo que deja que "Hecha" mueva el embudo. Solo
+    # se acepta con la forma exacta, para que un texto cualquiera de la
+    # descripcion no termine moviendo un issue.
+    lead = str(datos.get("lead") or "").strip().upper()
+    if not re.fullmatch(r"[A-Z]+-\d+", lead):
+        lead = ""
     return {"hora": hora, "dur": max(15, min(dur, 600)),
-            "lugar": str(datos.get("lugar") or ""), "nota": texto}
+            "lugar": str(datos.get("lugar") or ""),
+            "lead": lead,
+            # El responsable del TRABAJO, por nombre ("Mary"): es la
+            # etiqueta `Resp:` del lead, no el assignee de Linear, porque
+            # los empleados no tienen asiento de Linear (regla que no se
+            # rompe). El assignee sigue siendo cosa aparte.
+            "resp_lead": str(datos.get("resp") or "").strip(),
+            "nota": texto}
 
 
-def _poner_marca(nota, hora, dur, lugar):
-    marca = f"<!-- rose hora={hora}|dur={int(dur)}|lugar={(lugar or '').replace('|', ' ')} -->"
+def _poner_marca(nota, hora, dur, lugar, lead="", resp_lead=""):
+    def limpio(valor):
+        return (str(valor or "").replace("|", " ").replace("-->", "")).strip()
+
+    partes = [f"hora={hora}", f"dur={int(dur)}", f"lugar={limpio(lugar)}"]
+    if lead:
+        partes.append(f"lead={limpio(lead)}")
+    if resp_lead:
+        partes.append(f"resp={limpio(resp_lead)}")
+    marca = "<!-- rose " + "|".join(partes) + " -->"
     nota = (nota or "").strip()
     return f"{marca}\n\n{nota}".strip()
 
@@ -322,6 +345,9 @@ def _normalizar(issue):
         "nota": marca["nota"],
         "hora": marca["hora"],
         "dur": marca["dur"],
+        # El lead que esta actividad cierra, y quien la tiene (Fase 4).
+        "lead": marca["lead"],
+        "resp_lead": marca["resp_lead"],
         "fecha": issue.get("dueDate") or "",
         "estado": _estado_de(issue),
         "prioridad": 3 if prioridad in (0, 4) else prioridad,
@@ -413,9 +439,9 @@ def calentar_en_fondo():
         hasta = (primero + timedelta(days=52)).isoformat()
         listar(desde, hasta)
         leads_de_servicio()
-        # Import tardío: retail importa calendario (sería circular arriba).
-        from . import retail
-        retail.por_entregar()
+        # Import tardío: agenda importa calendario (sería circular arriba).
+        from . import agenda
+        agenda.por_agendar()
 
     _en_fondo("calentar", tarea)
 
@@ -579,8 +605,13 @@ mutation($id: String!, $texto: String!) {
 
 
 def crear(tipo, cliente, fecha, hora=HORA_POR_DEFECTO, dur=DURACION_POR_DEFECTO,
-          lugar="", resp_id="", prioridad=3, nota=""):
-    """Crea la actividad. Devuelve {ref, url}."""
+          lugar="", resp_id="", prioridad=3, nota="", lead="", resp_lead=""):
+    """Crea la actividad. Devuelve {ref, url, id}.
+
+    `lead` (LEAD-NN) y `resp_lead` (el nombre del empleado) viajan en la
+    marca de la descripcion: con ellos la actividad sabe a que lead cierra
+    y quien la tiene, sin tabla propia y sin asiento de Linear.
+    """
     _exigir_escritura()
     if tipo not in POR_CLAVE:
         raise ErrorCalendario("Ese tipo de actividad no existe.")
@@ -590,7 +621,8 @@ def crear(tipo, cliente, fecha, hora=HORA_POR_DEFECTO, dur=DURACION_POR_DEFECTO,
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", fecha or ""):
         raise ErrorCalendario("Falta la fecha.")
     if not configurado():
-        return _muestra_crear(tipo, cliente, fecha, hora, dur, lugar, resp_id, prioridad, nota)
+        return _muestra_crear(tipo, cliente, fecha, hora, dur, lugar, resp_id,
+                              prioridad, nota, lead, resp_lead)
 
     cat = catalogo()
     etiqueta = cat["etiquetas"].get(tipo)
@@ -598,7 +630,7 @@ def crear(tipo, cliente, fecha, hora=HORA_POR_DEFECTO, dur=DURACION_POR_DEFECTO,
         "teamId": _var("LINEAR_TEAM_CALENDARIO_ID") or _var("LINEAR_TEAM_ID"),
         "projectId": _var("LINEAR_PROJECT_CALENDARIO_ID"),
         "title": f"{POR_CLAVE[tipo]['nombre']} — {cliente}",
-        "description": _poner_marca(nota, hora, dur, lugar),
+        "description": _poner_marca(nota, hora, dur, lugar, lead, resp_lead),
         "dueDate": fecha,
         "priority": int(prioridad),
     }
@@ -612,7 +644,8 @@ def crear(tipo, cliente, fecha, hora=HORA_POR_DEFECTO, dur=DURACION_POR_DEFECTO,
     if not hecho.get("success"):
         raise ErrorCalendario("Linear no pudo crear la actividad.")
     invalidar_cache()
-    return {"ref": hecho["issue"]["identifier"], "url": hecho["issue"]["url"]}
+    return {"ref": hecho["issue"]["identifier"], "url": hecho["issue"]["url"],
+            "id": hecho["issue"]["id"]}
 
 
 def _actualizar(id_issue, datos):
@@ -641,7 +674,9 @@ def mover(id_issue, fecha, hora=None):
     if hora:
         issue = _una(id_issue)
         marca = _leer_marca(issue.get("description"))
-        datos["description"] = _poner_marca(marca["nota"], hora, marca["dur"], marca["lugar"])
+        datos["description"] = _poner_marca(
+            marca["nota"], hora, marca["dur"], marca["lugar"],
+            marca["lead"], marca["resp_lead"])
     _actualizar(id_issue, datos)
 
 
@@ -665,11 +700,18 @@ def reasignar(id_issue, resp_id):
     _actualizar(id_issue, {"assigneeId": resp_id or None})
 
 
-def cambiar_detalle(id_issue, hora=None, dur=None, lugar=None, prioridad=None):
-    """Hora, duración, lugar y prioridad (lo que vive en la marca)."""
+def cambiar_detalle(id_issue, hora=None, dur=None, lugar=None, prioridad=None,
+                   resp_lead=None):
+    """Hora, duración, lugar, prioridad y responsable (lo de la marca).
+
+    El lead amarrado NO se toca desde aquí: una actividad no cambia de
+    cliente a media edición, y si la amarra se pudiera reescribir con un
+    formulario, un descuido movería el embudo de otro lead.
+    """
     _exigir_escritura()
     if not configurado():
-        return _muestra_editar(id_issue, hora=hora, dur=dur, lugar=lugar, prioridad=prioridad)
+        return _muestra_editar(id_issue, hora=hora, dur=dur, lugar=lugar,
+                               prioridad=prioridad, resp_lead=resp_lead)
     issue = _una(id_issue)
     marca = _leer_marca(issue.get("description"))
     datos = {"description": _poner_marca(
@@ -677,6 +719,8 @@ def cambiar_detalle(id_issue, hora=None, dur=None, lugar=None, prioridad=None):
         hora or marca["hora"],
         dur or marca["dur"],
         marca["lugar"] if lugar is None else lugar,
+        marca["lead"],
+        marca["resp_lead"] if resp_lead is None else resp_lead,
     )}
     if prioridad:
         datos["priority"] = int(prioridad)
@@ -763,7 +807,16 @@ def _semilla():
             "tipo": tipo, "cliente": cliente, "titulo": f"{POR_CLAVE[tipo]['nombre']} — {cliente}",
             "lugar": lugar, "nota": "", "hora": hora, "dur": dur, "fecha": dia(desp),
             "estado": estado, "prioridad": prioridad, "resp": resp, "resp_id": resp.lower(),
+            "lead": "", "resp_lead": "",
         })
+    # Dos actividades de muestra SI vienen amarradas a un lead del tablero
+    # de ejemplo (Fase 4): con ellas se puede probar en local que "Hecha"
+    # mueve el embudo y que una Recogida no lo mueve.
+    for actividad in salida:
+        if actividad["tipo"] == "entrega" and actividad["cliente"] == "Hotel Bristol":
+            actividad.update({"lead": "LEAD-88", "resp_lead": "Ruben"})
+        if actividad["tipo"] == "recogida" and actividad["cliente"].startswith("Boda"):
+            actividad.update({"lead": "LEAD-89", "resp_lead": "Mary"})
     return salida
 
 
@@ -796,7 +849,8 @@ def _muestra_buscar(id_actividad):
     raise ErrorCalendario("Esa actividad ya no está.")
 
 
-def _muestra_crear(tipo, cliente, fecha, hora, dur, lugar, resp_id, prioridad, nota):
+def _muestra_crear(tipo, cliente, fecha, hora, dur, lugar, resp_id, prioridad,
+                   nota, lead="", resp_lead=""):
     lista = _muestra()
     numero = 201 + len(lista)
     nombre = next((g for g in _GENTE_MUESTRA if g.lower() == (resp_id or "").lower()), "Sin asignar")
@@ -806,9 +860,10 @@ def _muestra_crear(tipo, cliente, fecha, hora, dur, lugar, resp_id, prioridad, n
         "lugar": lugar, "nota": nota, "hora": hora, "dur": int(dur), "fecha": fecha,
         "estado": "pend", "prioridad": int(prioridad), "resp": nombre,
         "resp_id": (resp_id or "").lower(),
+        "lead": lead or "", "resp_lead": resp_lead or "",
     }
     lista.append(actividad)
-    return {"ref": actividad["ref"], "url": ""}
+    return {"ref": actividad["ref"], "url": "", "id": actividad["id"]}
 
 
 def _muestra_editar(id_actividad, **cambios):
