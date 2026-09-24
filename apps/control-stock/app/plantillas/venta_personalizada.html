@@ -31,7 +31,7 @@
   {# ---- Cliente ---- #}
   {% with form_cliente="form-servicio" %}{% include "_cliente.html" %}{% endwith %}
 
-  {% with form_cargos="form-servicio", cargos={'envio': borrador.envio, 'instalacion': borrador.instalacion} %}{% include "_cargos.html" %}{% endwith %}
+  {% with form_cargos="form-servicio", cargos=borrador %}{% include "_cargos.html" %}{% endwith %}
 
   {# ---- Plantas del catálogo (opcional): con el precio de Odoo ---- #}
   <div class="seccion-titulo" style="margin-top:16px">Plantas y materiales</div>

@@ -53,7 +53,7 @@
   {# ---- Cliente ---- #}
   {% with form_cliente="form-servicio" %}{% include "_cliente.html" %}{% endwith %}
 
-  {% with form_cargos="form-servicio", cargos={'envio': borrador.envio, 'instalacion': borrador.instalacion} %}{% include "_cargos.html" %}{% endwith %}
+  {% with form_cargos="form-servicio", cargos=borrador %}{% include "_cargos.html" %}{% endwith %}
 
   {% for seccion in meta.secciones %}
     {# Renglones de servicio repetibles: el párrafo crece al escribir y

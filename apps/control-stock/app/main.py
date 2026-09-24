@@ -60,6 +60,10 @@ VERSION_ESTATICOS = int(max(
     for nombre in os.listdir(os.path.join(RUTA_APP, "static"))
 ))
 plantillas.env.globals["v_estaticos"] = VERSION_ESTATICOS
+# El catálogo de cargos de servicio (envío, instalación, mantenimiento) lo
+# pinta el parcial _cargos.html en las cuatro pantallas de venta: va como
+# global para no pasarlo por contexto en cada una.
+plantillas.env.globals["cargos_catalogo"] = ventas.CARGOS
 # Igual para Retail y CRM, pero solo del MENÚ: el dueño las sacó de la
 # vista el 24/09/2026 ("que no se vea en el inventario pero dejalo
 # activo"), así que RETAIL_EN_MENU=0 / CRM_EN_MENU=0 esconden la pestaña
@@ -1027,8 +1031,10 @@ def venta_nueva(request: Request, q: str = "", error: str = ""):
     # mientras se escribe. El total real lo confirma Odoo al crear.
     contexto["leads_retail"] = _leads_retail_para_elegir()
     contexto["cargos_montos"] = _cargos_del_form(contexto["borrador"])
-    contexto["total_con_cargos"] = (contexto["total_carrito"]
-                                    + sum(contexto["cargos_montos"].values()))
+    contexto["total_con_cargos"] = (
+        contexto["total_carrito"]
+        + sum(v for k, v in contexto["cargos_montos"].items()
+              if not k.endswith("_desc")))
     return plantillas.TemplateResponse(request, "venta_nueva.html", contexto)
 
 
@@ -1111,8 +1117,10 @@ def _amarrar_lead_del_form(request, form):
 
 
 def _cargos_del_form(form):
-    """Los cargos opcionales (envío a domicilio, instalación) como montos.
-    Vacío o ilegible cuenta como 0: son opcionales, no motivo de error."""
+    """Los cargos opcionales (envío, instalación, mantenimiento): el monto
+    de cada uno y, en "<clave>_desc", el párrafo que se imprime debajo.
+    Vacío o ilegible cuenta como 0: son opcionales, no motivo de error.
+    Un párrafo vacío NO se guarda: así el renglón sale con el de fábrica."""
     cargos = {}
     for cargo in ventas.CARGOS:
         crudo = str(form.get(cargo["clave"]) or "").strip().replace(",", ".")
@@ -1120,6 +1128,9 @@ def _cargos_del_form(form):
             cargos[cargo["clave"]] = max(float(crudo), 0.0) if crudo else 0.0
         except ValueError:
             cargos[cargo["clave"]] = 0.0
+        parrafo = str(form.get(cargo["clave"] + "_desc") or "").strip()[:600]
+        if parrafo:
+            cargos[cargo["clave"] + "_desc"] = parrafo
     return cargos
 
 

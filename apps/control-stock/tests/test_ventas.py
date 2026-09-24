@@ -115,7 +115,10 @@ class OdooFalso:
         vals = args[0]
         nuevo = self._nuevo_id()
         lineas = [l[2] for l in vals["order_line"]]
-        total = sum(l["product_uom_qty"] * self._precio(l) for l in lineas)
+        # Las lineas display_type (secciones y los parrafos de los cargos)
+        # no llevan cantidad ni precio, igual que en el Odoo real.
+        total = sum(l["product_uom_qty"] * self._precio(l)
+                    for l in lineas if not l.get("display_type"))
         self.ordenes[nuevo] = {
             "name": f"S{nuevo}", "partner_id": vals["partner_id"],
             "tag_ids": vals.get("tag_ids"), "lineas": lineas,
@@ -139,7 +142,8 @@ class OdooFalso:
                 lineas = [l[2] for l in vals["order_line"] if l[0] == 0]
                 orden["lineas"] = lineas
                 orden["amount_total"] = round(
-                    sum(l["product_uom_qty"] * self._precio(l) for l in lineas), 2)
+                    sum(l["product_uom_qty"] * self._precio(l)
+                        for l in lineas if not l.get("display_type")), 2)
             for campo in ("partner_id", "client_order_ref"):
                 if campo in vals:
                     orden[campo] = vals[campo]
@@ -566,11 +570,12 @@ def test_borrador_sobrevive_los_reloads(cliente_venta):
     # Y se limpia al crear la venta.
     _agregar(cliente_venta, 501)
     cliente_venta.post("/venta/cotizar", data={"cliente": "María", "celular": "6567-3062"})
-    assert ventas.borrador_de("genesis") == {
-        "nombre": "", "celular": "", "servicios": [], "renglones": [],
-        "cobro": "total",
-        "ruc": "", "cedula": "", "correo": "", "direccion": "",
-        "envio": "", "instalacion": ""}
+    limpio = ventas.borrador_de("genesis")
+    assert limpio["nombre"] == "" and limpio["celular"] == ""
+    assert limpio["servicios"] == [] and limpio["renglones"] == []
+    # Todos los campos extra (datos de factura, montos y párrafos de los
+    # cargos) vuelven a vacío, sean los que sean.
+    assert all(limpio[c] == "" for c in ventas.CAMPOS_EXTRA)
 
 
 def test_cancelar_cotizacion(cliente_venta, odoo):
@@ -699,10 +704,23 @@ def test_el_cargo_de_instalacion_usa_su_propio_producto(monkeypatch):
                         lambda codigo, nombre: pedidos.append((codigo, nombre)) or 7000)
     lineas = ventas.lineas_de_cargos({"envio": 5, "instalacion": 40})
     assert pedidos == [("SV-ENVIO", "Envío a domicilio"),
-                       ("SV-CARGO-INSTALACION", "Instalación")]
-    # Y el renglón lleva el rótulo pelado, no la descripción de venta.
-    assert [l["name"] for l in lineas] == ["Envío a domicilio", "Instalación"]
-    assert [l["price_unit"] for l in lineas] == [5.0, 40.0]
+                       ("SV-CARGO-INSTALACION", "Instalación y siembra")]
+    # El renglón lleva el título y, debajo, su descripción de fábrica como
+    # subsección (24/09/2026) — o la que la empleada haya escrito.
+    renglones = [l for l in lineas if not l.get("display_type")]
+    parrafos = [l["name"] for l in lineas if l.get("display_type") == "line_subsection"]
+    assert [l["name"] for l in renglones] == ["Envío a domicilio", "Instalación y siembra"]
+    assert [l["price_unit"] for l in renglones] == [5.0, 40.0]
+    assert parrafos[0].startswith("Entrega de las plantas")
+    assert parrafos[1].startswith("Siembra en sitio")
+
+
+def test_el_parrafo_escrito_a_mano_le_gana_al_de_fabrica(monkeypatch):
+    monkeypatch.setattr(ventas, "_id_producto_cargo", lambda c, n: 7000)
+    lineas = ventas.lineas_de_cargos(
+        {"mantenimiento": 25, "mantenimiento_desc": "Dos visitas al mes."})
+    parrafos = [l["name"] for l in lineas if l.get("display_type") == "line_subsection"]
+    assert parrafos == ["Dos visitas al mes."]
 
 
 def test_una_cotizacion_vieja_sigue_reconociendo_su_cargo():
@@ -752,8 +770,11 @@ def test_la_vista_previa_reusa_una_sola_orden_por_empleada(cliente_venta, odoo, 
     previas = [i for i, o in odoo.ordenes.items()
                if (o.get("client_order_ref") or "").startswith(ventas.REF_VISTA_PREVIA)]
     assert len(previas) == 1
-    # El segundo vistazo ya trae el cargo de envío.
-    assert len(odoo.ordenes[previas[0]]["lineas"]) == 2
+    # El segundo vistazo ya trae el cargo de envío, con su párrafo gris
+    # debajo (la subsección que estrenaron los cargos, 24/09/2026).
+    lineas = odoo.ordenes[previas[0]]["lineas"]
+    assert len([l for l in lineas if not l.get("display_type")]) == 2
+    assert len([l for l in lineas if l.get("display_type") == "line_subsection"]) == 1
     assert [r for r, _ in llamadas] == ["sale.report_saleorder"] * 2
 
 

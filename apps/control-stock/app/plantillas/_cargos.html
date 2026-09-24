@@ -1,28 +1,36 @@
 {# Los cargos opcionales de la venta (dueño, 23/09/2026): envío a
-   domicilio —si nosotros le llevamos la planta— e instalación. Con monto
-   entran como una línea más de la orden en Odoo, así salen solos en la
-   cotización, la propuesta y la factura PDF; vacíos no cobran nada.
+   domicilio —si nosotros le llevamos la planta—, instalación y siembra, y
+   mantenimiento. Con monto entran como una línea más de la orden en Odoo,
+   así salen solos en la cotización, la propuesta y la factura PDF;
+   vacíos no cobran nada.
+
+   Cada uno lleva su descripción ya escrita (24/09/2026) para que el
+   renglón explique qué se cobra en vez de decir solo "Envío": se puede
+   corregir en cada cotización y lo que se escriba manda.
 
    Variables (con {% with %} antes del include):
    - form_cargos   id del <form> al que pertenecen los campos
    - cargos        valores ya puestos: el borrador en los formularios de
-                   crear, o lo que la cotización tiene en Odoo al editar #}
-<div class="seccion-titulo" style="margin-top:16px">Envío e instalación (opcional)</div>
+                   crear, o lo que la cotización tiene en Odoo al editar
+   - cargos_catalogo  ventas.CARGOS, para no repetir el HTML #}
+<div class="seccion-titulo" style="margin-top:16px">Cargos de servicio (opcional)</div>
+{% for cargo in cargos_catalogo %}
 <div class="campos-cliente">
   <div class="campo">
-    <span>Envío a domicilio ($)</span>
-    <input class="dato-cliente" name="envio" form="{{ form_cargos }}"
-           value="{{ cargos.envio or '' }}" type="number" step="0.01" min="0"
+    <span>{{ cargo.nombre }} ($)</span>
+    <input class="dato-cliente" name="{{ cargo.clave }}" form="{{ form_cargos }}"
+           value="{{ cargos[cargo.clave] or '' }}" type="number" step="0.01" min="0"
            inputmode="decimal" placeholder="0.00" autocomplete="off"
            onfocus="this.select()">
   </div>
-  <div class="campo">
-    <span>Instalación ($)</span>
-    <input class="dato-cliente" name="instalacion" form="{{ form_cargos }}"
-           value="{{ cargos.instalacion or '' }}" type="number" step="0.01" min="0"
-           inputmode="decimal" placeholder="0.00" autocomplete="off"
-           onfocus="this.select()">
+  <div class="campo campo-ancho">
+    <span>Qué incluye (sale en la cotización)</span>
+    <textarea class="dato-cliente parrafo-servicio" rows="2" maxlength="600"
+              name="{{ cargo.clave }}_desc" form="{{ form_cargos }}"
+              >{{ cargos[cargo.clave ~ '_desc'] or cargo.descripcion }}</textarea>
   </div>
 </div>
-<p class="nota-cliente">Con monto se suman al total (salen como una línea
-más en la cotización y la factura); vacíos no cobran nada.</p>
+{% endfor %}
+<p class="nota-cliente">Con monto se suman al total y salen como un renglón
+más —con su explicación debajo— en la cotización y la factura; vacíos no
+cobran nada.</p>

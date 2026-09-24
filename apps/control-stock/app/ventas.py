@@ -116,8 +116,15 @@ def diario_de(metodo):
 # Sin impuestos, como todo lo del negocio (las plantas van exentas de ITBMS).
 # ---------------------------------------------------------------------------
 
+# Cada cargo trae su DESCRIPCIÓN escrita (dueño, 24/09/2026): el renglón
+# ya no dice solo "Envío a domicilio", explica qué se está cobrando. Sale
+# en la cotización, la propuesta y la factura como el párrafo gris debajo
+# del título, igual que los servicios. Se puede editar en cada cotización,
+# pero llega escrita para no tener que redactarla cada vez.
 CARGOS = (
-    {"clave": "envio", "codigo": "SV-ENVIO", "nombre": "Envío a domicilio"},
+    {"clave": "envio", "codigo": "SV-ENVIO", "nombre": "Envío a domicilio",
+     "descripcion": "Entrega de las plantas en la dirección indicada, en "
+                    "vehículo del vivero. Incluye carga y descarga."},
     # Producto PROPIO del cargo (23/09/2026). Antes esto reusaba el
     # SV-INSTALACION de las cotizaciones de servicio, que en Odoo se llama
     # "Instalación, transporte y mantenimiento inicial": ese nombre es el
@@ -127,7 +134,14 @@ CARGOS = (
     # prometía transporte y mantenimiento inicial. Con producto propio la
     # cotización y la factura dicen las dos "Instalación", y las facturas
     # de servicio no cambian en nada.
-    {"clave": "instalacion", "codigo": "SV-CARGO-INSTALACION", "nombre": "Instalación"},
+    {"clave": "instalacion", "codigo": "SV-CARGO-INSTALACION",
+     "nombre": "Instalación y siembra",
+     "descripcion": "Siembra en sitio: preparación del espacio, sustrato y "
+                    "riego inicial. Las plantas quedan listas."},
+    {"clave": "mantenimiento", "codigo": "SV-CARGO-MANTENIMIENTO",
+     "nombre": "Mantenimiento",
+     "descripcion": "Visita de cuidado: poda, limpieza, fertilización y "
+                    "revisión de plagas."},
 )
 CODIGOS_CARGO = {c["codigo"]: c["clave"] for c in CARGOS}
 # El código viejo sigue reconociéndose al RELEER una cotización hecha antes
@@ -157,9 +171,22 @@ def _id_producto_cargo(codigo, nombre):
     return producto_id
 
 
+def descripcion_de_cargo(clave, cargos=None):
+    """Lo que se va a imprimir debajo del cargo: lo que escribió la
+    empleada ("<clave>_desc") o, si no tocó nada, la de fábrica."""
+    escrita = str((cargos or {}).get(clave + "_desc") or "").strip()
+    if escrita:
+        return escrita[:600]
+    for cargo in CARGOS:
+        if cargo["clave"] == clave:
+            return cargo["descripcion"]
+    return ""
+
+
 def lineas_de_cargos(cargos):
     """Las líneas de orden de los cargos con monto (> 0); {} o montos en
-    cero no agregan nada — son opcionales."""
+    cero no agregan nada — son opcionales. Cada una lleva su descripción
+    como renglón gris debajo, igual que un servicio."""
     lineas = []
     for cargo in CARGOS:
         try:
@@ -177,6 +204,9 @@ def lineas_de_cargos(cargos):
                 # debe prometer lo que el cargo no es (rótulos honestos).
                 "name": cargo["nombre"],
             })
+            parrafo = descripcion_de_cargo(cargo["clave"], cargos)
+            if parrafo:
+                lineas.append({"display_type": "line_subsection", "name": parrafo})
     return lineas
 
 
@@ -683,7 +713,9 @@ CAMPOS_CLIENTE = ("ruc", "cedula", "correo", "direccion")
 # Lo que el borrador guarda además del nombre y el celular: los datos
 # opcionales del cliente Y los cargos opcionales (envío, instalación), que
 # también tienen que sobrevivir a los reloads de agregar/quitar plantas.
-CAMPOS_EXTRA = CAMPOS_CLIENTE + ("envio", "instalacion")
+CAMPOS_EXTRA = (CAMPOS_CLIENTE
+                + tuple(c["clave"] for c in CARGOS)
+                + tuple(c["clave"] + "_desc" for c in CARGOS))
 
 
 def valores_de_cliente(datos):

@@ -134,7 +134,7 @@
     {# ---- 5. Envío e instalación, de último (pedido del dueño,
        23/09/2026) ---- Lo que se escriba acá se suma solo en la cuenta de
        arriba, sin recargar. #}
-    {% with form_cargos="form-acciones", cargos={'envio': borrador.envio, 'instalacion': borrador.instalacion} %}{% include "_cargos.html" %}{% endwith %}
+    {% with form_cargos="form-acciones", cargos=borrador %}{% include "_cargos.html" %}{% endwith %}
 
     {# Ver el PDF ANTES de generar (dueño, 23/09/2026). Mismo formulario: el
        botón solo cambia a dónde se manda, así viajan los mismos datos que
@@ -208,12 +208,11 @@
            data-plantas="{{ '%.2f' | format(total_carrito) }}">
         {% set a_mano = carrito | selectattr('precio_editado') | list %}
         <div class="linea-total"><span>Plantas{{ ' (con precios a mano)' if a_mano else ' (precios de Odoo)' }}</span><b>{{ total_carrito | dinero }}</b></div>
-        <div class="linea-total" id="linea-envio"
-             {% if not cargos_montos.envio %}style="display:none"{% endif %}>
-          <span>Envío a domicilio</span><b>{{ cargos_montos.envio | dinero }}</b></div>
-        <div class="linea-total" id="linea-instalacion"
-             {% if not cargos_montos.instalacion %}style="display:none"{% endif %}>
-          <span>Instalación</span><b>{{ cargos_montos.instalacion | dinero }}</b></div>
+        {% for cargo in cargos_catalogo %}
+        <div class="linea-total" id="linea-{{ cargo.clave }}"
+             {% if not cargos_montos[cargo.clave] %}style="display:none"{% endif %}>
+          <span>{{ cargo.nombre }}</span><b>{{ cargos_montos[cargo.clave] | dinero }}</b></div>
+        {% endfor %}
         <div class="linea-total total-final"><span>Total</span><b id="total-final">{{ total_con_cargos | dinero }}</b></div>
       </div>
 
