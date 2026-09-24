@@ -76,7 +76,11 @@ header{
 main{position:relative;z-index:1;flex:1;overflow-y:auto;padding:6px 20px 110px}
 .tab{display:none;animation:fade .25s ease}
 .tab.activa{display:block}
-@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+/* Solo opacidad: con un translateY, el navegador trata a .tab como
+   contenedor y la cabecera pegajosa del Stock deja de pegarse
+   (pedido del dueño, 24/09/2026: "las barras de stock online no están
+   pegadas arriba"). */
+@keyframes fade{from{opacity:0}to{opacity:1}}
 
 /* ---------- HOME ---------- */
 .score-card{
@@ -128,11 +132,14 @@ main{position:relative;z-index:1;flex:1;overflow-y:auto;padding:6px 20px 110px}
    arriba de main (que es el contenedor que scrollea) con el mismo fondo
    difuminado del nav inferior, para que las tarjetas pasen por debajo. */
 .stock-top{
-  position:sticky;top:0;z-index:5;
+  position:sticky;top:0;z-index:30;
   /* margin-top -6px anula el padding-top de main para quedar al ras del
      borde: sin esa franja no se ve la lista pasar por encima del buscador */
-  margin:-6px -20px 0;padding:12px 20px 0;
-  background:rgba(255,255,255,.94);backdrop-filter:blur(12px);
+  margin:-6px -20px 0;padding:12px 20px 8px;
+  /* Fondo sólido: con el traslúcido se veían pasar las tarjetas por
+     detrás y parecía que la barra no estaba pegada. */
+  background:#fff;
+  box-shadow:0 8px 10px -10px rgba(24,24,27,.45);
 }
 /* Las dos vistas del stock (Online / Global). Van dentro de .stock-top para
    quedar pegadas arriba con el buscador y los chips. La campana de alertas
@@ -920,8 +927,8 @@ button.enlace-sub{
   /* La franja pegajosa del buscador era azul noche fijo; en claro va blanca
      (y compensa el padding ancho de main en escritorio). */
   .stock-top{
-    background:rgba(255,255,255,.94);
-    margin:-6px -34px 0;padding:12px 34px 0;
+    background:#fff;
+    margin:-6px -34px 0;padding:12px 34px 8px;
   }
 }
 
@@ -1452,7 +1459,12 @@ nav .hamb{display:none}
    plantas, cargos, cuenta— y el total con su botón viajan pegados abajo.
    Todo vive bajo .forma-venta para no tocar las demás pantallas.
    ========================================================================== */
-.forma-venta{padding-bottom:96px}
+.forma-venta{padding-bottom:16px}
+/* La cabecera de Nueva venta: volver, logo y título en la misma línea,
+   con el formulario pegado debajo (24/09/2026). */
+.cabecera-venta{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.cabecera-venta .volver-cabecera{margin:0;order:-1}
+.cabecera-venta .brand{margin:0}
 /* Los datos de factura, plegados detrás del + (23/09/2026). */
 .pliegue{border-top:1px solid var(--noche-3);margin-top:11px;padding-top:11px}
 .pliegue > summary{
@@ -1476,36 +1488,62 @@ nav .hamb{display:none}
 /* ---- Las dos columnas: el trabajo a la izquierda, de dónde viene y la
    cuenta a la derecha (maqueta aprobada el 23/09/2026). En el teléfono
    se apila y el total vuelve a la barra de abajo. ---- */
-.venta-dos{display:block}
-.col-lado{display:flex;flex-direction:column;gap:14px;margin-top:18px}
-.tarjeta-lado{display:flex;flex-direction:column;gap:9px}
+/* Apilado (pantalla angosta): "De dónde viene" ARRIBA de todo —es lo
+   primero que se mira para saber de quién es la venta (24/09/2026)—,
+   después el formulario y la cuenta al final, pegada al botón. */
+.venta-dos{display:flex;flex-direction:column;gap:18px}
+.col-lead{order:-1}
+.col-trabajo{order:0}
+.col-cuenta{order:1}
+.col-lead,.col-cuenta{display:flex;flex-direction:column;gap:14px}
+.tarjeta-lado{
+  display:flex;flex-direction:column;gap:9px;
+  border:1px solid var(--noche-3);border-radius:16px;padding:13px 14px;
+  background:#fff;
+}
+/* Sin tarjeta de Retail elegida no hay nada que contar: el rótulo y el
+   selector van en la misma línea (24/09/2026). */
+.col-lead-corta .tarjeta-lado{
+  flex-direction:row;align-items:center;gap:12px;
+}
+.col-lead-corta .rotulo-lado{flex-shrink:0}
+.col-lead-corta select{flex:1;min-width:0}
 .rotulo-lado{
   font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
   color:var(--texto-suave);
 }
-.col-lado select{
+.col-lead select{
   width:100%;box-sizing:border-box;font-family:inherit;font-size:13px;
   padding:11px 12px;border-radius:12px;
   border:1px solid var(--borde);background:#fff;color:inherit;
 }
 .dicho-lead{font-size:12px;color:var(--texto-suave);line-height:1.5;margin:0}
 .dicho-lead b{color:var(--texto);font-weight:700}
-.col-lado .total-venta.desglose{margin:0}
+.col-cuenta .total-venta.desglose{margin:0}
 @media (min-width:900px){
-  main.angosto.forma-venta{max-width:1180px}
-  .venta-dos{display:grid;grid-template-columns:minmax(0,1fr) 340px;
-    gap:26px;align-items:start}
-  .col-lado{position:sticky;top:10px;margin-top:0;gap:16px}
-  .tarjeta-lado{
-    border:1px solid var(--noche-3);border-radius:18px;padding:16px;
-    background:#fff;
+  main.angosto.forma-venta{max-width:1180px;padding-bottom:26px;padding-top:0}
+  /* Franja de arriba compacta: lo que sobraba ahí es pantalla para el
+     formulario. */
+  header.cabecera-venta{padding:14px 34px 10px}
+  .cabecera-venta .logo{width:38px;height:38px}
+  .cabecera-venta h1{font-size:20px}
+}
+@media (min-width:1080px){
+  /* Con sitio: el trabajo a la izquierda ocupando las dos filas, y a la
+     derecha el lead arriba y la cuenta debajo. */
+  .venta-dos{
+    display:grid;grid-template-columns:minmax(0,1fr) 320px;
+    grid-template-areas:"trabajo lead" "trabajo cuenta";
+    grid-template-rows:auto 1fr;
+    gap:18px 24px;align-items:start;
   }
-  .piso-venta{display:none}
+  .col-trabajo{grid-area:trabajo}
+  .col-lead{grid-area:lead;position:sticky;top:10px}
+  .col-cuenta{grid-area:cuenta;position:sticky;top:10px}
+  .tarjeta-lado{border-radius:18px;padding:16px}
 }
 @media (max-width:899px){
-  /* En el teléfono el botón vive en la barra de abajo, no en la tarjeta. */
-  .col-lado .btn-generar{display:none}
-  .col-lado select{font-size:16px}
+  .col-lead select{font-size:16px}
 }
 /* El selector de la tarjeta de Retail: mismo campo que los del cliente. */
 .forma-venta > .campo > select{
@@ -1544,54 +1582,59 @@ nav .hamb{display:none}
   border-radius:16px;overflow:hidden;
 }
 .fila-planta{
-  background:#fff;display:grid;align-items:center;gap:12px;
-  grid-template-columns:1fr auto auto auto;padding:11px 13px;
+  background:#fff;display:grid;align-items:center;
+  column-gap:10px;row-gap:8px;
+  /* El nombre se queda con todo el ancho que sobre y los tres bloques de
+     la derecha piden lo suyo: sin esto, un SKU largo (PL-PALMA-BISMARKIA-
+     GRANDE) partía la fila en cuatro renglones. */
+  grid-template-columns:minmax(0,1fr) max-content max-content max-content;
+  padding:11px 13px;
 }
 .fila-planta .nombre{min-width:0}
 .fila-planta .nombre b{
   display:block;font-size:14.5px;font-weight:650;letter-spacing:-.01em;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
-.fila-planta .nombre > span{font-size:11.5px;color:var(--texto-suave)}
+/* El SKU en UNA línea: si no cabe entero, se corta con puntos. */
+.fila-planta .nombre > span{
+  display:block;font-size:11.5px;color:var(--texto-suave);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+/* El precio y, debajo, el "volver al de Odoo": en la misma línea no
+   cabían y empujaban al nombre. */
+.fila-planta .precio-unit{
+  flex-wrap:wrap;column-gap:3px;row-gap:1px;margin:0;width:max-content;
+}
+/* Todo lo de la derecha va compacto (pedido del dueño, 24/09/2026: "que
+   se achique todo, no solo el nombre"): así el nombre de la planta se lee
+   entero aunque la ventana no esté a pantalla completa. */
+.fila-planta .precio-unit input.monto{width:64px;height:30px;font-size:12.5px;padding:0 6px}
+.fila-planta .precio-unit .signo,
+.fila-planta .precio-unit .cu{font-size:10.5px}
+.fila-planta .precio-odoo{flex:0 0 100%;padding:0;text-align:left;font-size:10px}
+.fila-planta .qty-mini{gap:3px}
+.fila-planta .qty-mini button{width:29px;height:29px;font-size:16px;border-radius:9px}
+.fila-planta .qty-mini input.valor{width:34px;height:29px;font-size:13px}
+.fila-planta .nombre b{font-size:13.5px}
+.fila-planta .importe{min-width:60px;font-size:14px}
 .fila-planta .importe{
   font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;
   min-width:76px;text-align:right;
 }
 .fila-planta .precio-unit{margin-top:0}
 .forma-venta .desglose{margin-top:10px}
-/* El total y la acción, pegados abajo. */
-.piso-venta{
-  position:fixed;left:0;right:0;bottom:0;z-index:40;
-  background:rgba(255,255,255,.94);backdrop-filter:blur(8px);
-  border-top:1px solid var(--noche-3);
-  padding:10px 16px calc(10px + env(safe-area-inset-bottom));
-}
-.piso-venta .adentro{
-  max-width:940px;margin:0 auto;display:flex;align-items:center;gap:14px;
-}
-.piso-venta .suma{flex:1;min-width:0;line-height:1.15}
-.piso-venta .suma span{display:block;font-size:11px;color:var(--texto-suave)}
-.piso-venta .suma b{
-  font-size:21px;font-weight:800;letter-spacing:-.02em;
-  font-variant-numeric:tabular-nums;
-}
-.piso-venta .btn{flex-shrink:0;padding:14px 20px;font-size:13.5px}
 @media (max-width:899px){
-  /* En el teléfono la barra de abajo se sienta encima del menú. */
   .forma-venta > .campo > select{font-size:16px}
   .pliegue > summary{font-size:14px;padding:6px 0}
-  .piso-venta{bottom:64px}
-  .forma-venta{padding-bottom:150px}
-  .fila-planta{grid-template-columns:1fr auto;gap:8px 10px}
-  .fila-planta .nombre{grid-column:1/-1}
-  .fila-planta .precio-unit{grid-column:1}
-  .fila-planta .qty-mini{grid-column:2;justify-self:end}
+  /* Dos renglones limpios: arriba el nombre con su importe, abajo el
+     precio y la cantidad (24/09/2026). */
+  .fila-planta{grid-template-columns:minmax(0,1fr) auto;gap:7px 10px}
+  .fila-planta .nombre{grid-column:1;grid-row:1}
   .fila-planta .importe{
-    grid-column:1/-1;text-align:right;font-size:14px;
-    border-top:1px dashed var(--noche-3);padding-top:7px;
+    grid-column:2;grid-row:1;align-self:start;text-align:right;
+    font-size:15px;border:0;padding:0;
   }
-}
-@media (min-width:900px){
-  /* En computadora la barra respeta el sidebar y el lienzo redondeado. */
-  .piso-venta{left:258px;right:22px;bottom:18px;border-radius:0 0 26px 26px}
+  .fila-planta .precio-unit{grid-column:1;grid-row:2}
+  .fila-planta .qty-mini{grid-column:2;grid-row:2;justify-self:end}
+  .fila-planta .quitar-venta{margin-top:1px}
 }

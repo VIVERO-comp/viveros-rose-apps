@@ -20,7 +20,8 @@
          aria-label="{{ 'Precio de alquiler por planta' if alquiler else 'Precio por unidad' }}"
          onfocus="this.select()" onchange="this.form.submit()">
   <span class="cu">{{ 'c/u · alquiler' if alquiler else 'c/u' }}</span>
-  {% if linea.precio_editado and not alquiler %}
+  {# Sin precio de lista en Odoo no hay a dónde volver: el ↺ sobra. #}
+  {% if linea.precio_editado and not alquiler and linea.precio_odoo %}
   <button class="precio-odoo" type="submit" name="odoo" value="1"
           title="Volver al precio de Odoo">↺ Odoo {{ linea.precio_odoo | dinero }}</button>
   {% endif %}

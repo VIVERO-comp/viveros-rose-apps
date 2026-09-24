@@ -11,7 +11,12 @@
    (plantas), los cargos, la cuenta. El total y el botón viajan pegados
    abajo. #}
 {% with bm_titulo='Nueva venta', bm_volver='/venta' %}{% include '_barra_movil.html' %}{% endwith %}
-<header>
+{# En computadora, una sola franja arriba: volver, el logo y el título a
+   la izquierda, y el formulario pegado debajo (pedido del dueño,
+   24/09/2026: "sube el botón de volver y sube el form"). En el teléfono
+   manda la barra móvil y esta cabecera no se asoma. #}
+<header class="cabecera-venta">
+  <a class="volver volver-cabecera" href="/venta">← Volver a Vender</a>
   <div class="brand">
     <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
     <div>
@@ -22,7 +27,6 @@
 </header>
 
 <main class="angosto forma-venta">
-  <a class="volver" href="/venta">← Volver a Vender</a>
 
   {% if error_venta %}
   <div class="aviso-error">{{ error_venta }}</div>
@@ -143,8 +147,9 @@
 
   </div>{# col-trabajo #}
 
-  {# ---- La columna de la derecha: de dónde viene y la cuenta ---- #}
-  <aside class="col-lado">
+  {# ---- De dónde viene: a la derecha en computadora, arriba de todo
+       cuando la pantalla es angosta (pedido del dueño, 24/09/2026) ---- #}
+  <aside class="col-lead{% if not lead_pendiente %} col-lead-corta{% endif %}">
     {# Quién es el cliente en el CRM: su tarjeta de Retail, el chat de
        WhatsApp por donde entró y la referencia que viajó en tinta
        invisible dentro del mensaje. #}
@@ -152,7 +157,7 @@
     <div class="tarjeta-lado">
       <div class="rotulo-lado">De dónde viene</div>
       <select id="lead-retail" name="lead_ref" form="form-acciones">
-        <option value="">Ninguna · el lead se crea o se casa solo por celular</option>
+        <option value="">Ninguna</option>
         {% for l in leads_retail %}
         <option value="{{ l.ref }}" data-nombre="{{ l.nombre }}" data-cel="{{ l.cel }}"
                 {{ 'selected' if lead_pendiente and lead_pendiente.ref == l.ref }}>
@@ -185,13 +190,14 @@
         <input type="hidden" name="volver" value="nueva">
         <button class="quitar-lead" type="submit">No es para este lead</button>
       </form>
-      {% else %}
-      <p class="dicho-lead">Elegirla amarra esta venta a ese lead y llena su
-        nombre y celular. Sin tarjeta, el lead se crea o se casa solo por el
-        celular del cliente.</p>
       {% endif %}
     </div>
 
+  </aside>
+
+  {# ---- La cuenta: a la derecha en computadora, al final del formulario
+       cuando se apila ---- #}
+  <aside class="col-cuenta">
     {% if carrito %}
     <div class="tarjeta-lado">
       <div class="rotulo-lado">Cuenta</div>
@@ -216,20 +222,6 @@
     {% endif %}
   </aside>
   </div>{# venta-dos #}
-
-  {% if carrito %}
-  {# En el teléfono el total y la acción viajan pegados abajo; en
-     computadora viven en la tarjeta de la derecha. #}
-  <div class="piso-venta">
-    <div class="adentro">
-      <div class="suma">
-        <span>Total</span>
-        <b id="total-fijo">{{ total_con_cargos | dinero }}</b>
-      </div>
-      <button class="btn btn-dorado" type="submit" form="form-acciones">GENERAR COTIZACIÓN</button>
-    </div>
-  </div>
-  {% endif %}
 
   {% endif %}{# ventas_activo #}
 </main>

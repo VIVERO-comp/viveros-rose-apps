@@ -213,9 +213,6 @@ function pintarDesglose() {
   }
   const totalFinal = document.getElementById("total-final");
   if (totalFinal) totalFinal.textContent = "$" + total.toFixed(2);
-  // El mismo total en la barra pegada abajo (rediseño del 23/09/2026).
-  const totalFijo = document.getElementById("total-fijo");
-  if (totalFijo) totalFijo.textContent = "$" + total.toFixed(2);
 }
 if (desglose) {
   for (const clave of ["envio", "instalacion"]) {
