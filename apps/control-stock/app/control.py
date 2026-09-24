@@ -323,6 +323,15 @@ def ficha(ref):
 # El aviso al celular: hay un cliente esperando respuesta
 # ---------------------------------------------------------------------------
 
+# La marca de "esta instalación ya corrió una vez". Sin ella, la PRIMERA
+# pintada de la pantalla después de un deploy avisaría de cada lead que
+# tenga «Te toca» acumulado, y al encargado le sonaría el celular diez
+# veces de golpe por conversaciones viejas. Es un centinela y no "¿hay
+# filas?" a propósito: cuando todos contestan, la tabla se vacía, y eso no
+# puede volver a parecer una primera corrida.
+ACUSE_ESTRENO = "te-toca:__estreno__"
+
+
 def avisar_a_quien_le_toca(leads=None):
     """Web Push del SALTO a «Te toca», no de estar ahí.
 
@@ -332,11 +341,15 @@ def avisar_a_quien_le_toca(leads=None):
     la etiqueta se apaga, el acuse se olvida, así que la próxima vez que el
     cliente escriba vuelve a sonar.
 
+    La primera corrida después de un deploy solo TOMA NOTA de quién está
+    esperando: avisa de lo que pase de ahí en adelante, no del acumulado.
+
     Devuelve los leads por los que sonó.
     """
     if not avisos.configurado():
         return []
     leads = leads if leads is not None else linear_leads.listar()
+    estreno = not _ya_avisado(ACUSE_ESTRENO)
     sonaron = []
     for lead in leads:
         clave = f"te-toca:{lead['ref']}"
@@ -346,6 +359,8 @@ def avisar_a_quien_le_toca(leads=None):
         if _ya_avisado(clave):
             continue
         sonaron.append(lead)
+    if estreno:
+        return []  # ya quedó anotado quién espera; el aviso empieza mañana
     for lead in sonaron:
         quien = lead.get("resp") or "nadie todavía"
         avisos.avisar(

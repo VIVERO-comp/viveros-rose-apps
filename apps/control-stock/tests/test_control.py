@@ -404,17 +404,29 @@ def con_avisos(monkeypatch):
     return mandados
 
 
-def test_el_aviso_suena_una_sola_vez_por_lead(con_avisos):
+def test_la_primera_corrida_solo_toma_nota(con_avisos):
+    """Si no, el día del deploy al encargado le suena el celular una vez por
+    cada conversación que tenga «Te toca» acumulado."""
+    # LEAD-87 y LEAD-86 ya esperan respuesta desde antes.
+    assert control.avisar_a_quien_le_toca() == []
+    assert con_avisos == []
+
+
+def test_despues_del_estreno_el_aviso_suena_una_sola_vez(con_avisos):
+    control.avisar_a_quien_le_toca()          # el estreno: solo anota
+    lead = linear_leads.uno("LEAD-91")         # este no tenía «Te toca»
+    linear_leads.poner_te_toca(lead["id"], True)
+
     sonaron = control.avisar_a_quien_le_toca()
-    assert {l["ref"] for l in sonaron} == {"LEAD-87", "LEAD-86"}
-    assert len(con_avisos) == 2
+    assert [l["ref"] for l in sonaron] == ["LEAD-91"]
+    assert con_avisos == ["Te toca · Tamara"]
     # La segunda pintada de la pantalla no vuelve a sonar.
     assert control.avisar_a_quien_le_toca() == []
-    assert len(con_avisos) == 2
+    assert len(con_avisos) == 1
 
 
 def test_cuando_contestamos_el_aviso_se_olvida_y_puede_volver(con_avisos):
-    control.avisar_a_quien_le_toca()
+    control.avisar_a_quien_le_toca()          # el estreno
     lead = linear_leads.uno("LEAD-87")
     # Nuestra respuesta quita «Te toca»: el acuse se olvida.
     linear_leads.poner_te_toca(lead["id"], False)
@@ -422,6 +434,18 @@ def test_cuando_contestamos_el_aviso_se_olvida_y_puede_volver(con_avisos):
     # El cliente vuelve a escribir: suena de nuevo.
     linear_leads.poner_te_toca(lead["id"], True)
     assert [l["ref"] for l in control.avisar_a_quien_le_toca()] == ["LEAD-87"]
+    assert con_avisos == ["Te toca · Ximena Dávila"]
+
+
+def test_vaciar_la_tabla_no_vuelve_a_parecer_un_estreno(con_avisos):
+    """Cuando todos contestan, los acuses se borran — pero el centinela del
+    estreno se queda, así que el siguiente que espere sí suena."""
+    control.avisar_a_quien_le_toca()          # el estreno
+    for ref in ("LEAD-87", "LEAD-86"):
+        linear_leads.poner_te_toca(linear_leads.uno(ref)["id"], False)
+    control.avisar_a_quien_le_toca()          # se olvidan los dos acuses
+    linear_leads.poner_te_toca(linear_leads.uno("LEAD-86")["id"], True)
+    assert [l["ref"] for l in control.avisar_a_quien_le_toca()] == ["LEAD-86"]
 
 
 def test_sin_claves_vapid_no_suena_nada():

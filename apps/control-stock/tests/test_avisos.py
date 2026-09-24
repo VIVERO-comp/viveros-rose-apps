@@ -86,10 +86,14 @@ def test_el_aviso_no_suena_dos_veces_por_el_mismo_lead(cliente, con_claves):
     Antes esto lo cuidaba la tabla `control_visto` del kanban de chats; hoy
     lo cuida `control_acuse`, y el disparador es la etiqueta «Te toca».
     """
-    # Ximena (LEAD-87) y Nedjaira (LEAD-86) tienen «Te toca».
+    # La primera corrida solo toma nota (Ximena y Nedjaira ya esperaban).
     control.avisar_a_quien_le_toca()
-    assert sorted(t for _u, t, _c, _url in con_claves) == [
-        "Te toca · Nedjaira", "Te toca · Ximena Dávila"]
+    assert con_claves == []
+    # Ahora sí: a Tamara le entra un mensaje y le toca a alguien.
+    linear_leads.poner_te_toca(linear_leads.uno("LEAD-91")["id"], True)
+    control.avisar_a_quien_le_toca()
+    assert [t for _u, t, _c, _url in con_claves] == ["Te toca · Tamara"]
+    # Y abrir la pantalla mil veces no lo repite.
     con_claves.clear()
     cliente.get("/control")
     cliente.get("/control")
