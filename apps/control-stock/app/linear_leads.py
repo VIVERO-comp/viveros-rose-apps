@@ -201,13 +201,19 @@ def _sin_acentos(texto):
 # Catálogo del equipo LEAD (estados y etiquetas), cacheado
 # ---------------------------------------------------------------------------
 
+# `first: 1` en `teams` NO es decoración: Linear cobra la complejidad de una
+# consulta multiplicando los límites de las listas anidadas, y sin `first`
+# asume 50 equipos — 50 × 120 etiquetas pasó del tope y la respuesta fue
+# "Query too complex" (con el catálogo caído, `responsables()` devolvía
+# lista vacía y Control se quedaba con una sola columna). Hay un solo equipo
+# LEAD: pedir uno es lo correcto y además cabe de sobra.
 CONSULTA_CATALOGO = """
 query {
-  teams(filter: { key: { eq: "LEAD" } }) {
+  teams(first: 1, filter: { key: { eq: "LEAD" } }) {
     nodes {
       id
-      states(first: 40) { nodes { id name type } }
-      labels(first: 120) { nodes { id name isGroup parent { name } } }
+      states(first: 30) { nodes { id name type } }
+      labels(first: 60) { nodes { id name isGroup parent { name } } }
     }
   }
 }

@@ -278,6 +278,29 @@ def test_con_clave_y_el_interruptor_escribe(monkeypatch):
     assert linear_leads._exigir_escritura() is None
 
 
+def test_las_consultas_acotan_las_listas_anidadas():
+    """Linear cobra la complejidad multiplicando los límites anidados.
+
+    Sin `first` en `teams` asume 50, y 50 × 120 etiquetas devolvió "Query
+    too complex" contra el Linear real: el catálogo quedaba caído, y con él
+    `responsables()` vacío y Control con una sola columna. Las pruebas
+    corren en modo muestra y no lo habrían visto nunca, así que la forma de
+    las consultas se cuida aquí.
+    """
+    import re
+    # Toda colección que se pide (la que lleva `nodes`) tiene que acotarse.
+    for nombre, consulta in (
+            ("catalogo", linear_leads.CONSULTA_CATALOGO),
+            ("lista", linear_leads.CONSULTA_LISTA),
+            ("comentarios", linear_leads.CONSULTA_COMENTARIOS)):
+        colecciones = re.findall(r"(\w+)\(([^)]*)\)\s*\{\s*nodes", consulta)
+        assert colecciones, nombre
+        for campo, argumentos in colecciones:
+            assert "first:" in argumentos, f"{nombre}: {campo} sin tope"
+    # Y el catálogo pide UN equipo, no los 50 de por defecto.
+    assert "teams(first: 1," in linear_leads.CONSULTA_CATALOGO
+
+
 def test_el_estado_se_reconoce_por_el_nombre_de_la_columna():
     # Cinco de los ocho estados son del mismo tipo `started` en Linear: el
     # nombre es lo único que los distingue.
