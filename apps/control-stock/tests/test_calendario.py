@@ -285,20 +285,8 @@ def test_los_botones_de_sync_son_directos(cliente):
     assert "calendar.google.com/calendar/render?cid=webcal" in inicio
 
 
-def test_compras_se_esconde_con_la_bandera(cliente, monkeypatch):
-    monkeypatch.setenv("COMPRAS_ACTIVAS", "0")
-    inicio = cliente.get("/?tab=stock").text
-    assert 'href="/compras"' not in inicio
-    # Y el POST rebota en el servidor, no solo se esconde el botón.
-    r = cliente.post("/compras/nueva", data={}, follow_redirects=False)
-    assert r.status_code == 303 and r.headers["location"] == "/compras"
 
 
-def test_proyectos_se_esconde_con_la_bandera(cliente, monkeypatch):
-    monkeypatch.setenv("PROYECTOS_ACTIVOS", "0")
-    assert 'href="/proyecto"' not in _abrir(cliente).text
-    r = cliente.get("/proyecto", follow_redirects=False)
-    assert r.status_code == 303 and r.headers["location"] == "/"
 
 
 def test_retail_y_crm_salen_del_menu_con_la_bandera(cliente, monkeypatch):
@@ -407,11 +395,6 @@ def test_catalogo_guarda_su_marca_de_tiempo(monkeypatch):
     assert calendario._catalogo_cache["en"] > 0
 
 
-def test_proyectos_sale_en_el_nav_compartido(cliente):
-    """Al pasar a Vender (o Stock) la pestaña Proyectos no se esconde:
-    el navbar compartido la trae cuando la bandera está encendida."""
-    nav = cliente.get("/venta").text.split("<nav>")[1].split("</nav>")[0]
-    assert "Proyectos" in nav
 
 
 def test_la_raiz_abre_el_calendario(cliente):

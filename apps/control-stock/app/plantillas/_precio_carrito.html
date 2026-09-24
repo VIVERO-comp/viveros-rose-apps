@@ -3,12 +3,11 @@
    por si acaso le vendo más caro"). Al cambiarlo o dar Enter se guarda
    solo, igual que la cantidad; el ↺ lo devuelve al precio de Odoo.
 
-   `linea` es la línea del carrito; `volver` y `proyecto` son los campos
-   ocultos de la pantalla que incluye el parcial. #}
+   `linea` es la línea del carrito y `volver` el campo oculto de la
+   pantalla que incluye el parcial. #}
 <form class="precio-unit sin-margen" method="post" action="/venta/carrito/precio">
   <input type="hidden" name="producto_id" value="{{ linea.producto_id }}">
   <input type="hidden" name="volver" value="{{ volver or '' }}">
-  <input type="hidden" name="proyecto" value="{{ proyecto or '' }}">
   <span class="signo">$</span>
   {# En el alquiler el campo arranca VACÍO: rentar una planta no cuesta lo
      que comprarla, así que el precio de venta no sirve ni de base ni de

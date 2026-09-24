@@ -5,11 +5,9 @@
    <form> al que pertenecen los campos y `nombre_opcional` afloja el
    nombre en Nueva Venta, donde vacío significa "Cliente Local".
 
-   Donde estaba "Empresa" va el PROYECTO (el dueño la quitó el 17/09/2026:
-   no se imprime en la propuesta y el lugar rinde más para decir de qué
-   proyecto es la cotización). Sale solo si la pantalla lo pasa: fijo
-   cuando se entra desde la ficha de un proyecto, o a elegir en "Cotizar
-   Proyecto". #}
+   "Empresa" salió del bloque el 17/09/2026 (no se imprime en la
+   propuesta); el campo de proyecto que ocupó su lugar se retiró con la
+   pestaña Proyectos el 24/09/2026. #}
 <div class="seccion-titulo">Cliente</div>
 <div class="campos-cliente" id="campos-cliente">
   <div class="campo">
@@ -24,30 +22,6 @@
            value="{{ borrador.celular }}" autocomplete="off" inputmode="tel"
            placeholder="6567-3062">
   </div>
-  {% if elegir_proyecto %}
-  <div class="campo">
-    <span>Proyecto</span>
-    <select id="cliente-proyecto" name="proyecto" form="{{ form_cliente }}">
-      <option value="">Ninguno (cotización suelta)</option>
-      {% for p in proyectos %}
-      <option value="{{ p.ref }}" {% if p.ref == proyecto %}selected{% endif %}>
-        {{ p.ref }} · {{ p.nombre }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div class="campo campo-ancho">
-    {# Un botón de verdad para crear el proyecto (pedido del dueño,
-       23/09/2026), en vez del enlace chiquito con su aviso al lado. #}
-    <a class="anadir-servicio boton-enlace" href="/proyecto/nuevo">+ Crear proyecto</a>
-  </div>
-  {% elif proyecto_nombre %}
-  <div class="campo">
-    <span>Proyecto</span>
-    <input value="{{ proyecto }} · {{ proyecto_nombre }}" readonly>
-    <input type="hidden" name="proyecto" form="{{ form_cliente }}"
-           value="{{ proyecto }}">
-  </div>
-  {% endif %}
   {% if not factura_plegada %}
   {% include "_cliente_factura.html" %}
   {% endif %}

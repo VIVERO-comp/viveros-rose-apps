@@ -22,6 +22,10 @@ from datetime import date, datetime, timedelta
 from .datos import ZONA_PANAMA, _db
 from . import crm_leads, ventas
 
+# Un presupuesto cancelado no suma al ingreso esperado de la oportunidad.
+# (Vivía en app/proyectos.py hasta que Proyectos se retiró, 24/09/2026.)
+ESTADOS_VIVOS = ("draft", "sent", "sale")
+
 # tipo -> metadatos de la plantilla, calcados de PLANTILLA_POR_TIPO /
 # TIPOS_SERVICIO / ETIQUETA_ORDEN_POR_TIPO del addon vivero_rose_pedidos
 # (controllers/cotizar.py, models/servicio.py) y de la estructura real de
@@ -332,26 +336,6 @@ def _etiquetar_oportunidad(oportunidad_id, etiqueta):
 # paso, a diferencia del lead web que nace en "Nuevo" antes de cotizar.
 # ---------------------------------------------------------------------------
 
-def _oportunidad_para(partner_id, nombre, etiqueta_tipo, proyecto_ref):
-    """La oportunidad de la que cuelga la cotización.
-
-    Si nace dentro de un proyecto (el botón de su ficha o el selector
-    "Proyecto" del formulario) se usa la oportunidad DEL PROYECTO: así la
-    cotización sale adentro del proyecto en Odoo y el CRM sigue mostrando
-    una sola tarjeta por proyecto, nunca una por cotización (regla del
-    dueño). Sin proyecto se abre una oportunidad propia en "Cotizado", como
-    hasta ahora.
-    """
-    ref = (proyecto_ref or "").strip()
-    if not ref:
-        return _crear_oportunidad(partner_id, nombre, etiqueta_tipo)
-    from . import proyectos  # diferido: app/proyectos.py importa este módulo
-    proyecto = proyectos.buscar(ref)
-    if not proyecto:
-        raise ValueError(f"No existe el proyecto {ref}.")
-    return proyecto["id"]
-
-
 def _crear_oportunidad(partner_id, nombre, etiqueta_tipo):
     etapa_id = _id_ref("vivero_rose_pedidos.etapa_flujo_cotizado")
     oportunidad_id = ventas._ejecutar("crm.lead", "create", [{
@@ -603,15 +587,12 @@ def _lineas_por_tipo(tipo, servicios, lineas_catalogo, cobro=None):
 
 def crear_cotizacion(empleada, tipo, nombre, celular, servicios,
                      lineas_catalogo=None, datos_cliente=None,
-                     proyecto_ref=None, cargos=None, cobro=None):
+                     cargos=None, cobro=None):
     """Crea la cotización de servicio en Odoo: cliente (por teléfono o
     nombre; se crea si no existe), sale.order con la plantilla del tipo y
     las líneas armadas con los servicios que la empleada describió (cada
     uno con su monto) más las plantas del carrito. Devuelve el registro
-    local.
-
-    Con `proyecto_ref` la cotización queda colgada de ese proyecto: sale
-    adentro de su ficha en Odoo y suma a sus totales."""
+    local."""
     if tipo not in TIPOS:
         raise ValueError("Tipo de servicio desconocido.")
     nombre = (nombre or "").strip()
@@ -625,13 +606,9 @@ def crear_cotizacion(empleada, tipo, nombre, celular, servicios,
     lineas += ventas.lineas_de_cargos(cargos)
 
     partner = _cliente_id(nombre, celular, datos_cliente)
-    proyecto = (proyecto_ref or "").strip()
-    # Con proyecto la oportunidad es la DEL PROYECTO y no se espeja al
-    # equipo LEAD (una sola tarjeta por proyecto, regla del dueño). Sin
-    # proyecto, la orden nace primero y la oportunidad se resuelve después
-    # con lo que diga el espejo del CRM (¿cliente ya conocido?).
-    oportunidad_id = _oportunidad_para(
-        partner, nombre, meta["etiqueta_orden"], proyecto) if proyecto else None
+    # La orden nace primero y la oportunidad se resuelve después, con lo
+    # que diga el espejo del CRM (¿cliente ya conocido?).
+    oportunidad_id = None
     plantilla_id = _id_ref(meta["plantilla"])
     plantilla = ventas._ejecutar(
         "sale.order.template", "read", [[plantilla_id]],
@@ -659,29 +636,21 @@ def crear_cotizacion(empleada, tipo, nombre, celular, servicios,
     _etiquetar_orden(orden_id, meta["etiqueta_orden"])
     leido = ventas._ejecutar("sale.order", "read", [[orden_id]],
                              {"fields": ["name", "amount_total"]})[0]
-    espejo = None
-    if proyecto:
-        # En un proyecto el ingreso esperado es la SUMA de sus cotizaciones
-        # (y la tarjeta pasa a Cotizado): eso lo hace proyectos, no este
-        # módulo, para no pisar el total del proyecto con el de esta sola.
-        from . import proyectos  # diferido: proyectos importa este módulo
-        proyectos.enlazar_cotizacion(orden_id, proyecto)
-    else:
-        pendiente = ventas.tomar_lead_pendiente(empleada["id"])
-        espejo = crm_leads.espejar_venta(
-            nombre, celular, tipo, leido["name"], leido["amount_total"],
-            empleada["nombre"], issue=(pendiente or {}).get("ref", ""))
-        if pendiente and not (espejo or {}).get("identifier"):
-            # El puente no respondió, pero la empleada venía de la ficha de
-            # un lead concreto: la cotización queda vinculada igual.
-            espejo = {**(espejo or {}), "identifier": pendiente["ref"]}
-        oportunidad_id = _oportunidad_espejada(
-            partner, nombre, meta["etiqueta_orden"], espejo)
-        ventas._ejecutar("sale.order", "write",
-                         [[orden_id], {"opportunity_id": oportunidad_id}])
-        ventas._ejecutar("crm.lead", "write",
-                         [[oportunidad_id],
-                          {"expected_revenue": leido["amount_total"]}])
+    pendiente = ventas.tomar_lead_pendiente(empleada["id"])
+    espejo = crm_leads.espejar_venta(
+        nombre, celular, tipo, leido["name"], leido["amount_total"],
+        empleada["nombre"], issue=(pendiente or {}).get("ref", ""))
+    if pendiente and not (espejo or {}).get("identifier"):
+        # El puente no respondió, pero la empleada venía de la ficha de
+        # un lead concreto: la cotización queda vinculada igual.
+        espejo = {**(espejo or {}), "identifier": pendiente["ref"]}
+    oportunidad_id = _oportunidad_espejada(
+        partner, nombre, meta["etiqueta_orden"], espejo)
+    ventas._ejecutar("sale.order", "write",
+                     [[orden_id], {"opportunity_id": oportunidad_id}])
+    ventas._ejecutar("crm.lead", "write",
+                     [[oportunidad_id],
+                      {"expected_revenue": leido["amount_total"]}])
     return _guardar_local(empleada, tipo, nombre, celular, orden_id,
                           leido["name"], leido["amount_total"],
                           espejo=espejo)
@@ -1264,15 +1233,12 @@ def editar_cotizacion(n, servicios, plantas, renglones=None, cargos=None):
 
 def _actualizar_ingreso_esperado(oportunidad):
     """El ingreso esperado de la oportunidad = la SUMA de sus cotizaciones
-    vivas. Para una cotización suelta eso es su propio total; para un
-    proyecto (varias cotizaciones colgadas de la misma oportunidad) es la
-    suma, sin pisar el total del proyecto con el de una sola (misma regla
-    que proyectos._sincronizar_flujo, sin tocar etapas)."""
+    vivas. Normalmente es una sola, pero si varias cuelgan de la misma
+    oportunidad, se suman — sin tocar etapas."""
     oportunidad_id = (oportunidad[0] if isinstance(oportunidad, (list, tuple))
                       else oportunidad)
     if not oportunidad_id:
         return
-    from .proyectos import ESTADOS_VIVOS
     ordenes = ventas._ejecutar(
         "sale.order", "search_read",
         [[["opportunity_id", "=", oportunidad_id]]],

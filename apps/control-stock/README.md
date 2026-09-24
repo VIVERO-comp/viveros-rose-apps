@@ -2,8 +2,8 @@
 
 La app interna del equipo del vivero, en `inventario.plantaspanama.com`.
 Nació para el inventario y hoy es la app de operar el negocio: **Calendario**
-(la pestaña de entrada), **Stock**, **Vender**, **Retail**, **Proyectos**,
-**Compras/Gastos**, **Fichas** y **Ajustes** — y además sirve la **cara CRM**
+(la pestaña de entrada), **Stock**, **Vender**, **Retail**, **Fichas** y
+**Ajustes** — y además sirve la **cara CRM**
 (`/crm/calendario`), el mismo calendario con piel de Twenty que se ve como
 pestaña dentro del Twenty real. En producción desde septiembre 2026.
 
@@ -56,12 +56,6 @@ producción con `docker compose exec control-stock …`).
   empleada en Ajustes). Sin `LINEAR_API_KEY` corre en modo muestra.
 - **Retail** (`/retail`, `app/retail.py`) — kanban de leads retail/mayorista
   amarrado a las ventas de la app.
-- **Proyectos** (`/proyecto*`, `app/proyectos.py`) — un "Proyecto" de
-  paisajismo agrupa varias cotizaciones sueltas de un mismo cliente
-  (encendido con `PROYECTOS_ACTIVOS`).
-- **Compras/Gastos** (`/compras*`, `app/compras.py`) — compras del negocio;
-  una compra de proyecto NO sube el stock y una normal sí (encendido con
-  `COMPRAS_ACTIVAS`).
 - **Vender** y **Cotizaciones de servicio** — abajo tienen sección propia.
 
 ## La cara CRM (`/crm/calendario`)
@@ -228,7 +222,6 @@ login (solo local). Pruebas: `.venv/bin/pytest`.
 - Fichas: `TIENDA_DSN`, `FICHAS_EDITORES`.
 - Calendario: `LINEAR_API_KEY`, `LINEAR_TEAM_CALENDARIO_ID`,
   `LINEAR_PROJECT_CALENDARIO_ID`, `CALENDARIO_ESCRITURA`.
-- Pestañas con interruptor: `COMPRAS_ACTIVAS`, `PROYECTOS_ACTIVOS`.
 - Espejo de ventas al CRM: `CRM_LEADS_URL`, `CRM_LEADS_SECRETO`.
 - Cara CRM: `CRM_PUBLIC_BASE_URL`, `TWENTY_URL`, `TWENTY_API_KEY`.
 

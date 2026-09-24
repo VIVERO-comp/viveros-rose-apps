@@ -22,9 +22,9 @@ from fastapi.templating import Jinja2Templates
 
 from . import (acceso_google, avisos, calculos, calendario, calendario_google,
                colores, retail,
-               calendario_ics, compras, conteos, control, cotizaciones,
+               calendario_ics, conteos, control, cotizaciones,
                coworkers, crm_flujo, crm_twenty, datos, fichas, fotos,
-               proyectos, seguridad, ventas)
+               seguridad, ventas)
 
 app = FastAPI(title="Control Viverorose")
 
@@ -60,11 +60,6 @@ VERSION_ESTATICOS = int(max(
     for nombre in os.listdir(os.path.join(RUTA_APP, "static"))
 ))
 plantillas.env.globals["v_estaticos"] = VERSION_ESTATICOS
-# El navbar compartido pregunta por Proyectos en cada render: la pestaña
-# aparece en TODOS los menús cuando la bandera está encendida (el dueño
-# vio que al pasar a Stock "se escondía", 22/09/2026).
-from . import proyectos as _proyectos_nav
-plantillas.env.globals["proyectos_en_nav"] = _proyectos_nav.activos
 # Igual para Retail y CRM, pero solo del MENÚ: el dueño las sacó de la
 # vista el 24/09/2026 ("que no se vea en el inventario pero dejalo
 # activo"), así que RETAIL_EN_MENU=0 / CRM_EN_MENU=0 esconden la pestaña
@@ -101,7 +96,6 @@ plantillas.env.filters["fecha_dmy"] = calendario.dmy
 datos.iniciar_db()
 ventas.iniciar_tablas()
 cotizaciones.iniciar_tablas()
-proyectos.iniciar_tablas()
 retail.iniciar_tablas()
 control.iniciar_tablas()
 avisos.iniciar_tablas()
@@ -446,7 +440,6 @@ def inicio(request: Request, refrescar: int = 0):
         # Para armar los links /invitacion/{token} que se comparten.
         "base_publica": (os.environ.get("PUBLIC_BASE_URL")
                          or str(request.base_url)).rstrip("/"),
-        "compras_activas": compras.activo(),
         # Avisos Web Push (23/09/2026): cada quien activa SU celular; los
         # de "Esperando respuesta" le llegan al encargado de los chats.
         "avisos_clave": avisos.clave_publica(),
@@ -1155,9 +1148,7 @@ def _volver_del_carrito(form):
     empleada, igual que hoy): cada pantalla manda de vuelta a sí misma con
     un campo oculto "volver", limitado a rutas propias de Vender.
 
-    El proyecto de la cotización viaja en la URL de vuelta: sin él, agregar
-    una planta al carrito sacaría a la cotización de su proyecto sin que
-    nadie lo note. La búsqueda ya NO viaja (pedido del dueño, 22/09/2026):
+    La búsqueda ya NO viaja (pedido del dueño, 22/09/2026):
     al elegir una planta el buscador queda limpio. Y la vuelta lleva el
     ancla #plantas, para quedar en la lista de plantas en vez de saltar al
     tope de la página."""
@@ -1165,9 +1156,6 @@ def _volver_del_carrito(form):
     if destino != "/venta/servicio-personalizada" \
             and not destino.startswith("/venta/servicio/"):
         destino = "/venta/nueva"
-    proyecto = (form.get("proyecto") or "").strip()
-    if proyecto:
-        destino += f"?proyecto={quote(proyecto)}"
     return destino + "#plantas"
 
 
@@ -1320,17 +1308,10 @@ async def venta_cotizar(request: Request):
 # haber un formulario en curso a la vez (igual que hoy con Nueva Venta).
 # ---------------------------------------------------------------------------
 
-def _contexto_servicio(request, tipo, q="", error=None, servicios=None,
-                       proyecto=""):
+def _contexto_servicio(request, tipo, q="", error=None, servicios=None):
     """El contexto del mini-formulario de un tipo. Lo comparten el GET y el
     POST que no pudo crear la cotización: así un error no borra los
-    párrafos de servicio que la empleada ya escribió.
-
-    El proyecto llega de dos formas: ya puesto en la URL (los botones de la
-    ficha de un proyecto, `?proyecto=PROYECTO-01`), y entonces se muestra
-    fijo; o a elegir de una lista, que solo ofrece "Cotizar Proyecto"
-    (decisión del dueño 17/09/2026: en los demás tipos el proyecto solo
-    entra si vienes desde su ficha)."""
+    párrafos de servicio que la empleada ya escribió."""
     usuario = request.state.empleada["id"]
     borrador = ventas.borrador_de(usuario)
     if servicios is None:
@@ -1346,11 +1327,6 @@ def _contexto_servicio(request, tipo, q="", error=None, servicios=None,
         "resultados": None, "carrito": [], "total_carrito": 0.0,
         "borrador": borrador, "servicios": servicios or [{"texto": "", "monto": "", "descripcion": ""}],
         "error_venta": error or None,
-        "proyecto": (proyecto or "").strip(), "proyecto_nombre": None,
-        # El selector está SIEMPRE en "Cotizar Proyecto", aunque todavía no
-        # haya ningún proyecto en Odoo: si el campo desaparece cuando la
-        # lista está vacía, parece que la pantalla no lo tuviera.
-        "elegir_proyecto": tipo == "proyecto", "proyectos": [],
     }
     if contexto["ventas_activo"]:
         try:
@@ -1358,43 +1334,19 @@ def _contexto_servicio(request, tipo, q="", error=None, servicios=None,
                 contexto["resultados"] = ventas.buscar_productos(contexto["q"])
             contexto["carrito"], contexto["total_carrito"] = ventas.carrito_de(
                 usuario, base_cero=por_planta)
-            if contexto["proyecto"]:
-                proyecto = proyectos.buscar(contexto["proyecto"])
-                if proyecto:
-                    contexto["proyecto_nombre"] = proyecto["name"]
-                else:
-                    contexto["proyecto"] = ""
-                    contexto["error_venta"] = contexto["error_venta"] or (
-                        "Ese proyecto ya no existe: la cotización va a quedar "
-                        "suelta.")
         except Exception:
             contexto["error_venta"] = ("Sin conexión con Odoo en este momento. "
                                        "Vuelve a intentar en un rato.")
-        if tipo == "proyecto":
-            # En "Cotizar Proyecto" el selector está siempre, aunque se
-            # entre desde la ficha de un proyecto: así se puede cambiar
-            # de proyecto sin volver atrás. En los demás tipos el
-            # proyecto solo llega desde su ficha y se muestra fijo.
-            #
-            # Va en su propio try (23/09/2026): que no se pueda listar los
-            # proyectos no es que Odoo esté caído, y pintar el aviso rojo
-            # de "sin conexión" por eso asustaba sin motivo. Sin lista, el
-            # selector queda en "Ninguno" y el botón de crear sigue ahí.
-            try:
-                contexto["proyectos"] = proyectos.para_elegir()
-            except Exception:
-                contexto["proyectos"] = []
     return contexto
 
 
 @app.get("/venta/servicio/{tipo}")
-def venta_servicio(request: Request, tipo: str, q: str = "", error: str = "",
-                   proyecto: str = ""):
+def venta_servicio(request: Request, tipo: str, q: str = "", error: str = ""):
     if tipo not in cotizaciones.TIPOS:
         return RedirectResponse("/venta", status_code=303)
     return plantillas.TemplateResponse(
         request, "venta_servicio.html",
-        _contexto_servicio(request, tipo, q, error, proyecto=proyecto))
+        _contexto_servicio(request, tipo, q, error))
 
 
 @app.post("/venta/servicio/{tipo}")
@@ -1407,7 +1359,6 @@ async def venta_servicio_crear(request: Request, tipo: str):
         form.getlist("servicio_texto"), form.getlist("servicio_monto"),
         form.getlist("servicio_descripcion"))
     datos_cliente = _datos_cliente_del_form(form)
-    proyecto_ref = (form.get("proyecto") or "").strip()
     cobro = ventas.borrador_de(usuario)["cobro"]
     por_planta = cotizaciones.cobra_por_planta(tipo, cobro)
     carrito, _total = ventas.carrito_de(usuario, base_cero=por_planta)
@@ -1422,12 +1373,12 @@ async def venta_servicio_crear(request: Request, tipo: str):
         registro = cotizaciones.crear_cotizacion(
             request.state.empleada, tipo, form.get("cliente", ""),
             form.get("celular", ""), servicios, lineas_catalogo, datos_cliente,
-            proyecto_ref, cargos=_cargos_del_form(form), cobro=cobro)
+            cargos=_cargos_del_form(form), cobro=cobro)
     except ValueError as error:
         return plantillas.TemplateResponse(
             request, "venta_servicio.html",
-            _contexto_servicio(request, tipo, error=str(error), servicios=servicios,
-                               proyecto=proyecto_ref),
+            _contexto_servicio(request, tipo, error=str(error),
+                               servicios=servicios),
             status_code=200)
     except Exception as error:
         return plantillas.TemplateResponse(
@@ -1435,16 +1386,13 @@ async def venta_servicio_crear(request: Request, tipo: str):
             _contexto_servicio(
                 request, tipo,
                 error=f"Odoo no aceptó la cotización: {ventas._mensaje_de_error(error)}",
-                servicios=servicios, proyecto=proyecto_ref),
+                servicios=servicios),
             status_code=200)
     ventas.vaciar_carrito(usuario)
     ventas._limpiar_borrador(usuario)
     filas = [("Tipo", cotizaciones.etiqueta_de(tipo), None),
              ("Total", dinero_venta(registro["total"]), None),
              ("Estado", "Cotización (borrador en Odoo)", "dorado")]
-    if proyecto_ref:
-        # Que se vea que quedó dentro del proyecto y no suelta.
-        filas.insert(1, ("Proyecto", proyecto_ref, None))
     return plantillas.TemplateResponse(request, "venta_exito.html", {
         "titulo": "Cotización de servicio creada",
         "sub": f"{registro['orden']} · {registro['cliente']}",
@@ -1894,120 +1842,6 @@ def venta_foto(request: Request, producto_id: int):
 
 
 # ---------------------------------------------------------------------------
-# Proyectos: el contenedor de las varias cotizaciones de un mismo cliente.
-# El tablero calca las cuatro columnas del Flujo del CRM de Odoo, porque el
-# proyecto ES la oportunidad de ese Flujo (ver app/proyectos.py).
-# ---------------------------------------------------------------------------
-
-def _tipos_de_proyecto():
-    """Los tipos tal cual, para elegir DE QUÉ es el proyecto al crearlo."""
-    return [(t, cotizaciones.TIPOS[t]["etiqueta"]) for t in cotizaciones.ORDEN_TIPOS]
-
-
-def _tipos_para_cotizar():
-    """Los mismos tipos, pero con el nombre de los botones que abren una
-    cotización (dentro de la ficha del proyecto)."""
-    return [(t, cotizaciones.etiqueta_para_cotizar(t))
-            for t in cotizaciones.ORDEN_TIPOS]
-
-
-@app.get("/proyecto")
-def proyecto_tablero(request: Request, error: str = ""):
-    if not proyectos.activos():
-        return RedirectResponse("/", status_code=303)
-    columnas = []
-    if ventas.configurado():
-        try:
-            columnas = proyectos.kanban()
-        except Exception as excepcion:
-            print(f"proyectos: error armando el tablero: {excepcion!r}", flush=True)
-            error = error or "No se pudo leer los proyectos desde Odoo."
-    return plantillas.TemplateResponse(request, "proyectos.html", {
-        "ventas_activo": ventas.configurado(),
-        "columnas": columnas,
-        "error": error or None,
-    })
-
-
-@app.get("/proyecto/nuevo")
-def proyecto_nuevo(request: Request, error: str = "", nombre: str = "",
-                   celular: str = "", nota: str = "", nombre_proyecto: str = ""):
-    if not proyectos.activos():
-        return RedirectResponse("/", status_code=303)
-    return plantillas.TemplateResponse(request, "proyecto_nuevo.html", {
-        "tipos": _tipos_de_proyecto(),
-        "error": error or None,
-        "nombre": nombre, "celular": celular, "nota": nota,
-        "nombre_proyecto": nombre_proyecto,
-    })
-
-
-@app.post("/proyecto/nuevo")
-async def proyecto_crear(request: Request):
-    if not proyectos.activos():
-        return RedirectResponse("/", status_code=303)
-    form = await request.form()
-    nombre = form.get("nombre", "")
-    celular = form.get("celular", "")
-    nota = form.get("nota", "")
-    nombre_proyecto = form.get("nombre_proyecto", "")
-    try:
-        ref = proyectos.crear(request.state.empleada, nombre, celular,
-                              form.get("tipo", ""), nota, nombre_proyecto)
-    except ValueError as excepcion:
-        # Los datos vuelven a la pantalla para no hacerla escribir de nuevo.
-        return RedirectResponse(
-            "/proyecto/nuevo?error=" + quote(str(excepcion))
-            + f"&nombre={quote(nombre)}&celular={quote(celular)}&nota={quote(nota)}"
-            + f"&nombre_proyecto={quote(nombre_proyecto)}",
-            status_code=303)
-    except Exception as excepcion:
-        print(f"proyectos: error creando el proyecto: {excepcion!r}", flush=True)
-        return RedirectResponse(
-            "/proyecto/nuevo?error="
-            + quote("No se pudo crear el proyecto en Odoo. Intenta de nuevo."),
-            status_code=303)
-    return RedirectResponse(f"/proyecto/{ref}", status_code=303)
-
-
-@app.get("/proyecto/{ref}")
-def proyecto_ficha(request: Request, ref: str, error: str = ""):
-    if not proyectos.activos():
-        return RedirectResponse("/", status_code=303)
-    ficha = proyectos.detalle(ref)
-    if not ficha:
-        return RedirectResponse(
-            "/proyecto?error=" + quote(f"No existe el proyecto {ref}."),
-            status_code=303)
-    return plantillas.TemplateResponse(request, "proyecto_detalle.html", {
-        "p": ficha, "tipos": _tipos_para_cotizar(), "error": error or None,
-    })
-
-
-@app.post("/proyecto/{ref}/compra")
-async def proyecto_compra(request: Request, ref: str):
-    if not proyectos.activos():
-        return RedirectResponse("/", status_code=303)
-    form = await request.form()
-    try:
-        proyectos.agregar_compra(request.state.empleada, ref,
-                                 form.get("concepto", ""), form.get("monto", ""),
-                                 form.get("fecha", ""), form.get("nota", ""))
-    except ValueError as excepcion:
-        return RedirectResponse(f"/proyecto/{ref}?error=" + quote(str(excepcion)),
-                                status_code=303)
-    return RedirectResponse(f"/proyecto/{ref}", status_code=303)
-
-
-@app.post("/proyecto/{ref}/compra/{n}/quitar")
-def proyecto_compra_quitar(request: Request, ref: str, n: int):
-    if not proyectos.activos():
-        return RedirectResponse("/", status_code=303)
-    proyectos.quitar_compra(ref, n)
-    return RedirectResponse(f"/proyecto/{ref}", status_code=303)
-
-
-# ---------------------------------------------------------------------------
 # Calendario del equipo (espejo del proyecto CALENDARIO ROSE de Linear).
 #
 # Pantalla server-rendered como el resto de la app: Python arma la vista
@@ -2198,7 +2032,6 @@ def calendario_pantalla(request: Request):
 
     return plantillas.TemplateResponse(request, "calendario.html", {
         "empleada": empleada,
-        "proyectos_activos": proyectos.activos(),
         "cal": calendario,
         "estado": estado,
         "yo": yo,
@@ -3096,214 +2929,3 @@ def calendario_regenerar_enlace(request: Request):
     """Enlace nuevo para la empleada de la sesión; el viejo muere ya."""
     calendario_ics.regenerar(request.state.empleada["id"])
     return RedirectResponse("/?tab=ajustes&aviso=enlace-nuevo", status_code=303)
-
-
-# ---------------------------------------------------------------------------
-# Compras/Gastos: la plata que sale
-# ---------------------------------------------------------------------------
-# La pantalla agrupa por a quien se le carga la compra (Abraham, 18/09/2026):
-# Proyectos, Ventas y Del vivero. Las compras viven en Odoo; lo unico que se
-# decide aqui es que es valido y si hay que subir stock, y eso ultimo pasa
-# siempre por el order-api.
-
-def _pagina_compras(request, vista="proyectos", q="", error=None):
-    contexto = {
-        "request": request,
-        "compras_activo": compras.activo(),
-        "vista": vista,
-        "vistas": compras.VISTAS,
-        "q": q,
-        "error": error,
-        "resumen": {"total": 0.0, "cantidad": 0, "proyectos": 0.0, "ventas": 0.0,
-                    "vivero": 0.0, "categorias": [], "mes": ""},
-        "tarjetas": [],
-        "compras": [],
-    }
-    if compras.activo():
-        try:
-            contexto["resumen"] = compras.resumen_del_mes()
-            if vista == "proyectos":
-                contexto["tarjetas"] = compras.por_proyecto()
-            elif vista == "ventas":
-                contexto["tarjetas"] = compras.por_venta()
-            else:
-                contexto["compras"] = compras.listar("vivero", q)
-        except Exception as falla:  # Odoo caido o credenciales malas
-            contexto["error"] = ventas._mensaje_de_error(falla)
-    return plantillas.TemplateResponse(request, "compras.html", contexto)
-
-
-@app.get("/compras")
-def compras_lista(request: Request, vista: str = "proyectos", q: str = "",
-                  error: str = ""):
-    if vista not in dict(compras.VISTAS):
-        vista = "proyectos"
-    return _pagina_compras(request, vista, q, error or None)
-
-
-def _contexto_compra(request, compra=None, error=None, vista="proyectos",
-                     destino="vivero", proyecto_id=None, orden_id=None,
-                     orden_nombre=""):
-    return {
-        "request": request,
-        "compra": compra,
-        "error": error,
-        "vista": vista,
-        "accion": f"/compras/{compra['n']}" if compra else "/compras/nueva",
-        "categorias": compras.CATEGORIAS,
-        "formas_pago": compras.FORMAS_PAGO,
-        "destinos": (("vivero", "Del vivero"), ("proyecto", "Un proyecto"),
-                     ("venta", "Una venta")),
-        "destino": destino,
-        "proyectos": compras.proyectos_para_elegir() if compras.activo() else [],
-        "proyecto_id": proyecto_id,
-        "orden_id": orden_id,
-        "orden_nombre": orden_nombre,
-        "hoy": datetime.now(datos.ZONA_PANAMA).date().isoformat(),
-    }
-
-
-@app.get("/compras/nueva")
-def compra_nueva(request: Request, proyecto: int = 0, orden: int = 0,
-                 error: str = ""):
-    """El formulario en blanco. Si se entra desde la tarjeta de un proyecto o
-    de una venta, ese destino llega puesto y no hay que elegirlo."""
-    if not compras.activo():
-        return RedirectResponse("/compras", status_code=303)
-    destino = "proyecto" if proyecto else ("venta" if orden else "vivero")
-    orden_nombre = ""
-    if orden:
-        filas = ventas._ejecutar("sale.order", "read", [[int(orden)]],
-                                 {"fields": ["name", "partner_id"]})
-        if filas:
-            orden_nombre = f"{filas[0]['name']} · {(filas[0].get('partner_id') or [0, ''])[1]}"
-    contexto = _contexto_compra(
-        request, error=error or None, destino=destino,
-        proyecto_id=proyecto or None, orden_id=orden or None,
-        orden_nombre=orden_nombre)
-    return plantillas.TemplateResponse(request, "compra_form.html", contexto)
-
-
-async def _recibo_del_form(form):
-    """(bytes, nombre) del archivo subido, o (None, '') si no mandaron uno."""
-    archivo = form.get("recibo")
-    if not archivo or not getattr(archivo, "filename", ""):
-        return None, ""
-    contenido = await archivo.read()
-    if not contenido:
-        return None, ""
-    if len(contenido) > 15 * 1024 * 1024:
-        raise ValueError("El recibo pesa más de 15 MB. Toma la foto otra vez.")
-    return contenido, archivo.filename
-
-
-@app.post("/compras/nueva")
-async def compra_crear(request: Request):
-    if not compras.activo():
-        return RedirectResponse("/compras", status_code=303)
-    form = await request.form()
-    destino = form.get("destino") or "vivero"
-    try:
-        recibo, recibo_nombre = await _recibo_del_form(form)
-        lineas = compras.lineas_del_form(form) if destino != "proyecto" else []
-        n = compras.crear(request.state.empleada, form, lineas,
-                          recibo, recibo_nombre)
-    except ValueError as falla:
-        contexto = _contexto_compra(
-            request, error=str(falla), destino=destino,
-            proyecto_id=compras._entero(form.get("proyecto_id")),
-            orden_id=compras._entero(form.get("orden_id")))
-        return plantillas.TemplateResponse(request, "compra_form.html", contexto)
-    except Exception as falla:
-        contexto = _contexto_compra(
-            request, error=ventas._mensaje_de_error(falla), destino=destino)
-        return plantillas.TemplateResponse(request, "compra_form.html", contexto)
-
-    # El stock se mueve DESPUES de que la compra quedo guardada: si el
-    # order-api falla, la compra ya esta anotada y solo falta el inventario.
-    aviso = ""
-    if lineas:
-        try:
-            compras.subir_al_inventario(n, compras.lineas_de(n),
-                                        request.state.empleada["id"])
-            datos.reiniciar_cache_proxy()
-        except datos.SinConexion as falla:
-            aviso = (f"La compra quedó guardada, pero el stock no subió: "
-                     f"{falla}. Ajústalo desde Stock.")
-    vista = "proyectos" if destino == "proyecto" else (
-        "ventas" if destino == "venta" else "vivero")
-    destino_url = f"/compras?vista={vista}"
-    if aviso:
-        destino_url += "&error=" + quote(aviso)
-    return RedirectResponse(destino_url, status_code=303)
-
-
-@app.get("/compras/productos")
-def compras_productos(request: Request, q: str = ""):
-    """Plantas e insumos para la lista de lo que entra al inventario."""
-    if not compras.activo():
-        return {"productos": []}
-    return {"productos": compras.buscar_productos(q)}
-
-
-@app.get("/compras/ventas")
-def compras_ventas(request: Request, q: str = ""):
-    """Ventas y cotizaciones a las que colgarle la compra."""
-    if not compras.activo():
-        return {"ventas": []}
-    return {"ventas": compras.buscar_ventas(q)}
-
-
-@app.get("/compras/{n}")
-def compra_ficha(request: Request, n: int, error: str = ""):
-    if not compras.activo():
-        return RedirectResponse("/compras", status_code=303)
-    compra = compras.obtener(n)
-    if not compra:
-        return RedirectResponse("/compras", status_code=303)
-    contexto = _contexto_compra(
-        request, compra=compra, error=error or None,
-        destino=compra["destino"] if compra["destino"] != "proyecto" else "proyecto",
-        proyecto_id=compra["proyecto_id"], orden_id=compra["orden_id"],
-        orden_nombre=compra["orden_nombre"])
-    return plantillas.TemplateResponse(request, "compra_form.html", contexto)
-
-
-@app.post("/compras/{n}")
-async def compra_guardar(request: Request, n: int):
-    if not compras.activo():
-        return RedirectResponse("/compras", status_code=303)
-    form = await request.form()
-    try:
-        recibo, recibo_nombre = await _recibo_del_form(form)
-        compras.editar(n, form, recibo, recibo_nombre)
-    except ValueError as falla:
-        compra = compras.obtener(n)
-        contexto = _contexto_compra(
-            request, compra=compra, error=str(falla),
-            destino=form.get("destino") or "vivero",
-            proyecto_id=compras._entero(form.get("proyecto_id")),
-            orden_id=compras._entero(form.get("orden_id")))
-        return plantillas.TemplateResponse(request, "compra_form.html", contexto)
-    vista = {"proyecto": "proyectos", "venta": "ventas"}.get(
-        form.get("destino") or "vivero", "vivero")
-    return RedirectResponse(f"/compras?vista={vista}", status_code=303)
-
-
-@app.post("/compras/{n}/borrar")
-def compra_borrar(request: Request, n: int):
-    if not compras.activo():
-        return RedirectResponse("/compras", status_code=303)
-    compras.borrar(n)
-    return RedirectResponse("/compras", status_code=303)
-
-
-@app.get("/compras/{n}/recibo")
-def compra_recibo(request: Request, n: int):
-    contenido, nombre = compras.recibo_de(n)
-    if not contenido:
-        return RedirectResponse(f"/compras/{n}", status_code=303)
-    tipo = "application/pdf" if nombre.lower().endswith(".pdf") else "image/jpeg"
-    return Response(contenido, media_type=tipo,
-                    headers={"Content-Disposition": f'inline; filename="{nombre}"'})
-

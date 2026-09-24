@@ -36,8 +36,8 @@ incluidas las que hoy viven en otros repositorios:
   ROSE de Linear, con sync a Google Calendar y feed ICS), **Stock** (score,
   alertas, ajustes, publicación en la tienda), **Vender** (ventas locales y
   cotizaciones de servicio contra Odoo), **Retail** (kanban de leads),
-  **Proyectos**, **Compras/Gastos**, **Fichas** y **Ajustes** (login con
-  Google e invitaciones). Además sirve la **cara CRM**: `/crm/calendario`, el
+  **Fichas** y **Ajustes** (login con Google e invitaciones). Proyectos y
+  Compras/Gastos se retiraron el 24/09/2026, con el rediseno del CRM. Además sirve la **cara CRM**: `/crm/calendario`, el
   mismo calendario con piel de Twenty que se ve como pestaña dentro del
   Twenty real (`crm.plantaspanama.com`). Ver su
   [README](apps/control-stock/README.md).

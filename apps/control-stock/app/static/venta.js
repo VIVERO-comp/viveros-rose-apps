@@ -7,23 +7,6 @@ const entradaBusca = document.getElementById("busca-venta");
 const contenedorResultados = document.getElementById("resultados-venta");
 let temporizadorBusca = null;
 
-// El proyecto elegido en "Cotizar Proyecto" tiene que viajar con cada POST
-// del carrito (agregar, quitar, cambiar cantidad): esos formularios llevan
-// su campo oculto y aquí se les pone el valor que está elegido ahora, para
-// que agregar una planta no saque la cotización de su proyecto.
-const selectorProyecto = document.getElementById("cliente-proyecto");
-if (selectorProyecto) {
-  selectorProyecto.addEventListener("change", () => {
-    const valor = selectorProyecto.value;
-    for (const campo of document.querySelectorAll('input[type="hidden"][name="proyecto"]')) {
-      campo.value = valor;
-    }
-    if (contenedorResultados) {
-      contenedorResultados.dataset.proyecto = valor;
-    }
-  });
-}
-
 function escaparHtml(texto) {
   return String(texto)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -36,13 +19,6 @@ function pintarResultados(lista, q) {
   // pantalla marca a dónde debe volver el POST de agregar con
   // data-volver en #resultados-venta.
   const volver = (contenedorResultados.dataset.volver || "/venta/nueva");
-  // El proyecto de la cotización viaja con el POST de agregar: sin esto,
-  // tocar una planta del buscador en vivo devolvería a la pantalla sin su
-  // proyecto y la cotización nacería suelta.
-  const proyecto = (contenedorResultados.dataset.proyecto || "");
-  const campoProyecto = proyecto
-    ? `<input type="hidden" name="proyecto" value="${escaparHtml(proyecto)}">`
-    : "";
   if (!lista.length) {
     contenedorResultados.innerHTML =
       '<p class="nada-venta">Nada con "' + escaparHtml(q) + '". Prueba otro nombre o el SKU.</p>';
@@ -53,7 +29,6 @@ function pintarResultados(lista, q) {
       <input type="hidden" name="producto_id" value="${p.id}">
       <input type="hidden" name="cantidad" value="1">
       <input type="hidden" name="volver" value="${escaparHtml(volver)}">
-      ${campoProyecto}
       <button class="planta planta-boton" type="submit">
         <div class="foto">🪴<img src="/venta/foto/${p.id}" alt="" loading="lazy" onerror="this.remove()"></div>
         <div class="info"><b>${escaparHtml(p.nombre)}</b><span>${escaparHtml(p.sku)}</span>
