@@ -1,363 +1,376 @@
-"""La pestaña Control: el kanban de los chats de WhatsApp.
+"""La pestaña Control: reparte el trabajo del equipo.
 
-Versión C elegida por el dueño en el artefacto "Tablero Control"
-(23/09/2026): cuatro columnas, la tarjeta enseña el último mensaje y trae
-el botón de responder por WhatsApp, y las reglas del "semáforo":
+Fase 5 del rediseño del CRM (24/09/2026). **Regla de oro: Control no
+guarda nada propio.** El estado, el responsable y las notas se leen y se
+escriben en el equipo LEAD de Linear (`linear_leads`). Murieron las tablas
+`control_tablero` y `control_visto`, y con ellas el kanban de chats con su
+semáforo: aquí ya no hay una verdad local que pueda discrepar del tablero.
 
-- **En curso** (primera): el vivero contestó de último — la conversación
-  va andando. Negociando o en la entrega, la tarjeta se queda aquí: nada
-  la archiva sola.
-- **Esperando respuesta**: el cliente escribió de último y ESPERA la
-  respuesta del vivero — punto rojo (corrección de Abraham, 23/09/2026:
-  al principio quedó al revés). El punto rojo lo lleva TODA tarjeta de
-  esta columna, también la que un empleado devolvió aquí a mano aunque el
-  vivero haya contestado de último (segunda corrección del mismo día).
-- **Terminado**: cae sola cuando el lead sale **Ganado** en el CRM del
-  admin (el pipeline se mueve en Linear; aquí se lee ese estado). Va
-  ANTES de Inactivo (pedido del mismo día).
-- **Inactivo**: SOLO a mano, con motivo (los mismos motivoNoAvance del
-  CRM: No contestó · Dejó de responder · Solo preguntaba · Dijo que no).
+Dos vistas:
 
-La mano siempre le gana al automático: una tarjeta arrastrada se queda
-donde la pusieron hasta que llegue un mensaje NUEVO del chat — entonces
-las reglas vuelven a decidir (un inactivo revive, un "esperando" con
-mensaje del cliente vuelve a En curso con su punto rojo).
+- **Por empleado** (solo admin): una columna por etiqueta del grupo
+  Responsable de Linear, más «Sin asignar». Arrastrar una tarjeta cambia
+  la etiqueta `Resp:` del issue — nunca el `assignee`, que sigue siendo
+  Abraham. Las columnas salen de las etiquetas, así que sumar a alguien al
+  equipo es crear su etiqueta en Linear, sin tocar código ni desplegar.
+- **Por estado**: las 8 columnas del embudo. El dueño ve todo con la
+  etiqueta de responsable en color; un empleado ve **solo lo suyo**, y ese
+  filtro se aplica AQUÍ, en el servidor, no en el navegador.
 
-Los mensajes salen del Twenty real (los mismos `mensajesWhatsapp` del
-panel /admin) y los Ganados de Linear, con el caché y el refresco en fondo
-de siempre. Sin claves corre con datos de muestra.
+Arrastrar entre estados es una **corrección manual**: pide un motivo corto
+y queda como comentario firmado en el issue («Ruben movió de Hablando a
+Cotizado · le pasé el precio por teléfono»). Perdido pide además su motivo
+de pérdida. Lo automático del embudo lo mueven el mensaje del cliente, la
+cotización, el pago y el calendario — no esta pantalla.
+
+Lo único que esta pestaña guarda es una **tabla mínima de acuse**
+(`control_acuse`): a quién ya se le avisó de qué. No es dato del negocio y
+no cabe en Linear — es memoria de avisos, para que el mismo aviso no suene
+dos veces en cada recarga de la pantalla.
 """
 
+import os
 import re
-import time
-from datetime import datetime, timedelta, timezone
-from urllib.parse import quote
+from datetime import datetime
 
-from . import avisos, calendario, crm_flujo, crm_twenty, retail
+from . import agenda, avisos, calendario, linear_leads
 from .datos import ZONA_PANAMA, _db
 
-DIAS_VENTANA = 7      # cuántos días de mensajes se miran
-TTL_CHATS = 120       # mismo TTL que los leads de Retail
+VISTAS = ("empleado", "estado")
 
-# Corrección de Abraham (23/09/2026): "Esperando respuesta" es el chat que
-# ESPERA la respuesta del vivero (el cliente escribió de último); "En
-# curso" es la conversación andando (el vivero contestó de último).
-COLUMNAS = [
-    {"clave": "en_curso", "titulo": "En curso",
-     "pie": "El vivero contestó de último; la conversación va andando."},
-    {"clave": "esperando", "titulo": "Esperando respuesta",
-     "pie": "El cliente escribió de último, o alguien la puso aquí a mano: "
-            "todas le deben respuesta y llevan el punto rojo."},
-    {"clave": "terminado", "titulo": "Terminado",
-     "pie": "Ganado en el CRM del admin: cae aquí sola."},
-    {"clave": "inactivo", "titulo": "Inactivo",
-     "pie": "Dijo gracias, no contestó o solo preguntaba. Si escribe, revive."},
-]
-CLAVES_COLUMNA = {c["clave"] for c in COLUMNAS}
-
-# Los mismos motivos del CRM (lead.motivoNoAvance): así el día que esto se
-# escriba de vuelta a Twenty (fase 2 del plan), el vocabulario ya calza.
-MOTIVOS = {
-    "no_contesto": "No contestó",
-    "dejo_de_responder": "Dejó de responder",
-    "solo_preguntaba": "Solo preguntaba",
-    "dijo_que_no": "Dijo que no / precio",
-}
-
-_cache = {"en": 0, "dato": None}
+# El texto de "nadie lo tiene" en las tarjetas. La columna de Sin asignar
+# va primera a propósito: es la que hay que vaciar.
+SIN_ASIGNAR = "Sin asignar"
 
 
 def iniciar_tablas():
     with _db() as con:
+        # El acuse de un aviso: `clave` dice de qué aviso se trata
+        # ("te-toca:LEAD-91", "wa-label:LEAD-91:Ruben"). Una fila = ese
+        # aviso ya se dio. Nada más: ni estado, ni columna, ni motivo —
+        # eso vive en Linear.
         con.execute("""
-            CREATE TABLE IF NOT EXISTS control_tablero (
-                chat TEXT PRIMARY KEY,
-                columna TEXT NOT NULL,
-                motivo TEXT,
-                ultima TEXT NOT NULL,
-                actualizado TEXT NOT NULL
-            )
-        """)
-        # En qué columna quedó cada chat la última vez que se pintó el
-        # tablero: es lo que deja saber que un chat ACABA de caer en
-        # "Esperando respuesta" y hay que avisar (una sola vez, no en cada
-        # recarga de la pantalla).
-        con.execute("""
-            CREATE TABLE IF NOT EXISTS control_visto (
-                chat TEXT PRIMARY KEY,
-                columna TEXT NOT NULL,
-                visto TEXT NOT NULL
+            CREATE TABLE IF NOT EXISTS control_acuse (
+                clave TEXT PRIMARY KEY,
+                cuando TEXT NOT NULL
             )
         """)
 
 
+def _ya_avisado(clave):
+    """True si este aviso ya se dio.
+
+    La base es la que decide, con un INSERT que no hace nada si la fila ya
+    existe: dos pestañas abiertas a la vez no mandan el mismo aviso dos
+    veces.
+    """
+    iniciar_tablas()
+    ahora = datetime.now(ZONA_PANAMA).isoformat()
+    with _db() as con:
+        nuevo = con.execute(
+            "INSERT OR IGNORE INTO control_acuse (clave, cuando) VALUES (?, ?)",
+            (clave, ahora)).rowcount
+    return not nuevo
+
+
+def _olvidar_acuse(prefijo):
+    """Olvida los acuses que empiezan con `prefijo`: cuando la señal se
+    apaga, el aviso tiene que poder sonar de nuevo la próxima vez."""
+    iniciar_tablas()
+    with _db() as con:
+        con.execute("DELETE FROM control_acuse WHERE clave LIKE ?", (prefijo + "%",))
+
+
 # ---------------------------------------------------------------------------
-# Lectura de chats (Twenty o muestra) y de los Ganados (Linear o muestra)
+# El enganche para WAHA (Fase W): hoy el aviso es manual
 # ---------------------------------------------------------------------------
 
-_MUESTRA = [
-    {"chat": "m1", "nombre": "Tamara",         "cel": "6552-0966", "dir": "ENTRANTE",
-     "persona": "p1",
-     "texto": "¿Tienen calatheas grandes?", "fecha": "2026-09-23T14:40:00+00:00"},
-    {"chat": "m2", "nombre": "Kev",            "cel": "6209-7754", "dir": "SALIENTE",
-     "persona": "p2",
-     "texto": "Le paso el precio en un rato 🌿", "fecha": "2026-09-23T13:05:00+00:00"},
-    {"chat": "m3", "nombre": "Diana Caballero", "cel": "6114-9077", "dir": "ENTRANTE",
-     "persona": "",  # número sin lead en el CRM: vive solo en este tablero
-     "texto": "Buenas, sigo esperando la cotización", "fecha": "2026-09-22T21:10:00+00:00"},
-    {"chat": "m4", "nombre": "Soledad",        "cel": "6455-1832", "dir": "SALIENTE",
-     "persona": "p4",  # su lead ya salió Ganado en el CRM
-     "texto": "¡Que las disfrute! Cualquier cosa me escribe 🌿",
-     "fecha": "2026-09-21T16:20:00+00:00"},
-]
+def etiquetar_en_whatsapp(celular, etiqueta):
+    """Poner la etiqueta `etiqueta` al chat de `celular` en WhatsApp.
+
+    **Vacía a propósito.** Hoy nadie puede hacerlo desde el código: OpenWA
+    con motor `baileys` no soporta etiquetas (`501 getLabels`), y por eso
+    se eligió WAHA aparte, que todavía no está montado. Mientras tanto la
+    pantalla muestra el aviso manual («Pon en WhatsApp la etiqueta: X») y
+    esta función se queda como el punto de llamada, ya conectado arriba en
+    `mover_a_empleado()`.
+
+    El día que WAHA esté andando se llena esto, `waha_activo()` pasa a
+    decir la verdad y el aviso manual se apaga solo: nada más cambia.
+    Vuelve True si la etiqueta quedó puesta.
+    """
+    return False
 
 
-def _legible(telefono):
-    """El teléfono crudo del mensaje -> '6203-7333' (o tal cual si no es
-    un celular panameño de 8 dígitos)."""
+def waha_activo():
+    """¿Ya se puede etiquetar en WhatsApp desde el código?
+
+    Mientras sea False, la pantalla pide el aviso manual. El `and False`
+    es el candado de la Fase W: existe la variable de entorno pero la
+    función de arriba todavía está vacía, y prender el aviso antes de que
+    funcione dejaría al equipo creyendo que la etiqueta se puso sola.
+    """
+    return bool((os.environ.get("WAHA_URL") or "").strip()) and False
+
+
+# ---------------------------------------------------------------------------
+# Las dos vistas
+# ---------------------------------------------------------------------------
+
+def _tarjeta(lead):
+    """El lead listo para la tarjeta: lo que se ve y nada más."""
+    estado = lead.get("estado_ficha") or {}
+    return dict(lead, **{
+        "estado_titulo": estado.get("nombre") or lead.get("estado_nombre") or "",
+        "estado_chip": estado.get("chip") or "",
+        "motivo_chip": (linear_leads.chip_de_motivo(lead["motivo_clave"])
+                        if lead.get("motivo_clave") else ""),
+        "resp_titulo": lead.get("resp") or SIN_ASIGNAR,
+    })
+
+
+def _vivos(leads):
+    """Los leads que siguen en juego: los cerrados (Ganado, Perdido) no se
+    reparten entre empleados — ya no hay trabajo que hacerles."""
+    return [l for l in leads if l["estado"] not in linear_leads.CERRADOS]
+
+
+def tablero_por_empleado(leads=None):
+    """[{clave, titulo, pie, leads}] — una columna por responsable.
+
+    «Sin asignar» primero: es la que hay que vaciar. Después cada `Resp:`
+    de Linear, en orden. Las columnas SALEN de las etiquetas, así que
+    sumar a alguien al equipo es crear su etiqueta allá.
+    """
+    leads = _vivos([_tarjeta(l) for l in (leads if leads is not None
+                                          else linear_leads.listar())])
+    columnas = [{"clave": "", "titulo": SIN_ASIGNAR,
+                 "pie": "Nadie los tiene: repártelos."}]
+    for nombre in linear_leads.responsables():
+        columnas.append({"clave": nombre, "titulo": nombre,
+                         "pie": f"Lo que le toca a {nombre}."})
+    for columna in columnas:
+        columna["leads"] = [l for l in leads if (l["resp"] or "") == columna["clave"]]
+    return columnas
+
+
+def tablero_por_estado(solo_resp="", leads=None):
+    """[{clave, titulo, pie, leads}] — las 8 columnas del embudo.
+
+    `solo_resp` filtra a un responsable: es lo que ve un empleado, y se
+    aplica en el SERVIDOR. Un empleado sin etiqueta `Resp:` no ve nada,
+    que es lo correcto: todavía no le toca ningún lead.
+    """
+    todos = [_tarjeta(l) for l in (leads if leads is not None
+                                   else linear_leads.listar())]
+    if solo_resp:
+        todos = [l for l in todos if (l["resp"] or "") == solo_resp]
+    columnas = []
+    for estado in linear_leads.ESTADOS:
+        columnas.append({
+            "clave": estado["clave"], "titulo": estado["nombre"],
+            "color": estado["color"], "chip": estado["chip"],
+            "pie": estado["auto"],
+            "leads": [l for l in todos if l["estado"] == estado["clave"]],
+        })
+    return columnas
+
+
+def alcance(empleada, es_admin):
+    """Qué vistas puede ver quien está en la sesión, y con qué filtro.
+
+    El dueño ve las dos vistas y todo el equipo. Un empleado ve solo «Por
+    estado», y solo lo suyo: la vista «Por empleado» es de reparto, y
+    repartir es cosa del dueño.
+    """
+    if es_admin:
+        return {"vistas": list(VISTAS), "solo_resp": "", "admin": True}
+    return {"vistas": ["estado"],
+            "solo_resp": agenda.responsable_de_empleada(empleada),
+            "admin": False}
+
+
+def vista_pedida(pedida, alcance_actual):
+    """La vista que se pinta: la pedida si se puede, y si no la primera que
+    le toca (el dueño abre en «Por empleado», el empleado en «Por estado»)."""
+    if pedida in alcance_actual["vistas"]:
+        return pedida
+    return alcance_actual["vistas"][0]
+
+
+def puede_tocar(lead, alcance_actual):
+    """¿Quien está en la sesión puede mover ESTE lead?
+
+    El dueño, todo. Un empleado, solo los suyos — y eso se verifica aquí,
+    en el servidor, no confiando en que el navegador no mande lo que no
+    debe.
+    """
+    if alcance_actual["admin"]:
+        return True
+    return bool(alcance_actual["solo_resp"]) and (
+        (lead or {}).get("resp") or "") == alcance_actual["solo_resp"]
+
+
+# ---------------------------------------------------------------------------
+# Repartir: arrastrar cambia la etiqueta `Resp:`
+# ---------------------------------------------------------------------------
+
+def mover_a_empleado(ref, nombre, autor=""):
+    """El lead pasa a manos de `nombre` (o a Sin asignar con "").
+
+    Devuelve ("aviso", "error"). El aviso lleva el recordatorio de poner la
+    etiqueta en WhatsApp a mano mientras WAHA no exista, y ese recordatorio
+    se da UNA vez por lead y responsable (la tabla de acuse), para que no
+    reaparezca en cada recarga.
+    """
+    lead = linear_leads.uno(ref)
+    if lead is None:
+        return "", "Ese lead ya no está en Linear."
+    nombre = (nombre or "").strip()
+    if nombre and nombre not in linear_leads.responsables():
+        # Las etiquetas no se crean solas: si el nombre no existe en
+        # Linear, aquí se dice en vez de inventarlo.
+        return "", f"No existe la etiqueta «Resp: {nombre}» en Linear."
+    anterior = lead.get("resp") or ""
+    if anterior == nombre:
+        return "", ""
+    try:
+        linear_leads.poner_responsable(lead["id"], nombre)
+    except linear_leads.ErrorLeads as fallo:
+        return "", str(fallo)
+    linear_leads.refrescar()
+
+    # El lead cambió de manos: el recordatorio viejo ya no aplica.
+    _olvidar_acuse(f"wa-label:{lead['ref']}:")
+    if not nombre:
+        return f"{lead['nombre']} quedó sin asignar.", ""
+
+    aviso = f"{lead['nombre']} es de {nombre}."
+    # El enganche de la Fase W, ya llamado: cuando WAHA ande, esto etiqueta
+    # el chat y el recordatorio manual deja de salir.
+    if waha_activo() and lead.get("celular"):
+        if etiquetar_en_whatsapp(lead["celular"], nombre):
+            return aviso + " La etiqueta de WhatsApp quedó puesta.", ""
+    if not _ya_avisado(f"wa-label:{lead['ref']}:{nombre}"):
+        aviso += f" Pon en WhatsApp la etiqueta: {nombre}"
+        if anterior:
+            aviso += f" (y quita la de {anterior})"
+        aviso += "."
+    return aviso, ""
+
+
+# ---------------------------------------------------------------------------
+# Corregir el estado a mano: exige motivo y queda firmado
+# ---------------------------------------------------------------------------
+
+def mover_a_estado(ref, clave, nota="", motivo="", autor=""):
+    """Corrección manual del estado. Devuelve ("aviso", "error").
+
+    El motivo no es un capricho: el embudo se mueve solo, así que una
+    tarjeta empujada a mano es una excepción, y en dos semanas nadie se
+    acuerda de por qué. Queda como comentario firmado en el issue.
+    """
+    lead = linear_leads.uno(ref)
+    if lead is None:
+        return "", "Ese lead ya no está en Linear."
+    if clave not in linear_leads.POR_CLAVE:
+        return "", "Ese estado no existe en el embudo."
+    if lead["estado"] == clave:
+        return "", ""
+    nota = (nota or "").strip()
+    if not nota:
+        return "", "Escribí por qué la moviste."
+    try:
+        if clave == "PERDIDO":
+            if motivo not in linear_leads.MOTIVOS_PERDIDA:
+                return "", "Falta el motivo de la pérdida."
+            linear_leads.marcar_perdido(lead["id"], motivo, autor=autor)
+            linear_leads.comentar(lead["id"], nota, autor=autor)
+        else:
+            linear_leads.mover_estado(lead["id"], clave, manual=True,
+                                      nota=nota, autor=autor)
+    except linear_leads.ErrorLeads as fallo:
+        return "", str(fallo)
+    linear_leads.refrescar()
+    desde = (linear_leads.POR_CLAVE.get(lead["estado"]) or {}).get("nombre") or "—"
+    hasta = linear_leads.POR_CLAVE[clave]["nombre"]
+    return f"{lead['nombre']}: {desde} → {hasta}. Quedó anotado en el issue.", ""
+
+
+def escribir_nota(ref, texto, autor=""):
+    """Una nota sobre el lead: un comentario en su issue de Linear."""
+    lead = linear_leads.uno(ref)
+    if lead is None:
+        return "", "Ese lead ya no está en Linear."
+    try:
+        linear_leads.comentar(lead["id"], texto, autor=autor)
+    except linear_leads.ErrorLeads as fallo:
+        return "", str(fallo)
+    return "Nota guardada en el issue.", ""
+
+
+def ficha(ref):
+    """El lead con sus notas, para el panel de la derecha."""
+    lead = linear_leads.uno(ref)
+    if lead is None:
+        return None
+    abierta = _tarjeta(lead)
+    abierta["notas"] = linear_leads.comentarios(lead["id"])
+    return abierta
+
+
+# ---------------------------------------------------------------------------
+# El aviso al celular: hay un cliente esperando respuesta
+# ---------------------------------------------------------------------------
+
+def avisar_a_quien_le_toca(leads=None):
+    """Web Push del SALTO a «Te toca», no de estar ahí.
+
+    La etiqueta «Te toca» la pone el mensaje del cliente y la quita nuestra
+    respuesta; eso ya lo hace el frontend. Aquí solo suena el celular del
+    encargado, una sola vez por lead — de eso es la tabla de acuse. Cuando
+    la etiqueta se apaga, el acuse se olvida, así que la próxima vez que el
+    cliente escriba vuelve a sonar.
+
+    Devuelve los leads por los que sonó.
+    """
+    if not avisos.configurado():
+        return []
+    leads = leads if leads is not None else linear_leads.listar()
+    sonaron = []
+    for lead in leads:
+        clave = f"te-toca:{lead['ref']}"
+        if not lead.get("te_toca"):
+            _olvidar_acuse(clave)
+            continue
+        if _ya_avisado(clave):
+            continue
+        sonaron.append(lead)
+    for lead in sonaron:
+        quien = lead.get("resp") or "nadie todavía"
+        avisos.avisar(
+            avisos.USUARIO_CHATS,
+            f"Te toca · {lead['nombre']}",
+            f"{lead['estado_nombre']} · {quien}.",
+            "/control?abrir=" + lead["ref"])
+    return sonaron
+
+
+def avisar_en_fondo(leads):
+    """El aviso, sin que la pantalla lo espere."""
+    calendario._en_fondo("control-avisos",
+                         lambda: avisar_a_quien_le_toca(leads))
+
+
+def refrescar():
+    linear_leads.refrescar()
+
+
+def celular_legible(telefono):
+    """El teléfono crudo -> '6203-7333' (o tal cual si no es panameño)."""
     digitos = re.sub(r"\D", "", telefono or "")
     if digitos.startswith("507"):
         digitos = digitos[3:]
     if len(digitos) == 8:
         return f"{digitos[:4]}-{digitos[4:]}"
     return digitos
-
-
-def _crudos():
-    """[{chat, nombre, cel, dir, texto, fecha}] del período, sin el estado
-    del tablero todavía."""
-    if not crm_twenty.twenty_configurado():
-        return [dict(c) for c in _MUESTRA]
-    if _cache["dato"] is not None:
-        if time.time() - _cache["en"] >= TTL_CHATS:
-            calendario._en_fondo("control", _buscar)
-        return [dict(c) for c in _cache["dato"]]
-    try:
-        return [dict(c) for c in _buscar()]
-    except Exception:
-        return []
-
-
-def _buscar():
-    # UTC con "Z", el mismo formato que manda el panel /admin: a Twenty el
-    # ISO con offset (-05:00) no le gusta en los filtros.
-    desde = datetime.now(timezone.utc) - timedelta(days=DIAS_VENTANA)
-    desde_iso = desde.strftime("%Y-%m-%dT%H:%M:%S.000Z")
-    mensajes = []
-    cursor = None
-    for _ in range(10):  # tope duro: 600 mensajes bastan y sobran
-        ruta = ('mensajesWhatsapp?filter=fecha[gte]:"' + quote(desde_iso)
-                + '"&order_by=fecha[AscNullsFirst]&limit=60')
-        if cursor:
-            ruta += "&starting_after=" + quote(cursor)
-        j = crm_twenty._twenty(ruta)
-        mensajes.extend((j.get("data") or {}).get("mensajesWhatsapp") or [])
-        pagina = j.get("pageInfo") or (j.get("data") or {}).get("pageInfo") or {}
-        cursor = pagina.get("endCursor") if pagina.get("hasNextPage") else None
-        if not cursor:
-            break
-
-    por_chat = {}
-    for m in mensajes:
-        chat_id = m.get("chatId")
-        if not chat_id:
-            continue
-        c = por_chat.setdefault(chat_id, {"chat": chat_id, "nombre": "", "cel": "",
-                                          "persona": "", "dir": "", "texto": "",
-                                          "fecha": ""})
-        if m.get("chatNombre") and not c["nombre"]:
-            c["nombre"] = m["chatNombre"]
-        if m.get("telefono") and not c["cel"]:
-            c["cel"] = _legible(m["telefono"])
-        if m.get("personaId") and not c["persona"]:
-            c["persona"] = m["personaId"]
-        fecha = str(m.get("fecha") or m.get("createdAt") or "")
-        if fecha >= c["fecha"]:
-            c.update({"fecha": fecha, "texto": m.get("texto") or "",
-                      "dir": m.get("direccion") or "ENTRANTE"})
-    filas = list(por_chat.values())
-    _cache.update({"en": time.time(), "dato": filas})
-    return filas
-
-
-def refrescar():
-    _cache.update({"en": 0, "dato": None})
-
-
-# ---------------------------------------------------------------------------
-# El tablero: Ganado manda, luego la mano (hasta el próximo mensaje),
-# luego el semáforo (quién habló de último)
-# ---------------------------------------------------------------------------
-
-def _marcas():
-    iniciar_tablas()
-    with _db() as con:
-        filas = con.execute(
-            "SELECT chat, columna, motivo, ultima FROM control_tablero").fetchall()
-    return {f[0]: {"columna": f[1], "motivo": f[2], "ultima": f[3]} for f in filas}
-
-
-def _leads_por_celular():
-    """{últimos 8 dígitos: lead de Retail} para el salto 'Ver en Retail'."""
-    por_cel = {}
-    for lead in retail._crudos():
-        digitos = re.sub(r"\D", "", lead.get("cel") or "")[-8:]
-        if len(digitos) == 8:
-            por_cel.setdefault(digitos, lead)
-    return por_cel
-
-
-def _hace_bonito(iso_texto):
-    try:
-        cuando = datetime.fromisoformat(str(iso_texto).replace("Z", "+00:00"))
-        dias = (datetime.now(ZONA_PANAMA).date()
-                - cuando.astimezone(ZONA_PANAMA).date()).days
-    except (ValueError, TypeError):
-        return ""
-    if dias <= 0:
-        return "hoy"
-    return f"hace {dias} día" + ("s" if dias > 1 else "")
-
-
-def tablero():
-    """([columnas con sus chats], {chat_id: chat}) todo resuelto en Python.
-
-    La prioridad de cada tarjeta, en sincronía con el CRM del admin:
-    1. Su lead salió GANADO → Terminado (nadie la mueve a mano de ahí).
-    2. La mano del empleado, mientras no llegue un mensaje más nuevo —
-       EXCEPTO un "inactivo" local de un chat con lead: ese vive en el
-       motivo del lead en Twenty (la mano lo escribió allá), así que si
-       Twenty ya no lo tiene (el admin lo quitó), aquí tampoco.
-    3. El motivo del lead en Twenty → Inactivo (puesto aquí o en el admin,
-       es el mismo dato).
-    4. El semáforo: quién habló de último.
-    """
-    marcas = _marcas()
-    leads = _leads_por_celular()
-    crm = crm_flujo.por_persona()
-    chats = []
-    for c in _crudos():
-        digitos = re.sub(r"\D", "", c.get("cel") or "")[-8:]
-        lead_crm = crm.get(c.get("persona") or "")
-        motivo_crm = (lead_crm or {}).get("motivoNoAvance") or ""
-        marca = marcas.get(c["chat"])
-        mano_fresca = bool(marca) and c["fecha"] <= marca["ultima"]
-        if lead_crm and lead_crm.get("estado") == "GANADO":
-            c["columna"], c["motivo"] = "terminado", ""
-        elif mano_fresca and not (marca["columna"] == "inactivo" and lead_crm):
-            c["columna"] = marca["columna"]
-            c["motivo"] = MOTIVOS.get(marca["motivo"] or "", "")
-        elif motivo_crm:
-            c["columna"] = "inactivo"
-            c["motivo"] = crm_flujo.MOTIVOS.get(motivo_crm, motivo_crm)
-        else:
-            # El semáforo: quién habló de último. El cliente escribió →
-            # Esperando respuesta (le deben una); el vivero contestó → En
-            # curso. Un inactivo con mensaje nuevo del cliente cae aquí y
-            # por eso revive solo.
-            c["columna"] = "en_curso" if c["dir"] == "SALIENTE" else "esperando"
-            c["motivo"] = ""
-        # El punto rojo es de la COLUMNA, no de quién habló de último
-        # (corrección de Abraham, 23/09/2026): una tarjeta devuelta a mano
-        # a "Esperando respuesta" también le debe una al cliente, así que
-        # también lo enseña.
-        c["debe"] = c["columna"] == "esperando"
-        c["nombre"] = c["nombre"] or c["cel"] or "Sin identificar"
-        c["cuando"] = crm_twenty._cuando_bonito(c["fecha"])
-        c["hace"] = _hace_bonito(c["fecha"])
-        c["lead"] = leads.get(digitos)  # None si no calza con un lead de Retail
-        c["lead_crm_id"] = (lead_crm or {}).get("id") or ""
-        c["ganado"] = c["columna"] == "terminado"
-        chats.append(c)
-    chats.sort(key=lambda c: c["fecha"], reverse=True)
-    _avisar_de_los_que_esperan(chats)
-    columnas = [dict(col, chats=[c for c in chats if c["columna"] == col["clave"]])
-                for col in COLUMNAS]
-    return columnas, {c["chat"]: c for c in chats}
-
-
-def _avisar_de_los_que_esperan(chats):
-    """El aviso al celular del encargado de contestar (Abraham, 23/09/2026:
-    "a Rubén siempre", "siempre que caiga en Esperando").
-
-    Avisa del SALTO a "Esperando respuesta", no de estar ahí: un chat que
-    ya estaba esperando no vuelve a sonar en cada recarga de la pantalla,
-    y da igual si lo empujó un mensaje nuevo del cliente o la mano de un
-    compañero — el hecho es el mismo, hay un cliente esperando.
-
-    La primera corrida después de un deploy solo TOMA NOTA de dónde está
-    cada chat: si no, el encargado recibiría de golpe un aviso por cada
-    conversación abierta.
-    """
-    if not avisos.configurado():
-        return
-    iniciar_tablas()
-    with _db() as con:
-        conocidos = {f[0]: f[1] for f in
-                     con.execute("SELECT chat, columna FROM control_visto")}
-        estreno = not conocidos
-        nuevos = []
-        for chat in chats:
-            antes = conocidos.get(chat["chat"])
-            if antes == chat["columna"]:
-                continue
-            # UPDATE ... WHERE columna <> la de ahora + INSERT: la base es
-            # la que decide quién avisa, así que dos pestañas abiertas a la
-            # vez no mandan el aviso dos veces.
-            cambio = con.execute(
-                "UPDATE control_visto SET columna = ?, visto = datetime('now')"
-                " WHERE chat = ? AND columna <> ?",
-                (chat["columna"], chat["chat"], chat["columna"])).rowcount
-            if not cambio:
-                cambio = con.execute(
-                    "INSERT OR IGNORE INTO control_visto (chat, columna, visto)"
-                    " VALUES (?, ?, datetime('now'))",
-                    (chat["chat"], chat["columna"])).rowcount
-            if cambio and chat["columna"] == "esperando":
-                nuevos.append(chat)
-    if estreno:
-        return
-    for chat in nuevos:
-        avisos.avisar(
-            avisos.USUARIO_CHATS,
-            f"Esperando respuesta · {chat['nombre']}",
-            (chat["texto"] or "Toca para abrir el chat.")[:120],
-            "/control?abrir=" + quote(chat["chat"]))
-
-
-def mover(chat_id, columna, motivo=""):
-    """Guarda la mano del empleado y la SINCRONIZA con el CRM del admin:
-    mandar a Inactivo un chat con lead registra el motivo en el lead (el
-    mismo porqué que pone el panel), y sacarlo de Inactivo lo quita. La
-    mano local manda hasta que el chat reciba un mensaje más nuevo que
-    `ultima`; entonces el semáforo vuelve a decidir. Vuelve "" si todo
-    bien, o el mensaje de error para la pantalla."""
-    if columna not in CLAVES_COLUMNA or not chat_id:
-        return ""
-    _columnas, por_chat = tablero()
-    chat = por_chat.get(chat_id) or {}
-    ultima = chat.get("fecha") or ""
-
-    # El espejo hacia el CRM (Twenty/Linear/Odoo, vía crm_flujo): primero
-    # se escribe allá; si el CRM no responde, la mano NO se guarda — la
-    # tarjeta rebotaría al refrescar y contaría una mentira.
-    lead_id = chat.get("lead_crm_id") or ""
-    if lead_id:
-        if columna == "inactivo":
-            if not crm_flujo.registrar_motivo(lead_id, (motivo or "").upper()):
-                return "No se pudo registrar el motivo en el CRM; inténtalo de nuevo."
-        elif chat.get("columna") == "inactivo":
-            if not crm_flujo.registrar_motivo(lead_id, ""):
-                return "No se pudo quitar el motivo en el CRM; inténtalo de nuevo."
-
-    iniciar_tablas()
-    ahora = datetime.now(ZONA_PANAMA).isoformat()
-    with _db() as con:
-        con.execute("""
-            INSERT INTO control_tablero (chat, columna, motivo, ultima, actualizado)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(chat) DO UPDATE SET columna = excluded.columna,
-                motivo = excluded.motivo, ultima = excluded.ultima,
-                actualizado = excluded.actualizado
-        """, (chat_id, columna, motivo if motivo in MOTIVOS else None, ultima, ahora))
-    return ""

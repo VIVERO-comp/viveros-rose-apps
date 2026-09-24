@@ -23,7 +23,7 @@ from fastapi.templating import Jinja2Templates
 from . import (acceso_google, agenda, avisos, calculos, calendario,
                calendario_google, colores, retail,
                calendario_ics, conteos, control, cotizaciones,
-               coworkers, crm_flujo, crm_twenty, datos, fichas, fotos,
+               coworkers, crm_twenty, datos, fichas, fotos,
                linear_leads, seguridad, ventas)
 
 app = FastAPI(title="Control Viverorose")
@@ -69,7 +69,6 @@ plantillas.env.globals["cargos_catalogo"] = ventas.CARGOS
 # activo"), así que RETAIL_EN_MENU=0 / CRM_EN_MENU=0 esconden la pestaña
 # y las pantallas siguen vivas y funcionando en /retail y /crm.
 plantillas.env.globals["retail_en_nav"] = retail.en_menu
-plantillas.env.globals["crm_en_nav"] = crm_flujo.en_menu
 
 
 def fecha_bonita(iso):
@@ -2225,50 +2224,149 @@ async def retail_fecha(request: Request):
 
 @app.get("/control")
 def control_pantalla(request: Request):
-    """La pestaña Control: el kanban de chats de WhatsApp (versión C del
-    artefacto "Tablero Control", elegida por el dueño el 23/09/2026)."""
-    columnas, por_chat = control.tablero()
-    abierta = por_chat.get(request.query_params.get("abrir", ""))
-    con_motivo = por_chat.get(request.query_params.get("motivo", ""))
-    # La ficha completa del lead (la MISMA del CRM: datos, notas y la
-    # conversación entera) cuando el chat casa con uno; sin lead, la
-    # tarjeta se queda con su ficha corta.
-    ficha = None
-    if abierta and abierta.get("lead_crm_id"):
-        ficha = crm_flujo.detalle(abierta["lead_crm_id"])
+    """La pestaña Control (Fase 5, 24/09/2026): reparte el trabajo.
+
+    Dos vistas sobre el MISMO tablero de Linear — «Por empleado» (reparto,
+    solo el dueño) y «Por estado» (las 8 columnas del embudo, filtrado a lo
+    suyo si es un empleado). Control no guarda nada propio: todo se lee y
+    se escribe en el issue.
+    """
+    empleada = request.state.empleada
+    alc = control.alcance(empleada, _es_admin(empleada))
+    vista = control.vista_pedida(request.query_params.get("vista", ""), alc)
+    leads = linear_leads.listar(
+        refrescar=request.query_params.get("refrescar") == "1")
+
+    if vista == "empleado":
+        columnas = control.tablero_por_empleado(leads)
+    else:
+        columnas = control.tablero_por_estado(alc["solo_resp"], leads)
+
+    # El celular del encargado suena cuando un lead gana «Te toca»; una
+    # sola vez por lead, y por detrás para que la pantalla no espere.
+    control.avisar_en_fondo(leads)
+
+    abierta = control.ficha(request.query_params.get("abrir", ""))
+    # El modal de la corrección manual: a un estado nuevo no se llega sin
+    # motivo, así que el drag (y el botón) pasan por aquí.
+    moviendo = None
+    ref_mover = request.query_params.get("mover", "")
+    destino = linear_leads.POR_CLAVE.get(request.query_params.get("a", ""))
+    if ref_mover and destino:
+        lead = control.ficha(ref_mover)
+        if lead and control.puede_tocar(lead, alc):
+            moviendo = {"lead": lead, "destino": destino}
+
+    puede_escribir = linear_leads.escritura_activa() or not linear_leads.configurado()
     return plantillas.TemplateResponse(request, "control.html", {
-        "empleada": request.state.empleada,
-        "modo": "muestra" if not crm_twenty.twenty_configurado() else "twenty",
+        "empleada": empleada,
+        "modo": linear_leads.modo(),
+        "alc": alc,
+        "vista": vista,
         "columnas": columnas,
         "abierta": abierta,
-        "ficha": ficha,
-        "estados": {c["clave"]: c for c in crm_flujo.COLUMNAS},
-        "con_motivo": con_motivo,
-        "motivos": control.MOTIVOS,
-        "dias_ventana": control.DIAS_VENTANA,
+        "moviendo": moviendo,
+        "estados": linear_leads.ESTADOS,
+        "responsables": linear_leads.responsables(),
+        "motivos": linear_leads.MOTIVOS_PERDIDA,
+        "puede_mover": puede_escribir,
+        "puede_tocar_abierta": (
+            puede_escribir and control.puede_tocar(abierta, alc)
+            if abierta else False),
         "aviso": request.query_params.get("aviso"),
         "error": request.query_params.get("error"),
     })
 
 
+def _control_vuelve(vista, aviso="", error="", abrir=""):
+    partes = [f"vista={quote(vista)}"]
+    if abrir:
+        partes.append("abrir=" + quote(abrir))
+    if aviso:
+        partes.append("aviso=" + quote(aviso))
+    if error:
+        partes.append("error=" + quote(error))
+    return RedirectResponse("/control?" + "&".join(partes), status_code=303)
+
+
+def _control_permiso(request, ref):
+    """(alcance, vista, error) — el candado del servidor.
+
+    Un empleado solo mueve lo suyo, y eso se verifica AQUÍ: que el
+    navegador no muestre el botón no basta, porque un POST se puede mandar
+    a mano.
+    """
+    empleada = request.state.empleada
+    alc = control.alcance(empleada, _es_admin(empleada))
+    vista = control.vista_pedida(request.query_params.get("vista", ""), alc)
+    if not (linear_leads.escritura_activa() or not linear_leads.configurado()):
+        return alc, vista, ("Esta instancia mira el tablero real pero no "
+                            "escribe en Linear.")
+    lead = linear_leads.uno(ref)
+    if lead is None:
+        return alc, vista, "Ese lead ya no está en Linear."
+    if not control.puede_tocar(lead, alc):
+        return alc, vista, f"Ese lead es de {lead.get('resp') or 'nadie'}: no lo movés vos."
+    return alc, vista, ""
+
+
+@app.post("/control/responsable")
+async def control_responsable(request: Request):
+    """Repartir: la etiqueta `Resp:` del issue cambia de nombre.
+
+    Es lo que hace el arrastre de la vista «Por empleado». Nunca toca el
+    `assignee` del issue.
+    """
+    form = await request.form()
+    ref = form.get("ref", "")
+    alc, vista, error = _control_permiso(request, ref)
+    if error:
+        return _control_vuelve(vista, error=error)
+    if not alc["admin"]:
+        return _control_vuelve(vista, error="Repartir es cosa del dueño.")
+    autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
+    aviso, error = control.mover_a_empleado(ref, form.get("resp", ""), autor=autor)
+    return _control_vuelve(vista, aviso=aviso, error=error)
+
+
+@app.post("/control/estado")
+async def control_estado(request: Request):
+    """Corregir el estado a mano: exige motivo y queda firmado.
+
+    Sin motivo (el caso del arrastre) redirige al modal que lo pregunta; el
+    modal vuelve aquí con el motivo escrito.
+    """
+    form = await request.form()
+    ref, estado = form.get("ref", ""), form.get("estado", "")
+    alc, vista, error = _control_permiso(request, ref)
+    if error:
+        return _control_vuelve(vista, error=error)
+    if estado not in linear_leads.POR_CLAVE:
+        return _control_vuelve(vista, error="Ese estado no existe en el embudo.")
+    if not (form.get("nota") or "").strip():
+        return RedirectResponse(
+            f"/control?vista={quote(vista)}&mover={quote(ref)}&a={quote(estado)}",
+            status_code=303)
+    autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
+    aviso, error = control.mover_a_estado(
+        ref, estado, nota=form.get("nota", ""), motivo=form.get("motivo", ""),
+        autor=autor)
+    return _control_vuelve(vista, aviso=aviso, error=error)
+
+
 @app.post("/control/nota")
 async def control_nota(request: Request):
-    """Una nota desde la ficha de Control: el mismo historial del issue de
-    Linear que ven el panel y la pestaña CRM."""
+    """Una nota sobre el lead: un comentario en su issue de Linear."""
     form = await request.form()
-    chat, lead, texto = form.get("chat", ""), form.get("lead", ""), form.get("texto", "")
-    if crm_flujo.escribir_nota(lead, texto):
-        return RedirectResponse(
-            f"/control?abrir={quote(chat)}&aviso=" + quote("Nota guardada."),
-            status_code=303)
-    return RedirectResponse(
-        f"/control?abrir={quote(chat)}&error=" + quote(
-            "No se pudo guardar la nota; inténtalo de nuevo."),
-        status_code=303)
+    ref = form.get("ref", "")
+    _alc, vista, error = _control_permiso(request, ref)
+    if error:
+        return _control_vuelve(vista, error=error, abrir=ref)
+    autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
+    aviso, error = control.escribir_nota(ref, form.get("texto", ""), autor=autor)
+    return _control_vuelve(vista, aviso=aviso, error=error, abrir=ref)
 
 
-# ---------------------------------------------------------------------------
-# Avisos Web Push: el celular suena aunque la app esté cerrada (23/09/2026)
 # ---------------------------------------------------------------------------
 
 @app.get("/sw-avisos.js")
@@ -2336,121 +2434,6 @@ def avisos_baja(request: Request):
 def equipo_redirige():
     """La pestaña se renombró a Control (23/09/2026); el enlace viejo vive."""
     return RedirectResponse("/control", status_code=308)
-
-
-@app.post("/control/mover")
-async def control_mover(request: Request):
-    form = await request.form()
-    chat, columna = form.get("chat", ""), form.get("columna", "")
-    motivo = form.get("motivo", "")
-    # A Inactivo no se llega sin motivo: el drag (o el botón) redirige al
-    # modal que pregunta por qué, y el modal vuelve aquí con el motivo.
-    if columna == "inactivo" and motivo not in control.MOTIVOS:
-        return RedirectResponse(f"/control?motivo={quote(chat)}", status_code=303)
-    error = control.mover(chat, columna, motivo)
-    if error:
-        return RedirectResponse("/control?aviso=" + quote(error), status_code=303)
-    return RedirectResponse("/control", status_code=303)
-
-
-@app.get("/crm")
-def crm_pantalla(request: Request):
-    """La pestaña CRM: el espejo del CRM del admin (pedido del dueño,
-    23/09/2026: "mirror idéntico y sync"). El tablero no se arrastra — el
-    estado se mueve en Linear, igual que en el admin — pero la ficha trae
-    lo mismo que el panel: motivo, notas y la conversación completa."""
-    columnas, inactivos = crm_flujo.tablero()
-    abierta = None
-    if request.query_params.get("abrir"):
-        abierta = crm_flujo.detalle(request.query_params.get("abrir"))
-    return plantillas.TemplateResponse(request, "crm.html", {
-        "empleada": request.state.empleada,
-        "modo": "muestra" if not crm_twenty.twenty_configurado() else "twenty",
-        "columnas": columnas,
-        "inactivos": inactivos,
-        "abierta": abierta,
-        "motivos": crm_flujo.MOTIVOS,
-        "intereses": crm_flujo.INTERESES,
-        "estados": {c["clave"]: c for c in crm_flujo.COLUMNAS},
-        "aviso": request.query_params.get("aviso"),
-        "error": request.query_params.get("error"),
-    })
-
-
-@app.post("/crm/mover")
-async def crm_mover(request: Request):
-    """El drag del kanban: solo hacia En conversación, Pedido pendiente o
-    Ganado (los otros estados los pone el sistema). Mueve el issue en
-    Linear y espeja Twenty, igual que el drag del panel /admin."""
-    form = await request.form()
-    lead, estado = form.get("lead", ""), form.get("estado", "")
-    if crm_flujo.mover_estado(lead, estado):
-        return RedirectResponse("/crm", status_code=303)
-    return RedirectResponse(
-        "/crm?error=" + quote("No se pudo mover el lead; inténtalo de nuevo."),
-        status_code=303)
-
-
-@app.post("/crm/motivo")
-async def crm_motivo(request: Request):
-    """El porqué del lead, como lo registra el panel /admin (mismo campo,
-    mismas labels de Linear y archivo en Odoo cuando la clave del admin
-    está configurada). motivo vacío = quitarlo."""
-    form = await request.form()
-    lead, motivo = form.get("lead", ""), form.get("motivo", "")
-    if crm_flujo.registrar_motivo(lead, motivo):
-        aviso = "Motivo quitado: el lead vuelve a su columna." if not motivo \
-            else "Motivo registrado; el lead pasa a Inactivos, aquí y en el admin."
-        return RedirectResponse(
-            f"/crm?abrir={quote(lead)}&aviso=" + quote(aviso), status_code=303)
-    return RedirectResponse(
-        f"/crm?abrir={quote(lead)}&error=" + quote(
-            "No se pudo escribir el motivo en el CRM; inténtalo de nuevo."),
-        status_code=303)
-
-
-@app.post("/crm/interes")
-async def crm_interes(request: Request):
-    """Corrige el tipo de interés del lead (Abraham, 23/09/2026): lo pone el
-    clasificador leyendo el mensaje y, cuando se equivoca, se cambia desde
-    el chip de la ficha. Va por el puente del frontend, que lo escribe en
-    Twenty, en la label de Linear —y con ella se mueven la pestaña Retail y
-    el log de servicio del calendario— y en la oportunidad de Odoo."""
-    form = await request.form()
-    lead, interes = form.get("lead", ""), form.get("interes", "")
-    hecho = crm_flujo.cambiar_interes(lead, interes)
-    if hecho:
-        nombre = crm_flujo.INTERESES.get(interes, interes)
-        # El aviso dice lo que DE VERDAD quedó: Linear y Odoo son
-        # best-effort del otro lado del puente y pueden no haber entrado.
-        faltaron = [donde for donde, ok in
-                    (("Linear", hecho["en_linear"]), ("Odoo", hecho["en_odoo"]))
-                    if not ok]
-        aviso = f"Tipo cambiado a {nombre}."
-        if faltaron and crm_twenty.twenty_configurado():
-            aviso += " Ojo: no entró en " + " ni en ".join(faltaron) + "."
-        return RedirectResponse(
-            f"/crm?abrir={quote(lead)}&aviso=" + quote(aviso), status_code=303)
-    return RedirectResponse(
-        f"/crm?abrir={quote(lead)}&error=" + quote(
-            "No se pudo cambiar el tipo; inténtalo de nuevo."),
-        status_code=303)
-
-
-@app.post("/crm/nota")
-async def crm_nota(request: Request):
-    """Una nota sobre el lead: cae como comentario del issue en Linear,
-    firmada — el mismo historial que ven el panel y Abraham en Linear."""
-    form = await request.form()
-    lead, texto = form.get("lead", ""), form.get("texto", "")
-    if crm_flujo.escribir_nota(lead, texto):
-        return RedirectResponse(
-            f"/crm?abrir={quote(lead)}&aviso=" + quote("Nota guardada."),
-            status_code=303)
-    return RedirectResponse(
-        f"/crm?abrir={quote(lead)}&error=" + quote(
-            "No se pudo guardar la nota; inténtalo de nuevo."),
-        status_code=303)
 
 
 def _volver_a(request, aviso="", error=""):

@@ -289,27 +289,31 @@ def test_los_botones_de_sync_son_directos(cliente):
 
 
 
-def test_retail_y_crm_salen_del_menu_con_la_bandera(cliente, monkeypatch):
-    """El dueño las sacó de la vista el 24/09/2026 ("que no se vea en el
-    inventario pero dejalo activo"): las pestañas desaparecen de TODOS los
-    menús (calendario, Inicio y Control) y Control se queda, pero las
-    pantallas siguen funcionando para quien entre con la URL."""
+def test_retail_sale_del_menu_con_la_bandera(cliente, monkeypatch):
+    """El dueño la sacó de la vista el 24/09/2026 ("que no se vea en el
+    inventario pero dejalo activo"): la pestaña desaparece de TODOS los
+    menús (calendario, Inicio y Control), pero la pantalla sigue
+    funcionando para quien entre con la URL.
+
+    La pestaña CRM ya no entra en esta prueba: murió en la Fase 5
+    (24/09/2026) y no hay bandera que la devuelva.
+    """
     monkeypatch.setenv("RETAIL_EN_MENU", "0")
-    monkeypatch.setenv("CRM_EN_MENU", "0")
     for pagina in (_abrir(cliente).text, cliente.get("/?tab=stock").text,
                    cliente.get("/control").text):
         assert 'href="/retail"' not in pagina
         assert 'href="/crm"' not in pagina
         assert 'href="/control"' in pagina or "Control" in pagina
-    # Escondidas, no apagadas: las rutas siguen respondiendo la pantalla.
-    for ruta in ("/retail", "/crm"):
-        assert cliente.get(ruta, follow_redirects=False).status_code == 200
+    # Escondida, no apagada: la ruta sigue respondiendo la pantalla.
+    assert cliente.get("/retail", follow_redirects=False).status_code == 200
 
 
-def test_retail_y_crm_siguen_en_el_menu_sin_la_bandera(cliente):
-    """Sin las variables (desarrollo y pruebas) todo sigue como antes."""
+def test_retail_sigue_en_el_menu_sin_la_bandera(cliente):
+    """Sin la variable (desarrollo y pruebas) Retail sigue como antes."""
     cuerpo = _abrir(cliente).text
-    assert 'href="/retail"' in cuerpo and 'href="/crm"' in cuerpo
+    assert 'href="/retail"' in cuerpo
+    # Y la pestaña CRM no vuelve: se borró, no se escondió.
+    assert 'href="/crm"' not in cuerpo
 
 
 # ---------------------------------------------------------------------------

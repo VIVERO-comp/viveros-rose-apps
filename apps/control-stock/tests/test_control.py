@@ -1,252 +1,421 @@
-"""La pestaña Control (kanban de chats) y la pestaña CRM, en modo muestra."""
+"""La pestaña Control, Fase 5: reparte el trabajo del equipo.
+
+Corren en modo muestra (sin LINEAR_API_KEY), así que el tablero del equipo
+LEAD vive en memoria. Lo que se cuida aquí es lo que duele si se rompe:
+que Control no guarde nada propio, que repartir cambie la etiqueta `Resp:`
+y nunca el assignee, que un empleado vea y mueva SOLO lo suyo (verificado
+en el servidor), y que una corrección de estado a mano no pase sin motivo.
+
+Los leads de muestra (app/linear_leads.py):
+
+    LEAD-91  Tamara              Por agendar  Resp: Ruben
+    LEAD-90  Juan Carlos Lopez   Por agendar  sin Resp:
+    LEAD-89  Boda Las Nubes      Agendado     Resp: Mary
+    LEAD-88  Hotel Bristol       Entregado    Resp: Ruben
+    LEAD-87  Ximena Dávila       Cotizado     sin Resp:, Te toca
+    LEAD-86  Nedjaira            Hablando     Resp: Salomón, Te toca
+    LEAD-85  Diego Armando       Nuevo        sin Resp:
+    LEAD-84  Soledad             Ganado       Resp: Abraham
+    LEAD-83  Monica Gama         Perdido      sin Resp:
+"""
 
 import pytest
 
-from app import control, crm_flujo
+from app import control, linear_leads
 
 
 @pytest.fixture(autouse=True)
-def muestra_limpia(monkeypatch):
-    monkeypatch.delenv("TWENTY_API_KEY", raising=False)
+def muestra_limpia(monkeypatch, db_limpia):
     monkeypatch.delenv("LINEAR_API_KEY", raising=False)
-    control.refrescar()
-    crm_flujo.refrescar()
-    # En muestra las escrituras (motivo, drag de estado) mutan las filas:
-    # cada caso arranca con el tablero de fábrica (solo Monica inactiva).
-    de_fabrica = {"L1": "NUEVO", "L2": "EN_CONVERSACION", "L3": "CONTACTADO",
-                  "L4": "GANADO", "L5": "CONTACTADO"}
-    tipo_de_fabrica = {"L1": "PLANTAS_RETAIL", "L2": "PLANTAS_RETAIL",
-                       "L3": "MAYORISTA", "L4": "PLANTAS_RETAIL",
-                       "L5": "PLANTAS_RETAIL"}
-    for fila in crm_flujo._MUESTRA:
-        fila["motivoNoAvance"] = "SOLO_PREGUNTABA" if fila["id"] == "L5" else ""
-        fila["estado"] = de_fabrica[fila["id"]]
-        fila["tipoInteres"] = [tipo_de_fabrica[fila["id"]]]
+    monkeypatch.delenv("CALENDARIO_ESCRITURA", raising=False)
+    monkeypatch.delenv("AJUSTES_ADMINS", raising=False)
+    linear_leads.reiniciar_muestra()
+    control.iniciar_tablas()
 
 
-def test_el_semaforo_reparte_las_columnas(cliente):
+@pytest.fixture
+def de_dueno(monkeypatch):
+    """La sesión de las pruebas es el dueño (ve las dos vistas y todo).
+
+    `genesis` es la empleada con la que entra el TestClient (conftest).
+    """
+    monkeypatch.setenv("AJUSTES_ADMINS", "genesis")
+
+
+ADMIN = {"vistas": ["empleado", "estado"], "solo_resp": "", "admin": True}
+EMPLEADO = {"vistas": ["estado"], "solo_resp": "Ruben", "admin": False}
+
+
+# ---------------------------------------------------------------------------
+# Control no guarda nada propio
+# ---------------------------------------------------------------------------
+
+def test_lo_unico_que_guarda_es_el_acuse_de_los_avisos():
+    from app.datos import _db
+    with _db() as con:
+        tablas = {f[0] for f in con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "control_acuse" in tablas
+    # Las tablas del kanban viejo ya no se crean: el estado vive en Linear.
+    assert "control_tablero" not in tablas
+    assert "control_visto" not in tablas
+
+
+# ---------------------------------------------------------------------------
+# Vista por empleado
+# ---------------------------------------------------------------------------
+
+def test_las_columnas_son_las_etiquetas_de_responsable():
+    columnas = control.tablero_por_empleado()
+    assert [c["titulo"] for c in columnas] == [
+        "Sin asignar", "Abraham", "Mary", "Ruben", "Salomón"]
+
+
+def test_cada_lead_cae_en_la_columna_de_su_responsable():
+    por_titulo = {c["titulo"]: {l["ref"] for l in c["leads"]}
+                  for c in control.tablero_por_empleado()}
+    assert por_titulo["Ruben"] == {"LEAD-91", "LEAD-88"}
+    assert por_titulo["Mary"] == {"LEAD-89"}
+    assert por_titulo["Sin asignar"] == {"LEAD-90", "LEAD-87", "LEAD-85"}
+
+
+def test_los_cerrados_no_se_reparten():
+    # Soledad (Ganado) y Monica (Perdido) no tienen trabajo que hacerles.
+    todos = {l["ref"] for c in control.tablero_por_empleado() for l in c["leads"]}
+    assert "LEAD-84" not in todos and "LEAD-83" not in todos
+
+
+# ---------------------------------------------------------------------------
+# Vista por estado
+# ---------------------------------------------------------------------------
+
+def test_la_vista_por_estado_trae_las_8_columnas_del_embudo():
+    columnas = control.tablero_por_estado()
+    assert [c["titulo"] for c in columnas] == [
+        "Nuevo", "Hablando", "Cotizado", "Por agendar",
+        "Agendado", "Entregado", "Ganado", "Perdido"]
+
+
+def test_un_empleado_solo_ve_lo_suyo():
+    columnas = control.tablero_por_estado(solo_resp="Ruben")
+    refs = {l["ref"] for c in columnas for l in c["leads"]}
+    assert refs == {"LEAD-91", "LEAD-88"}
+
+
+def test_un_empleado_sin_etiqueta_resp_no_ve_nada():
+    # Correcto: todavía no le toca ningún lead.
+    assert control.alcance({"id": "nadie"}, es_admin=False)["solo_resp"] == ""
+
+
+# ---------------------------------------------------------------------------
+# El alcance: quién ve y quién toca qué (decidido en el servidor)
+# ---------------------------------------------------------------------------
+
+def test_el_dueno_ve_las_dos_vistas_y_todo():
+    alc = control.alcance({"id": "abraham"}, es_admin=True)
+    assert alc == ADMIN
+
+
+def test_el_empleado_solo_tiene_la_vista_por_estado():
+    alc = control.alcance(
+        {"id": "ruben", "nombre": "Rubén", "email": "ruben@viverorose.com",
+         "email_verificado": True}, es_admin=False)
+    assert alc["vistas"] == ["estado"]
+    assert alc["solo_resp"] == "Ruben"
+    assert alc["admin"] is False
+
+
+def test_una_vista_que_no_le_toca_cae_en_la_suya():
+    assert control.vista_pedida("empleado", EMPLEADO) == "estado"
+    assert control.vista_pedida("", ADMIN) == "empleado"
+    assert control.vista_pedida("estado", ADMIN) == "estado"
+
+
+def test_un_empleado_no_puede_tocar_un_lead_de_otro():
+    mio = linear_leads.uno("LEAD-91")      # Resp: Ruben
+    de_otro = linear_leads.uno("LEAD-89")  # Resp: Mary
+    de_nadie = linear_leads.uno("LEAD-90")
+    assert control.puede_tocar(mio, EMPLEADO) is True
+    assert control.puede_tocar(de_otro, EMPLEADO) is False
+    assert control.puede_tocar(de_nadie, EMPLEADO) is False
+    # El dueño, todo.
+    for lead in (mio, de_otro, de_nadie):
+        assert control.puede_tocar(lead, ADMIN) is True
+
+
+# ---------------------------------------------------------------------------
+# Repartir: la etiqueta `Resp:`, nunca el assignee
+# ---------------------------------------------------------------------------
+
+def test_repartir_cambia_la_etiqueta_resp():
+    aviso, error = control.mover_a_empleado("LEAD-90", "Mary", autor="Abraham")
+    assert error == ""
+    lead = linear_leads.uno("LEAD-90")
+    assert lead["resp"] == "Mary"
+    assert "Resp: Mary" in lead["etiquetas"]
+    assert "Juan Carlos Lopez es de Mary" in aviso
+
+
+def test_repartir_avisa_de_la_etiqueta_de_whatsapp_una_sola_vez():
+    # El aviso manual existe porque OpenWA (baileys) no soporta etiquetas;
+    # se da UNA vez por lead y responsable, y no en cada recarga.
+    aviso, _e = control.mover_a_empleado("LEAD-91", "Mary")
+    assert "Pon en WhatsApp la etiqueta: Mary" in aviso
+    assert "quita la de Ruben" in aviso
+    # Volver a ponerlo en Ruben y de vuelta en Mary: el acuse del par se
+    # olvidó al cambiar de manos, así que el aviso vuelve a salir.
+    control.mover_a_empleado("LEAD-91", "Ruben")
+    aviso, _e = control.mover_a_empleado("LEAD-91", "Mary")
+    assert "Pon en WhatsApp la etiqueta: Mary" in aviso
+
+
+def test_el_mismo_reparto_repetido_no_repite_el_aviso():
+    control.mover_a_empleado("LEAD-90", "Mary")
+    # Sin cambio de manos no hay nada que avisar.
+    aviso, error = control.mover_a_empleado("LEAD-90", "Mary")
+    assert aviso == "" and error == ""
+
+
+def test_quitar_el_responsable_lo_deja_sin_asignar():
+    aviso, error = control.mover_a_empleado("LEAD-91", "")
+    assert error == ""
+    assert "sin asignar" in aviso
+    assert linear_leads.uno("LEAD-91")["resp"] == ""
+
+
+def test_un_responsable_que_no_existe_en_linear_se_rechaza():
+    # Las etiquetas no se crean solas: aquí se dice en vez de inventarla.
+    aviso, error = control.mover_a_empleado("LEAD-91", "Fulano")
+    assert aviso == ""
+    assert "No existe la etiqueta «Resp: Fulano»" in error
+    assert linear_leads.uno("LEAD-91")["resp"] == "Ruben"
+
+
+# ---------------------------------------------------------------------------
+# El enganche para WAHA (Fase W): hoy vacío a propósito
+# ---------------------------------------------------------------------------
+
+def test_el_enganche_de_whatsapp_esta_puesto_pero_apagado():
+    assert control.waha_activo() is False
+    assert control.etiquetar_en_whatsapp("6552-0966", "Ruben") is False
+
+
+def test_con_waha_andando_el_aviso_manual_se_apaga(monkeypatch):
+    """El día que WAHA ande, se llena etiquetar_en_whatsapp() y el aviso
+    manual desaparece sin tocar nada más. Esto lo demuestra."""
+    monkeypatch.setattr(control, "waha_activo", lambda: True)
+    monkeypatch.setattr(control, "etiquetar_en_whatsapp",
+                        lambda celular, etiqueta: True)
+    aviso, error = control.mover_a_empleado("LEAD-91", "Mary")
+    assert error == ""
+    assert "Pon en WhatsApp" not in aviso
+    assert "La etiqueta de WhatsApp quedó puesta" in aviso
+
+
+# ---------------------------------------------------------------------------
+# Corregir el estado a mano: exige motivo y queda firmado
+# ---------------------------------------------------------------------------
+
+def test_corregir_el_estado_exige_motivo():
+    aviso, error = control.mover_a_estado("LEAD-86", "COTIZADO", nota="")
+    assert aviso == ""
+    assert "por qué la moviste" in error
+    assert linear_leads.uno("LEAD-86")["estado"] == "HABLANDO"
+
+
+def test_corregir_el_estado_queda_anotado_en_el_issue():
+    aviso, error = control.mover_a_estado(
+        "LEAD-86", "COTIZADO", nota="le pasé el precio por teléfono",
+        autor="Ruben")
+    assert error == ""
+    assert "Hablando → Cotizado" in aviso
+    lead = linear_leads.uno("LEAD-86")
+    assert lead["estado"] == "COTIZADO"
+    nota = linear_leads.comentarios(lead["id"])[0]["texto"]
+    assert "le pasé el precio por teléfono" in nota
+    assert "Ruben" in nota
+
+
+def test_corregir_hacia_atras_se_puede_a_mano():
+    # El automático nunca degrada; una corrección a mano sí.
+    aviso, error = control.mover_a_estado(
+        "LEAD-88", "AGENDADO", nota="no se entregó, me equivoqué", autor="Mary")
+    assert error == ""
+    assert linear_leads.uno("LEAD-88")["estado"] == "AGENDADO"
+
+
+def test_perdido_a_mano_pide_su_motivo_de_perdida():
+    aviso, error = control.mover_a_estado(
+        "LEAD-85", "PERDIDO", nota="no volvió a escribir")
+    assert aviso == ""
+    assert "Falta el motivo" in error
+    assert linear_leads.uno("LEAD-85")["estado"] == "NUEVO"
+
+
+def test_perdido_con_motivo_pone_su_etiqueta():
+    aviso, error = control.mover_a_estado(
+        "LEAD-85", "PERDIDO", nota="dijo que estaba caro",
+        motivo="PRECIO", autor="Mary")
+    assert error == ""
+    lead = linear_leads.uno("LEAD-85")
+    assert lead["estado"] == "PERDIDO"
+    assert lead["motivo"] == "Precio"
+
+
+def test_un_estado_inventado_se_rechaza():
+    aviso, error = control.mover_a_estado(
+        "LEAD-86", "CONTACTADO", nota="algo")
+    assert aviso == ""
+    assert "no existe" in error
+
+
+# ---------------------------------------------------------------------------
+# La pantalla
+# ---------------------------------------------------------------------------
+
+def test_el_dueno_abre_en_por_empleado(cliente, de_dueno):
     cuerpo = cliente.get("/control").text
-    assert "En curso" in cuerpo and "Esperando respuesta" in cuerpo
-    assert "Inactivo" in cuerpo and "Terminado" in cuerpo
-    # Terminado va ANTES de Inactivo (pedido del dueño, 23/09/2026).
-    assert cuerpo.index("Terminado") < cuerpo.index("Inactivo")
-    # Corrección del dueño (23/09/2026): Tamara escribió de último ->
-    # ESPERA la respuesta del vivero; a Kev le contestaron -> En curso;
-    # Soledad está Ganada -> Terminado.
-    _columnas, por_chat = control.tablero()
-    assert por_chat["m1"]["columna"] == "esperando" and por_chat["m1"]["debe"]
-    assert por_chat["m2"]["columna"] == "en_curso"
-    assert por_chat["m4"]["columna"] == "terminado"
+    assert "Sin asignar" in cuerpo
+    assert "Por empleado" in cuerpo and "Por estado" in cuerpo
+    assert "Tamara" in cuerpo
+    # Las columnas de los responsables, sacadas de las etiquetas de Linear.
+    for nombre in ("Abraham", "Mary", "Ruben", "Salomón"):
+        assert nombre in cuerpo
 
 
-def test_la_tarjeta_trae_mensaje_y_responder(cliente):
+def test_la_vista_por_estado_pinta_las_8_columnas(cliente, de_dueno):
+    cuerpo = cliente.get("/control", params={"vista": "estado"}).text
+    for titulo in ("Nuevo", "Hablando", "Cotizado", "Por agendar",
+                   "Agendado", "Entregado", "Ganado", "Perdido"):
+        assert titulo in cuerpo
+
+
+def test_el_empleado_no_ve_el_segmento_de_vistas(cliente):
+    # Sin AJUSTES_ADMINS la sesión de prueba no es admin.
     cuerpo = cliente.get("/control").text
-    assert "¿Tienen calatheas grandes?" in cuerpo       # el último mensaje
-    assert "wa.me/50765520966" in cuerpo                # botón Responder
-    assert "6552-0966" in cuerpo                        # número al lado del nombre
+    assert "Por empleado" not in cuerpo
 
 
-def test_la_ficha_de_control_es_la_misma_del_crm(cliente):
-    # Tamara (chat m1, lead L1): su ficha trae la conversación completa en
-    # burbujas, las notas y los datos del lead — como la ficha del CRM.
-    cuerpo = cliente.get("/control?abrir=m1").text
-    assert "Conversación · WhatsApp" in cuerpo
-    assert "msj-cliente" in cuerpo                     # burbuja del cliente
-    assert "Guardar nota" in cuerpo
-    assert "Estado CRM" in cuerpo
-    # Un chat sin lead (Diana, m3) conserva la ficha corta de siempre.
-    corta = cliente.get("/control?abrir=m3").text
-    assert "Guardar nota" not in corta
-    assert "eq-burbuja" in corta
+def test_la_ficha_ensena_el_lead_y_sus_notas(cliente, de_dueno):
+    cuerpo = cliente.get("/control", params={"abrir": "LEAD-91"}).text
+    assert "Tamara" in cuerpo
+    assert "Ruben" in cuerpo
+    assert "6552-0966" in cuerpo
+    assert "Se lo doy a" in cuerpo
+    assert "Corregir el estado" in cuerpo
 
 
-def test_mover_a_inactivo_pide_motivo_y_persiste(cliente):
-    # El drag manda a Inactivo sin motivo: el servidor redirige al modal.
-    r = cliente.post("/control/mover", data={"chat": "m3", "columna": "inactivo"},
-                     follow_redirects=False)
-    assert r.status_code == 303 and "motivo=m3" in r.headers["location"]
-    # El modal vuelve con el motivo y ahí sí se guarda.
-    r = cliente.post("/control/mover",
-                     data={"chat": "m3", "columna": "inactivo",
-                           "motivo": "solo_preguntaba"},
-                     follow_redirects=False)
-    assert r.status_code == 303
-    _columnas, por_chat = control.tablero()
-    assert por_chat["m3"]["columna"] == "inactivo"
-    assert por_chat["m3"]["motivo"] == "Solo preguntaba"
+def test_repartir_desde_la_pantalla(cliente, de_dueno):
+    respuesta = cliente.post("/control/responsable",
+                             params={"vista": "empleado"},
+                             data={"ref": "LEAD-90", "resp": "Mary"},
+                             follow_redirects=False)
+    assert respuesta.status_code == 303
+    assert "aviso=" in respuesta.headers["location"]
+    assert linear_leads.uno("LEAD-90")["resp"] == "Mary"
 
 
-def test_un_mensaje_nuevo_le_gana_a_la_mano(cliente):
-    cliente.post("/control/mover",
-                 data={"chat": "m3", "columna": "inactivo",
-                       "motivo": "no_contesto"})
-    # El cliente escribe DESPUÉS de la marca: el semáforo vuelve a decidir
-    # y el chat revive en Esperando respuesta (le deben una).
-    control._MUESTRA[2]["fecha"] = "2099-01-01T12:00:00+00:00"
-    try:
-        _columnas, por_chat = control.tablero()
-        assert por_chat["m3"]["columna"] == "esperando"
-    finally:
-        control._MUESTRA[2]["fecha"] = "2026-09-22T21:10:00+00:00"
+def test_repartir_no_lo_puede_un_empleado(cliente):
+    respuesta = cliente.post("/control/responsable",
+                             data={"ref": "LEAD-91", "resp": "Mary"},
+                             follow_redirects=False)
+    assert respuesta.status_code == 303
+    assert "error=" in respuesta.headers["location"]
+    assert linear_leads.uno("LEAD-91")["resp"] == "Ruben"
 
 
-def test_la_mano_le_gana_al_semaforo_mientras_no_haya_mensaje(cliente):
-    # Kev está en "En curso" (el vivero contestó); el empleado lo pasa a
-    # Esperando respuesta a mano y ahí se queda aunque el semáforo diga
-    # otra cosa.
-    cliente.post("/control/mover", data={"chat": "m2", "columna": "esperando"})
-    _columnas, por_chat = control.tablero()
-    assert por_chat["m2"]["columna"] == "esperando"
-    # Y lleva el punto rojo aunque el vivero haya contestado de último
-    # (corrección de Abraham, 23/09/2026): el punto es de la columna.
-    assert por_chat["m2"]["debe"]
-    assert "ctl-alerta" in cliente.get("/control").text
+def test_el_arrastre_entre_estados_pasa_por_el_modal_del_motivo(cliente, de_dueno):
+    # El drag manda ref + estado y NADA más: el servidor lo desvía al modal.
+    respuesta = cliente.post("/control/estado", params={"vista": "estado"},
+                             data={"ref": "LEAD-86", "estado": "COTIZADO"},
+                             follow_redirects=False)
+    assert respuesta.status_code == 303
+    destino = respuesta.headers["location"]
+    assert "mover=LEAD-86" in destino and "a=COTIZADO" in destino
+    assert linear_leads.uno("LEAD-86")["estado"] == "HABLANDO"
+    # Y el modal pide el motivo.
+    cuerpo = cliente.get("/control", params={
+        "vista": "estado", "mover": "LEAD-86", "a": "COTIZADO"}).text
+    assert "¿Por qué la movés?" in cuerpo
+    assert "Hablando → Cotizado" in cuerpo
+
+
+def test_el_modal_de_perdido_ofrece_los_seis_motivos(cliente, de_dueno):
+    cuerpo = cliente.get("/control", params={
+        "vista": "estado", "mover": "LEAD-85", "a": "PERDIDO"}).text
+    for texto in ("Precio", "No respondió", "Sin stock", "Fuera de zona",
+                  "Compró en otro lado", "Solo preguntaba"):
+        assert texto in cuerpo
+
+
+def test_mover_con_motivo_desde_la_pantalla(cliente, de_dueno):
+    respuesta = cliente.post(
+        "/control/estado", params={"vista": "estado"},
+        data={"ref": "LEAD-86", "estado": "COTIZADO",
+              "nota": "le pasé el precio por teléfono"},
+        follow_redirects=False)
+    assert respuesta.status_code == 303
+    assert linear_leads.uno("LEAD-86")["estado"] == "COTIZADO"
+
+
+def test_un_empleado_no_mueve_el_lead_de_otro_desde_la_pantalla(cliente):
+    respuesta = cliente.post(
+        "/control/estado",
+        data={"ref": "LEAD-89", "estado": "ENTREGADO", "nota": "porque sí"},
+        follow_redirects=False)
+    assert respuesta.status_code == 303
+    assert "error=" in respuesta.headers["location"]
+    assert linear_leads.uno("LEAD-89")["estado"] == "AGENDADO"
+
+
+def test_una_nota_desde_la_pantalla_cae_en_el_issue(cliente, de_dueno):
+    respuesta = cliente.post("/control/nota", params={"vista": "estado"},
+                             data={"ref": "LEAD-91", "texto": "llamar antes de ir"},
+                             follow_redirects=False)
+    assert respuesta.status_code == 303
+    lead = linear_leads.uno("LEAD-91")
+    assert "llamar antes de ir" in linear_leads.comentarios(lead["id"])[0]["texto"]
 
 
 def test_equipo_redirige_a_control(cliente):
-    r = cliente.get("/equipo", follow_redirects=False)
-    assert r.status_code == 308 and r.headers["location"] == "/control"
+    respuesta = cliente.get("/equipo", follow_redirects=False)
+    assert respuesta.status_code == 308
+    assert respuesta.headers["location"] == "/control"
 
 
-def test_el_crm_pinta_el_tablero_del_admin(cliente):
-    cuerpo = cliente.get("/crm").text
-    assert "Nuevo" in cuerpo and "Ganado" in cuerpo and "Perdido" in cuerpo
-    assert "PP-70211 · Tamara" in cuerpo
-    # Un lead con motivo no va en columnas: va en Inactivos.
-    assert "Inactivos (1)" in cuerpo
-    assert "PP-70190 · Monica Gama" in cuerpo
+# ---------------------------------------------------------------------------
+# El aviso al celular: una sola vez por «Te toca»
+# ---------------------------------------------------------------------------
 
-
-def test_la_tarjeta_del_crm_dice_donde_esta_en_retail(cliente):
-    # Kev (L2, issue LEAD-45) vive en el kanban Retail en "Por cotizar":
-    # su tarjeta del CRM lo dice en un label chiquito.
-    cuerpo = cliente.get("/crm").text
-    assert "Retail · por cotizar" in cuerpo
-    # Y su ficha trae el salto directo a esa tarjeta de Retail.
-    ficha = cliente.get("/crm?abrir=L2").text
-    assert "/retail?abrir=LEAD-45" in ficha
-
-
-def test_la_ficha_del_crm_trae_lo_del_panel(cliente):
-    cuerpo = cliente.get("/crm?abrir=L1").text
-    assert "PP-70211 · Tamara" in cuerpo
-    assert "¿Tienen calatheas grandes?" in cuerpo   # la conversación
-    assert "Registra el porqué" in cuerpo           # el bloque del motivo
-    assert "Guardar nota" in cuerpo                 # las notas se escriben
-
-
-def test_registrar_motivo_sincroniza_los_dos_tableros(cliente):
-    # Desde la ficha del CRM se registra el porqué, como en el panel.
-    r = cliente.post("/crm/motivo", data={"lead": "L3", "motivo": "DIJO_QUE_NO"},
-                     follow_redirects=False)
-    assert r.status_code == 303 and "aviso=" in r.headers["location"]
-    cuerpo = cliente.get("/crm").text
-    assert "Inactivos (2)" in cuerpo  # Monica + NC Renovando
-    # Quitarlo lo revive en su columna de siempre.
-    cliente.post("/crm/motivo", data={"lead": "L3", "motivo": ""})
-    assert "Inactivos (1)" in cliente.get("/crm").text
-
-
-def test_control_inactivo_se_espeja_en_el_crm(cliente):
-    # Tamara (chat m1, lead L1): mandarla a Inactivo en Control registra el
-    # motivo en su lead — el admin y la pestaña CRM lo ven igual.
-    r = cliente.post("/control/mover",
-                     data={"chat": "m1", "columna": "inactivo",
-                           "motivo": "solo_preguntaba"},
-                     follow_redirects=False)
-    assert r.status_code == 303
-    _columnas, por_chat = control.tablero()
-    assert por_chat["m1"]["columna"] == "inactivo"
-    assert "PP-70211 · Tamara" in [t["titulo"] for t in crm_flujo.tablero()[1]]
-    # Sacarla de Inactivo en Control quita el motivo del lead: revive en
-    # los dos tableros.
-    cliente.post("/control/mover", data={"chat": "m1", "columna": "en_curso"})
-    assert crm_flujo.tablero()[1] == [t for t in crm_flujo.tablero()[1]
-                                      if t["titulo"] != "PP-70211 · Tamara"]
-
-
-def test_el_drag_del_crm_solo_acepta_los_tres_destinos(cliente):
-    # Nuevo y Contactado no son destino del drag: los pone el sistema.
-    r = cliente.post("/crm/mover", data={"lead": "L1", "estado": "NUEVO"},
-                     follow_redirects=False)
-    assert "error=" in r.headers["location"]
-    r = cliente.post("/crm/mover", data={"lead": "L1", "estado": "CONTACTADO"},
-                     follow_redirects=False)
-    assert "error=" in r.headers["location"]
-    # A En conversación sí, y el tablero lo refleja.
-    r = cliente.post("/crm/mover", data={"lead": "L1", "estado": "EN_CONVERSACION"},
-                     follow_redirects=False)
-    assert r.status_code == 303 and "error" not in r.headers["location"]
-    columnas, _inactivos = crm_flujo.tablero()
-    conversacion = next(c for c in columnas if c["clave"] == "EN_CONVERSACION")
-    assert "PP-70211 · Tamara" in [t["titulo"] for t in conversacion["tarjetas"]]
-    # Y las tres listas de destino son las únicas que aceptan soltar.
-    cuerpo = cliente.get("/crm").text
-    assert cuerpo.count("data-estado=") == 3
-
-
-def test_ganado_por_drag_llega_a_terminado_en_control(cliente):
-    # Arrastrar el lead de Kev a Ganado en el CRM manda su chat a
-    # Terminado en Control: mismo espejo, mismo dato.
-    cliente.post("/crm/mover", data={"lead": "L2", "estado": "GANADO"})
-    _columnas, por_chat = control.tablero()
-    assert por_chat["m2"]["columna"] == "terminado"
-
-
-def test_el_motivo_del_admin_llega_a_control(cliente):
-    # El admin registra un motivo sobre el lead de Kev (L2): su chat cae
-    # solo en Inactivo dentro de Control, sin que nadie lo arrastre aquí.
-    crm_flujo.registrar_motivo("L2", "NO_CONTESTO")
-    _columnas, por_chat = control.tablero()
-    assert por_chat["m2"]["columna"] == "inactivo"
-    assert por_chat["m2"]["motivo"] == "No contestó"
-    # Y el Ganado del CRM ya mandaba a Soledad a Terminado (mismo espejo).
-    assert por_chat["m4"]["columna"] == "terminado"
-
-
-# --- El tipo de interés se corrige desde la ficha (Abraham, 23/09/2026) ----
-
-def test_la_ficha_ofrece_los_tipos_para_corregir_el_de_ahora(cliente):
-    cuerpo = cliente.get("/crm?abrir=L1").text
-    assert 'action="/crm/interes"' in cuerpo
-    # El que tiene puesto sale marcado (y sin poder tocarse otra vez).
-    assert 'value="PLANTAS_RETAIL"' in cuerpo and "puesto" in cuerpo
-    # Y están los otros diez para elegir, con el nombre que se ve en Twenty.
-    assert "Eventos · Alquiler" in cuerpo and "Mantenimiento" in cuerpo
-
-
-def test_cambiar_el_tipo_lo_deja_puesto_en_la_ficha(cliente):
-    respuesta = cliente.post("/crm/interes",
-                             data={"lead": "L1", "interes": "EVENTOS_ALQUILER"},
-                             follow_redirects=False)
-    assert respuesta.status_code == 303
-    assert crm_flujo.detalle("L1")["interes"] == "EVENTOS_ALQUILER"
-    assert crm_flujo.detalle("L1")["chips"][0]["texto"] == "Eventos · Alquiler"
-
-
-def test_un_tipo_inventado_no_toca_nada(cliente):
-    assert crm_flujo.cambiar_interes("L1", "PLANTAS_DE_MENTIRA") is None
-    assert crm_flujo.detalle("L1")["interes"] == "PLANTAS_RETAIL"
-
-
-def test_con_twenty_de_verdad_el_cambio_va_por_el_puente(monkeypatch):
-    """Con Twenty configurado NO se escribe a medias desde aquí: la
-    corrección viaja a /api/crm/lead-interes, que mueve Twenty, la label de
-    Linear y la etiqueta de Odoo de una sola vez."""
-    llamadas = []
-    monkeypatch.setattr(crm_flujo.crm_twenty, "twenty_configurado", lambda: True)
+@pytest.fixture
+def con_avisos(monkeypatch):
+    mandados = []
+    monkeypatch.setattr(control.avisos, "configurado", lambda: True)
     monkeypatch.setattr(
-        crm_flujo.crm_leads, "cambiar_tipo_de_interes",
-        lambda lead, interes: (llamadas.append((lead, interes))
-                               or {"ok": True, "enLinear": True, "enOdoo": True}))
-    monkeypatch.setattr(crm_flujo, "refrescar", lambda: None)
-    monkeypatch.setattr(crm_flujo, "_refrescar_retail", lambda: None)
-    assert crm_flujo.cambiar_interes("L9", "MANTENIMIENTO") == {"en_linear": True, "en_odoo": True}
-    assert llamadas == [("L9", "MANTENIMIENTO")]
+        control.avisos, "avisar",
+        lambda usuario, titulo, cuerpo, ruta: mandados.append(titulo))
+    return mandados
 
 
-def test_si_el_puente_falla_el_cambio_no_se_da_por_hecho(monkeypatch):
-    monkeypatch.setattr(crm_flujo.crm_twenty, "twenty_configurado", lambda: True)
-    monkeypatch.setattr(crm_flujo.crm_leads, "cambiar_tipo_de_interes",
-                        lambda lead, interes: None)
-    assert crm_flujo.cambiar_interes("L9", "MANTENIMIENTO") is None
+def test_el_aviso_suena_una_sola_vez_por_lead(con_avisos):
+    sonaron = control.avisar_a_quien_le_toca()
+    assert {l["ref"] for l in sonaron} == {"LEAD-87", "LEAD-86"}
+    assert len(con_avisos) == 2
+    # La segunda pintada de la pantalla no vuelve a sonar.
+    assert control.avisar_a_quien_le_toca() == []
+    assert len(con_avisos) == 2
+
+
+def test_cuando_contestamos_el_aviso_se_olvida_y_puede_volver(con_avisos):
+    control.avisar_a_quien_le_toca()
+    lead = linear_leads.uno("LEAD-87")
+    # Nuestra respuesta quita «Te toca»: el acuse se olvida.
+    linear_leads.poner_te_toca(lead["id"], False)
+    assert control.avisar_a_quien_le_toca() == []
+    # El cliente vuelve a escribir: suena de nuevo.
+    linear_leads.poner_te_toca(lead["id"], True)
+    assert [l["ref"] for l in control.avisar_a_quien_le_toca()] == ["LEAD-87"]
+
+
+def test_sin_claves_vapid_no_suena_nada():
+    assert control.avisar_a_quien_le_toca() == []

@@ -1,9 +1,16 @@
-"""Los avisos Web Push: suscripción del celular y el aviso de un chat que
-cae en "Esperando respuesta" (pedido de Abraham, 23/09/2026)."""
+"""Los avisos Web Push: la suscripción del celular y el botón de prueba.
+
+QUÉ dispara el aviso cambió en la Fase 5 (24/09/2026): ya no es un chat que
+cae en la columna "Esperando respuesta" —esa columna murió con el kanban de
+chats— sino un lead que gana la etiqueta «Te toca» en Linear. Eso se prueba
+en tests/test_control.py (`test_el_aviso_suena_una_sola_vez_por_lead` y
+compañía), que es donde vive esa decisión. Aquí queda la plomería: las
+claves VAPID, el service worker y la suscripción.
+"""
 
 import pytest
 
-from app import avisos, control, crm_flujo
+from app import avisos, control, linear_leads
 
 
 @pytest.fixture(autouse=True)
@@ -12,8 +19,7 @@ def muestra_limpia(db_limpia, monkeypatch):
     monkeypatch.delenv("LINEAR_API_KEY", raising=False)
     monkeypatch.delenv("VAPID_CLAVE_PUBLICA", raising=False)
     monkeypatch.delenv("VAPID_CLAVE_PRIVADA", raising=False)
-    control.refrescar()
-    crm_flujo.refrescar()
+    linear_leads.reiniciar_muestra()
     control.iniciar_tablas()
     avisos.iniciar_tablas()
 
@@ -73,45 +79,21 @@ def test_una_suscripcion_a_medias_se_rechaza(cliente):
     assert r.status_code == 400
 
 
-def test_la_primera_corrida_solo_toma_nota(cliente, con_claves):
-    # Si no, el encargado recibiría un aviso por cada conversación abierta
-    # el día que se despliega.
-    control.tablero()
-    assert con_claves == []
+def test_el_aviso_no_suena_dos_veces_por_el_mismo_lead(cliente, con_claves):
+    """La plomería vista desde arriba: la pantalla se puede abrir mil veces
+    y el celular suena una sola vez por lead.
 
-
-def test_mover_a_esperando_a_mano_avisa_al_encargado(cliente, con_claves):
-    control.tablero()                       # la corrida que toma nota
-    con_claves.clear()
-    # Kev (m2) está En curso; un compañero lo devuelve a Esperando.
-    cliente.post("/control/mover", data={"chat": "m2", "columna": "esperando"})
-    usuario, titulo, _cuerpo, url = con_claves[0]
-    assert usuario == avisos.USUARIO_CHATS
-    assert titulo == "Esperando respuesta · Kev"
-    assert url == "/control?abrir=m2"
-    # Y no vuelve a sonar cada vez que alguien abre la pantalla.
+    Antes esto lo cuidaba la tabla `control_visto` del kanban de chats; hoy
+    lo cuida `control_acuse`, y el disparador es la etiqueta «Te toca».
+    """
+    # Ximena (LEAD-87) y Nedjaira (LEAD-86) tienen «Te toca».
+    control.avisar_a_quien_le_toca()
+    assert sorted(t for _u, t, _c, _url in con_claves) == [
+        "Te toca · Nedjaira", "Te toca · Ximena Dávila"]
     con_claves.clear()
     cliente.get("/control")
+    cliente.get("/control")
     assert con_claves == []
-
-
-def test_un_mensaje_nuevo_del_cliente_tambien_avisa(cliente, con_claves):
-    control.tablero()
-    con_claves.clear()
-    # Soledad (m4) estaba en Terminado; escribe de nuevo y su chat cae en
-    # Esperando respuesta.
-    crm_flujo._MUESTRA[3]["estado"] = "EN_CONVERSACION"
-    control._MUESTRA[3].update({"dir": "ENTRANTE", "texto": "Otra consulta",
-                                "fecha": "2099-01-01T12:00:00+00:00"})
-    try:
-        control.tablero()
-        assert [t for _u, t, _c, _url in con_claves] == [
-            "Esperando respuesta · Soledad"]
-    finally:
-        control._MUESTRA[3].update({"dir": "SALIENTE",
-                                    "texto": "¡Que las disfrute! Cualquier cosa me escribe 🌿",
-                                    "fecha": "2026-09-21T16:20:00+00:00"})
-        crm_flujo._MUESTRA[3]["estado"] = "GANADO"
 
 
 def test_el_aviso_de_prueba_necesita_un_celular_activado(cliente, monkeypatch):

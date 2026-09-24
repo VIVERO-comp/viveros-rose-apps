@@ -56,8 +56,16 @@ producción con `docker compose exec control-stock …`).
   empleada en Ajustes). Sin `LINEAR_API_KEY` corre en modo muestra.
   Desde la **Fase 4** (24/09/2026) el calendario además CIERRA el embudo:
   ver la sección propia abajo.
+- **Control** (`/control`, `app/control.py`) — reparte el trabajo del equipo:
+  dos vistas sobre el tablero de Linear (por empleado / por estado). Sección
+  propia abajo.
 - **Retail** (`/retail`, `app/retail.py`) — kanban de leads retail/mayorista
-  amarrado a las ventas de la app. Fuera del menú con `RETAIL_EN_MENU=0`.
+  amarrado a las ventas de la app. Fuera del menú con `RETAIL_EN_MENU=0`,
+  esperando el OK del dueño para borrarse.
+- ~~**CRM** (`/crm`)~~ — **murió en la Fase 5** (24/09/2026): era el embudo
+  viejo. Su trabajo lo hace Control. `crm_flujo.py` sobrevive solo como
+  trastienda de Retail, y se va con ella. La piel del calendario dentro de
+  Twenty (`/crm/calendario`) no se tocó.
 - **Vender** y **Cotizaciones de servicio** — abajo tienen sección propia.
 
 ## El embudo de leads y la Fase 4 (`app/linear_leads.py`, `app/agenda.py`)
@@ -123,6 +131,48 @@ etiqueta `Resp:` y comenta firmado. Reglas que respeta y no se negocian:
 - **El saldo no se inventa**: si Odoo no contesta, la pantalla lo dice en vez
   de mostrar $0 y mentir — un $0 falso hace que alguien entregue sin cobrar.
   Y sin saldo confiable, un lead nunca pasa a Ganado.
+
+### Fase 5: Control reparte el trabajo (`app/control.py`)
+
+**Regla de oro: Control no guarda nada propio.** El estado, el responsable y
+las notas se leen y se escriben en el issue. Murieron `control_tablero` y
+`control_visto` (con ellas, el kanban de chats y su semáforo): ya no hay una
+verdad local que pueda discrepar del tablero.
+
+- **Por empleado** (solo admin): una columna por etiqueta del grupo
+  Responsable, más «Sin asignar» primera. Arrastrar cambia la etiqueta
+  `Resp:` — **nunca el `assignee`**. Las columnas SALEN de las etiquetas, así
+  que sumar a alguien al equipo es crear su etiqueta en Linear: sin código y
+  sin desplegar. Los Ganado y Perdido no se reparten.
+- **Por estado**: las 8 columnas del embudo. El dueño ve todo con el chip del
+  responsable; un empleado ve **solo lo suyo**, y ese filtro se aplica en el
+  servidor (`control.alcance`) — igual que el permiso para mover
+  (`control.puede_tocar`), porque un POST se puede mandar a mano.
+- **Arrastrar entre estados es una corrección manual**: pide un motivo corto
+  y queda como comentario firmado en el issue. El arrastre manda solo
+  `ref` + `estado`, y el servidor lo desvía al modal que pregunta el porqué.
+  Perdido pide además su motivo de pérdida (etiqueta del grupo).
+- **El único dato propio** es `control_acuse`: a quién ya se le avisó de qué
+  (`te-toca:LEAD-91`, `wa-label:LEAD-91:Ruben`). No es dato del negocio y no
+  cabe en Linear — es memoria de avisos, para que el mismo aviso no suene dos
+  veces en cada recarga. Cuando la señal se apaga, el acuse se olvida.
+- **El aviso al celular** (Web Push) suena por el SALTO a «Te toca», una sola
+  vez por lead. La etiqueta la pone el mensaje del cliente y la quita nuestra
+  respuesta; eso lo hace el frontend.
+
+### El enganche para WAHA (Fase W)
+
+Mientras WAHA no exista, repartir un lead muestra el aviso manual: «Pon en
+WhatsApp la etiqueta: Ruben (y quita la de Mary)». Ese aviso se da UNA vez
+por lead y responsable.
+
+`control.etiquetar_en_whatsapp(celular, etiqueta)` está **vacía a propósito**,
+con su punto de llamada ya puesto en `mover_a_empleado()`. Hoy nadie puede
+etiquetar desde el código: OpenWA con motor `baileys` no soporta etiquetas
+(`501 getLabels`), y por eso se eligió WAHA aparte. El día que WAHA ande se
+llena esa función, `waha_activo()` pasa a decir la verdad y **el aviso manual
+se apaga solo** — nada más cambia. Hay una prueba que lo demuestra
+(`test_con_waha_andando_el_aviso_manual_se_apaga`).
 
 ## La cara CRM (`/crm/calendario`)
 
@@ -400,25 +450,34 @@ propósito: un alias genérico compartido entre pruebas y producción ya causó
 fallos intermitentes en el checkout). La instancia de pruebas se llama
 `control-stock-pruebas` y va en la red de pruebas.
 
+**Siempre desde un checkout limpio del commit aprobado**, nunca desde el
+árbol de trabajo: ahí puede haber trabajo sin commitear de otra tanda que NO
+se despliega.
+
 ```bash
+git worktree add /tmp/deploy-apps <commit>
+cd /tmp/deploy-apps/apps/control-stock
 ./scripts/actualizar_fotos.sh   # refresca la copia del mapa de fotos del catálogo
-rsync -a --exclude .venv --exclude datos --exclude .env --exclude archivos \
+rsync -a --exclude .venv --exclude datos --exclude '.env*' --exclude archivos \
       --exclude 'control-stock.db*' --exclude '__pycache__' \
       -e "ssh -p 2222" . hermes@143.244.167.222:control-stock/
 ssh -p 2222 hermes@143.244.167.222 'cd control-stock && docker compose up -d --build'
 ```
 
-Mejor todavía: rsyncar desde un checkout limpio del commit a desplegar
-(`git worktree add /tmp/deploy-apps <commit>`), para no arrastrar trabajo a
-medias del árbol local. El `.env` del droplet no se pisa nunca (por eso el
-`--exclude .env`); las variables nuevas se agregan a mano allá.
+El exclude es `.env*` **con el asterisco**, no `.env`: en el droplet viven
+los respaldos `.env.bak-*`, y un `rsync --delete` que solo excluya `.env` se
+los lleva (ya pasó). El `.env` del droplet no se pisa nunca; las variables
+nuevas se agregan a mano allá.
 
-Retail y CRM están **fuera del menú** en producción desde el 24/09/2026
-(`RETAIL_EN_MENU=0` y `CRM_EN_MENU=0` en el `.env` del droplet; pedido del
-dueño: "que no se vea en el inventario pero dejalo activo"). Es solo
-visibilidad — distinto de `COMPRAS_ACTIVAS` / `PROYECTOS_ACTIVOS`, que sí
-apagan las rutas: `/retail` y `/crm` siguen vivos y funcionando para quien
-entre con la URL, y Control quedó encendido en el menú.
+El `up -d --build` no es opcional: la app corre como imagen Docker horneada,
+así que copiar archivos y reiniciar no cambia nada.
+
+Retail está **fuera del menú** en producción desde el 24/09/2026
+(`RETAIL_EN_MENU=0` en el `.env` del droplet; pedido del dueño: "que no se
+vea en el inventario pero dejalo activo"). Es solo visibilidad — distinto de
+`COMPRAS_ACTIVAS` / `PROYECTOS_ACTIVOS`, que sí apagan las rutas: `/retail`
+sigue vivo para quien entre con la URL. `CRM_EN_MENU` ya no hace nada: la
+pestaña CRM se borró en la Fase 5, no se esconde.
 
 La cara CRM necesita además, en el `.env` del droplet: `CRM_PUBLIC_BASE_URL`,
 `TWENTY_URL` y `TWENTY_API_KEY`, y el callback

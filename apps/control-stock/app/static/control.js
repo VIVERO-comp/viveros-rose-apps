@@ -1,18 +1,18 @@
 /* El único JS de la pestaña Control: el arrastre entre columnas. Todo lo
-   demás (columnas, tarjetas, ficha, modal de motivo) lo arma el servidor.
-   Soltar una tarjeta manda un formulario POST /control/mover y la página
-   vuelve pintada por el servidor; soltar en Inactivo redirige al modal
-   del motivo (lo decide el servidor, no este script). */
+   demás (columnas, tarjetas, ficha, modal del motivo) lo arma el servidor.
+
+   Soltar una tarjeta manda un formulario POST y la página vuelve pintada
+   por el servidor. A dónde va ese POST y cómo se llama el campo lo dice la
+   propia columna (data-destino / data-campo), no este script: en la vista
+   "por empleado" cambia la etiqueta Resp: y en la vista "por estado" abre
+   el modal que pide el motivo. Quién puede mover qué lo decide el
+   servidor; aquí solo se arrastra lo que el servidor marcó arrastrable. */
 (function () {
   'use strict';
 
-  // La conversación de la ficha abre mostrando lo último, como el panel.
-  var chat = document.querySelector('.crm-conversacion');
-  if (chat) chat.scrollTop = chat.scrollHeight;
-
-  document.querySelectorAll('.ctl-tarjeta').forEach(function (tarjeta) {
+  document.querySelectorAll('.ctl-tarjeta[draggable="true"]').forEach(function (tarjeta) {
     tarjeta.addEventListener('dragstart', function (ev) {
-      ev.dataTransfer.setData('text/plain', tarjeta.getAttribute('data-chat'));
+      ev.dataTransfer.setData('text/plain', tarjeta.getAttribute('data-ref'));
       ev.dataTransfer.effectAllowed = 'move';
       tarjeta.classList.add('arrastrando');
     });
@@ -32,17 +32,23 @@
     lista.addEventListener('drop', function (ev) {
       ev.preventDefault();
       lista.classList.remove('dropok');
-      var chat = ev.dataTransfer.getData('text/plain');
-      if (!chat) return;
+      var ref = ev.dataTransfer.getData('text/plain');
+      var destino = lista.getAttribute('data-destino');
+      var campo = lista.getAttribute('data-campo');
+      if (!ref || !destino || !campo) return;
+
       var form = document.createElement('form');
       form.method = 'post';
-      form.action = '/control/mover';
-      var campoChat = document.createElement('input');
-      campoChat.type = 'hidden'; campoChat.name = 'chat'; campoChat.value = chat;
-      var campoCol = document.createElement('input');
-      campoCol.type = 'hidden'; campoCol.name = 'columna';
-      campoCol.value = lista.getAttribute('data-columna');
-      form.appendChild(campoChat); form.appendChild(campoCol);
+      form.action = destino + '?vista=' + encodeURIComponent(
+        lista.getAttribute('data-vista') || '');
+      [['ref', ref], [campo, lista.getAttribute('data-columna')]].forEach(
+        function (par) {
+          var input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = par[0];
+          input.value = par[1];
+          form.appendChild(input);
+        });
       document.body.appendChild(form);
       form.submit();
     });

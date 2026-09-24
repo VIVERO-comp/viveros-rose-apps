@@ -1,28 +1,26 @@
-"""La pestaña CRM: el espejo del CRM del admin, dentro de inventario.
+"""Lo que queda del espejo del CRM: la trastienda de la pestaña Retail.
 
-Pedido del dueño (23/09/2026, ampliado el mismo día): "que tenga las
-mismas funciones que el CRM de admin, un mirror idéntico y sync". O sea:
+**La pestaña CRM murió en la Fase 5** (24/09/2026): su kanban era el
+embudo VIEJO (con Contactado y En conversación, que dejaron de existir) y
+su trabajo lo hace ahora `control.py` leyendo y escribiendo el equipo LEAD
+de Linear. Se fueron la pantalla (`/crm` y sus cuatro POST), la plantilla
+`crm.html` y su JS.
 
-- El mismo kanban "Por estado" (columnas, nombres y colores calcados del
-  /admin). El ESTADO sigue moviéndose en Linear (regla del 11/09/2026):
-  el tablero no se arrastra, igual que en el admin.
-- La ficha del lead al abrir la tarjeta: motivo, notas (los comentarios
-  del issue de Linear) y la conversación COMPLETA de WhatsApp — lo mismo
-  que carga /api/crm/lead-detalle en el panel.
-- Escribir el "porqué" (motivoNoAvance) y las notas, EN SINCRONÍA con el
-  admin: la escritura va por LAS MISMAS rutas del panel
-  (/api/crm/lead-motivo y /api/crm/lead-nota, con la credencial
-  X-Clave-Admin en CRM_ADMIN_CLAVE), así un motivo puesto aquí dispara
-  exactamente lo mismo que en el admin — Twenty, las labels de Linear
-  ("Motivo: …" + "Desactivado") y el archivo de la oportunidad en Odoo.
-  Sin la clave configurada cae al respaldo directo (Twenty PATCH y el
-  comentario en Linear): los tableros quedan igual sincronizados y solo
-  se pierden los extras hasta poner la clave.
+Este módulo sigue vivo por UNA razón: `retail.py` lo usa. Retail casa sus
+leads con los del espejo (`lead_por_ref`, `senales_retail`,
+`_etapas_retail`), y mover una tarjeta de Retail escribe el estado por
+aquí (`mover_estado`). El día que Retail se borre —está fuera del menú
+desde el 24/09/2026 con `RETAIL_EN_MENU=0`, esperando el OK del dueño—
+este archivo se va con él, y no antes: borrarlo hoy dejaría a Retail sin
+piso.
 
-Los leads salen del objeto `leads` del Twenty real (los mismos que pinta
-/api/crm/tablero en el frontend). Los que tienen motivoNoAvance no van en
-columnas: van en la sección "Inactivos" de abajo, igual que en el admin.
-Sin TWENTY_API_KEY corre con leads de muestra.
+Ojo con lo que hay acá adentro: los estados (`COLUMNAS`, `DESTINOS_DRAG`,
+`_NOMBRES_LINEAR`) y los motivos (`MOTIVOS`) son el vocabulario VIEJO. Lo
+nuevo vive en `linear_leads.py`, que es la única puerta al tablero. Nada
+nuevo debería entrar por aquí.
+
+Los leads salen del objeto `leads` del Twenty real. Sin TWENTY_API_KEY
+corre con leads de muestra.
 """
 
 import os
@@ -35,16 +33,6 @@ import httpx
 from . import calendario, colores, crm_leads, crm_twenty
 
 TTL_LEADS = 120
-
-def en_menu():
-    """CRM_EN_MENU=0 saca la pestaña CRM de TODOS los menús (dueño,
-    24/09/2026: "que no se vea en el inventario pero dejalo activo").
-
-    Es SOLO visibilidad: /crm sigue vivo y funcionando para quien entre
-    con la URL, y la piel del calendario dentro de Twenty
-    (/crm/calendario y su login) nunca se tocó. Sin la variable, se ve."""
-    return os.environ.get("CRM_EN_MENU", "1") != "0"
-
 
 # Mismo orden y nombres que COLUMNAS_LEADS del admin
 # (viveros-rose-frontend/src/pages/api/crm/tablero.ts); el punto de la

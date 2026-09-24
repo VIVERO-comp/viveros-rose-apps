@@ -701,3 +701,23 @@ a{color:inherit}
   display:flex;flex-wrap:wrap;gap:4px;align-items:center;
 }
 .cobro-pie a{color:var(--texto);font-weight:600;text-decoration:underline;text-underline-offset:2px}
+
+/* ---------- Fase 5: Control reparte el trabajo (24/09/2026) ----------
+   Las tarjetas de Control dejaron de ser chats y pasaron a ser leads: lo
+   nuevo son los chips (estado, interes, motivo) con el color de la paleta
+   unica, y el chip del responsable en la vista por estado. */
+
+.ctl-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.chip-est{
+  display:inline-block;font-size:9.5px;font-weight:700;line-height:1.5;
+  padding:1px 6px;border-radius:999px;border:1px solid var(--borde);
+  background:var(--crema-2);color:var(--suave);white-space:nowrap;
+}
+/* "Sin asignar" no es una categoria del negocio: va en gris apagado y en
+   cursiva, para que se lea como un hueco y no como el nombre de alguien. */
+.chip-est.chip-nadie{
+  color:var(--muy-suave);font-weight:600;font-style:italic;
+  background:transparent;border-style:dashed;
+}
+.ctl-pie-tarjeta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:5px}
+.ctl-pie-tarjeta .ctl-wa{margin-left:auto}

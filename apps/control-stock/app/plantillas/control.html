@@ -11,13 +11,14 @@
 <meta name="apple-mobile-web-app-title" content="Control">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-{# La pestaña Control (versión C del artefacto "Tablero Control",
-   23/09/2026): kanban de chats con el último mensaje a la vista y el
-   semáforo automático. El servidor arma todo; el único JS es el arrastre
-   (control.js), que POSTea un formulario, y el menú (menu.js). #}
+{# La pestaña Control, Fase 5 (24/09/2026): dos vistas sobre el MISMO
+   tablero de Linear — por empleado (reparto, solo el dueño) y por estado
+   (las 8 columnas del embudo). Control no guarda nada: el estado, el
+   responsable y las notas viven en el issue. El servidor arma todo; el
+   único JS es el arrastre (control.js), que POSTea un formulario. #}
 <link rel="stylesheet" href="/static/calendario.css?v={{ v_estaticos }}">
 <script type="speculationrules">
-{"prerender": [{"urls": ["/", "/?tab=stock", "/venta", "/calendario"{% if retail_en_nav() %}, "/retail"{% endif %}{% if crm_en_nav() %}, "/crm"{% endif %}], "eagerness": "moderate"}]}
+{"prerender": [{"urls": ["/", "/?tab=stock", "/venta", "/calendario"{% if retail_en_nav() %}, "/retail"{% endif %}], "eagerness": "moderate"}]}
 </script>
 </head>
 <body class="{{ 'menu-oculto' if request.cookies.get('menu') == '0' }}">
@@ -45,56 +46,96 @@
     <span class="pil on">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Control
     </span>
-    {% if crm_en_nav() %}
-    <a class="pil" href="/crm">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="10" rx="1.5"/><rect x="17" y="4" width="5" height="13" rx="1.5"/></svg>CRM
-    </a>
-    {% endif %}
     <a class="pil" href="/?tab=ajustes">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Ajustes
     </a>
     <div class="pie">
       <b>{{ empleada.nombre or empleada.id }}</b>
-      <span>{% if modo == 'muestra' %}Chats de muestra (sin Twenty){% else %}Chats · WhatsApp{% endif %}</span>
+      <span>
+        {% if modo == 'muestra' %}Leads de muestra (sin Linear)
+        {% elif modo == 'lectura' %}Solo lectura del tablero real
+        {% else %}Equipo LEAD · Linear{% endif %}
+      </span>
     </div>
   </aside>
 
   <div class="tablero">
     {# La barra única del teléfono (artefacto aprobado, 23/09/2026). #}
-    {% with bm_titulo='Control', bm_sub='Chats de WhatsApp del negocio' %}{% include '_barra_movil.html' %}{% endwith %}
+    {% with bm_titulo='Control', bm_sub='El trabajo del equipo' %}{% include '_barra_movil.html' %}{% endwith %}
     <div class="barra">
       <button class="btn icono hamb" type="button" aria-label="Mostrar u ocultar el menú"
               aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
       <h3>Control</h3>
-      <span class="tenue" style="font-size:12px">Los chats de WhatsApp de los últimos {{ dias_ventana }} días · arrastra para mover</span>
+      {# El segmento de vistas: el dueño tiene las dos, el empleado solo
+         "Por estado" — y no es que se le esconda el botón, es que el
+         servidor no le arma la otra. #}
+      {% if alc.vistas|length > 1 %}
+      <div class="segmento">
+        {% for v in alc.vistas %}
+        <a class="{{ 'on' if v == vista }}" href="/control?vista={{ v }}">
+          {{ 'Por empleado' if v == 'empleado' else 'Por estado' }}</a>
+        {% endfor %}
+      </div>
+      {% endif %}
+      <span class="crece"></span>
+      <span class="tenue" style="font-size:12px">
+        {% if vista == 'empleado' %}Arrastra para repartir · cambia la etiqueta Resp: en Linear
+        {% elif alc.solo_resp %}Lo tuyo, {{ alc.solo_resp }}
+        {% elif not alc.admin %}Todavía no te toca ningún lead
+        {% else %}Arrastrar entre estados es una corrección: pide el motivo{% endif %}
+      </span>
     </div>
 
     {% if error %}<div class="franja"><b>Ups.</b> <span>{{ error }}</span></div>{% endif %}
     {% if aviso %}<div class="aviso-ok">{{ aviso }}</div>{% endif %}
+    {% if modo == 'lectura' %}
+    <div class="solo-lectura"><b>Solo lectura.</b> Esta instancia mira el
+      tablero real pero no escribe en Linear.</div>
+    {% endif %}
+    {% if not alc.admin and not alc.solo_resp %}
+    <div class="solo-lectura"><b>Sin etiqueta.</b> Tu cuenta todavía no tiene
+      su etiqueta <b>Resp:</b> en Linear, así que no hay leads que mostrarte.
+      El dueño la crea allá y aparecen solos.</div>
+    {% endif %}
 
     <div class="ret-tablero">
       {% for col in columnas %}
-      <div class="ret-col {{ 'urgente' if col.clave == 'esperando' }}">
-        <div class="ret-cab"><b>{{ col.titulo }}</b><span class="crece"></span>
-          <span class="ret-cuenta">{{ col.chats|length }}</span></div>
-        <div class="ret-lista" data-columna="{{ col.clave }}">
-          {% for c in col.chats %}
-          {# Tarjeta versión C: div arrastrable con el enlace adentro (la
-             ficha) y el botón de WhatsApp aparte — un <a> no puede llevar
-             otro <a> adentro. #}
-          <div class="ret-tarjeta ctl-tarjeta" draggable="true" data-chat="{{ c.chat }}">
-            <a class="ctl-zona" href="/control?abrir={{ c.chat | urlencode }}">
-              <span class="t-cab">{% if c.lead %}<span class="pt-leyenda" style="background:{{ c.lead.color }}"></span>{% endif %}
-                <b>{{ c.nombre }}</b>{% if c.cel and c.cel != c.nombre %}<span class="t-cel mono">· {{ c.cel }}</span>{% endif %}
-                {% if c.debe %}<span class="ctl-alerta" title="Te debe respuesta"></span>{% endif %}</span>
-              {% if c.texto %}<span class="t-sub eq-texto">{{ 'Vivero: ' if c.dir == 'SALIENTE' else '' }}{{ c.texto[:90] }}</span>{% endif %}
+      <div class="ret-col {{ 'urgente' if col.clave == '' and vista == 'empleado' }}">
+        <div class="ret-cab">
+          {% if col.color %}<span class="pt-leyenda" style="background:{{ col.color }}"></span>{% endif %}
+          <b>{{ col.titulo }}</b><span class="crece"></span>
+          <span class="ret-cuenta">{{ col.leads|length }}</span>
+        </div>
+        <div class="ret-lista" data-columna="{{ col.clave }}"
+             data-destino="{{ '/control/responsable' if vista == 'empleado' else '/control/estado' }}"
+             data-campo="{{ 'resp' if vista == 'empleado' else 'estado' }}"
+             data-vista="{{ vista }}">
+          {% for l in col.leads %}
+          {# Tarjeta: div arrastrable con el enlace de la ficha adentro y el
+             enlace del chat aparte (un <a> no puede llevar otro adentro). #}
+          <div class="ret-tarjeta ctl-tarjeta" draggable="{{ 'true' if puede_mover else 'false' }}"
+               data-ref="{{ l.ref }}">
+            <a class="ctl-zona" href="/control?vista={{ vista }}&abrir={{ l.ref | urlencode }}">
+              <span class="t-cab">
+                <b>{{ l.nombre }}</b>
+                {% if l.te_toca %}<span class="ctl-alerta" title="Te toca: hay un cliente esperando"></span>{% endif %}
+              </span>
+              <span class="t-sub ctl-chips">
+                <span class="chip-est" style="{{ l.estado_chip }}">{{ l.estado_titulo }}</span>
+                {% if l.interes %}<span class="chip-est">{{ l.interes }}</span>{% endif %}
+                {% if l.pago %}<span class="etq-pago">{{ l.pago }}</span>{% endif %}
+                {% if l.motivo %}<span class="chip-est" style="{{ l.motivo_chip }}">{{ l.motivo }}</span>{% endif %}
+              </span>
             </a>
-            <span class="t-sub ctl-pie-tarjeta"><span class="mono">{{ c.hace }}</span>
-              {% if c.motivo %}<span class="etq at">{{ c.motivo }}</span>{% endif %}
-              {% if c.ganado %}<span class="etq ok">Ganado</span>{% endif %}
-              {% if c.cel %}<a class="ctl-wa" href="https://wa.me/507{{ c.cel.replace('-', '') }}" target="_blank" rel="noopener">💬 Responder</a>{% endif %}</span>
+            <span class="t-sub ctl-pie-tarjeta">
+              <span class="mono">{{ l.ref }} · {{ l.hace }}</span>
+              {% if vista == 'estado' and alc.admin %}
+              <span class="chip-est {{ 'chip-nadie' if not l.resp }}">{{ l.resp_titulo }}</span>
+              {% endif %}
+              {% if l.wa %}<a class="ctl-wa" href="{{ l.wa }}" target="_blank" rel="noopener">chat ↗</a>{% endif %}
+            </span>
           </div>
           {% endfor %}
         </div>
@@ -102,132 +143,162 @@
       </div>
       {% endfor %}
     </div>
+    <p class="pie-nota" style="padding:0 4px">
+      {% if vista == 'empleado' %}
+        Las columnas son las etiquetas del grupo <b>Responsable</b> de Linear:
+        sumar a alguien al equipo es crear su etiqueta allá, sin tocar el código.
+        Los Ganado y Perdido no se reparten.
+      {% else %}
+        El embudo se mueve solo (el mensaje del cliente, la cotización, el pago
+        y el calendario). Arrastrar aquí es una corrección a mano, y por eso
+        pide el motivo y queda anotada en el issue.
+      {% endif %}
+    </p>
   </div>
 </div>
 
 {% set activa = 'control' %}{% include '_nav.html' %}
 
 {% if abierta %}
-<a class="telon" href="/control" aria-label="Cerrar"></a>
-<aside class="panel-der" role="dialog" aria-label="Ficha del chat">
+<a class="telon" href="/control?vista={{ vista }}" aria-label="Cerrar"></a>
+<aside class="panel-der" role="dialog" aria-label="Ficha del lead">
   <div class="cab-panel">
-    {% if abierta.lead %}
-    <span class="chip on" style="background:{{ abierta.lead.color }};color:#fff">
-      <span class="pt" style="background:#fff"></span>{{ abierta.lead.tipo_nombre }}</span>
-    {% else %}
-    <span class="chip on"><span class="pt"></span>WhatsApp</span>
-    {% endif %}
-    <a class="btn chico" href="/control">Cerrar</a>
+    <span class="chip on" style="{{ abierta.estado_chip }}">{{ abierta.estado_titulo }}</span>
+    <a class="btn chico" href="/control?vista={{ vista }}">Cerrar</a>
   </div>
   <h4>{{ abierta.nombre }}</h4>
-  {# La MISMA ficha que la del CRM (corrección de Abraham, 23/09/2026:
-     "esto debe ser así en Control también, o sea el chat y eso"): datos
-     del lead, saltos, notas y la conversación completa en burbujas. Un
-     chat sin lead en el CRM se queda con su ficha corta de siempre. #}
+  <div class="etiquetas">
+    {% if abierta.te_toca %}<span class="etq at">Te toca</span>{% endif %}
+    {% if abierta.interes %}<span class="etq">{{ abierta.interes }}</span>{% endif %}
+    {% if abierta.pago %}<span class="etq">{{ abierta.pago }}</span>{% endif %}
+    {% if abierta.motivo %}<span class="etq at">{{ abierta.motivo }}</span>{% endif %}
+  </div>
+
   <div>
-    <div class="dato"><b>Está en</b><span>{{ (columnas | selectattr('clave', 'equalto', abierta.columna) | first).titulo }}{% if abierta.motivo %} · {{ abierta.motivo }}{% endif %}</span></div>
-    {% if ficha and ficha.estado in estados %}<div class="dato"><b>Estado CRM</b><span>{{ estados[ficha.estado].titulo }}</span></div>{% endif %}
-    {% if abierta.cel %}<div class="dato"><b>Teléfono</b><span>{{ abierta.cel }}</span></div>{% endif %}
-    {% if ficha and (ficha.canal or ficha.pagina) %}<div class="dato"><b>Origen</b><span>{{ ficha.canal }}{% if ficha.canal and ficha.pagina %} · {% endif %}{{ ficha.pagina }}</span></div>{% endif %}
-    {% if ficha %}<div class="dato"><b>Llegó</b><span>{{ ficha.hace }}</span></div>
-    {% else %}<div class="dato"><b>Último mensaje</b><span>{{ abierta.cuando }}</span></div>{% endif %}
-    {% if abierta.lead %}<div class="dato"><b>Lead</b><span>{{ abierta.lead.ref }}</span></div>{% endif %}
+    <div class="dato"><b>Responsable</b><span>{{ abierta.resp_titulo }}</span></div>
+    <div class="dato"><b>Origen</b><span>{{ abierta.origen or '—' }}</span></div>
+    <div class="dato"><b>Llegó</b><span>{{ abierta.hace }}</span></div>
+    {% if abierta.celular %}<div class="dato"><b>Teléfono</b><span class="mono">{{ abierta.celular }}</span></div>{% endif %}
+    <div class="dato"><b>Issue</b><span class="mono">{{ abierta.ref }}{% if abierta.pp %} · {{ abierta.pp }}{% endif %}</span></div>
   </div>
 
   <div class="acciones">
-    {% if abierta.cel %}
-    <a class="btn" href="https://wa.me/507{{ abierta.cel.replace('-', '') }}" target="_blank" rel="noopener">💬 WhatsApp</a>
+    {% if abierta.wa %}
+    <a class="btn" href="{{ abierta.wa }}" target="_blank" rel="noopener">💬 WhatsApp</a>
     {% endif %}
-    {% if ficha and ficha.linear_url %}
-    <a class="btn" href="{{ ficha.linear_url }}" target="_blank" rel="noopener">Linear ↗</a>
-    {% endif %}
-    {% if ficha and ficha.twenty_url %}
-    <a class="btn" href="{{ ficha.twenty_url }}" target="_blank" rel="noopener">Twenty ↗</a>
-    {% endif %}
-    {% if abierta.lead and retail_en_nav() %}
-    <a class="btn oro" href="/retail?abrir={{ abierta.lead.ref | urlencode }}">Ver en Retail →</a>
+    {% if abierta.url %}
+    <a class="btn" href="{{ abierta.url }}" target="_blank" rel="noopener">Linear ↗</a>
     {% endif %}
   </div>
 
-  {% if ficha %}
-  {# Las notas: el mismo historial del issue de Linear que ve el panel. #}
+  {% if puede_tocar_abierta %}
+  {# Repartir: el mismo cambio de etiqueta que hace el arrastre. #}
+  <div class="ret-mover">
+    <div class="tenue" style="text-transform:uppercase;letter-spacing:.05em">Se lo doy a</div>
+    <div class="acciones" style="margin-top:8px;flex-wrap:wrap">
+      {% for r in responsables %}{% if r != abierta.resp %}
+      <form method="post" action="/control/responsable?vista={{ vista }}">
+        <input type="hidden" name="ref" value="{{ abierta.ref }}">
+        <input type="hidden" name="resp" value="{{ r }}">
+        <button class="btn" type="submit">→ {{ r }}</button>
+      </form>
+      {% endif %}{% endfor %}
+      {% if abierta.resp %}
+      <form method="post" action="/control/responsable?vista={{ vista }}">
+        <input type="hidden" name="ref" value="{{ abierta.ref }}">
+        <input type="hidden" name="resp" value="">
+        <button class="btn" type="submit">→ Sin asignar</button>
+      </form>
+      {% endif %}
+    </div>
+    <p class="pie-nota">El responsable es la etiqueta <b>Resp:</b> del issue, no
+      el asignado: los empleados no tienen asiento de Linear.</p>
+  </div>
+
+  {# Corregir el estado a mano: pasa por el modal del motivo. #}
+  <div class="ret-mover">
+    <div class="tenue" style="text-transform:uppercase;letter-spacing:.05em">Corregir el estado</div>
+    <div class="acciones" style="margin-top:8px;flex-wrap:wrap">
+      {% for e in estados %}{% if e.clave != abierta.estado %}
+      <a class="btn" href="/control?vista={{ vista }}&mover={{ abierta.ref | urlencode }}&a={{ e.clave }}">→ {{ e.nombre }}</a>
+      {% endif %}{% endfor %}
+    </div>
+    <p class="pie-nota">Solo para arreglar un error: el embudo se mueve solo.
+      Pide el motivo y queda anotado en el issue, con tu nombre.</p>
+  </div>
+
   <div class="ret-cotizs">
     <div class="tenue ret-cotiz-titulo">Notas</div>
-    {% for n in ficha.notas %}
-    <div class="crm-nota"><small>{{ n.autor or '—' }} · {{ n.cuando }}</small>{{ n.texto }}</div>
+    {% for n in abierta.notas %}
+    <div class="crm-nota"><small>{{ n.quien }} · {{ n.cuando }}</small>{{ n.texto }}</div>
     {% else %}
     <p class="pie-nota" style="margin:4px 0 0">Sin notas todavía.</p>
     {% endfor %}
-    <form method="post" action="/control/nota" class="crm-forma-nota">
-      <input type="hidden" name="chat" value="{{ abierta.chat }}">
-      <input type="hidden" name="lead" value="{{ abierta.lead_crm_id }}">
+    <form method="post" action="/control/nota?vista={{ vista }}" class="crm-forma-nota">
+      <input type="hidden" name="ref" value="{{ abierta.ref }}">
       <textarea class="campo" name="texto" rows="2" maxlength="2000"
                 placeholder="Escribe una nota…" required></textarea>
       <button class="btn" type="submit" data-guardando="Guardando…">Guardar nota</button>
     </form>
   </div>
-  {% endif %}
-
-  {% if ficha and ficha.mensajes %}
-  {# La conversación completa, con las burbujas del panel del admin. #}
+  {% else %}
+  <div class="solo-lectura">
+    {% if modo == 'lectura' %}
+      <b>Solo lectura.</b> Esta instancia mira el tablero real pero no escribe.
+    {% else %}
+      <b>No es tuyo.</b> Este lead es de {{ abierta.resp_titulo }}: lo ves para
+      coordinarte, pero lo mueve {{ abierta.resp_titulo }} o el dueño.
+    {% endif %}
+  </div>
   <div class="ret-cotizs">
-    <div class="tenue ret-cotiz-titulo">Conversación · WhatsApp</div>
-    <div class="crm-conversacion">
-      {% for m in ficha.mensajes %}
-      <div class="msj {{ 'msj-vivero' if m.salida else 'msj-cliente' }}">
-        <p>{{ m.texto }}</p>
-        <span class="msj-hora">{{ m.cuando }}</span>
-      </div>
-      {% endfor %}
-    </div>
-  </div>
-  {% elif abierta.texto %}
-  <div class="eq-burbuja {{ 'eq-nuestra' if abierta.dir == 'SALIENTE' }}">
-    <small>{{ 'Vivero' if abierta.dir == 'SALIENTE' else 'Cliente' }}</small>
-    {{ abierta.texto[:400] }}
+    <div class="tenue ret-cotiz-titulo">Notas</div>
+    {% for n in abierta.notas %}
+    <div class="crm-nota"><small>{{ n.quien }} · {{ n.cuando }}</small>{{ n.texto }}</div>
+    {% else %}
+    <p class="pie-nota" style="margin:4px 0 0">Sin notas todavía.</p>
+    {% endfor %}
   </div>
   {% endif %}
-
-  {# Mover de columna: igual que en Retail, abajo y separado. Inactivo
-     pasa por el modal del motivo. #}
-  <div class="ret-mover">
-    <div class="tenue" style="text-transform:uppercase;letter-spacing:.05em">Mover a</div>
-    <div class="acciones" style="margin-top:8px">
-      {% for col in columnas %}{% if col.clave != abierta.columna %}
-      {% if col.clave == 'inactivo' %}
-      <a class="btn" href="/control?motivo={{ abierta.chat | urlencode }}">→ Inactivo</a>
-      {% else %}
-      <form method="post" action="/control/mover">
-        <input type="hidden" name="chat" value="{{ abierta.chat }}">
-        <input type="hidden" name="columna" value="{{ col.clave }}">
-        <button class="btn" type="submit">→ {{ col.titulo }}</button>
-      </form>
-      {% endif %}
-      {% endif %}{% endfor %}
-    </div>
-    <p class="pie-nota">Tu mano manda hasta que el chat reciba un mensaje
-      nuevo; entonces el semáforo vuelve a decidir. Ganado siempre cae en
-      Terminado.</p>
-  </div>
 </aside>
 {% endif %}
 
-{% if con_motivo %}
-<a class="telon" href="/control" aria-label="Cerrar"></a>
-<form class="modal ret-modal-fecha" method="post" action="/control/mover">
-  <h4>¿Por qué quedó inactivo? · {{ con_motivo.nombre }}</h4>
-  <input type="hidden" name="chat" value="{{ con_motivo.chat }}">
-  <input type="hidden" name="columna" value="inactivo">
-  <div class="acciones" style="flex-wrap:wrap">
-    {% for clave, texto in motivos.items() %}
-    <button class="btn" type="submit" name="motivo" value="{{ clave }}">{{ texto }}</button>
-    {% endfor %}
+{% if moviendo %}
+{# El motivo de la corrección manual. Perdido pide además su motivo de
+   pérdida, que es una etiqueta del grupo "Motivo de pérdida". #}
+<a class="telon" href="/control?vista={{ vista }}" aria-label="Cerrar"></a>
+<form class="modal" method="post" action="/control/estado?vista={{ vista }}">
+  <div class="cab-panel">
+    <div><span class="tenue">CORRECCIÓN A MANO · {{ moviendo.lead.ref }}</span>
+      <h4>{{ moviendo.lead.estado_titulo }} → {{ moviendo.destino.nombre }}</h4></div>
+    <a class="btn chico" href="/control?vista={{ vista }}">Cerrar</a>
   </div>
-  <div class="acciones" style="justify-content:flex-end;margin-top:8px">
-    <a class="btn" href="/control">Mejor no</a>
+  <input type="hidden" name="ref" value="{{ moviendo.lead.ref }}">
+  <input type="hidden" name="estado" value="{{ moviendo.destino.clave }}">
+
+  {% if moviendo.destino.clave == 'PERDIDO' %}
+  <div class="campo-caja">
+    <label for="mv-motivo">Motivo de la pérdida</label>
+    <select class="sel ancho" id="mv-motivo" name="motivo" required>
+      <option value="">Elige uno…</option>
+      {% for clave, texto in motivos.items() %}
+      <option value="{{ clave }}">{{ texto }}</option>
+      {% endfor %}
+    </select>
   </div>
-  <p class="pie-nota">El motivo es el mismo del CRM; si el cliente vuelve a
-    escribir, la tarjeta revive sola en su columna.</p>
+  {% endif %}
+
+  <div class="campo-caja">
+    <label for="mv-nota">¿Por qué la movés?</label>
+    <input class="campo" id="mv-nota" name="nota" required maxlength="300"
+           autocomplete="off" placeholder="Ej: le pasé el precio por teléfono">
+  </div>
+  <div class="acciones">
+    <button class="btn oro" type="submit" data-guardando="Moviendo…">Mover y anotar</button>
+    <a class="btn" href="/control?vista={{ vista }}">Mejor no</a>
+  </div>
+  <p class="pie-nota">Queda como comentario firmado en el issue
+    («{{ empleada.nombre or empleada.id }} movió de {{ moviendo.lead.estado_titulo }}
+    a {{ moviendo.destino.nombre }} · …»), para que en dos semanas se sepa por qué.</p>
 </form>
 {% endif %}
 

@@ -315,6 +315,22 @@ def _nombre_y_pp(titulo):
     return nombre, pp
 
 
+def _celular_de(descripcion):
+    """El celular del cliente, sacado de la tarjeta del issue.
+
+    La tarjeta trae el link de WhatsApp (o el bloque Cliente con el
+    +507): de ahi sale el numero, sin preguntarle nada a Twenty. Vuelve
+    "6999-9901", o "" si la tarjeta no trae telefono.
+    """
+    texto = descripcion or ""
+    encontrado = re.search(r"wa\.me/(\d{8,15})", texto)
+    digitos = encontrado.group(1)[-8:] if encontrado else ""
+    if not digitos:
+        encontrado = re.search(r"\+507\s?(\d{4})[- ]?(\d{4})", texto)
+        digitos = (encontrado.group(1) + encontrado.group(2)) if encontrado else ""
+    return f"{digitos[:4]}-{digitos[4:]}" if len(digitos) == 8 else ""
+
+
 def _dias_desde(iso_texto):
     try:
         cuando = datetime.fromisoformat(str(iso_texto).replace("Z", "+00:00"))
@@ -356,6 +372,7 @@ def _normalizar(issue):
         return (por_grupo.get(grupo) or [""])[0]
 
     nombre, pp = _nombre_y_pp(issue.get("title"))
+    celular = _celular_de(issue.get("description"))
     clave_estado = _estado_de(issue)
     resp = una(GRUPO_RESPONSABLE)
     dias = _dias_desde(issue.get("createdAt"))
@@ -370,6 +387,8 @@ def _normalizar(issue):
         "nombre": nombre,
         "pp": pp,
         "descripcion": issue.get("description") or "",
+        "celular": celular,
+        "wa": ("https://wa.me/507" + celular.replace("-", "")) if celular else "",
         "estado": clave_estado,
         "estado_nombre": (issue.get("state") or {}).get("name") or "",
         "estado_ficha": POR_CLAVE.get(clave_estado),
@@ -731,23 +750,23 @@ _MUESTRA_GRUPOS = {
 }
 
 _SEMILLA = [
-    ("LEAD-91", "Tamara", "PP-70211", "POR_AGENDAR", 1,
+    ("LEAD-91", "Tamara", "PP-70211", "POR_AGENDAR", 1, "6552-0966",
      ["WhatsApp", "Plantas", "Abono 50%", "Resp: Ruben"]),
-    ("LEAD-90", "Juan Carlos Lopez", "PP-70208", "POR_AGENDAR", 2,
+    ("LEAD-90", "Juan Carlos Lopez", "PP-70208", "POR_AGENDAR", 2, "6033-2211",
      ["plantaspanama.com", "Plantas", "Pagado 100%"]),
-    ("LEAD-89", "Boda Las Nubes", "PP-70207", "AGENDADO", 3,
+    ("LEAD-89", "Boda Las Nubes", "PP-70207", "AGENDADO", 3, "6788-4102",
      ["Instagram", "Eventos", "Abono 50%", "Resp: Mary"]),
-    ("LEAD-88", "Hotel Bristol", "PP-70205", "ENTREGADO", 5,
+    ("LEAD-88", "Hotel Bristol", "PP-70205", "ENTREGADO", 5, "6209-7754",
      ["WhatsApp", "Mantenimiento", "Cobrar saldo", "Resp: Ruben"]),
-    ("LEAD-87", "Ximena Dávila", "PP-70203", "COTIZADO", 4,
+    ("LEAD-87", "Ximena Dávila", "PP-70203", "COTIZADO", 4, "6455-1832",
      ["viverorose.com", "Eventos", "Te toca"]),
-    ("LEAD-86", "Nedjaira", "PP-70202", "HABLANDO", 2,
+    ("LEAD-86", "Nedjaira", "PP-70202", "HABLANDO", 2, "6114-9077",
      ["WhatsApp", "Plantas", "Te toca", "Resp: Salomón"]),
-    ("LEAD-85", "Diego Armando", "PP-70199", "NUEVO", 0,
+    ("LEAD-85", "Diego Armando", "PP-70199", "NUEVO", 0, "6987-5510",
      ["TikTok", "Mayorista"]),
-    ("LEAD-84", "Soledad", "PP-70195", "GANADO", 8,
+    ("LEAD-84", "Soledad", "PP-70195", "GANADO", 8, "6740-0923",
      ["WhatsApp", "Plantas", "Pagado 100%", "Resp: Abraham"]),
-    ("LEAD-83", "Monica Gama", "PP-70190", "PERDIDO", 9,
+    ("LEAD-83", "Monica Gama", "PP-70190", "PERDIDO", 9, "",
      ["Google", "Plantas", "Solo preguntaba"]),
 ]
 
@@ -759,7 +778,7 @@ def _muestra():
     global _MUESTRA
     if _MUESTRA is None:
         _MUESTRA = []
-        for ref, nombre, pp, estado, dias, etiquetas in _SEMILLA:
+        for ref, nombre, pp, estado, dias, celular, etiquetas in _SEMILLA:
             ficha = POR_CLAVE[estado]
             por_grupo = {}
             for nombre_label in etiquetas:
@@ -771,7 +790,9 @@ def _muestra():
             _MUESTRA.append({
                 "id": "muestra-" + ref, "ref": ref, "url": "",
                 "titulo": f"{nombre} ({pp})", "nombre": nombre, "pp": pp,
-                "descripcion": "", "estado": estado,
+                "descripcion": "", "celular": celular,
+                "wa": ("https://wa.me/507" + celular.replace("-", "")) if celular else "",
+                "estado": estado,
                 "estado_nombre": ficha["nombre"], "estado_ficha": ficha,
                 "cerrado": estado in CERRADOS, "etiquetas": list(etiquetas),
                 "origen": (por_grupo.get(GRUPO_ORIGEN) or [""])[0],
