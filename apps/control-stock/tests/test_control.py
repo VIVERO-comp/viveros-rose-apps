@@ -260,6 +260,13 @@ def test_perdido_con_motivo_pone_su_etiqueta():
     lead = linear_leads.uno("LEAD-85")
     assert lead["estado"] == "PERDIDO"
     assert lead["motivo"] == "Precio"
+    # UN solo comentario, con la nota y el motivo adentro: dos seguidos
+    # diciendo lo mismo solo ensucian el issue.
+    notas = linear_leads.comentarios(lead["id"])
+    assert len(notas) == 1
+    assert "dijo que estaba caro" in notas[0]["texto"]
+    assert "motivo: Precio" in notas[0]["texto"]
+    assert "Mary" in notas[0]["texto"]
 
 
 def test_un_estado_inventado_se_rechaza():

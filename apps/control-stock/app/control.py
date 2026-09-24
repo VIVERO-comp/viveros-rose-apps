@@ -284,8 +284,8 @@ def mover_a_estado(ref, clave, nota="", motivo="", autor=""):
         if clave == "PERDIDO":
             if motivo not in linear_leads.MOTIVOS_PERDIDA:
                 return "", "Falta el motivo de la pérdida."
-            linear_leads.marcar_perdido(lead["id"], motivo, autor=autor)
-            linear_leads.comentar(lead["id"], nota, autor=autor)
+            # Un solo comentario con la nota Y el motivo adentro.
+            linear_leads.marcar_perdido(lead["id"], motivo, nota=nota, autor=autor)
         else:
             linear_leads.mover_estado(lead["id"], clave, manual=True,
                                       nota=nota, autor=autor)

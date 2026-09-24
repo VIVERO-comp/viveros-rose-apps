@@ -719,17 +719,21 @@ def mover_estado(id_issue, clave, manual=False, nota="", autor=""):
     return True
 
 
-def marcar_perdido(id_issue, motivo_clave, autor=""):
+def marcar_perdido(id_issue, motivo_clave, nota="", autor=""):
     """Perdido a mano: la columna Perdido + su etiqueta de motivo.
 
     El motivo es obligatorio: un Perdido sin porqué no le sirve a nadie
-    cuando alguien revisa el embudo dos semanas después.
+    cuando alguien revisa el embudo dos semanas después. La nota de quien
+    lo cerró y el motivo van en UN solo comentario —dos seguidos diciendo
+    lo mismo solo ensucian el issue.
     """
     if motivo_clave not in MOTIVOS_PERDIDA:
         raise ErrorLeads("Falta el motivo de la pérdida.")
     nombre = MOTIVOS_PERDIDA[motivo_clave]
+    nota = (nota or "").strip()
     mover_estado(id_issue, "PERDIDO", manual=True,
-                 nota=f"motivo: {nombre}", autor=autor)
+                 nota=f"{nota} · motivo: {nombre}" if nota else f"motivo: {nombre}",
+                 autor=autor)
     poner_label_de_grupo(id_issue, GRUPO_MOTIVO, nombre)
     return True
 
