@@ -9,7 +9,9 @@ el botón de responder por WhatsApp, y las reglas del "semáforo":
   la archiva sola.
 - **Esperando respuesta**: el cliente escribió de último y ESPERA la
   respuesta del vivero — punto rojo (corrección de Abraham, 23/09/2026:
-  al principio quedó al revés).
+  al principio quedó al revés). El punto rojo lo lleva TODA tarjeta de
+  esta columna, también la que un empleado devolvió aquí a mano aunque el
+  vivero haya contestado de último (segunda corrección del mismo día).
 - **Terminado**: cae sola cuando el lead sale **Ganado** en el CRM del
   admin (el pipeline se mueve en Linear; aquí se lee ese estado). Va
   ANTES de Inactivo (pedido del mismo día).
@@ -31,7 +33,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
-from . import calendario, crm_flujo, crm_twenty, retail
+from . import avisos, calendario, crm_flujo, crm_twenty, retail
 from .datos import ZONA_PANAMA, _db
 
 DIAS_VENTANA = 7      # cuántos días de mensajes se miran
@@ -44,7 +46,8 @@ COLUMNAS = [
     {"clave": "en_curso", "titulo": "En curso",
      "pie": "El vivero contestó de último; la conversación va andando."},
     {"clave": "esperando", "titulo": "Esperando respuesta",
-     "pie": "El cliente escribió de último: alguien le debe respuesta."},
+     "pie": "El cliente escribió de último, o alguien la puso aquí a mano: "
+            "todas le deben respuesta y llevan el punto rojo."},
     {"clave": "terminado", "titulo": "Terminado",
      "pie": "Ganado en el CRM del admin: cae aquí sola."},
     {"clave": "inactivo", "titulo": "Inactivo",
@@ -73,6 +76,17 @@ def iniciar_tablas():
                 motivo TEXT,
                 ultima TEXT NOT NULL,
                 actualizado TEXT NOT NULL
+            )
+        """)
+        # En qué columna quedó cada chat la última vez que se pintó el
+        # tablero: es lo que deja saber que un chat ACABA de caer en
+        # "Esperando respuesta" y hay que avisar (una sola vez, no en cada
+        # recarga de la pantalla).
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS control_visto (
+                chat TEXT PRIMARY KEY,
+                columna TEXT NOT NULL,
+                visto TEXT NOT NULL
             )
         """)
 
@@ -243,7 +257,11 @@ def tablero():
             # por eso revive solo.
             c["columna"] = "en_curso" if c["dir"] == "SALIENTE" else "esperando"
             c["motivo"] = ""
-        c["debe"] = c["columna"] == "esperando" and c["dir"] != "SALIENTE"
+        # El punto rojo es de la COLUMNA, no de quién habló de último
+        # (corrección de Abraham, 23/09/2026): una tarjeta devuelta a mano
+        # a "Esperando respuesta" también le debe una al cliente, así que
+        # también lo enseña.
+        c["debe"] = c["columna"] == "esperando"
         c["nombre"] = c["nombre"] or c["cel"] or "Sin identificar"
         c["cuando"] = crm_twenty._cuando_bonito(c["fecha"])
         c["hace"] = _hace_bonito(c["fecha"])
@@ -252,9 +270,59 @@ def tablero():
         c["ganado"] = c["columna"] == "terminado"
         chats.append(c)
     chats.sort(key=lambda c: c["fecha"], reverse=True)
+    _avisar_de_los_que_esperan(chats)
     columnas = [dict(col, chats=[c for c in chats if c["columna"] == col["clave"]])
                 for col in COLUMNAS]
     return columnas, {c["chat"]: c for c in chats}
+
+
+def _avisar_de_los_que_esperan(chats):
+    """El aviso al celular del encargado de contestar (Abraham, 23/09/2026:
+    "a Rubén siempre", "siempre que caiga en Esperando").
+
+    Avisa del SALTO a "Esperando respuesta", no de estar ahí: un chat que
+    ya estaba esperando no vuelve a sonar en cada recarga de la pantalla,
+    y da igual si lo empujó un mensaje nuevo del cliente o la mano de un
+    compañero — el hecho es el mismo, hay un cliente esperando.
+
+    La primera corrida después de un deploy solo TOMA NOTA de dónde está
+    cada chat: si no, el encargado recibiría de golpe un aviso por cada
+    conversación abierta.
+    """
+    if not avisos.configurado():
+        return
+    iniciar_tablas()
+    with _db() as con:
+        conocidos = {f[0]: f[1] for f in
+                     con.execute("SELECT chat, columna FROM control_visto")}
+        estreno = not conocidos
+        nuevos = []
+        for chat in chats:
+            antes = conocidos.get(chat["chat"])
+            if antes == chat["columna"]:
+                continue
+            # UPDATE ... WHERE columna <> la de ahora + INSERT: la base es
+            # la que decide quién avisa, así que dos pestañas abiertas a la
+            # vez no mandan el aviso dos veces.
+            cambio = con.execute(
+                "UPDATE control_visto SET columna = ?, visto = datetime('now')"
+                " WHERE chat = ? AND columna <> ?",
+                (chat["columna"], chat["chat"], chat["columna"])).rowcount
+            if not cambio:
+                cambio = con.execute(
+                    "INSERT OR IGNORE INTO control_visto (chat, columna, visto)"
+                    " VALUES (?, ?, datetime('now'))",
+                    (chat["chat"], chat["columna"])).rowcount
+            if cambio and chat["columna"] == "esperando":
+                nuevos.append(chat)
+    if estreno:
+        return
+    for chat in nuevos:
+        avisos.avisar(
+            avisos.USUARIO_CHATS,
+            f"Esperando respuesta · {chat['nombre']}",
+            (chat["texto"] or "Toca para abrir el chat.")[:120],
+            "/control?abrir=" + quote(chat["chat"]))
 
 
 def mover(chat_id, columna, motivo=""):

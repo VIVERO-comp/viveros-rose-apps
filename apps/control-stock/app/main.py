@@ -20,7 +20,8 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import (acceso_google, calculos, calendario, calendario_google, colores, retail,
+from . import (acceso_google, avisos, calculos, calendario, calendario_google,
+               colores, retail,
                calendario_ics, compras, conteos, control, cotizaciones,
                coworkers, crm_flujo, crm_twenty, datos, fichas, fotos,
                proyectos, seguridad, ventas)
@@ -97,6 +98,7 @@ cotizaciones.iniciar_tablas()
 proyectos.iniciar_tablas()
 retail.iniciar_tablas()
 control.iniciar_tablas()
+avisos.iniciar_tablas()
 calendario_ics.iniciar_tablas()
 calendario_google.iniciar_tablas()
 calendario_google.arrancar_hilo()
@@ -146,7 +148,11 @@ async def exigir_sesion(request: Request, call_next):
     # exista la sesión.
     # /calendario.ics es la suscripción del teléfono: la autoriza su token
     # secreto (empleada_del_token), no la cookie de sesión.
+    # /sw-avisos.js y /manifest.webmanifest los pide el navegador por su
+    # cuenta (también cuando la sesión venció): si contestaran con el
+    # redirect al login, los avisos del celular se caerían en silencio.
     if (ruta == "/login" or ruta == "/calendario.ics" or ruta == "/crm/login"
+            or ruta == "/sw-avisos.js" or ruta == "/manifest.webmanifest"
             or ruta.startswith("/static") or ruta.startswith("/f/")
             or ruta.startswith("/auth/google") or ruta.startswith("/invitacion/")
             or ruta.startswith("/crm/auth/google")):
@@ -435,6 +441,11 @@ def inicio(request: Request, refrescar: int = 0):
         "base_publica": (os.environ.get("PUBLIC_BASE_URL")
                          or str(request.base_url)).rstrip("/"),
         "compras_activas": compras.activo(),
+        # Avisos Web Push (23/09/2026): cada quien activa SU celular; los
+        # de "Esperando respuesta" le llegan al encargado de los chats.
+        "avisos_clave": avisos.clave_publica(),
+        "avisos_celulares": avisos.cuantos(request.state.empleada["id"]),
+        "avisos_encargado": avisos.USUARIO_CHATS,
         "gcal_configurado": calendario_google.configurado(),
         "gcal_conexion": calendario_google.conexion_de(request.state.empleada["id"]),
         # La suscripción del calendario (feed ICS) en Ajustes (22/09/2026).
@@ -2375,6 +2386,71 @@ async def control_nota(request: Request):
         f"/control?abrir={quote(chat)}&error=" + quote(
             "No se pudo guardar la nota; inténtalo de nuevo."),
         status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Avisos Web Push: el celular suena aunque la app esté cerrada (23/09/2026)
+# ---------------------------------------------------------------------------
+
+@app.get("/sw-avisos.js")
+def avisos_service_worker():
+    """El service worker tiene que vivir en la RAÍZ: servido desde /static
+    solo podría atender /static, y los avisos son de toda la app. Sin
+    caché, para que un deploy lo renueve de una."""
+    return FileResponse(
+        os.path.join(RUTA_APP, "static", "sw-avisos.js"),
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
+
+
+@app.get("/manifest.webmanifest")
+def avisos_manifest():
+    """El manifest de la app instalada. En iPhone los avisos SOLO llegan si
+    la app está agregada a la pantalla de inicio, y para eso hace falta
+    este archivo."""
+    return Response(json.dumps({
+        "name": "Control Viverorose",
+        "short_name": "Control",
+        "start_url": "/control",
+        "display": "standalone",
+        "background_color": "#ffffff",
+        "theme_color": "#ffffff",
+        "icons": [{"src": "/static/logo.jpg", "sizes": "512x512", "type": "image/jpeg"}],
+    }), media_type="application/manifest+json")
+
+
+@app.post("/avisos/suscribir")
+async def avisos_suscribir(request: Request):
+    """El celular entrega su suscripción; se guarda a nombre de quien tiene
+    la sesión abierta en él."""
+    try:
+        suscripcion = await request.json()
+    except Exception:
+        suscripcion = None
+    if not avisos.guardar(request.state.empleada["id"], suscripcion):
+        return Response(status_code=400)
+    return Response(status_code=204)
+
+
+@app.post("/avisos/prueba")
+def avisos_prueba(request: Request):
+    """'Mandarme uno de prueba': el mismo camino que el aviso de verdad."""
+    empleada = request.state.empleada
+    if not avisos.cuantos(empleada["id"]):
+        return RedirectResponse("/?tab=ajustes&aviso=avisos-sin-celular",
+                                status_code=303)
+    avisos.avisar(empleada["id"], "Aviso de prueba",
+                  "Si ves esto, los avisos de este celular funcionan.",
+                  "/control")
+    return RedirectResponse("/?tab=ajustes&aviso=avisos-prueba", status_code=303)
+
+
+@app.post("/avisos/baja")
+def avisos_baja(request: Request):
+    """Apagar los avisos en todos los celulares de esta empleada."""
+    for suscripcion in avisos.suscripciones(request.state.empleada["id"]):
+        avisos.borrar(suscripcion["endpoint"])
+    return RedirectResponse("/?tab=ajustes&aviso=avisos-apagados", status_code=303)
 
 
 @app.get("/equipo")

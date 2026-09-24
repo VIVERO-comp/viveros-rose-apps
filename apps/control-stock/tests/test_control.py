@@ -97,6 +97,10 @@ def test_la_mano_le_gana_al_semaforo_mientras_no_haya_mensaje(cliente):
     cliente.post("/control/mover", data={"chat": "m2", "columna": "esperando"})
     _columnas, por_chat = control.tablero()
     assert por_chat["m2"]["columna"] == "esperando"
+    # Y lleva el punto rojo aunque el vivero haya contestado de último
+    # (corrección de Abraham, 23/09/2026): el punto es de la columna.
+    assert por_chat["m2"]["debe"]
+    assert "ctl-alerta" in cliente.get("/control").text
 
 
 def test_equipo_redirige_a_control(cliente):

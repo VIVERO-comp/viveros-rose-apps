@@ -101,6 +101,21 @@ pero fuera del menú desde el 11/09/2026, pedido del dueño):
   `scripts/traer_fichas.py` + `generar_catalogo.py` en el frontend — guardar
   aquí no cambia la tienda al instante. Ver el README de control-stock.
 
+Avisos en el celular (Web Push, 23/09/2026): un chat que cae en **Esperando
+respuesta** — lo mueva un compañero a mano o lo empuje un mensaje nuevo del
+cliente — le suena el celular al encargado de contestar
+(`AVISOS_CHATS_USUARIO`, hoy Rubén), aunque tenga la app cerrada. Mismo
+estándar gratis del order-api (VAPID + pywebpush) y las MISMAS claves, pero
+con suscripción propia: el navegador la amarra al origen. El aviso es del
+SALTO a esa columna, no de estar ahí (no vuelve a sonar en cada recarga), y
+la primera corrida tras un deploy solo toma nota para no disparar un aviso
+por cada conversación abierta. Cada quien activa su teléfono en Ajustes →
+"Avisos en este celular" (en iPhone hay que agregar la app a la pantalla de
+inicio primero). El service worker se sirve en la raíz (`/sw-avisos.js`,
+`Service-Worker-Allowed: /`) y no tiene manejador de `fetch`: no cachea
+nada. Sin claves VAPID en el `.env` la app arranca igual y los avisos quedan
+en el log.
+
 Alertas: campanita con contador; se crea una por producto crítico
 (disponible < umbral, 3 por defecto y configurable desde el panel), lleva al
 producto, se marca atendida y se cierra sola si el stock se recupera.

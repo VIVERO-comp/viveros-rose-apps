@@ -368,6 +368,50 @@
     </div>
     </details>
 
+    {# Avisos en el celular (23/09/2026): cada quien activa el suyo. Los
+       avisos de "Esperando respuesta" le llegan al encargado de los chats
+       (AVISOS_CHATS_USUARIO). El botón es el único JS: pedir el permiso y
+       entregar la suscripción es lo único que no se puede hacer desde
+       Python. #}
+    <details class="ajuste-d">
+      <summary><span class="que"><b>Avisos en este celular</b><span>{% if avisos_celulares %}{{ avisos_celulares }} celular{{ 's' if avisos_celulares > 1 }} activado{{ 's' if avisos_celulares > 1 }}{% else %}Apagados{% endif %}</span></span><span class="flecha">›</span></summary>
+      <div class="ajuste-cuerpo">
+<div class="seccion-titulo">Avisos en este celular</div>
+    {% if aviso_ajustes == 'avisos-activados' %}<div class="aviso-ok">Avisos activados en este celular.</div>
+    {% elif aviso_ajustes == 'avisos-prueba' %}<div class="aviso-ok">Aviso de prueba mandado. Debe salirte en unos segundos.</div>
+    {% elif aviso_ajustes == 'avisos-sin-celular' %}<div class="aviso-error">Primero activa los avisos en este celular.</div>
+    {% elif aviso_ajustes == 'avisos-apagados' %}<div class="aviso-ok">Avisos apagados en todos tus celulares.</div>{% endif %}
+    <div class="inv-card">
+      <h3>Que el celular suene con los chats</h3>
+      {% if avisos_clave %}
+      <p>Un chat que cae en <b>Esperando respuesta</b> le avisa al celular de
+      <b>{{ avisos_encargado }}</b>, lo haya movido un compañero a mano o lo
+      haya empujado un mensaje nuevo del cliente. Activa tu celular aquí (una
+      vez por teléfono).</p>
+      <div class="botones">
+        <button class="btn btn-dorado" type="button" id="activar-avisos"
+                data-clave="{{ avisos_clave }}">Activar los avisos aquí</button>
+        <form method="post" action="/avisos/prueba">
+          <button class="btn btn-linea" type="submit">Mandarme uno de prueba</button>
+        </form>
+        {% if avisos_celulares %}
+        <form method="post" action="/avisos/baja">
+          <button class="btn btn-linea btn-chico" type="submit">Apagar mis avisos</button>
+        </form>
+        {% endif %}
+      </div>
+      <p>En iPhone hay que agregar la app a la pantalla de inicio primero
+      (Compartir → Añadir a pantalla de inicio) y activar los avisos desde
+      ahí: Apple no los deja llegar a una pestaña suelta de Safari.</p>
+      {% else %}
+      <p>Los avisos están apagados en el servidor: faltan las claves VAPID
+      (VAPID_CLAVE_PUBLICA y VAPID_CLAVE_PRIVADA en el .env del droplet).</p>
+      {% endif %}
+    </div>
+
+    </div>
+    </details>
+
     {# La hoja de inventario vivía en la pestaña Inventario (hoy fuera del
        menú): el dueño pidió tenerla aquí (16/09/2026). Solo imprime, no
        ajusta nada. #}
@@ -734,4 +778,7 @@
 {% block scripts %}
 <script>window.DATOS = {{ datos_json | safe }};</script>
 <script src="/static/app.js?v={{ v_estaticos }}"></script>
+{# Pedirle el permiso al navegador y entregar la suscripción del celular:
+   lo único de los avisos que no se puede hacer desde Python. #}
+<script src="/static/avisos.js?v={{ v_estaticos }}" defer></script>
 {% endblock %}
