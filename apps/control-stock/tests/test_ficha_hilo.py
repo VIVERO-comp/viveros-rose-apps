@@ -261,3 +261,52 @@ def test_las_notas_no_se_mezclan_con_la_conversacion(cliente, de_dueno):
     """El rótulo dice de quién son: el cliente no vio ninguna."""
     cuerpo = cliente.get("/control", params={"abrir": "LEAD-91"}).text
     assert "Notas internas · solo el equipo" in cuerpo
+
+
+# ---------------------------------------------------------------------------
+# El candado de la instancia de pruebas
+#
+# El .env de control-stock-pruebas TIENE SINCRO_URL y SINCRO_SECRET, así que
+# en cuanto ese contenedor se reinicie, `waha_activo()` pasa a True allá.
+# Lo que no puede pasar nunca es que pruebas le ponga una etiqueta al
+# WhatsApp de verdad: la escritura en Linear se cierra antes
+# (CALENDARIO_ESCRITURA=0) y el camino ni siquiera llega al enganche.
+# ---------------------------------------------------------------------------
+
+def _pruebas_en_lectura(monkeypatch):
+    """Una instancia configurada contra Linear pero SIN permiso de escribir,
+    y con el enganche de WhatsApp encendido."""
+    monkeypatch.setattr(linear_leads, "configurado", lambda: True)
+    monkeypatch.setattr(linear_leads, "escritura_activa", lambda: False)
+    monkeypatch.setenv("SINCRO_URL", "http://10.116.0.3:3002/sincronizar")
+    monkeypatch.setenv("SINCRO_SECRET", "no-importa-el-valor")
+
+
+def test_en_lectura_repartir_no_toca_whatsapp(monkeypatch):
+    _pruebas_en_lectura(monkeypatch)
+    assert control.waha_activo() is True
+    llamadas = []
+    monkeypatch.setattr(control, "etiquetar_en_whatsapp",
+                        lambda ref: llamadas.append(ref))
+    monkeypatch.setattr(linear_leads, "uno",
+                        lambda ref, leads=None: {"id": "i", "ref": ref,
+                                                 "nombre": "Tamara", "resp": ""})
+    monkeypatch.setattr(linear_leads, "responsables", lambda: ["Mary"])
+    aviso, error = control.mover_a_empleado("LEAD-91", "Mary")
+    assert not aviso and "no escribe en" in error
+    assert llamadas == []
+
+
+def test_en_lectura_corregir_el_estado_no_toca_whatsapp(monkeypatch):
+    _pruebas_en_lectura(monkeypatch)
+    llamadas = []
+    monkeypatch.setattr(control, "etiquetar_en_whatsapp",
+                        lambda ref: llamadas.append(ref))
+    monkeypatch.setattr(linear_leads, "uno",
+                        lambda ref, leads=None: {"id": "i", "ref": ref,
+                                                 "nombre": "Tamara",
+                                                 "estado": "HABLANDO"})
+    aviso, error = control.mover_a_estado("LEAD-91", "COTIZADO",
+                                          nota="probando en pruebas")
+    assert not aviso and "no escribe en" in error
+    assert llamadas == []
