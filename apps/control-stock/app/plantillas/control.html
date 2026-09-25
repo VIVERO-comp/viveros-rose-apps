@@ -169,6 +169,79 @@
     {% if abierta.motivo %}<span class="etq at">{{ abierta.motivo }}</span>{% endif %}
   </div>
 
+  {# --- Qué hago. Los tres botones del diseño están reservados y apagados:
+         los construye la sesión de Control. Lo único vivo es abrir el chat,
+         y por eso es el botón negro de esta pantalla. --- #}
+  <div class="acciones">
+    {% if abierta.wa %}
+    <a class="btn oro" href="{{ abierta.wa }}" target="_blank" rel="noopener">💬 WhatsApp</a>
+    {% endif %}
+    <button class="btn" type="button" disabled>🔴 Responder</button>
+    {% if abierta.estado in ('NUEVO', 'HABLANDO') %}
+    <button class="btn" type="button" disabled>Cotizar</button>
+    {% endif %}
+    <button class="btn" type="button" disabled>Adjuntar venta</button>
+  </div>
+  <p class="pie-nota" style="margin:-4px 0 0">Los tres botones apagados llegan
+    con la cotización conectada.</p>
+
+  {# --- Cuánto es. El lugar de la cotización conectada, todavía vacío. --- #}
+  <div class="ficha-cot-vacia">Sin cotización conectada.</div>
+
+  {# --- Qué se dijo: el hilo. Cliente a la izquierda, equipo a la derecha
+         con el nombre de quien respondió; los sucesos del sistema en lila,
+         en medio; las notas internas, abajo y aparte. --- #}
+  <div class="ficha-hilo-cab">
+    <span>Conversación</span>
+    {% if abierta.twenty_url %}
+    <a class="tenue" href="{{ abierta.twenty_url }}" target="_blank" rel="noopener">ver en Twenty ↗</a>
+    {% endif %}
+  </div>
+  {% if abierta.hilo %}
+  <div class="ficha-hilo">
+    {% for b in abierta.hilo %}
+      {% if b.tipo == 'dia' %}
+      <span class="hilo-dia">{{ b.texto }}</span>
+      {% elif b.tipo == 'suceso' %}
+      <div class="hilo-suceso"><span>{{ b.texto }}</span>
+        {% if b.hora %}<span class="hilo-hora">{{ b.hora }}</span>{% endif %}</div>
+      {% else %}
+      <div class="hilo-grupo{{ ' mio' if b.mio }}{{ ' anonimo' if b.desconocido }}{{ ' delsistema' if b.sistema }}">
+        <span class="hilo-ava">{{ b.iniciales }}</span>
+        <div class="hilo-pila">
+          <span class="hilo-nombre">{{ b.nombre }}</span>
+          {% for m in b.mensajes %}
+          <div class="hilo-globo"><span>{{ m.texto }}</span><span class="hilo-hora">{{ m.hora }}</span></div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="pie-nota" style="margin:0">Sin chat disponible.</p>
+  {% endif %}
+
+  {# --- Las notas internas, aparte: nunca dentro del hilo, porque el
+         cliente no las vio. --- #}
+  <div class="ret-cotizs">
+    <div class="tenue ret-cotiz-titulo">Notas internas · solo el equipo</div>
+    {% for n in abierta.notas %}
+    <div class="crm-nota"><small>{{ n.quien }} · {{ n.cuando }}</small>{{ n.texto }}</div>
+    {% else %}
+    <p class="pie-nota" style="margin:4px 0 0">Sin notas todavía.</p>
+    {% endfor %}
+    {% if puede_tocar_abierta %}
+    <form method="post" action="/control/nota?vista={{ vista }}" class="crm-forma-nota">
+      <input type="hidden" name="ref" value="{{ abierta.ref }}">
+      <textarea class="campo" name="texto" rows="2" maxlength="2000"
+                placeholder="Escribe una nota…" required></textarea>
+      <button class="btn" type="submit" data-guardando="Guardando…">Guardar nota</button>
+    </form>
+    {% endif %}
+  </div>
+
+  {# --- Los datos, al final: se consultan, no se leen cada vez. --- #}
   <div>
     <div class="dato"><b>Responsable</b><span>{{ abierta.resp_titulo }}</span></div>
     <div class="dato"><b>Origen</b><span>{{ abierta.origen or '—' }}</span></div>
@@ -176,15 +249,11 @@
     {% if abierta.celular %}<div class="dato"><b>Teléfono</b><span class="mono">{{ abierta.celular }}</span></div>{% endif %}
     <div class="dato"><b>Issue</b><span class="mono">{{ abierta.ref }}{% if abierta.pp %} · {{ abierta.pp }}{% endif %}</span></div>
   </div>
-
+  {% if abierta.url %}
   <div class="acciones">
-    {% if abierta.wa %}
-    <a class="btn" href="{{ abierta.wa }}" target="_blank" rel="noopener">💬 WhatsApp</a>
-    {% endif %}
-    {% if abierta.url %}
     <a class="btn" href="{{ abierta.url }}" target="_blank" rel="noopener">Linear ↗</a>
-    {% endif %}
   </div>
+  {% endif %}
 
   {% if puede_tocar_abierta %}
   {# Repartir: el mismo cambio de etiqueta que hace el arrastre. #}
@@ -221,21 +290,6 @@
     <p class="pie-nota">Solo para arreglar un error: el embudo se mueve solo.
       Pide el motivo y queda anotado en el issue, con tu nombre.</p>
   </div>
-
-  <div class="ret-cotizs">
-    <div class="tenue ret-cotiz-titulo">Notas</div>
-    {% for n in abierta.notas %}
-    <div class="crm-nota"><small>{{ n.quien }} · {{ n.cuando }}</small>{{ n.texto }}</div>
-    {% else %}
-    <p class="pie-nota" style="margin:4px 0 0">Sin notas todavía.</p>
-    {% endfor %}
-    <form method="post" action="/control/nota?vista={{ vista }}" class="crm-forma-nota">
-      <input type="hidden" name="ref" value="{{ abierta.ref }}">
-      <textarea class="campo" name="texto" rows="2" maxlength="2000"
-                placeholder="Escribe una nota…" required></textarea>
-      <button class="btn" type="submit" data-guardando="Guardando…">Guardar nota</button>
-    </form>
-  </div>
   {% else %}
   <div class="solo-lectura">
     {% if modo == 'lectura' %}
@@ -244,14 +298,6 @@
       <b>No es tuyo.</b> Este lead es de {{ abierta.resp_titulo }}: lo ves para
       coordinarte, pero lo mueve {{ abierta.resp_titulo }} o el dueño.
     {% endif %}
-  </div>
-  <div class="ret-cotizs">
-    <div class="tenue ret-cotiz-titulo">Notas</div>
-    {% for n in abierta.notas %}
-    <div class="crm-nota"><small>{{ n.quien }} · {{ n.cuando }}</small>{{ n.texto }}</div>
-    {% else %}
-    <p class="pie-nota" style="margin:4px 0 0">Sin notas todavía.</p>
-    {% endfor %}
   </div>
   {% endif %}
 </aside>

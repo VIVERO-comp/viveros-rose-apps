@@ -158,6 +158,27 @@ def _cuando_bonito(iso_texto):
         return ""
 
 
+def dia_legible(iso_texto):
+    """ISO de Twenty -> 'Jueves 24 sep', el separador de día del hilo."""
+    try:
+        cuando = datetime.fromisoformat(str(iso_texto).replace("Z", "+00:00"))
+        cuando = cuando.astimezone(calendario.ZONA_PANAMA)
+    except (ValueError, TypeError):
+        return ""
+    return (f"{calendario.DOW_LARGO[cuando.weekday()]} {cuando.day} "
+            f"{calendario.MESES[cuando.month - 1][:3]}")
+
+
+def hora_legible(iso_texto):
+    """ISO de Twenty -> '08:05' en hora de Panamá."""
+    try:
+        cuando = datetime.fromisoformat(str(iso_texto).replace("Z", "+00:00"))
+        cuando = cuando.astimezone(calendario.ZONA_PANAMA)
+    except (ValueError, TypeError):
+        return ""
+    return f"{cuando.hour:02d}:{cuando.minute:02d}"
+
+
 def ficha_de_lead(lead):
     """{pp, telefono, wa, llego, mensajes, twenty_url} o None si no hay Twenty."""
     if not twenty_configurado():
@@ -199,10 +220,21 @@ def _buscar_ficha(lead):
         j = _twenty("mensajesWhatsapp?filter=personaId[eq]:%22" + quote(persona_id)
                     + "%22&order_by=createdAt[AscNullsFirst]&limit=60")
         for m in (j.get("data") or {}).get("mensajesWhatsapp") or []:
+            # `fecha` cruda además de la bonita: el hilo de la ficha ordena
+            # los mensajes contra los sucesos del sistema, y para eso hace
+            # falta algo comparable, no "24/09 · 08:05".
+            cruda = m.get("fecha") or m.get("createdAt") or ""
             mensajes.append({
                 "texto": m.get("texto") or "",
                 "salida": (m.get("direccion") or "") == "SALIENTE",
-                "cuando": _cuando_bonito(m.get("fecha") or m.get("createdAt") or ""),
+                "cuando": _cuando_bonito(cruda),
+                "fecha": cruda,
+                "dia": dia_legible(cruda),
+                "hora": hora_legible(cruda),
+                # Quién lo escribió (Fase B). Vacío mientras WAHA no lo haya
+                # anotado todavía: entonces el hilo dice «Vivero», que es lo
+                # único cierto, en vez de inventar un nombre.
+                "autor": (m.get("autor") or "").strip(),
             })
 
     llego = ""

@@ -35,7 +35,7 @@ import re
 import httpx
 from datetime import datetime
 
-from . import agenda, avisos, calendario, linear_leads
+from . import agenda, avisos, calendario, crm_twenty, linear_leads
 from .datos import ZONA_PANAMA, _db
 
 VISTAS = ("empleado", "estado")
@@ -355,13 +355,176 @@ def escribir_nota(ref, texto, autor=""):
     return "Nota guardada en el issue.", ""
 
 
+
+# ---------------------------------------------------------------------------
+# El hilo de la ficha (Fase C, 25/09/2026)
+#
+# La conversación entera dentro del panel: el cliente a la izquierda, el
+# equipo a la derecha CON EL NOMBRE de quien respondió, y los sucesos del
+# sistema como un renglón lila en medio del hilo («Cotización S00089
+# generada»), para que la plata y la conversación se lean juntas.
+#
+# Los mensajes seguidos del mismo autor van bajo UNA firma. En una tanda de
+# diez mensajes de Mary, repetir «Mary» diez veces no dice nada nuevo y
+# empuja la conversación fuera de la pantalla.
+#
+# Todo se decide aquí: la plantilla recorre bloques ya armados y no toma
+# ninguna decisión.
+# ---------------------------------------------------------------------------
+
+# La firma que `linear_leads.comentar()` le pone a lo que escribe una
+# PERSONA desde Control. Su ausencia es la señal de que ese comentario lo
+# escribió el sistema; no se compara contra el nombre del bot a propósito,
+# que es un dato que puede cambiar en Linear sin avisar.
+FIRMA_PERSONA = "_— "
+
+# Los ecos: comentarios del sistema que REPITEN un mensaje que el hilo ya
+# muestra dos líneas más arriba. Son ciertos y en el issue de Linear tienen
+# sentido —allá no se ve la conversación—, pero dentro del hilo son ruido:
+# en el lead de Diana Caballero había cinco en una sola tarde, cada uno
+# debajo del mensaje que repetía. Medido sobre el tablero real del
+# 25/09/2026: 96 de los 100 comentarios del sistema son ecos.
+#
+# Lo que NO es eco se queda: «🧾 S00089 · $55.00 — hecha en inventario», el
+# cierre del barrido de 14 días, el origen emparejado por hora. Eso cuenta
+# algo que la conversación no dice, y por eso el hilo existe.
+_ECOS = (
+    # La Fase B, cuando el equipo rompe el silencio.
+    re.compile(r"^.{1,40} respondió[:.]"),
+    # El receptor del frontend, cada vez que el cliente vuelve a escribir.
+    re.compile(r"^Volvió a escribir por WhatsApp"),
+)
+
+
+def _es_eco(texto):
+    return any(patron.match(texto) for patron in _ECOS)
+
+# Cómo se ve el que escribe. «Vivero» es el que no sabemos: un saliente que
+# WAHA todavía no anotó no tiene autor, y ponerle un nombre sería inventarlo.
+SIN_AUTOR = "Vivero"
+
+
+def _iniciales(nombre):
+    """Dos letras para el avatar del hilo.
+
+    Con nombre y apellido, la inicial de cada uno (Jenny Londoño -> JL).
+    Con una sola palabra, sus dos primeras letras. Un dispositivo que nadie
+    reclamó sale como «?4», para que se note que le falta dueño. Un nombre
+    que es puro emoji cae en «?».
+    """
+    nombre = (nombre or "").strip()
+    if nombre.startswith("Equipo"):
+        numeros = [c for c in nombre if c.isdigit()]
+        return "?" + (numeros[-1] if numeros else "")
+    palabras = [p for p in nombre.replace("·", " ").split() if p[:1].isalpha()]
+    if len(palabras) >= 2:
+        return (palabras[0][0] + palabras[1][0]).upper()
+    letras = [c for c in nombre if c.isalpha()]
+    return ("".join(letras[:2]) or "?").upper()
+
+
+def separar_notas(notas):
+    """Parte los comentarios del issue en (sucesos del hilo, notas internas).
+
+    Un comentario firmado lo escribió una persona: es una nota interna y va
+    APARTE, debajo del hilo, nunca mezclada con lo que vio el cliente. Uno
+    sin firma lo escribió el sistema y cuenta algo que la conversación no
+    dice —la cotización, el pago—, así que entra al hilo.
+    """
+    sucesos, internas = [], []
+    for nota in notas or []:
+        texto = (nota.get("texto") or "").strip()
+        if FIRMA_PERSONA in texto:
+            internas.append(nota)
+            continue
+        if _es_eco(texto):
+            continue
+        sucesos.append(nota)
+    return sucesos, internas
+
+
+def hilo(mensajes, sucesos=(), nombre_cliente=""):
+    """Los bloques del chat, en orden y ya agrupados.
+
+    Tres tipos de bloque, y la plantilla no hace más que pintarlos:
+
+    - `dia`: el separador («Jueves 24 sep»).
+    - `grupo`: una tanda de mensajes del mismo autor, con su firma y su
+      avatar. `mio` dice si va a la derecha.
+    - `suceso`: el renglón lila del sistema, en medio del hilo.
+    """
+    linea = []
+    for m in mensajes or []:
+        linea.append({
+            "orden": m.get("fecha") or "",
+            "tipo": "mensaje",
+            "dia": m.get("dia") or "",
+            "hora": m.get("hora") or "",
+            "texto": m.get("texto") or "",
+            "salida": bool(m.get("salida")),
+            "autor": (m.get("autor") or "").strip(),
+        })
+    for s in sucesos or []:
+        linea.append({
+            "orden": s.get("fecha") or "",
+            "tipo": "suceso",
+            "dia": crm_twenty.dia_legible(s.get("fecha") or ""),
+            "hora": crm_twenty.hora_legible(s.get("fecha") or ""),
+            "texto": (s.get("texto") or "").strip(),
+        })
+    linea.sort(key=lambda x: x["orden"])
+
+    bloques, dia_actual, grupo = [], None, None
+    for item in linea:
+        if item["dia"] and item["dia"] != dia_actual:
+            bloques.append({"tipo": "dia", "texto": item["dia"]})
+            dia_actual, grupo = item["dia"], None
+        if item["tipo"] == "suceso":
+            # Un suceso corta la tanda: lo que venga después vuelve a
+            # firmarse, aunque sea del mismo autor.
+            grupo = None
+            bloques.append({"tipo": "suceso", "texto": item["texto"],
+                            "hora": item["hora"]})
+            continue
+        nombre = (item["autor"] or SIN_AUTOR) if item["salida"] else (
+            nombre_cliente or "Cliente")
+        if grupo is None or grupo["nombre"] != nombre or grupo["mio"] != item["salida"]:
+            grupo = {
+                "tipo": "grupo",
+                "nombre": nombre,
+                "iniciales": _iniciales(nombre),
+                "mio": item["salida"],
+                "desconocido": item["salida"] and (
+                    not item["autor"] or item["autor"].startswith("Equipo")),
+                "sistema": item["autor"] == "Sistema",
+                "mensajes": [],
+            }
+            bloques.append(grupo)
+        grupo["mensajes"].append({"hora": item["hora"], "texto": item["texto"]})
+    return bloques
+
+
 def ficha(ref):
-    """El lead con sus notas, para el panel de la derecha."""
+    """El lead con su conversación y sus notas, para el panel de la derecha.
+
+    El chat es un extra: si Twenty no contesta, el panel se pinta igual y
+    dice que no hay chat, en vez de quedarse en blanco.
+    """
     lead = linear_leads.uno(ref)
     if lead is None:
         return None
     abierta = _tarjeta(lead)
-    abierta["notas"] = linear_leads.comentarios(lead["id"])
+    sucesos, internas = separar_notas(linear_leads.comentarios(lead["id"]))
+    abierta["notas"] = internas
+
+    ficha_twenty = crm_twenty.ficha_de_lead(lead) or {}
+    mensajes = ficha_twenty.get("mensajes") or []
+    abierta["hilo"] = hilo(mensajes, sucesos, lead.get("nombre") or "")
+    abierta["hay_chat"] = bool(mensajes)
+    abierta["twenty_url"] = ficha_twenty.get("twenty_url") or ""
+    # El teléfono de Twenty completa al del issue cuando allá no quedó.
+    if not abierta.get("celular") and ficha_twenty.get("telefono"):
+        abierta["celular"] = ficha_twenty["telefono"]
     return abierta
 
 
