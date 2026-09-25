@@ -178,6 +178,47 @@ llena esa función, `waha_activo()` pasa a decir la verdad y **el aviso manual
 se apaga solo** — nada más cambia. Hay una prueba que lo demuestra
 (`test_con_waha_andando_el_aviso_manual_se_apaga`).
 
+### El resumen del día (`app/resumen.py`, `/resumen`)
+
+Pedido de Abraham (25/09/2026): a las **7 p.m. de Panamá**, un aviso al
+celular —**no** WhatsApp— **solo para él**, con cinco bloques: leads nuevos
+del día por origen, cotizaciones, pagos registrados, leads sin `Resp:`, y
+quién tiene clientes esperando y **hace cuánto**.
+
+- **Vive en control-stock y no en order-api**, aunque order-api también sepa
+  mandar Web Push. El navegador amarra la suscripción al **origen**: el celular
+  del dueño se suscribe en `inventario.plantaspanama.com`, así que su
+  suscripción está en la base de ESTA app. Desde order-api (suscripciones de
+  los repartidores, otro origen) no le llegaría nada.
+- **El aviso lleva solo el titular** (`3 nuevos · 1 pago ($500.00) · 22 sin
+  dueño · 3 esperando`) y abre `/resumen` con el detalle. En un push no caben
+  cinco bloques, y partirlo en cinco avisos sería peor.
+- **Nada se inventa.** Si Odoo o Linear no contestan, ese bloque queda **en
+  blanco y lo dice** — nunca en cero. Un cero falso parece una noticia buena, y
+  esa es la peor clase de mentira en un resumen. El titular además avisa «con
+  huecos».
+- **El «hace cuánto» sale del último mensaje del cliente**
+  (`mensajesWhatsapp.fecha` de Twenty), **nunca** del `updatedAt` del issue:
+  cualquier toque nuestro reinicia ese campo, que es justo la trampa que casi
+  mató al barrido. Si Twenty no contesta, el lead sale sin el tiempo.
+- **Un domingo sin novedades no suena.** El vivero cierra domingo (`HORARIO`,
+  L–V 8–17 y sábado 8–12); si además no pasó nada, el aviso no se manda. Un
+  domingo con algo —un cliente que escribió— sí suena.
+- **El candado es el secreto, no la cookie**: lo llama el cron, no una persona,
+  así que `POST /avisos/resumen` está exento del login y verifica
+  `RESUMEN_SECRETO` con `hmac.compare_digest`. Sin la variable, 503 y no hace
+  nada. La pantalla `/resumen` sí pide sesión.
+- La pantalla dice en qué estado está el aviso mismo: si falta el secreto, si el
+  dueño no tiene ningún celular activado, o que está andando.
+
+El cron del droplet (que corre en hora de Panamá, así que no hay que convertir
+a UTC como en Vercel):
+
+```bash
+0 19 * * * curl -fsS -X POST -H "Authorization: Bearer $RESUMEN_SECRETO" \
+  http://127.0.0.1:8092/avisos/resumen >> ~/resumen.log 2>&1
+```
+
 ## La cara CRM (`/crm/calendario`)
 
 El MISMO calendario, con la piel de Twenty, para verse como pestaña dentro

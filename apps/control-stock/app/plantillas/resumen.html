@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block titulo %}Resumen del {{ r.dia_texto }} — Control Viverorose{% endblock %}
+
+{# A donde lleva el aviso del celular de las 7 p.m. El push solo carga el
+   titular; el detalle de los cinco bloques vive aqui.
+
+   Regla de la pantalla: un bloque cuya fuente no contesto NO se pinta en
+   cero — se dice que no se pudo leer. Un cero falso parece una noticia
+   buena, y esa es la peor clase de mentira en un resumen. #}
+
+{% block contenido %}
+{% with bm_titulo='Resumen', bm_sub=r.dia_texto, bm_volver='/control' %}
+  {% include '_barra_movil.html' %}
+{% endwith %}
+
+<main class="angosto">
+  <div class="seccion-titulo">Resumen del {{ r.dia_texto }}</div>
+
+  <div class="inv-card">
+    <h3>{{ titular }}</h3>
+    <p style="margin-bottom:0">
+      {% if r.cerrado %}Domingo: el vivero estuvo cerrado.
+      {% elif es_hoy %}El día va corriendo; esto es lo que hay hasta ahora.
+      {% else %}Así cerró el día.{% endif %}
+    </p>
+  </div>
+
+  {% if r.errores %}
+  <div class="aviso-error">
+    <b>Hay huecos en este resumen.</b> No se pudo leer:
+    <ul style="margin:6px 0 0 18px">
+      {% for e in r.errores %}<li>{{ e }}</li>{% endfor %}
+    </ul>
+    Los bloques que dependen de eso salen en blanco a propósito, no en cero.
+  </div>
+  {% endif %}
+
+  {# ---------- 1. Leads nuevos por origen ---------- #}
+  <div class="inv-card">
+    <h3>Leads nuevos {% if r.nuevos %}· {{ r.nuevos.total }}{% endif %}</h3>
+    {% if r.nuevos is none %}
+    <p style="margin-bottom:0">No se pudo leer Linear.</p>
+    {% elif not r.nuevos.total %}
+    <p style="margin-bottom:0">Ninguno entró hoy.</p>
+    {% else %}
+    <p>De dónde llegaron:</p>
+    {% for origen, cuantos in r.nuevos.por_origen %}
+    <div class="fila"><span>{{ origen }}</span><b>{{ cuantos }}</b></div>
+    {% endfor %}
+    <p style="margin:12px 0 0">Quiénes son:</p>
+    {% for l in r.nuevos.filas %}
+    <div class="fila">
+      <span>{{ l.nombre }}{% if l.interes %} · {{ l.interes }}{% endif %}</span>
+      <b>{{ l.ref }}</b>
+    </div>
+    {% endfor %}
+    {% endif %}
+  </div>
+
+  {# ---------- 2. Cotizaciones ---------- #}
+  <div class="inv-card">
+    <h3>Cotizaciones {% if r.cotizaciones %}· {{ r.cotizaciones.total }}{% endif %}</h3>
+    {% if r.cotizaciones is none %}
+    <p style="margin-bottom:0">No se pudo leer Odoo.</p>
+    {% elif not r.cotizaciones.total %}
+    <p style="margin-bottom:0">Ninguna se cotizó hoy.</p>
+    {% else %}
+    <p>{{ plata(r.cotizaciones.monto) }} en total:</p>
+    {% for c in r.cotizaciones.filas %}
+    <div class="fila">
+      <span>{{ c.cliente }} · {{ c.orden }}</span>
+      <b>{{ plata(c.total) }}</b>
+    </div>
+    {% endfor %}
+    {% endif %}
+  </div>
+
+  {# ---------- 3. Pagos registrados ---------- #}
+  <div class="inv-card">
+    <h3>Pagos registrados {% if r.pagos %}· {{ r.pagos.total }}{% endif %}</h3>
+    {% if r.pagos is none %}
+    <p style="margin-bottom:0">No se pudo leer Odoo.</p>
+    {% elif not r.pagos.total %}
+    <p style="margin-bottom:0">Ninguno entró hoy.</p>
+    {% else %}
+    <p>{{ plata(r.pagos.monto) }} en total:</p>
+    {% for p in r.pagos.filas %}
+    <div class="fila">
+      <span>{{ p.cliente }}{% if p.orden %} · {{ p.orden }}{% endif %}{% if p.medio %} · {{ p.medio }}{% endif %}</span>
+      <b>{{ plata(p.monto) }}</b>
+    </div>
+    {% endfor %}
+    {% endif %}
+  </div>
+
+  {# ---------- 4. Leads sin dueño ---------- #}
+  <div class="inv-card">
+    <h3>Sin dueño
+      {% if r.sin_resp %}· {{ r.sin_resp.total }} de {{ r.sin_resp.de }}{% endif %}</h3>
+    {% if r.sin_resp is none %}
+    <p style="margin-bottom:0">No se pudo leer Linear.</p>
+    {% elif not r.sin_resp.total %}
+    <p style="margin-bottom:0">Todos tienen responsable. 🌿</p>
+    {% else %}
+    <p>Leads vivos sin etiqueta <b>Resp:</b>. Se reparten arrastrando en Control.</p>
+    {% for l in r.sin_resp.filas[:15] %}
+    <div class="fila"><span>{{ l.nombre }} · {{ l.estado }}</span><b>{{ l.ref }}</b></div>
+    {% endfor %}
+    {% if r.sin_resp.total > 15 %}
+    <p style="margin:10px 0 0">…y {{ r.sin_resp.total - 15 }} más.</p>
+    {% endif %}
+    <div class="botones" style="margin-top:14px">
+      <a class="btn btn-dorado" href="/control?vista=empleado">Repartirlos</a>
+    </div>
+    {% endif %}
+  </div>
+
+  {# ---------- 5. Quién tiene clientes esperando ---------- #}
+  <div class="inv-card">
+    <h3>Clientes esperando
+      {% if r.esperando %}· {{ r.esperando.total }}{% endif %}</h3>
+    {% if r.esperando is none %}
+    <p style="margin-bottom:0">No se pudo leer Linear.</p>
+    {% elif not r.esperando.total %}
+    <p style="margin-bottom:0">Nadie con «Te toca». Todos contestados. 🌿</p>
+    {% else %}
+    <p>Con la etiqueta <b>«Te toca»</b>, y hace cuánto que esperan respuesta:</p>
+    {% for grupo in r.esperando.por_resp %}
+    <div class="seccion-titulo" style="margin-top:12px">
+      {{ grupo.resp or 'Sin dueño' }} · {{ grupo.leads|length }}</div>
+    {% for l in grupo.leads %}
+    <div class="fila">
+      <span>{{ l.nombre }}</span>
+      <b>{% if l.espera %}{{ l.espera }}{% else %}—{% endif %}</b>
+    </div>
+    {% endfor %}
+    {% endfor %}
+    {% if r.esperando.por_resp and not r.esperando.por_resp[0].leads[0].espera %}
+    <p style="margin:12px 0 0">El «hace cuánto» sale del último mensaje del
+      cliente en Twenty; si sale vacío es que Twenty no contestó.</p>
+    {% endif %}
+    {% endif %}
+  </div>
+
+  {# ---------- El estado del aviso mismo ---------- #}
+  <div class="inv-card">
+    <h3>El aviso de las 7 p.m.</h3>
+    {% if not armado %}
+    <p style="margin-bottom:0">Todavía <b>no está armado</b>: falta
+      <span style="font-family:monospace">RESUMEN_SECRETO</span> en el
+      <span style="font-family:monospace">.env</span> del droplet. Mientras no
+      esté, el cron no puede dispararlo y esta pantalla es lo único que hay.</p>
+    {% elif not celulares %}
+    <p style="margin-bottom:0">Armado, pero <b>{{ dueno }} no tiene ningún celular
+      con los avisos activados</b>, así que el aviso no puede llegar. Se activa en
+      Ajustes → «Avisos en este celular».</p>
+    {% else %}
+    <p style="margin-bottom:0">Andando. Le llega a <b>{{ dueno }}</b>
+      ({{ celulares }} celular{{ 'es' if celulares > 1 }}) todos los días a las
+      7 p.m. de Panamá. Un domingo sin novedades no suena.</p>
+    {% endif %}
+  </div>
+
+  <div class="botones" style="margin-bottom:20px">
+    <a class="btn btn-linea" href="{{ liga_ayer }}">← El día anterior</a>
+    {% if not es_hoy %}<a class="btn btn-linea" href="{{ liga_hoy }}">Hoy</a>{% endif %}
+    <a class="btn btn-linea" href="/control">Ir a Control</a>
+  </div>
+</main>
+{% endblock %}

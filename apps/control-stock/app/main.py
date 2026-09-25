@@ -15,7 +15,8 @@ from datetime import datetime, timedelta
 from urllib.parse import quote
 
 from fastapi import FastAPI, Request, UploadFile
-from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse, Response
+from fastapi.responses import (FileResponse, JSONResponse, PlainTextResponse,
+                               RedirectResponse, Response)
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -24,7 +25,7 @@ from . import (acceso_google, agenda, avisos, calculos, calendario,
                calendario_google, colores,
                calendario_ics, conteos, control, cotizaciones,
                coworkers, crm_twenty, datos, fichas, fotos,
-               linear_leads, seguridad, ventas)
+               linear_leads, resumen, seguridad, ventas)
 
 app = FastAPI(title="Control Viverorose")
 
@@ -151,7 +152,10 @@ async def exigir_sesion(request: Request, call_next):
     # /sw-avisos.js y /manifest.webmanifest los pide el navegador por su
     # cuenta (también cuando la sesión venció): si contestaran con el
     # redirect al login, los avisos del celular se caerían en silencio.
+    # /avisos/resumen lo llama el cron del droplet, no una persona: su
+    # candado es RESUMEN_SECRETO (lo verifica la ruta), no la cookie.
     if (ruta == "/login" or ruta == "/calendario.ics" or ruta == "/crm/login"
+            or ruta == "/avisos/resumen"
             or ruta == "/sw-avisos.js" or ruta == "/manifest.webmanifest"
             or ruta.startswith("/static") or ruta.startswith("/f/")
             or ruta.startswith("/auth/google") or ruta.startswith("/invitacion/")
@@ -2314,6 +2318,51 @@ async def avisos_suscribir(request: Request):
     if not avisos.guardar(request.state.empleada["id"], suscripcion):
         return Response(status_code=400)
     return Response(status_code=204)
+
+
+@app.post("/avisos/resumen")
+async def avisos_resumen(request: Request):
+    """El resumen del día al celular del dueño. Lo dispara el cron del
+    droplet a las 19:00 de Panamá, con el secreto en el header.
+
+    No lleva sesión a propósito: no lo abre una persona, lo llama una
+    máquina. Por eso el candado es el secreto y no la cookie.
+    """
+    if not resumen.armado():
+        # Sin RESUMEN_SECRETO no corre: un resumen que cualquiera puede
+        # disparar es un resumen que cualquiera puede usar para sondear el
+        # negocio. Mismo trato que el barrido del frontend.
+        return JSONResponse(
+            {"ok": False, "motivo": "falta RESUMEN_SECRETO"}, status_code=503)
+    if not resumen.credencial_valida(request.headers.get("authorization")):
+        return JSONResponse({"ok": False}, status_code=401)
+    hecho = resumen.mandar()
+    return JSONResponse({"ok": True, "mandado": hecho["mandado"],
+                         "motivo": hecho["motivo"], "titular": hecho["titular"]})
+
+
+@app.get("/resumen")
+def resumen_pantalla(request: Request):
+    """El detalle del resumen: a donde lleva el aviso del celular."""
+    dia = request.query_params.get("dia", "")
+    try:
+        cuando = datetime.strptime(dia, "%Y-%m-%d").date() if dia else resumen.hoy()
+    except ValueError:
+        cuando = resumen.hoy()
+    datos = resumen.del_dia(cuando)
+    ayer = cuando - timedelta(days=1)
+    return plantillas.TemplateResponse(request, "resumen.html", {
+        "empleada": request.state.empleada,
+        "r": datos,
+        "titular": resumen.titular(datos),
+        "plata": resumen._plata,
+        "es_hoy": cuando == resumen.hoy(),
+        "liga_ayer": "/resumen?dia=" + ayer.isoformat(),
+        "liga_hoy": "/resumen",
+        "dueno": resumen.usuario_dueno(),
+        "celulares": avisos.cuantos(resumen.usuario_dueno()),
+        "armado": resumen.armado(),
+    })
 
 
 @app.post("/avisos/prueba")
