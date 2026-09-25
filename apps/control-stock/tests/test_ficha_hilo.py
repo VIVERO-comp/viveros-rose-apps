@@ -310,3 +310,46 @@ def test_en_lectura_corregir_el_estado_no_toca_whatsapp(monkeypatch):
                                           nota="probando en pruebas")
     assert not aviso and "no escribe en" in error
     assert llamadas == []
+
+
+# ---------------------------------------------------------------------------
+# Los ecos, medidos contra el tablero real del 25/09/2026
+#
+# De los 100 comentarios del sistema que había ese día, 96 eran «Volvió a
+# escribir por WhatsApp: «…»»: uno por cada mensaje entrante, justo debajo
+# del mensaje que repetían. Los otros cuatro sí cuentan algo que la
+# conversación no dice, y esos son los que el hilo existe para mostrar.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("texto", [
+    "Volvió a escribir por WhatsApp: «Sería la pink princess»",
+    "Volvió a escribir por WhatsApp (PP-L4779)",
+    "Mary respondió: «Buenos días»",
+])
+def test_los_ecos_no_entran_al_hilo(texto):
+    sucesos, internas = control.separar_notas([nota(texto)])
+    assert sucesos == [] and internas == []
+
+
+@pytest.mark.parametrize("texto", [
+    "🧾 S00089 · $55.00 — hecha en inventario (Vender) por Abraham",
+    "Cerrado por el barrido: 14 días sin mensajes.",
+    "Origen emparejado por hora: el mensaje llegó 8 s después del tap.",
+])
+def test_los_sucesos_de_verdad_si_entran(texto):
+    sucesos, internas = control.separar_notas([nota(texto)])
+    assert [s["texto"] for s in sucesos] == [texto]
+
+
+def test_la_cotizacion_sale_como_renglon_lila_en_el_hilo():
+    """Es el renglón que pidió el dueño, y sale de un comentario que Linear
+    ya tiene: «🧾 S00089 · $55.00 — hecha en inventario (Vender)»."""
+    bloques = control.hilo(
+        mensajes=[m("2026-09-24T13:05:00Z", "Hola"),
+                  m("2026-09-24T21:00:00Z", "Gracias")],
+        sucesos=[nota("🧾 S00089 · $55.00 — hecha en inventario (Vender) por Abraham",
+                      fecha="2026-09-24T19:58:00Z")],
+        nombre_cliente="Jenny Londoño")
+    lila = [b for b in bloques if b["tipo"] == "suceso"]
+    assert len(lila) == 1
+    assert "S00089" in lila[0]["texto"] and "$55.00" in lila[0]["texto"]

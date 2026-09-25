@@ -378,10 +378,26 @@ def escribir_nota(ref, texto, autor=""):
 # que es un dato que puede cambiar en Linear sin avisar.
 FIRMA_PERSONA = "_— "
 
-# El eco de la Fase B: «Mary respondió: «…»». Es cierto, pero el hilo ya
-# muestra ese mismo mensaje con el nombre de Mary encima, así que en el
-# hilo sobra. Sigue estando en el issue de Linear, que es su lugar.
-_ECO_RESPONDIO = re.compile(r"^.{1,40} respondió[:.]")
+# Los ecos: comentarios del sistema que REPITEN un mensaje que el hilo ya
+# muestra dos líneas más arriba. Son ciertos y en el issue de Linear tienen
+# sentido —allá no se ve la conversación—, pero dentro del hilo son ruido:
+# en el lead de Diana Caballero había cinco en una sola tarde, cada uno
+# debajo del mensaje que repetía. Medido sobre el tablero real del
+# 25/09/2026: 96 de los 100 comentarios del sistema son ecos.
+#
+# Lo que NO es eco se queda: «🧾 S00089 · $55.00 — hecha en inventario», el
+# cierre del barrido de 14 días, el origen emparejado por hora. Eso cuenta
+# algo que la conversación no dice, y por eso el hilo existe.
+_ECOS = (
+    # La Fase B, cuando el equipo rompe el silencio.
+    re.compile(r"^.{1,40} respondió[:.]"),
+    # El receptor del frontend, cada vez que el cliente vuelve a escribir.
+    re.compile(r"^Volvió a escribir por WhatsApp"),
+)
+
+
+def _es_eco(texto):
+    return any(patron.match(texto) for patron in _ECOS)
 
 # Cómo se ve el que escribe. «Vivero» es el que no sabemos: un saliente que
 # WAHA todavía no anotó no tiene autor, y ponerle un nombre sería inventarlo.
@@ -421,7 +437,7 @@ def separar_notas(notas):
         if FIRMA_PERSONA in texto:
             internas.append(nota)
             continue
-        if _ECO_RESPONDIO.match(texto):
+        if _es_eco(texto):
             continue
         sucesos.append(nota)
     return sucesos, internas
