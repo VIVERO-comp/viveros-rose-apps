@@ -41,6 +41,16 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+# EL CONTRATO CON `sincronizar_cada_2.sh`: el script del cron decide si
+# anota en el diario mirando el CODIGO DE SALIDA, no una frase de la
+# salida. Una condicion amarrada a texto libre ya fallo una vez -buscaba
+# «0 chats etiquetados» y el sincronizador imprime «0 chats de leads», asi
+# que nunca calzo y el diario se llevo las 720 pasadas del dia-. Si alguna
+# vez cambia el texto del resumen, esto sigue funcionando.
+SALIDA_SIN_NADA = 0      # no habia nada que hacer: el cron se calla
+SALIDA_CON_ERRORES = 1   # fallo algo: se anota, con el detalle
+SALIDA_CON_CAMBIOS = 2   # se cambio algo de verdad: se anota
+
 RUTA = os.path.dirname(os.path.abspath(__file__))
 WAHA = "http://127.0.0.1:3001"
 SESION = "vivero"
@@ -604,11 +614,13 @@ def _poner_nombre(chat_id, nombre, aplicar):
         return False, str(fallo)[:90]
 
 
-def nombres_de_contactos(leads, aplicar):
+def nombres_de_contactos(leads, lista_interna, aplicar):
     """Le pone el nombre de Twenty (o "Cliente PP-XXXXX") a cada contacto de
-    lead VIVO que hoy no tiene nombre propio. Los cerrados (Ganado/Perdido)
-    se saltan con el motivo "cerrado": llegan aqui porque `leads_del_crm()`
-    los trae para el camino de las ETIQUETAS, que en un cerrado solo resta.
+    lead VIVO que hoy no tiene nombre propio. Se saltan, con su motivo a la
+    vista: los cerrados (Ganado/Perdido), que llegan aqui porque
+    `leads_del_crm()` los trae para el camino de las ETIQUETAS -donde un
+    cerrado solo resta-, y los numeros INTERNOS del negocio, con el mismo
+    criterio que usa el bloque de etiquetas.
     Vuelve (tocaria, saltaria, hechos, errores):
 
       tocaria  = [(lead, nombre_nuevo, origen, [(id_etiqueta, chat_id,
@@ -634,6 +646,17 @@ def nombres_de_contactos(leads, aplicar):
             continue
         if not lead["telefono"]:
             saltaria.append((lead, "sin telefono en Twenty/Linear: no hay chat"))
+            continue
+        # Un numero INTERNO del negocio no es un cliente y no se toca, igual
+        # que en el bloque de etiquetas (mismo criterio: los ultimos 8
+        # digitos contra la lista) y por la misma regla escrita arriba: «los
+        # numeros internos del negocio se saltan, AUNQUE tengan lead viejo».
+        # Que hoy ninguno tenga lead es casualidad de los datos, no una
+        # garantia: el 25/09 el privado de Mary escribio un punto y ocho
+        # fotos y el sistema le abrio un lead que hubo que borrar a mano.
+        # Si vuelve a pasar, su contacto no se toca.
+        if lista_interna and solo_digitos(lead["telefono"])[-8:] in lista_interna:
+            saltaria.append((lead, "numero interno del negocio: no es un cliente"))
             continue
         cus = solo_digitos(lead["telefono"]) + "@c.us"
         lid = chat_id_real(lead["telefono"])
@@ -959,7 +982,7 @@ def main():
     # --- nombres de contacto (0b) ---
     print("-" * 76)
     tocaria_n, saltaria_n, hechos_n, errores_n = \
-        nombres_de_contactos(leads, aplicar_nombres)
+        nombres_de_contactos(leads, lista_interna, aplicar_nombres)
     print("NOMBRES DE CONTACTO   ·   %s   (%d a tocar · %d se saltan)" % (
         "APLICANDO" if aplicar_nombres else "EN SECO (no escribe nada)",
         len(tocaria_n), len(saltaria_n)))
@@ -973,7 +996,8 @@ def main():
         print("          de donde sale el nombre nuevo: %s" % origen)
         print()
     if saltaria_n:
-        print("SE SALTAN (cerrado / nombre a mano / sin chat / sin telefono): %d"
+        print("SE SALTAN (cerrado / interno / nombre a mano / sin chat"
+              " / sin telefono): %d"
               % len(saltaria_n))
         for lead, motivo in saltaria_n:
             print("   %-9s %-24s %s" % (lead["ref"], lead["nombre"][:22], motivo))
@@ -984,7 +1008,7 @@ def main():
     if not aplicar and not aplicar_nombres:
         print("EN SECO: no se escribio nada, ni en WhatsApp ni en Linear "
               "ni en los nombres de contacto.")
-        return 0
+        return SALIDA_SIN_NADA
 
     # El estado se guarda DESPUES de aplicar etiquetas: si la pasada reventó
     # a medias, la próxima vuelve a comparar contra lo de antes y no pierde
@@ -997,7 +1021,17 @@ def main():
           % (hechos, hechos_eq, hechos_n, len(leads) - len(planes), len(errores)))
     for ref, motivo in errores:
         print("   ERROR %s: %s" % (ref, motivo))
-    return 1 if errores else 0
+    # Un error pesa mas que un cambio: si hubo de los dos, se anota como
+    # error, que es lo que hay que ir a mirar. «Cambio» es solo lo que se
+    # ESCRIBIO de verdad -etiquetas de chats, internos, nombres, o una
+    # devolucion a Linear-, nunca lo que se calculo: con una sola bandera,
+    # lo de la otra mitad se imprime pero no se escribe, y eso no es un
+    # cambio que merezca un renglon del diario.
+    if errores:
+        return SALIDA_CON_ERRORES
+    if hechos or hechos_eq or hechos_n or (devoluciones and aplicar):
+        return SALIDA_CON_CAMBIOS
+    return SALIDA_SIN_NADA
 
 
 if __name__ == "__main__":
