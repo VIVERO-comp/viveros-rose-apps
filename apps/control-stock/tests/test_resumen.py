@@ -15,10 +15,16 @@ from datetime import date, timedelta
 
 import pytest
 
-from app import avisos, linear_leads, resumen
+from app import almacen_waha, avisos, linear_leads, resumen
 
 LUNES = date(2026, 9, 21)
 DOMINGO = date(2026, 9, 27)
+
+# El almacén de WAHA en un día sano, ya decidido por `almacen_waha.armar`.
+ALMACEN_SANO = {"mb": 2, "antes_mb": 5, "mensajes": 132, "vencido": False,
+                "alerta": False, "corto": "",
+                "frase": "El limpiador lo bajó de 5 MB a 2 MB a las 6:17 pm."
+                         " Quedan 132 mensajes guardados. Lo sano ronda 2 MB."}
 
 
 @pytest.fixture(autouse=True)
@@ -30,6 +36,14 @@ def muestra_limpia(monkeypatch, db_limpia):
     monkeypatch.delenv("AVISOS_DUENO_USUARIO", raising=False)
     monkeypatch.delenv("VAPID_CLAVE_PUBLICA", raising=False)
     monkeypatch.delenv("VAPID_CLAVE_PRIVADA", raising=False)
+    # El puente con el droplet del CRM: fuera del entorno, para que ninguna
+    # prueba salga a la red, y reemplazado por un almacén sano. Así el estado
+    # base de estas pruebas es «todo bien» y el renglón del almacén no
+    # ensucia las aserciones de los otros cinco bloques.
+    monkeypatch.delenv("SINCRO_URL", raising=False)
+    monkeypatch.delenv("SINCRO_SECRET", raising=False)
+    monkeypatch.setattr(almacen_waha, "configurado", lambda: True)
+    monkeypatch.setattr(almacen_waha, "bloque", lambda **k: ALMACEN_SANO)
     linear_leads.reiniciar_muestra()
     avisos.iniciar_tablas()
 
@@ -219,6 +233,83 @@ def test_si_linear_no_contesta_los_tres_bloques_quedan_en_blanco(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# El sexto renglón: el almacén de WAHA, que vive en el OTRO droplet
+# ---------------------------------------------------------------------------
+
+def test_el_almacen_sale_en_el_resumen_y_no_en_el_titular(con_odoo):
+    """Sano, el número se ve en la pantalla; el titular no lo nombra, igual
+    que no nombra «0 pagos»."""
+    datos = resumen.del_dia()
+    assert datos["almacen"]["mb"] == 2
+    assert datos["errores"] == []
+    assert "almacén" not in resumen.titular(datos)
+
+
+def test_sin_el_puente_el_almacen_queda_en_blanco_y_lo_dice(monkeypatch):
+    monkeypatch.setattr(almacen_waha, "configurado", lambda: False)
+    datos = resumen.del_dia()
+    assert datos["almacen"] is None, "en blanco, nunca en 0 MB"
+    assert any("almacén de WhatsApp no se pudo leer" in e
+               for e in datos["errores"])
+    assert "con huecos" in resumen.titular(datos)
+
+
+def test_si_el_droplet_del_crm_no_contesta_no_se_inventa_un_cero(monkeypatch):
+    def revienta(**_k):
+        raise OSError("no hay ruta al host")
+
+    monkeypatch.setattr(almacen_waha, "bloque", revienta)
+    datos = resumen.del_dia()
+    # Lo importante de este renglón: un 0 MB falso parecería una buena
+    # noticia, y es justo lo contrario de lo que este renglón vigila.
+    assert datos["almacen"] is None
+    assert any("almacén de WhatsApp no se pudo leer: no hay ruta al host" in e
+               for e in datos["errores"])
+    assert "con huecos" in resumen.titular(datos)
+
+
+def test_un_almacen_disparado_entra_al_titular(monkeypatch):
+    monkeypatch.setattr(almacen_waha, "bloque", lambda **k: dict(
+        ALMACEN_SANO, mb=68, alerta=True, corto="almacén 68 MB"))
+    datos = resumen.del_dia()
+    assert "almacén 68 MB" in resumen.titular(datos)
+
+
+def test_un_almacen_disparado_suena_aunque_sea_domingo(monkeypatch):
+    """Un domingo en blanco no suena; un domingo con el almacén disparado sí.
+    Si nadie lo ve, crece toda la semana."""
+    monkeypatch.setattr(resumen, "_leads", lambda dia: {
+        "nuevos": {"total": 0, "por_origen": [], "filas": []},
+        "sin_resp": {"total": 0, "de": 0, "filas": []},
+        "esperando": {"total": 0, "por_resp": []}})
+    monkeypatch.setattr(almacen_waha, "bloque", lambda **k: dict(
+        ALMACEN_SANO, mb=68, alerta=True, corto="almacén 68 MB"))
+    datos = resumen.del_dia(DOMINGO)
+    assert resumen.hay_algo(datos) is True
+
+
+def test_un_hueco_del_almacen_no_despierta_el_telefono_en_domingo(monkeypatch):
+    """No saber no es noticia: solo la alerta lo es."""
+    monkeypatch.setattr(resumen, "_leads", lambda dia: {
+        "nuevos": {"total": 0, "por_origen": [], "filas": []},
+        "sin_resp": {"total": 0, "de": 0, "filas": []},
+        "esperando": {"total": 0, "por_resp": []}})
+    monkeypatch.setattr(almacen_waha, "configurado", lambda: False)
+    datos = resumen.del_dia(DOMINGO)
+    assert resumen.hay_algo(datos) is False
+
+
+def test_el_dia_del_resumen_es_el_que_decide_si_la_fecha_se_nombra(monkeypatch):
+    """`bloque()` recibe el día del resumen: sin él, una corrida de ayer se
+    leería como «a las 6:17 pm» sin decir de qué día."""
+    vistos = []
+    monkeypatch.setattr(almacen_waha, "bloque",
+                        lambda **k: vistos.append(k) or ALMACEN_SANO)
+    resumen.del_dia(LUNES)
+    assert vistos == [{"hoy_iso": "2026-09-21"}]
+
+
+# ---------------------------------------------------------------------------
 # El titular: lo único que cabe en la notificación
 # ---------------------------------------------------------------------------
 
@@ -377,3 +468,28 @@ def test_una_fecha_mala_cae_en_hoy(cliente):
     cuerpo = cliente.get("/resumen", params={"dia": "ayer"}).text
     from app import calendario
     assert calendario.dmy(resumen.hoy().isoformat()) in cuerpo
+
+
+def test_la_pantalla_pinta_el_renglon_del_almacen(cliente, con_odoo):
+    cuerpo = cliente.get("/resumen").text
+    assert "Almacén de WhatsApp · 2 MB" in cuerpo
+    assert "El limpiador lo bajó de 5 MB a 2 MB" in cuerpo
+
+
+def test_la_pantalla_no_pinta_el_almacen_en_cero_cuando_no_se_pudo(
+        cliente, monkeypatch):
+    monkeypatch.setattr(almacen_waha, "configurado", lambda: False)
+    cuerpo = cliente.get("/resumen").text
+    assert "Almacén de WhatsApp · —" in cuerpo
+    assert "No es 0 MB" in cuerpo
+    assert "0 MB</h3>" not in cuerpo
+    assert "Hay huecos en este resumen" in cuerpo
+
+
+def test_la_pantalla_resalta_el_almacen_disparado(cliente, monkeypatch):
+    monkeypatch.setattr(almacen_waha, "bloque", lambda **k: dict(
+        ALMACEN_SANO, mb=68, alerta=True, corto="almacén 68 MB",
+        frase="OJO: pasa de 20 MB. El limpiador lo dejó en 68 MB."))
+    cuerpo = cliente.get("/resumen").text
+    assert "Almacén de WhatsApp · 68 MB" in cuerpo
+    assert "<b>OJO: pasa de 20 MB" in cuerpo

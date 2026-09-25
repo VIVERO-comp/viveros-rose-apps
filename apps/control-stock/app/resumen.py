@@ -5,6 +5,12 @@ para él, con cinco cosas: los leads nuevos del día por origen, las
 cotizaciones, los pagos registrados, los leads sin dueño y quién tiene
 clientes esperando y hace cuánto.
 
+Desde el 25/09/2026 lleva un sexto renglón que no es del negocio sino de la
+salud del sistema: **cuánto pesa el almacén de WAHA**. Se sumó porque una vez
+se disparó a 70 MB bajando 20 584 mensajes de historial y nadie lo vio hasta
+que alguien se acordó de mirar. Vive en el OTRO droplet, así que se pregunta
+por el puente que ya existe (ver `almacen_waha.py`).
+
 Vive en control-stock y no en order-api por una razón que no se negocia:
 el navegador amarra la suscripción de los avisos al **origen**. El celular
 del dueño se suscribe en `inventario.plantaspanama.com`, así que su
@@ -28,7 +34,8 @@ responde 503 y no hace nada, igual que el barrido del frontend.
 import os
 from datetime import datetime, timedelta
 
-from . import avisos, calendario, crm_twenty, linear_leads, ventas
+from . import (almacen_waha, avisos, calendario, crm_twenty, linear_leads,
+               ventas)
 from .datos import ZONA_PANAMA
 
 # El horario de atención del vivero (Abraham, 25/09/2026). Aquí solo se usa
@@ -280,6 +287,23 @@ def del_dia(dia=None):
             datos.update({"cotizaciones": None, "pagos": None})
             datos["errores"].append(f"Odoo no contestó: {fallo}")
 
+    # El sexto: el almacén de WAHA, que vive en el droplet del CRM. Si el
+    # puente no está o no contesta, el renglón queda en blanco y lo dice —
+    # jamás en 0 MB, que es justo la mentira tranquilizadora que este
+    # renglón existe para evitar.
+    if not almacen_waha.configurado():
+        datos["almacen"] = None
+        datos["errores"].append(
+            "El almacén de WhatsApp no se pudo leer: falta el puente con el "
+            "droplet del CRM (SINCRO_URL y SINCRO_SECRET).")
+    else:
+        try:
+            datos["almacen"] = almacen_waha.bloque(hoy_iso=dia.isoformat())
+        except Exception as fallo:
+            datos["almacen"] = None
+            datos["errores"].append(
+                f"El almacén de WhatsApp no se pudo leer: {str(fallo)[:160]}")
+
     return datos
 
 
@@ -293,7 +317,11 @@ def hay_algo(datos):
         bloque = datos.get(clave)
         if bloque and bloque.get("total"):
             return True
-    return False
+    # Un almacén disparado SÍ es novedad, aunque sea domingo: si nadie lo
+    # ve, crece toda la semana. Un hueco no, en cambio — no saber no es una
+    # noticia por la que valga despertar el teléfono.
+    almacen = datos.get("almacen")
+    return bool(almacen and almacen.get("alerta"))
 
 
 def titular(datos):
@@ -316,6 +344,11 @@ def titular(datos):
     e = datos.get("esperando")
     if e and e["total"]:
         partes.append(f"{e['total']} esperando")
+    # El almacén solo se nombra cuando está mal. Sano no gasta titular: el
+    # número se ve en la pantalla, que es a donde lleva el aviso.
+    a = datos.get("almacen")
+    if a and a.get("corto"):
+        partes.append(a["corto"])
     if datos.get("errores"):
         partes.append("con huecos")
     return " · ".join(partes) or "Día sin novedades."
