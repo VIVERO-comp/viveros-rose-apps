@@ -42,6 +42,7 @@ import os
 import re
 from datetime import datetime, timedelta
 
+from . import calendario, crm_twenty, linear_leads
 from .datos import ZONA_PANAMA, _db, ahora_iso
 
 # El teléfono principal es el dispositivo 0 de WhatsApp: su JID viene sin
@@ -302,3 +303,160 @@ def leer_evento(evento):
         "dispositivo": dispositivo,
         "source": str(m.get("source") or "").strip(),
     }
+
+
+# ---------------------------------------------------------------------------
+# Fase B: el autor viaja a Twenty y a Linear
+#
+# El pendiente que dejó el webhook (un id de WhatsApp y un dispositivo) se
+# cruza con el mensaje que Twenty ya tenía. Dos salidas: el campo `autor` del
+# mensaje, y un comentario del bot en el issue del lead.
+#
+# **El comentario es solo de la PRIMERA respuesta de cada tanda** (decisión
+# del dueño, 25/09/2026): cuando lo anterior fue del cliente, el equipo acaba
+# de romper el silencio y eso se anota. Las respuestas seguidas no comentan —
+# un chat de veinte mensajes dejaría veinte comentarios y el issue se
+# volvería ilegible. La conversación entera se ve igual en Control.
+# ---------------------------------------------------------------------------
+
+# Cuánto del mensaje entra en el comentario de Linear. Lo justo para
+# reconocer de qué se habló al leer el issue; el texto completo vive en el
+# chat de Control y en Twenty.
+LARGO_EXTRACTO = 60
+
+_aviso_dado = set()
+
+
+def _avisar_una_vez(clave, texto):
+    """Un problema que se repite en cada pasada se dice UNA vez.
+
+    El aplicador corre en cada pintada de Control: sin esto, un campo que
+    falta en Twenty llenaría el log con la misma línea cada pocos segundos y
+    taparía lo que sí importa."""
+    if clave in _aviso_dado:
+        return
+    _aviso_dado.add(clave)
+    linear_leads.registro_aviso(texto)
+
+
+def olvidar_avisos():
+    """Para las pruebas y para después de arreglar lo que fallaba."""
+    _aviso_dado.clear()
+
+
+def extracto(texto):
+    """El texto en una línea, cortado con puntos suspensivos si hace falta."""
+    limpio = " ".join(str(texto or "").split())
+    if len(limpio) <= LARGO_EXTRACTO:
+        return limpio
+    return limpio[:LARGO_EXTRACTO].rstrip() + "…"
+
+
+def es_primera_de_la_tanda(mensaje):
+    """¿Este saliente rompe el silencio, o es uno más seguido?
+
+    True cuando lo anterior de esa persona fue del cliente o no hubo nada.
+    Ante la duda (sin persona, o Twenty no contesta) devuelve False: es
+    preferible que falte un comentario a llenar el issue de ruido.
+    """
+    persona = (mensaje or {}).get("personaId") or ""
+    fecha = (mensaje or {}).get("fecha") or (mensaje or {}).get("createdAt") or ""
+    if not persona or not fecha:
+        return False
+    try:
+        previo = crm_twenty.mensaje_previo(persona, fecha)
+    except Exception:
+        return False
+    if previo is None:
+        return True   # nuestra primera palabra en ese chat
+    return (previo.get("direccion") or "") != "SALIENTE"
+
+
+def _pendientes(limite):
+    iniciar_tablas()
+    with _db() as con:
+        return [dict(f) for f in con.execute(
+            "SELECT wa_message_id, dispositivo, source, cuando FROM wa_pendiente "
+            "ORDER BY cuando LIMIT ?", (limite,)).fetchall()]
+
+
+def _olvidar_pendiente(wa_message_id):
+    with _db() as con:
+        con.execute("DELETE FROM wa_pendiente WHERE wa_message_id = ?",
+                    (wa_message_id,))
+
+
+def aplicar_pendientes(limite=25):
+    """Le pone autor a los salientes que Twenty ya tiene.
+
+    Devuelve {aplicados, comentados, esperando, fallaron}. `esperando` no es
+    un error: son mensajes que OpenWA todavía no guardó — se reintentan en la
+    próxima pasada, y si en 24 horas no aparecen es que son de un chat que el
+    CRM no sigue, y el pendiente se borra solo.
+
+    Fail-soft de punta a punta: esto corre por detrás de una pantalla, y un
+    tropiezo con Twenty o con Linear nunca puede tumbarla.
+    """
+    cuenta = {"aplicados": 0, "comentados": 0, "esperando": 0, "fallaron": 0}
+    if not crm_twenty.twenty_configurado():
+        return cuenta
+    limpiar_pendientes()
+    mapa = mapa_de_nombres()
+    for fila in _pendientes(limite):
+        try:
+            mensaje = crm_twenty.mensaje_por_wa_id(fila["wa_message_id"])
+        except Exception:
+            cuenta["fallaron"] += 1
+            _avisar_una_vez("twenty-lectura",
+                            "wa_autor: Twenty no responde; los autores esperan.")
+            continue
+        if mensaje is None:
+            # Todavía no llegó (o nunca va a llegar). Se queda esperando: no
+            # se crea nada en Twenty, que es el candado de privacidad.
+            cuenta["esperando"] += 1
+            continue
+        autor = nombre_de(fila["dispositivo"], fila["source"], mapa=mapa)
+        try:
+            crm_twenty.poner_autor(mensaje.get("id"), autor)
+        except Exception:
+            cuenta["fallaron"] += 1
+            _avisar_una_vez(
+                "twenty-autor",
+                "wa_autor: no se pudo escribir el campo `autor` en Twenty. "
+                "¿Existe ya en el objeto mensajesWhatsapp?")
+            continue
+        cuenta["aplicados"] += 1
+        if _comentar_en_linear(mensaje, autor):
+            cuenta["comentados"] += 1
+        _olvidar_pendiente(fila["wa_message_id"])
+    return cuenta
+
+
+def _comentar_en_linear(mensaje, autor):
+    """«Mary respondió: «…»» en el issue del lead. True si quedó.
+
+    Lo firma el bot «Vivero rose», como todo lo que escribe el sistema: el
+    nombre del empleado va DENTRO del texto, que es de lo que se trata.
+    """
+    if not es_primera_de_la_tanda(mensaje):
+        return False
+    try:
+        issue = crm_twenty.issue_de_persona(mensaje.get("personaId") or "")
+    except Exception:
+        return False
+    if not issue:
+        return False   # un chat sin lead no tiene dónde anotarse
+    texto = extracto(mensaje.get("texto") or "")
+    frase = f"{autor} respondió: «{texto}»" if texto else f"{autor} respondió."
+    try:
+        linear_leads.comentar(issue, frase)
+    except Exception:
+        _avisar_una_vez("linear-comentario",
+                        "wa_autor: no se pudo comentar en Linear.")
+        return False
+    return True
+
+
+def aplicar_en_fondo():
+    """El aplicador sin que la pantalla lo espere."""
+    calendario._en_fondo("wa-autor", aplicar_pendientes)

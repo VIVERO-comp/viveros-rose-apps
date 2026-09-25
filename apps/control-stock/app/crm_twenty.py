@@ -217,3 +217,74 @@ def _buscar_ficha(lead):
         "twenty_url": (f"{twenty_publico()}/object/person/{persona_id}"
                        if persona_id else f"{twenty_publico()}/objects/leads"),
     }
+
+
+# ---------------------------------------------------------------------------
+# Quién respondió (Fase B, 25/09/2026): el autor de cada mensaje saliente
+#
+# Lo que WAHA vio (el dispositivo) se cruza aquí con lo que Twenty ya tenía
+# (el mensaje). La regla que manda: **solo se escribe ENCIMA de un mensaje
+# que ya existe**. Si el waMessageId no está en Twenty, es un chat que el CRM
+# no sigue y aquí no se crea nada.
+# ---------------------------------------------------------------------------
+
+def mensaje_por_wa_id(wa_message_id):
+    """El mensaje de Twenty con ese id de WhatsApp, o None si no está.
+
+    None es una respuesta legítima y frecuente: puede que OpenWA todavía no
+    lo haya guardado (los dos webhooks llegan casi juntos y el orden no está
+    garantizado), o puede que sea un chat que el CRM no sigue. Quien llama
+    distingue los dos casos por el tiempo, no por esto.
+    """
+    if not twenty_configurado() or not wa_message_id:
+        return None
+    j = _twenty("mensajesWhatsapp?filter=waMessageId[eq]:%22"
+                + quote(str(wa_message_id)) + "%22&limit=1")
+    filas = (j.get("data") or {}).get("mensajesWhatsapp") or []
+    return filas[0] if filas else None
+
+
+def poner_autor(id_mensaje, autor):
+    """Escribe quién mandó ese mensaje. Devuelve True si quedó."""
+    if not twenty_configurado() or not id_mensaje or not autor:
+        return False
+    _twenty_patch("mensajesWhatsapp/" + quote(str(id_mensaje)),
+                  {"autor": str(autor)[:60]})
+    return True
+
+
+def mensaje_previo(persona_id, fecha):
+    """El mensaje anterior de esa persona, o None si este es el primero.
+
+    Sirve para saber si un saliente es la PRIMERA respuesta de la tanda: si
+    lo de antes fue del cliente (o no hubo nada), el equipo acaba de romper
+    el silencio y eso merece el comentario en Linear.
+
+    OJO con la trampa que costó encontrar el 25/09: en Twenty **dos
+    `filter=` en la misma URL no se suman, el segundo pisa al primero**. Las
+    dos condiciones van en UN solo filter con `and(...)`, o la consulta
+    devuelve el último mensaje de TODO el sistema, el de un desconocido.
+    """
+    if not twenty_configurado() or not persona_id or not fecha:
+        return None
+    filtro = (f"and(personaId[eq]:%22{quote(str(persona_id))}%22,"
+              f"fecha[lt]:%22{quote(str(fecha))}%22)")
+    j = _twenty(f"mensajesWhatsapp?filter={filtro}"
+                "&order_by=fecha[DescNullsLast]&limit=1")
+    filas = (j.get("data") or {}).get("mensajesWhatsapp") or []
+    return filas[0] if filas else None
+
+
+def issue_de_persona(persona_id):
+    """El issue de Linear del lead de esa persona, o '' si no tiene.
+
+    Un chat sin lead no es un error: hay Person provisionales que nacen de un
+    saliente y todavía no son de nadie. Sin issue, no hay dónde comentar y
+    ya está.
+    """
+    if not twenty_configurado() or not persona_id:
+        return ""
+    j = _twenty("leadsWeb?filter=personaId[eq]:%22" + quote(str(persona_id))
+                + "%22&limit=1")
+    filas = (j.get("data") or {}).get("leadsWeb") or []
+    return (filas[0].get("linearIssueId") or "") if filas else ""

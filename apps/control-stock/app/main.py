@@ -2190,6 +2190,10 @@ def control_pantalla(request: Request):
     # El celular del encargado suena cuando un lead gana «Te toca»; una
     # sola vez por lead, y por detrás para que la pantalla no espere.
     control.avisar_en_fondo(leads)
+    # Y de paso se reintentan los autores que quedaron esperando a que
+    # OpenWA guardara su mensaje. También por detrás: esta pantalla no
+    # espera a Twenty.
+    wa_autor.aplicar_en_fondo()
 
     abierta = control.ficha(request.query_params.get("abrir", ""))
     # El modal de la corrección manual: a un estado nuevo no se llega sin
@@ -2393,6 +2397,11 @@ async def wa_autor_webhook(request: Request):
         return JSONResponse({"ok": True, "anotado": False, "motivo": "no aplica"})
     anotado = wa_autor.anotar(leido["wa_message_id"], leido["dispositivo"],
                               leido["source"])
+    # Fase B: ponerle el autor al mensaje de Twenty. Por detrás y sin que
+    # WAHA lo espere — si el mensaje todavía no llegó de OpenWA, el
+    # pendiente se reintenta en la próxima pasada.
+    if anotado:
+        wa_autor.aplicar_en_fondo()
     wa_autor.limpiar_pendientes()
     return JSONResponse({"ok": True, "anotado": anotado,
                          "dispositivo": leido["dispositivo"]})
