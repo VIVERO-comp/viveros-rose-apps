@@ -1,0 +1,31 @@
+# El endpoint de sincronizacion inmediata. Proyecto APARTE de ~/waha a
+# proposito: asi un `docker compose up -d` aqui no recrea nunca el
+# contenedor de WAHA — y con el, la sesion y el webhook que registra la
+# sesion del «autor de mensajes».
+name: sincro
+
+services:
+  sincro:
+    image: python:3.12-slim
+    container_name: sincro
+    restart: unless-stopped
+    # network_mode host por dos razones: llegar a WAHA en 127.0.0.1:3001
+    # y poder escuchar en la IP PRIVADA del droplet, que es por donde lo
+    # llama control-stock desde el otro droplet.
+    network_mode: host
+    environment:
+      TZ: America/Panama
+      # Solo la IP privada. En la publica no escucha: desde internet no existe.
+      SINCRO_ESCUCHA: "10.116.0.3"
+      SINCRO_PUERTO: "3002"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      # De solo lectura: el endpoint lee el codigo y el .env, no los escribe.
+      - /home/hermes/waha:/waha:ro
+    command: ["python", "/waha/endpoint.py"]
+    mem_limit: 128m
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
