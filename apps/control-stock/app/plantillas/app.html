@@ -571,6 +571,47 @@
     <p class="sin-filas">No hay números guardados.</p>
     {% endfor %}
     {% endif %}
+    {# Dispositivos de WhatsApp (Fase A, 25/09/2026): el 6099 lo contestan
+       varias personas desde varios equipos, y WhatsApp numera cada uno
+       (el `:N` del remitente). WAHA nos avisa ese numero; aqui se le pone
+       cara. Nunca se inventa un nombre: sin mapear sale "Equipo ·
+       dispositivo N". #}
+    <div class="seccion-titulo">Dispositivos de WhatsApp</div>
+    {% if aviso_ajustes == 'dispositivo-guardado' %}<div class="aviso-ok">Listo. Desde ahora sus respuestas salen con ese nombre.</div>
+    {% elif aviso_ajustes == 'dispositivo-invalido' %}<div class="aviso-error">Ese dispositivo no se ve válido.</div>{% endif %}
+    {% if not dispositivos_armados %}
+    <div class="aviso-error">Falta <b>WAHA_WEBHOOK_SECRET</b> en el <code>.env</code>: hasta que esté, nadie puede avisar qué dispositivo escribió.</div>
+    {% endif %}
+    {% for d in dispositivos %}
+    <div class="historial-item acceso-item">
+      <div>
+        <b>{{ d.se_ve }}</b>
+        <small>
+          {% if d.es_telefono %}el celular del negocio{% else %}dispositivo {{ d.dispositivo }}{% endif %}
+          · {{ d.mensajes }} mensaje{{ '' if d.mensajes == 1 else 's' }}
+          · último {{ d.visto_en | fecha_bonita }}
+          {% if d.sin_nombre %} · <b>falta ponerle nombre</b>{% endif %}
+        </small>
+      </div>
+      <form method="post" action="/ajustes/dispositivos/nombrar" class="form-dispositivo">
+        <input type="hidden" name="dispositivo" value="{{ d.dispositivo }}">
+        <input name="nombre" type="text" maxlength="40" value="{{ d.nombre }}"
+               list="nombres-equipo" autocomplete="off"
+               placeholder="{{ 'Teléfono' if d.es_telefono else 'Ej: Mary' }}">
+        <button class="btn btn-linea btn-chico" type="submit">Guardar</button>
+      </form>
+    </div>
+    {% else %}
+    <p class="sin-filas">Todavía no ha escrito ningún dispositivo. Pedile a cada
+      quien que mande un mensaje desde su equipo a un número de la lista de
+      coworkers (nunca a un cliente) y aparecerá acá.</p>
+    {% endfor %}
+    <datalist id="nombres-equipo">
+      {% for r in responsables_wa %}<option value="{{ r }}">{% endfor %}
+    </datalist>
+    <p class="pie-ajuste">El nombre dice quién <b>escribió</b> el mensaje. No es lo
+      mismo que <b>Resp:</b>, que dice de quién es el lead.</p>
+
     <form class="form-invitar" method="post" action="/ajustes/coworkers/agregar">
       <label class="campo">
         <span>Número de WhatsApp de un coworker (sus chats no se vuelven leads)</span>

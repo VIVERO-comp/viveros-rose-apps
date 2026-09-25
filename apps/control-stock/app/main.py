@@ -25,7 +25,7 @@ from . import (acceso_google, agenda, avisos, calculos, calendario,
                calendario_google, colores,
                calendario_ics, conteos, control, cotizaciones,
                coworkers, crm_twenty, datos, fichas, fotos,
-               linear_leads, resumen, seguridad, ventas)
+               linear_leads, resumen, seguridad, ventas, wa_autor)
 
 app = FastAPI(title="Control Viverorose")
 
@@ -154,8 +154,10 @@ async def exigir_sesion(request: Request, call_next):
     # redirect al login, los avisos del celular se caerían en silencio.
     # /avisos/resumen lo llama el cron del droplet, no una persona: su
     # candado es RESUMEN_SECRETO (lo verifica la ruta), no la cookie.
+    # /wa/autor lo llama WAHA desde el droplet del CRM: su candado es la
+    # firma HMAC del cuerpo crudo (la verifica la ruta), no la cookie.
     if (ruta == "/login" or ruta == "/calendario.ics" or ruta == "/crm/login"
-            or ruta == "/avisos/resumen"
+            or ruta == "/avisos/resumen" or ruta == "/wa/autor"
             or ruta == "/sw-avisos.js" or ruta == "/manifest.webmanifest"
             or ruta.startswith("/static") or ruta.startswith("/f/")
             or ruta.startswith("/auth/google") or ruta.startswith("/invitacion/")
@@ -426,11 +428,16 @@ def inicio(request: Request, refrescar: int = 0):
     # vive en la base `tienda` del droplet; si no responde, Ajustes lo dice
     # sin tumbar el resto de la pestaña.
     lista_coworkers, coworkers_error = [], None
+    # Dispositivos de WhatsApp (Fase A, 25/09/2026): quién escribió cada
+    # respuesta del 6099. La tabla es local y nunca falla, pero se arma solo
+    # para el dueño: es el mapa de quién es quién en el equipo.
+    dispositivos = []
     if es_admin:
         try:
             lista_coworkers = coworkers.listar()
         except Exception:
             coworkers_error = True
+        dispositivos = wa_autor.vistos()
     return plantillas.TemplateResponse(request, "app.html", {
         "empleada": request.state.empleada,
         "puede_fichas": puede_fichas,
@@ -439,6 +446,9 @@ def inicio(request: Request, refrescar: int = 0):
         "invitaciones": seguridad.invitaciones_pendientes() if es_admin else [],
         "coworkers": lista_coworkers,
         "coworkers_error": coworkers_error,
+        "dispositivos": dispositivos,
+        "dispositivos_armados": wa_autor.configurado(),
+        "responsables_wa": linear_leads.responsables() if es_admin else [],
         "aviso_ajustes": request.query_params.get("aviso"),
         "inv_nueva": request.query_params.get("inv") if es_admin else None,
         # Para armar los links /invitacion/{token} que se comparten.
@@ -734,6 +744,30 @@ async def ajustes_coworker_quitar(request: Request):
             return RedirectResponse("/?tab=ajustes&aviso=coworker-error",
                                     status_code=303)
     return RedirectResponse("/?tab=ajustes&aviso=coworker-quitado",
+                            status_code=303)
+
+
+@app.post("/ajustes/dispositivos/nombrar")
+async def ajustes_dispositivo_nombrar(request: Request):
+    """Le pone nombre al dispositivo que escribió por el WhatsApp del negocio.
+
+    Es el mapeo entero: cada empleado manda UN mensaje desde su equipo, el
+    dispositivo aparece aquí, y el dueño le escribe el nombre. Reasignable
+    siempre — cuando alguien vuelve a vincular su computadora, WhatsApp le
+    da un número nuevo y esto se arregla escribiendo, no desplegando.
+
+    Un nombre vacío lo devuelve a «Equipo · dispositivo N»: nunca se inventa
+    quién escribió.
+    """
+    if (rechazo := _solo_admin(request)) is not None:
+        return rechazo
+    form = await request.form()
+    dispositivo = (form.get("dispositivo") or "").strip()
+    if not dispositivo.isdigit():
+        return RedirectResponse("/?tab=ajustes&aviso=dispositivo-invalido",
+                                status_code=303)
+    wa_autor.nombrar(dispositivo, form.get("nombre") or "")
+    return RedirectResponse("/?tab=ajustes&aviso=dispositivo-guardado",
                             status_code=303)
 
 
@@ -2318,6 +2352,50 @@ async def avisos_suscribir(request: Request):
     if not avisos.guardar(request.state.empleada["id"], suscripcion):
         return Response(status_code=400)
     return Response(status_code=204)
+
+
+@app.post("/wa/autor")
+async def wa_autor_webhook(request: Request):
+    """WAHA avisa qué dispositivo escribió un saliente del 6099.
+
+    No lo abre una persona: lo llama WAHA desde el droplet del CRM, así que
+    el candado es la firma HMAC del cuerpo crudo y no la cookie. Entra por
+    el HTTPS que ya existe (inventario.plantaspanama.com), sin puertos
+    nuevos.
+
+    Guarda el dispositivo y NADA más: ni el texto, ni el número, ni el
+    chat. Quién es ese dispositivo lo dice la tabla de Ajustes, y ponerle el
+    autor al mensaje es cosa de la Fase B, que solo escribe encima de un
+    mensaje que Twenty ya tenía.
+
+    Contesta 200 hasta cuando el evento no sirve: WAHA reintenta lo que no
+    sea 2xx, y un evento que nunca nos va a interesar (un entrante, un
+    grupo) no debe volver quince veces.
+    """
+    if not wa_autor.configurado():
+        # Sin WAHA_WEBHOOK_SECRET no se acepta nada: un endpoint que
+        # cualquiera puede llenar de dispositivos inventados ensucia la
+        # tabla de Ajustes y le pone nombres falsos a los mensajes.
+        return JSONResponse({"ok": False, "motivo": "falta WAHA_WEBHOOK_SECRET"},
+                            status_code=503)
+    crudo = await request.body()
+    if len(crudo) > 2_000_000:
+        return JSONResponse({"ok": False, "motivo": "muy grande"}, status_code=413)
+    if not wa_autor.firma_valida(crudo, request.headers.get("x-webhook-hmac")):
+        return JSONResponse({"ok": False}, status_code=401)
+    try:
+        evento = json.loads(crudo.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return JSONResponse({"ok": False, "motivo": "json invalido"}, status_code=400)
+
+    leido = wa_autor.leer_evento(evento)
+    if leido is None:
+        return JSONResponse({"ok": True, "anotado": False, "motivo": "no aplica"})
+    anotado = wa_autor.anotar(leido["wa_message_id"], leido["dispositivo"],
+                              leido["source"])
+    wa_autor.limpiar_pendientes()
+    return JSONResponse({"ok": True, "anotado": anotado,
+                         "dispositivo": leido["dispositivo"]})
 
 
 @app.post("/avisos/resumen")
