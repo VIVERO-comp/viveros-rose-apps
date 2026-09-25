@@ -183,7 +183,9 @@ se apaga solo** — nada más cambia. Hay una prueba que lo demuestra
 Pedido de Abraham (25/09/2026): a las **7 p.m. de Panamá**, un aviso al
 celular —**no** WhatsApp— **solo para él**, con cinco bloques: leads nuevos
 del día por origen, cotizaciones, pagos registrados, leads sin `Resp:`, y
-quién tiene clientes esperando y **hace cuánto**.
+quién tiene clientes esperando y **hace cuánto**. Desde el 25/09 lleva un
+**sexto renglón que no es del negocio sino de la salud del sistema: lo que
+pesa el almacén de WAHA** (ver abajo).
 
 - **Vive en control-stock y no en order-api**, aunque order-api también sepa
   mandar Web Push. El navegador amarra la suscripción al **origen**: el celular
@@ -210,6 +212,40 @@ quién tiene clientes esperando y **hace cuánto**.
   nada. La pantalla `/resumen` sí pide sesión.
 - La pantalla dice en qué estado está el aviso mismo: si falta el secreto, si el
   dueño no tiene ningún celular activado, o que está andando.
+
+#### El renglón del almacén de WAHA (`app/almacen_waha.py`)
+
+Se sumó porque el almacén se disparó una vez a **70 MB** bajando 20 584
+mensajes de historial, y nadie lo vio hasta que alguien se acordó de mirar.
+Abraham lo quiere a diario, sin acordarse.
+
+- **WAHA vive en el OTRO droplet** (el del CRM, con Twenty y OpenWA), así que
+  un `du` local no sirve: control-stock no ve ese disco. Se pregunta por el
+  **puente que ya existe** —el endpoint de sincronización inmediata— con una
+  ruta más, `GET /almacen`, el mismo puerto de la red privada y **el mismo
+  `SINCRO_SECRET`**. Ninguna integración de este proyecto abre un puerto, y la
+  URL se **deriva de `SINCRO_URL`**: no hay variable nueva que llenar, porque
+  dos nombres para la misma puerta ya apagaron este enganche una vez.
+- **El número es el «después» del limpiador, no el disco del instante.** El
+  almacén sube durante la hora y `limpiar_almacen.sh` lo pliega cada hora a
+  los `:17` (`almacen 5 MB -> 2 MB` en `~/waha/almacen.log`). A las 7 p.m., 43
+  minutos después del plegado, el instantáneo sería una falsa alarma casi
+  todos los días. El «antes» se nombra al lado porque **el salto es la señal**:
+  `5 -> 2` está sano; `71 -> 68` dice que hay historial que ya no puede plegar.
+- **Si el limpiador deja de correr, su número viejo NO se repite.** Ese es el
+  caso que de otro modo pasa desapercibido: la última línea se queda congelada
+  en un tranquilizador «2 MB» mientras el disco crece. Pasadas
+  `VENCE_HORAS` (3) el renglón dice que el cron no corre y muestra el disco de
+  ahora, que el endpoint mide aparte.
+- **Si no se puede saber, queda en blanco y lo dice** — jamás 0 MB, que es
+  justo la mentira tranquilizadora que este renglón existe para evitar. El
+  titular avisa «con huecos», como con Odoo y Linear.
+- **El titular solo lo nombra cuando está mal** (`almacén 68 MB`, `almacén sin
+  limpiar`): sano, el número se ve en la pantalla y no gasta el espacio del
+  push, igual que no se nombra un «0 pagos». Y un almacén disparado **sí hace
+  sonar el aviso un domingo**; un hueco, no.
+- El lado del droplet está en el repo (`waha/endpoint.py`) pero **se copia a
+  mano con `scp`**: esa carpeta no tiene despliegue automático.
 
 El cron del droplet (que corre en hora de Panamá, así que no hay que convertir
 a UTC como en Vercel):
@@ -239,6 +275,9 @@ etiquetas en el chat de WhatsApp, sin esperar su pasada de cada 2 minutos.
 - **Los nombres no son los mismos a los dos lados**, y está bien: en Linear la
   etiqueta es `Resp: Mary` y en WhatsApp es `Mary`. El traductor vive en el
   sincronizador, en un solo lugar.
+- **El mismo puente sirve para preguntar cuánto pesa el almacén de WAHA**
+  (`GET /almacen`, ver el renglón del resumen): misma puerta, mismo secreto,
+  ninguna variable nueva.
 
 ## La cara CRM (`/crm/calendario`)
 

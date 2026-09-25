@@ -34,6 +34,17 @@ se encarga de las dos:
 **Lo sano es ~2 MB.** El diario queda en `~/waha/almacen.log`, y si pasa de
 20 MB lo dice ahí en voz alta.
 
+Desde el 25/09 ese diario **también se ve desde el otro droplet**: el resumen
+de las 7 p.m. de control-stock trae un renglón «Almacén de WhatsApp · 2 MB»
+preguntando por `GET /almacen` del `endpoint.py` (ver abajo). Así el número le
+llega al dueño todos los días sin que nadie tenga que acordarse de mirarlo.
+**El número que viaja es el «después» de la última corrida**, no el disco del
+instante: el almacén sube durante la hora y el limpiador lo pliega, así que
+mirar el disco a las 7 p.m. —43 minutos después del plegado de los :17— sería
+una falsa alarma casi todos los días. Si el cron del limpiador dejara de
+correr, el renglón lo dice y muestra el disco de ahora: el número viejo no se
+repite como si fuera de hoy.
+
 **Los seis límites de historial están en `1`, no en `0`.** Para whatsmeow un
 `0` no es «nada», es «sin fijar»: manda el valor por defecto del servidor. El
 24/09 se vinculó con `0` y bajaron **20 584 mensajes** (120 MB). El mínimo que
@@ -91,7 +102,10 @@ Lo que **no** está en el repo, a propósito: `~/waha/.env` (secretos) y
 - ✅ **El endpoint de sincronización inmediata** (`endpoint.py`, puerto 3002,
   protegido con `SINCRO_SECRET`), que llama Control al asignar o mover un
   lead. Solo alcanzable desde el droplet de apps por la red privada; `ufw`
-  permite 3002 únicamente desde `10.116.0.2`.
+  permite 3002 únicamente desde `10.116.0.2`. Contesta dos cosas:
+  `POST /sincro/lead` (sincronizar un lead ya) y **`GET /almacen`** (lo que
+  pesa el almacén, para el resumen de las 7 p.m. de control-stock), las dos
+  con el mismo Bearer. El `GET /salud` sigue sin candado y sin datos.
 - ✅ **Almacén controlado**: límites de historial en 1 y un cron que lo
   limpia cada hora. Se mantiene en ~2 MB.
 - ✅ **El webhook del «autor de mensajes»** registrado (ver el final).

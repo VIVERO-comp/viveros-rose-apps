@@ -142,6 +142,27 @@
     {% endif %}
   </div>
 
+  {# ---------- 6. El almacen de WAHA, que vive en el otro droplet ---------- #}
+  {# No es un bloque del negocio: es salud del sistema. Se sumo porque el
+     almacen se disparo una vez a 70 MB bajando historial y nadie lo vio.
+     El numero que se muestra es el «despues» del limpiador, no el disco de
+     este instante: el almacen sube durante la hora y el limpiador lo pliega
+     cada hora a los :17, asi que el instantaneo de las 7 p.m. seria una
+     falsa alarma casi todos los dias. Toda la regla esta en Python
+     (`almacen_waha.armar`); aqui solo se pinta lo ya decidido. #}
+  <div class="inv-card">
+    <h3>Almacén de WhatsApp · {% if r.almacen %}{{ r.almacen.mb }} MB{% else %}—{% endif %}</h3>
+    {% if r.almacen is none %}
+    <p style="margin-bottom:0">No se pudo preguntar cuánto pesa, así que no se
+      sabe. <b>No es 0 MB</b>: es que el droplet del CRM no contestó (el motivo
+      está arriba, en los huecos).</p>
+    {% elif r.almacen.alerta %}
+    <p style="margin-bottom:0"><b>{{ r.almacen.frase }}</b></p>
+    {% else %}
+    <p style="margin-bottom:0">{{ r.almacen.frase }}</p>
+    {% endif %}
+  </div>
+
   {# ---------- El estado del aviso mismo ---------- #}
   <div class="inv-card">
     <h3>El aviso de las 7 p.m.</h3>
