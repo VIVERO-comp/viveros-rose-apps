@@ -26,12 +26,18 @@ renglón en blanco y lo dice — nunca en cero.
 
 Este servidor solo LEE: mide el disco y lee el diario del limpiador. No
 escribe nada en `~/waha` (su volumen está montado de solo lectura).
+
+El compose de este servicio NO vive en `~/waha` sino en `~/sincro/` del
+droplet del CRM (proyecto `sincro`, `network_mode: host`, monta
+`/home/hermes/waha` como `:ro`): un `docker compose restart` ahí toma este
+archivo nuevo **sin tocar el contenedor de WAHA**, que es lo que hay que
+cuidar — recrear WAHA se lleva la sesión y el webhook del «autor».
 """
 import json
 import os
 import re
 import sys
-from datetime import datetime
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, "/waha")
@@ -50,41 +56,76 @@ ALMACEN = os.path.join(RUTA, ".sessions")
 
 # Una corrida del limpiador, tal como la escribe `limpiar_almacen.sh`:
 #   2026-09-25 18:17:03 · almacen 5 MB -> 2 MB · quedan 132 mensajes
-# El mismo diario lleva además líneas de alerta («OJO: el almacen sigue
-# en…»), que este patrón se salta a propósito: solo interesan las corridas.
+# De esta línea se leen los MB y los mensajes. **Su fecha NO se usa para
+# nada**: ver `_ultima_corrida()`.
 CORRIDA = re.compile(
-    r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) · almacen (\d+) MB -> (\d+) MB"
+    r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d · almacen (\d+) MB -> (\d+) MB"
     r" · quedan (\S+) mensajes")
+
+# La otra línea que el limpiador sabe escribir, inmediatamente después de su
+# corrida y en la misma pasada, cuando el almacén quedó grande:
+#   2026-09-25 18:17:03 · OJO: el almacen sigue en 68 MB (lo sano es ~2)...
+ALERTA = re.compile(r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d · OJO:")
 
 
 def _ultima_corrida():
-    """{cuando, antes_mb, mb, mensajes, edad_horas} de la última corrida del
-    limpiador, o {} si el diario no existe o no tiene ninguna.
+    """{mtime, edad_horas, cola, antes_mb, mb, mensajes} de la última corrida
+    del limpiador, o {} si el diario no existe.
 
-    La edad se calcula AQUÍ, con el reloj de esta máquina, que es la que
-    escribió la línea. Mandarla cruda y restarla del otro lado es cómo se
-    cuelan las cinco horas de diferencia que nadie ve venir.
+    LA EDAD SALE DEL `mtime` DEL ARCHIVO, NO DE LA FECHA DE LA LÍNEA. Ese fue
+    un bug real (25/09/2026): el HOST de este droplet corre en UTC y es el
+    host quien escribe el diario por cron, mientras este proceso corre con
+    `TZ=America/Panama`. Parsear el texto y compararlo contra el reloj de acá
+    daba **−4 horas**, así que la edad nunca pasaba de las 3 horas y la
+    detección de «el limpiador murió» quedaba apagada **en silencio** — justo
+    la red de seguridad que este endpoint existe para alimentar. Un `mtime` es
+    un epoch absoluto: no hay zona que interpretar, y sigue siendo correcto si
+    mañana alguien cambia el `TZ` del contenedor o la del host.
+
+    Por eso tampoco viaja la fecha de la línea: si viajara, alguien la usaría
+    para mostrar la hora y el bug volvería por la puerta de atrás. Lo que
+    viaja es el `mtime`, y quien lo muestra lo formatea en hora de Panamá.
+
+    El caso de borde: el `mtime` es del ARCHIVO, no de la línea. Vale como
+    fecha de la última corrida solo si el diario TERMINA en una corrida, o en
+    la alerta que el limpiador escribe justo después de una (misma pasada,
+    segundos de diferencia). Si termina en cualquier otra cosa —alguien
+    escribió a mano, un logrotate, un formato nuevo— el archivo es fresco pero
+    la corrida podría ser vieja: entonces `edad_horas` vuelve **None** y el
+    resumen lo trata como vencido. Preferir «no sé, mirá el disco» a un «todo
+    bien» que no se puede sostener.
     """
     try:
+        mtime = os.path.getmtime(DIARIO)
         with open(DIARIO, "r", encoding="utf-8", errors="replace") as diario:
-            lineas = diario.readlines()[-400:]
+            lineas = [l.strip() for l in diario.readlines()[-400:] if l.strip()]
     except OSError:
         return {}
+
+    cola = "desconocida"
+    if lineas and CORRIDA.match(lineas[-1]):
+        cola = "corrida"
+    elif (len(lineas) > 1 and ALERTA.match(lineas[-1])
+            and CORRIDA.match(lineas[-2])):
+        cola = "alerta"
+
+    datos = {"mtime": round(mtime), "cola": cola, "edad_horas": None,
+             "antes_mb": None, "mb": None, "mensajes": None}
+    if cola != "desconocida":
+        datos["edad_horas"] = round((time.time() - mtime) / 3600.0, 2)
+
+    # Los MB de la última corrida que haya, incluso si el diario termina en
+    # algo raro: es el último «después» conocido, y sigue siendo el número
+    # honesto. Lo que no se puede sostener en ese caso es su FECHA.
     for linea in reversed(lineas):
-        calza = CORRIDA.match(linea.strip())
+        calza = CORRIDA.match(linea)
         if not calza:
             continue
-        cuando, antes, despues, mensajes = calza.groups()
-        try:
-            edad = (datetime.now()
-                    - datetime.strptime(cuando, "%Y-%m-%d %H:%M:%S")
-                    ).total_seconds() / 3600.0
-        except ValueError:
-            edad = None
-        return {"cuando": cuando, "antes_mb": int(antes), "mb": int(despues),
-                "mensajes": None if mensajes == "?" else int(mensajes),
-                "edad_horas": None if edad is None else round(edad, 2)}
-    return {}
+        antes, despues, mensajes = calza.groups()
+        datos.update({"antes_mb": int(antes), "mb": int(despues),
+                      "mensajes": None if mensajes == "?" else int(mensajes)})
+        break
+    return datos
 
 
 def _disco_mb():
@@ -139,8 +180,8 @@ class Manejador(BaseHTTPRequestHandler):
                                              "motivo": "falta SINCRO_SECRET"})
             if not self._autorizado():
                 return self._responder(401, {"ok": False})
-            cuerpo = {"ok": True, "cuando": "", "antes_mb": None, "mb": None,
-                      "mensajes": None, "edad_horas": None,
+            cuerpo = {"ok": True, "mtime": None, "cola": "", "mb": None,
+                      "antes_mb": None, "mensajes": None, "edad_horas": None,
                       "ahora_mb": _disco_mb()}
             cuerpo.update(_ultima_corrida())
             return self._responder(200, cuerpo)

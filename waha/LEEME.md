@@ -106,6 +106,19 @@ Lo que **no** está en el repo, a propósito: `~/waha/.env` (secretos) y
   `POST /sincro/lead` (sincronizar un lead ya) y **`GET /almacen`** (lo que
   pesa el almacén, para el resumen de las 7 p.m. de control-stock), las dos
   con el mismo Bearer. El `GET /salud` sigue sin candado y sin datos.
+  **Su compose NO vive en esta carpeta**: está en `~/sincro/docker-compose.yml`
+  (proyecto `sincro`, `network_mode: host`, monta `/home/hermes/waha` como
+  `:ro`). Al cambiar `endpoint.py` se recarga con `cd ~/sincro && docker
+  compose restart`, que **no toca el contenedor de WAHA** — y eso es lo que
+  hay que cuidar: recrear WAHA se lleva la sesión y el webhook del «autor».
+  En el repo el mismo archivo está como `waha/docker-compose.endpoint.yml`.
+
+**El diario del limpiador lo escribe el HOST, que corre en UTC**, y el
+contenedor del endpoint corre con `TZ=America/Panama`: son 5 horas de
+diferencia. Por eso la edad de la última corrida se calcula del **`mtime`**
+del archivo —un epoch, sin zona que interpretar— y nunca de la fecha escrita
+en la línea. Parsear el texto daba −4 horas y apagaba en silencio la
+detección de «el limpiador dejó de correr».
 - ✅ **Almacén controlado**: límites de historial en 1 y un cron que lo
   limpia cada hora. Se mantiene en ~2 MB.
 - ✅ **El webhook del «autor de mensajes»** registrado (ver el final).

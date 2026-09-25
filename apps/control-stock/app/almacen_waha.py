@@ -24,16 +24,28 @@ congelada en un tranquilizador «2 MB» mientras el disco crece sin techo.
 Cuando el diario está vencido este módulo NO repite ese número viejo como si
 fuera de hoy: dice que el limpiador no corre y muestra el disco de ahora.
 
+**La edad y la hora salen del `mtime` del diario, un epoch absoluto, nunca de
+la fecha escrita en su última línea.** Esa fue una trampa real: el host del
+droplet del CRM escribe el diario en UTC y el proceso que lo lee corre con
+`TZ=America/Panama`, así que comparar el texto contra un `now()` daba
+**−4 horas** — la edad nunca pasaba de 3 y la detección de «el limpiador
+murió» quedaba apagada **sin que nada avisara**, que es exactamente la falla
+que este renglón vino a evitar. Un epoch no tiene zona que interpretar, y
+sigue siendo correcto si mañana alguien cambia el `TZ` de cualquiera de los
+dos lados. El endpoint tampoco manda ya la fecha de la línea: si viajara,
+alguien la usaría para mostrar la hora y el bug volvería por atrás.
+
 Y si el droplet del CRM no contesta, esto LANZA. El resumen deja entonces el
 renglón en blanco y lo dice — nunca en 0 MB, que parecería una buena noticia.
 """
 
-import re
+from datetime import datetime
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
 from . import calendario, control
+from .datos import ZONA_PANAMA
 
 # El mismo tope con el que `~/waha/limpiar_almacen.sh` grita en su diario
 # («OJO: el almacen sigue en X MB»). Lo sano ronda 2 MB; 20 ya es historial.
@@ -105,7 +117,9 @@ def armar(crudo, hoy_iso=""):
     antes = crudo.get("antes_mb")
     edad = crudo.get("edad_horas")
     ahora = crudo.get("ahora_mb")
-    cuando = _cuando_texto(crudo.get("cuando") or "", hoy_iso)
+    # La hora se formatea del MISMO `mtime` del que sale la edad, en hora de
+    # Panamá: así el número y la hora no pueden contradecirse.
+    cuando = _cuando_texto(crudo.get("mtime"), hoy_iso)
 
     # Vencido = el limpiador no dejó línea, o la que dejó ya no es de ahora.
     # Una edad negativa (línea con hora del futuro, relojes desalineados) no
@@ -134,7 +148,7 @@ def armar(crudo, hoy_iso=""):
         "mb": ahora, "antes_mb": None, "mensajes": None,
         "cuando_texto": cuando, "edad_horas": edad, "vencido": True,
         "alerta": True, "corto": "almacén sin limpiar",
-        "frase": _frase_vencido(ahora, cuando),
+        "frase": _frase_vencido(ahora, cuando, crudo.get("cola") or ""),
     }
 
 
@@ -153,14 +167,25 @@ def _frase_grande(mb, antes, cuando):
             f"WAHA un 0 no es un límite, es «sin fijar».")
 
 
-def _frase_vencido(ahora, cuando):
-    cuenta = (f"El limpiador no ha corrido desde su última pasada, {cuando},"
-              if cuando else
-              "El limpiador no tiene ninguna pasada en su diario,")
-    return (f"{cuenta} así que su último número ya no dice nada. El disco "
-            f"tiene {ahora} MB ahora mismo. Mientras su cron no corra el "
-            f"almacén solo crece: es lo primero que hay que revisar en el "
-            f"droplet del CRM.")
+def _frase_vencido(ahora, cuando, cola=""):
+    """Tres razones distintas para no fiarse del último número, y cada una se
+    dice como es. La tercera es del caso de borde del diario: el `mtime` puede
+    ser fresco y la última corrida vieja si alguien le escribió otra cosa al
+    final. Ahí no se puede sostener ninguna fecha, y eso se dice — «no sé» es
+    una respuesta honesta; «todo bien» sería un invento."""
+    if cola == "desconocida":
+        cuenta = ("El diario del limpiador termina en algo que no reconozco: "
+                  "no se puede saber cuándo corrió por última vez, ni fiarse "
+                  "de su último número.")
+    elif cuando:
+        cuenta = (f"El limpiador no ha corrido desde su última pasada, "
+                  f"{cuando}, así que su último número ya no dice nada.")
+    else:
+        cuenta = ("El limpiador no tiene ninguna pasada en su diario, así que "
+                  "no hay número suyo del que fiarse.")
+    return (f"{cuenta} El disco tiene {ahora} MB ahora mismo, y eso sí es de "
+            f"ahora. Hay que ir a ver el limpiador en el droplet del CRM: "
+            f"mientras no corra, el almacén solo crece.")
 
 
 def _plegado(mb, antes, cuando):
@@ -187,17 +212,19 @@ def _miles(n):
     return f"{int(n):,}".replace(",", " ")
 
 
-def _cuando_texto(cuando, hoy_iso=""):
-    """«a las 6:17 pm» si la corrida es de hoy; «el 24/09/2026 a las 6:17 pm»
-    si es de otro día. La fecha solo aparece cuando aporta algo, y cuando
-    aparece es día/mes, como todas las fechas del negocio."""
-    # Se valida el formato aunque el endpoint ya lo garantice: el resumen no
-    # puede reventar porque el otro droplet escriba una línea rara.
-    calza = re.match(r"^(\d{4}-\d\d-\d\d) (\d\d:\d\d)", str(cuando))
-    if not calza:
+def _cuando_texto(mtime, hoy_iso=""):
+    """«a las 4:17 pm» si la corrida es de hoy; «el 24/09/2026 a las 4:17 pm»
+    si es de otro día. Se formatea el `mtime` (epoch) en hora de PANAMÁ, que
+    es la del dueño que lo lee — no la del droplet, que corre en UTC.
+    """
+    if not mtime:
         return ""
-    dia, reloj = calza.groups()
-    hora = calendario.hora_bonita(reloj)
+    try:
+        cuando = datetime.fromtimestamp(float(mtime), ZONA_PANAMA)
+    except (TypeError, ValueError, OSError, OverflowError):
+        return ""
+    hora = calendario.hora_bonita(cuando.strftime("%H:%M"))
+    dia = cuando.date().isoformat()
     if hoy_iso and dia != hoy_iso:
         return f"el {calendario.dmy(dia)} a las {hora}"
     return f"a las {hora}"

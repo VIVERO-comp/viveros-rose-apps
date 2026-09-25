@@ -244,8 +244,18 @@ Abraham lo quiere a diario, sin acordarse.
   limpiar`): sano, el número se ve en la pantalla y no gasta el espacio del
   push, igual que no se nombra un «0 pagos». Y un almacén disparado **sí hace
   sonar el aviso un domingo**; un hueco, no.
+- **La edad de la última corrida sale del `mtime` del diario, no de la fecha
+  escrita en su línea.** El host del droplet del CRM escribe ese texto en UTC
+  y el proceso que lo lee corre en hora de Panamá: parsearlo daba −4 horas, y
+  con eso la edad nunca pasaba de 3 y la detección de arriba quedaba apagada
+  **sin un solo error en ningún log**. Un epoch no tiene zona que interpretar.
+  La hora que se muestra se formatea de ese mismo `mtime` en hora de Panamá,
+  así que el número y la hora no pueden contradecirse.
 - El lado del droplet está en el repo (`waha/endpoint.py`) pero **se copia a
-  mano con `scp`**: esa carpeta no tiene despliegue automático.
+  mano con `scp`**: esa carpeta no tiene despliegue automático. Su compose vive
+  en `~/sincro/docker-compose.yml` del droplet del CRM, y se recarga con
+  `cd ~/sincro && docker compose restart` — eso **no** toca el contenedor de
+  WAHA, que es lo que hay que cuidar.
 
 El cron del droplet (que corre en hora de Panamá, así que no hay que convertir
 a UTC como en Vercel):

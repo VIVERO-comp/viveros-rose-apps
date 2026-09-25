@@ -2,6 +2,10 @@
 # proposito: asi un `docker compose up -d` aqui no recrea nunca el
 # contenedor de WAHA — y con el, la sesion y el webhook que registra la
 # sesion del «autor de mensajes».
+#
+# EN EL DROPLET DEL CRM ESTE ARCHIVO VIVE EN `~/sincro/docker-compose.yml`
+# (no en ~/waha). Tras copiar un `endpoint.py` nuevo:
+#     cd ~/sincro && docker compose restart
 name: sincro
 
 services:

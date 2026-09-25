@@ -9,6 +9,10 @@ Lo que se cuida aquí es lo que duele si se rompe:
    cada hora a los :17, así que el instantáneo daría falsas alarmas.
 3. Que cuando el limpiador DEJA de correr no se repita su último número
    tranquilizador — ese es el caso que de otro modo pasa desapercibido.
+   Y que la EDAD salga del `mtime` del diario y nunca de la fecha escrita en
+   su última línea: el droplet escribe ese texto en UTC y el proceso que lo
+   lee corre en hora de Panamá, así que compararlos daba −4 horas y apagaba
+   esta detección en silencio (bug real del 25/09/2026).
 4. Que cuando no se puede saber, se lance: el renglón queda en blanco y lo
    dice, nunca en 0 MB.
 
@@ -16,9 +20,16 @@ Ninguna prueba sale a la red: `armar()` es pura y `leer()` se prueba con una
 puerta falsa.
 """
 
+from datetime import datetime
+
 import pytest
 
 from app import almacen_waha
+from app.datos import ZONA_PANAMA
+
+# Las 6:17 pm del 25/09/2026 en Panamá, como epoch. Es lo que el endpoint
+# manda: un instante absoluto, sin zona que interpretar.
+MTIME_6_17_PM = datetime(2026, 9, 25, 18, 17, 3, tzinfo=ZONA_PANAMA).timestamp()
 
 
 @pytest.fixture(autouse=True)
@@ -29,8 +40,9 @@ def puente_puesto(monkeypatch):
 
 def crudo(**cambios):
     """Lo que contesta el endpoint del droplet del CRM en un día sano."""
-    base = {"ok": True, "cuando": "2026-09-25 18:17:03", "antes_mb": 5,
-            "mb": 2, "mensajes": 132, "edad_horas": 0.7, "ahora_mb": 4}
+    base = {"ok": True, "mtime": MTIME_6_17_PM, "cola": "corrida",
+            "antes_mb": 5, "mb": 2, "mensajes": 132, "edad_horas": 0.7,
+            "ahora_mb": 4}
     base.update(cambios)
     return base
 
@@ -154,9 +166,9 @@ def test_el_tope_es_el_mismo_con_el_que_grita_el_limpiador():
 # ---------------------------------------------------------------------------
 
 def test_si_el_limpiador_no_corre_no_se_repite_su_numero_viejo():
+    ayer = datetime(2026, 9, 24, 12, 17, 1, tzinfo=ZONA_PANAMA).timestamp()
     a = almacen_waha.armar(
-        crudo(mb=2, antes_mb=5, edad_horas=30.0, ahora_mb=64,
-              cuando="2026-09-24 12:17:01"),
+        crudo(mb=2, antes_mb=5, edad_horas=30.0, ahora_mb=64, mtime=ayer),
         hoy_iso="2026-09-25")
     assert a["vencido"] is True and a["alerta"] is True
     assert a["mb"] == 64, "el disco de ahora, no el 2 MB congelado de ayer"
@@ -167,14 +179,26 @@ def test_si_el_limpiador_no_corre_no_se_repite_su_numero_viejo():
 
 
 def test_sin_ninguna_corrida_en_el_diario_pero_con_disco():
-    a = almacen_waha.armar({"ok": True, "cuando": "", "mb": None,
+    a = almacen_waha.armar({"ok": True, "mtime": None, "mb": None,
                             "antes_mb": None, "mensajes": None,
                             "edad_horas": None, "ahora_mb": 3})
     assert a["vencido"] is True and a["mb"] == 3
     assert "ninguna pasada" in a["frase"]
 
 
-def test_una_linea_del_futuro_no_cuenta_como_vencida():
+def test_si_el_diario_termina_en_algo_raro_no_se_sostiene_su_fecha():
+    """El `mtime` es del ARCHIVO: si alguien le escribió otra cosa al final,
+    es fresco aunque la última corrida sea vieja. Ahí se dice que no se sabe,
+    no «todo bien»."""
+    a = almacen_waha.armar(crudo(cola="desconocida", edad_horas=None,
+                                 ahora_mb=31), hoy_iso="2026-09-25")
+    assert a["vencido"] is True and a["alerta"] is True
+    assert a["mb"] == 31, "el disco de ahora, que sí se puede medir"
+    assert "no reconozco" in a["frase"]
+    assert "no ha corrido desde su última pasada" not in a["frase"]
+
+
+def test_un_mtime_en_el_futuro_no_cuenta_como_vencido():
     """Relojes desalineados: una edad negativa es fresca, no vencida."""
     a = almacen_waha.armar(crudo(edad_horas=-1.5), hoy_iso="2026-09-25")
     assert a["vencido"] is False and a["mb"] == 2
@@ -183,7 +207,7 @@ def test_una_linea_del_futuro_no_cuenta_como_vencida():
 def test_si_no_hay_diario_ni_disco_se_lanza_para_que_quede_el_hueco():
     """Nunca 0 MB: un cero falso parece una buena noticia."""
     with pytest.raises(RuntimeError):
-        almacen_waha.armar({"ok": True, "cuando": "", "mb": None,
+        almacen_waha.armar({"ok": True, "mtime": None, "mb": None,
                             "ahora_mb": None})
 
 
@@ -192,22 +216,22 @@ def test_si_no_hay_diario_ni_disco_se_lanza_para_que_quede_el_hueco():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("cuando,hoy,texto", [
-    ("2026-09-25 18:17:03", "2026-09-25", "a las 6:17 pm"),
-    ("2026-09-25 08:17:00", "2026-09-25", "a las 8:17 am"),
-    ("2026-09-24 12:17:01", "2026-09-25", "el 24/09/2026 a las 12:17 pm"),
-    ("", "2026-09-25", ""),
-    ("cualquier cosa", "2026-09-25", ""),
+    ((2026, 9, 25, 18, 17), "2026-09-25", "a las 6:17 pm"),
+    ((2026, 9, 25, 8, 17), "2026-09-25", "a las 8:17 am"),
+    ((2026, 9, 24, 12, 17), "2026-09-25", "el 24/09/2026 a las 12:17 pm"),
 ])
-def test_la_hora_de_la_ultima_corrida(cuando, hoy, texto):
-    assert almacen_waha._cuando_texto(cuando, hoy) == texto
+def test_la_hora_de_la_ultima_corrida_sale_del_mtime(cuando, hoy, texto):
+    mtime = datetime(*cuando, tzinfo=ZONA_PANAMA).timestamp()
+    assert almacen_waha._cuando_texto(mtime, hoy) == texto
 
 
-def test_un_404_dice_que_falta_copiar_el_endpoint(monkeypatch):
-    """`waha/` se copia a mano con scp: el primer día, el error más probable
-    es que el droplet corra la versión vieja del endpoint."""
-    class Respuesta:
-        status_code = 404
+@pytest.mark.parametrize("mtime", [None, 0, "", "cualquier cosa"])
+def test_sin_mtime_no_se_inventa_una_hora(mtime):
+    assert almacen_waha._cuando_texto(mtime, "2026-09-25") == ""
 
-    monkeypatch.setattr(almacen_waha.httpx, "get", lambda *a, **k: Respuesta())
-    with pytest.raises(RuntimeError, match="falta copiarle waha/endpoint.py"):
-        almacen_waha.leer()
+
+def test_la_hora_se_muestra_en_panama_no_en_la_zona_del_droplet():
+    """El droplet del CRM corre en UTC. Si la hora se tomara de allá, el
+    dueño leería «8:17 pm» cuando en su reloj son las 4:17 pm."""
+    en_utc = datetime.fromisoformat("2026-09-25T21:17:00+00:00").timestamp()
+    assert almacen_waha._cuando_texto(en_utc, "2026-09-25") == "a las 4:17 pm"
