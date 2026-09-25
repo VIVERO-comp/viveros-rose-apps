@@ -195,21 +195,62 @@ def test_un_responsable_que_no_existe_en_linear_se_rechaza():
 # El enganche para WAHA (Fase W): hoy vacío a propósito
 # ---------------------------------------------------------------------------
 
-def test_el_enganche_de_whatsapp_esta_puesto_pero_apagado():
+def test_sin_las_variables_el_enganche_esta_apagado(monkeypatch):
+    monkeypatch.delenv("SINCRO_URL", raising=False)
+    monkeypatch.delenv("SINCRO_SECRETO", raising=False)
     assert control.waha_activo() is False
-    assert control.etiquetar_en_whatsapp("6552-0966", "Ruben") is False
+    assert control.etiquetar_en_whatsapp("LEAD-91") is False
 
 
-def test_con_waha_andando_el_aviso_manual_se_apaga(monkeypatch):
-    """El día que WAHA ande, se llena etiquetar_en_whatsapp() y el aviso
-    manual desaparece sin tocar nada más. Esto lo demuestra."""
+def test_hace_falta_la_url_Y_el_secreto(monkeypatch):
+    monkeypatch.setenv("SINCRO_URL", "http://10.116.0.3:3002/sincro/lead")
+    monkeypatch.delenv("SINCRO_SECRETO", raising=False)
+    assert control.waha_activo() is False, "con la URL sola no alcanza"
+    monkeypatch.setenv("SINCRO_SECRETO", "el-secreto")
+    assert control.waha_activo() is True
+
+
+def test_el_enganche_no_bloquea_ni_cuando_el_endpoint_revienta(monkeypatch):
+    """La regla del dueño: si el endpoint falla o tarda, Control sigue
+    igual. Sale en un hilo y el error solo queda en el log."""
+    monkeypatch.setenv("SINCRO_URL", "http://10.116.0.3:3002/sincro/lead")
+    monkeypatch.setenv("SINCRO_SECRETO", "el-secreto")
+    avisos_log = []
+    monkeypatch.setattr(control, "registro_aviso", avisos_log.append)
+
+    def revienta(*_a, **_k):
+        raise OSError("no hay ruta al host")
+
+    monkeypatch.setattr(control.httpx, "post", revienta)
+    # Despachado: vuelve True aunque el endpoint no exista.
+    assert control.etiquetar_en_whatsapp("LEAD-91") is True
+    import time
+    for _ in range(40):
+        if avisos_log:
+            break
+        time.sleep(0.05)
+    assert avisos_log and "no contestó" in avisos_log[0]
+
+
+def test_con_el_endpoint_puesto_el_aviso_manual_se_apaga(monkeypatch):
+    """Cuando el sincronizador se encarga, la pantalla deja de pedir el
+    aviso manual: ya no hay nada que poner a mano."""
     monkeypatch.setattr(control, "waha_activo", lambda: True)
-    monkeypatch.setattr(control, "etiquetar_en_whatsapp",
-                        lambda celular, etiqueta: True)
+    monkeypatch.setattr(control, "etiquetar_en_whatsapp", lambda ref: True)
     aviso, error = control.mover_a_empleado("LEAD-91", "Mary")
     assert error == ""
     assert "Pon en WhatsApp" not in aviso
-    assert "La etiqueta de WhatsApp quedó puesta" in aviso
+    assert "se está poniendo sola" in aviso
+
+
+def test_el_lead_que_se_manda_a_sincronizar_es_el_que_se_movio(monkeypatch):
+    monkeypatch.setattr(control, "waha_activo", lambda: True)
+    pedidos = []
+    monkeypatch.setattr(control, "etiquetar_en_whatsapp",
+                        lambda ref: pedidos.append(ref) or True)
+    control.mover_a_empleado("LEAD-90", "Mary")
+    control.mover_a_estado("LEAD-86", "COTIZADO", nota="le pasé el precio")
+    assert pedidos == ["LEAD-90", "LEAD-86"]
 
 
 # ---------------------------------------------------------------------------

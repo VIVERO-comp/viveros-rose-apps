@@ -31,6 +31,8 @@ dos veces en cada recarga de la pantalla.
 
 import os
 import re
+
+import httpx
 from datetime import datetime
 
 from . import agenda, avisos, calendario, linear_leads
@@ -85,32 +87,69 @@ def _olvidar_acuse(prefijo):
 # El enganche para WAHA (Fase W): hoy el aviso es manual
 # ---------------------------------------------------------------------------
 
-def etiquetar_en_whatsapp(celular, etiqueta):
-    """Poner la etiqueta `etiqueta` al chat de `celular` en WhatsApp.
+def registro_aviso(texto):
+    """Un aviso al log. Aparte para que las pruebas puedan mirarlo — y
+    propio de este módulo: tomarlo prestado de otro es cómo se cuela un
+    NameError que solo aparece el día que algo falla de verdad."""
+    import logging
+    logging.getLogger("control_stock").warning(texto)
 
-    **Vacía a propósito.** Hoy nadie puede hacerlo desde el código: OpenWA
-    con motor `baileys` no soporta etiquetas (`501 getLabels`), y por eso
-    se eligió WAHA aparte, que todavía no está montado. Mientras tanto la
-    pantalla muestra el aviso manual («Pon en WhatsApp la etiqueta: X») y
-    esta función se queda como el punto de llamada, ya conectado arriba en
-    `mover_a_empleado()`.
 
-    El día que WAHA esté andando se llena esto, `waha_activo()` pasa a
-    decir la verdad y el aviso manual se apaga solo: nada más cambia.
-    Vuelve True si la etiqueta quedó puesta.
+def _sincro_url():
+    return (os.environ.get("SINCRO_URL") or "").strip()
+
+
+def _sincro_secreto():
+    return (os.environ.get("SINCRO_SECRETO") or "").strip()
+
+
+def etiquetar_en_whatsapp(lead_ref):
+    """Pide al sincronizador que deje YA las etiquetas de ese lead en su
+    chat de WhatsApp, en vez de esperar su pasada de cada 2 minutos.
+
+    **No bloquea y no puede tumbar nada.** Sale en un hilo aparte con
+    timeout corto, y si el endpoint falla o tarda, la pantalla sigue igual:
+    solo queda el error en el log y el sincronizador lo arregla en la
+    próxima pasada. Por eso vuelve `True` cuando el aviso se DESPACHÓ, no
+    cuando la etiqueta quedó puesta — desde acá eso no se puede saber sin
+    hacer esperar a quien está usando la app.
+
+    Vive en el droplet del CRM, junto a WAHA, y se le llega por la red
+    privada (`10.116.0.3:3002`): WAHA escucha solo en su localhost.
     """
-    return False
+    url, secreto = _sincro_url(), _sincro_secreto()
+    if not (url and secreto and lead_ref):
+        return False
+
+    def tarea():
+        try:
+            respuesta = httpx.post(
+                url, json={"lead": lead_ref},
+                headers={"Authorization": "Bearer " + secreto},
+                timeout=6.0)
+            if respuesta.status_code >= 300:
+                registro_aviso(
+                    "el sincronizador de WhatsApp rechazó %s: HTTP %s"
+                    % (lead_ref, respuesta.status_code))
+        except Exception as fallo:
+            # Nunca se propaga: Control no depende de WhatsApp.
+            registro_aviso("el sincronizador de WhatsApp no contestó por %s: %s"
+                           % (lead_ref, fallo))
+
+    calendario._en_fondo("sincro-wa-" + lead_ref, tarea)
+    return True
 
 
 def waha_activo():
     """¿Ya se puede etiquetar en WhatsApp desde el código?
 
-    Mientras sea False, la pantalla pide el aviso manual. El `and False`
-    es el candado de la Fase W: existe la variable de entorno pero la
-    función de arriba todavía está vacía, y prender el aviso antes de que
-    funcione dejaría al equipo creyendo que la etiqueta se puso sola.
+    Es True cuando están puestas las dos variables del endpoint de
+    sincronización (`SINCRO_URL` y `SINCRO_SECRETO`). Mientras falte
+    alguna, la pantalla sigue pidiendo el aviso manual («Pon en WhatsApp la
+    etiqueta: X»): prenderlo antes de que funcione dejaría al equipo
+    creyendo que la etiqueta se puso sola.
     """
-    return bool((os.environ.get("WAHA_URL") or "").strip()) and False
+    return bool(_sincro_url() and _sincro_secreto())
 
 
 # ---------------------------------------------------------------------------
@@ -248,9 +287,9 @@ def mover_a_empleado(ref, nombre, autor=""):
     aviso = f"{lead['nombre']} es de {nombre}."
     # El enganche de la Fase W, ya llamado: cuando WAHA ande, esto etiqueta
     # el chat y el recordatorio manual deja de salir.
-    if waha_activo() and lead.get("celular"):
-        if etiquetar_en_whatsapp(lead["celular"], nombre):
-            return aviso + " La etiqueta de WhatsApp quedó puesta.", ""
+    if waha_activo():
+        if etiquetar_en_whatsapp(lead["ref"]):
+            return aviso + " La etiqueta de WhatsApp se está poniendo sola.", ""
     if not _ya_avisado(f"wa-label:{lead['ref']}:{nombre}"):
         aviso += f" Pon en WhatsApp la etiqueta: {nombre}"
         if anterior:
@@ -292,6 +331,10 @@ def mover_a_estado(ref, clave, nota="", motivo="", autor=""):
     except linear_leads.ErrorLeads as fallo:
         return "", str(fallo)
     linear_leads.refrescar()
+    # El estado tambien es una etiqueta del chat: que no espere los 2
+    # minutos del sincronizador.
+    if waha_activo():
+        etiquetar_en_whatsapp(lead["ref"])
     desde = (linear_leads.POR_CLAVE.get(lead["estado"]) or {}).get("nombre") or "—"
     hasta = linear_leads.POR_CLAVE[clave]["nombre"]
     return f"{lead['nombre']}: {desde} → {hasta}. Quedó anotado en el issue.", ""

@@ -219,6 +219,27 @@ a UTC como en Vercel):
   http://127.0.0.1:8092/avisos/resumen >> ~/resumen.log 2>&1
 ```
 
+### El enganche con WhatsApp (`SINCRO_URL`, `SINCRO_SECRETO`)
+
+Al asignar o mover un lead en Control, se le pide al **sincronizador de
+etiquetas** —que vive en el droplet del CRM, junto a WAHA— que deje ya las
+etiquetas en el chat de WhatsApp, sin esperar su pasada de cada 2 minutos.
+
+- **No bloquea.** Sale en un hilo con timeout de 6 s. Si el endpoint falla o
+  tarda, la pantalla sigue igual y el error queda en el log; el sincronizador
+  lo arregla en la próxima pasada. Por eso `etiquetar_en_whatsapp()` vuelve
+  `True` cuando el aviso se **despachó**, no cuando la etiqueta quedó puesta:
+  saberlo de verdad obligaría a hacer esperar a quien usa la app.
+- **Se le llega por la red privada** (`10.116.0.3:3002`): WAHA escucha solo en
+  su propio localhost, y el puerto está abierto en ufw **únicamente** desde
+  `10.116.0.2`, que es este droplet.
+- **Con las dos variables puestas**, la pantalla deja de pedir el aviso manual
+  («Pon en WhatsApp la etiqueta: X»). Si falta alguna, el aviso manual se
+  queda: es mejor pedirlo a mano que dejar al equipo creyendo que se puso solo.
+- **Los nombres no son los mismos a los dos lados**, y está bien: en Linear la
+  etiqueta es `Resp: Mary` y en WhatsApp es `Mary`. El traductor vive en el
+  sincronizador, en un solo lugar.
+
 ## La cara CRM (`/crm/calendario`)
 
 El MISMO calendario, con la piel de Twenty, para verse como pestaña dentro
