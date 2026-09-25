@@ -54,6 +54,11 @@ PERMITIDO = (
     re.compile(r"^/api/%s/labels/chats/[^/]+$" % SESION),   # leer/guardar de un chat
     re.compile(r"^/api/contacts/check-exists$"),
     re.compile(r"^/api/sessions/%s$" % SESION),
+    # Nombres de contacto (0b): leer y poner el nombre de un chat. UNA sola
+    # ruta nueva, nada mas — la lista blanca se compara SIN el query, asi
+    # que esto no necesita nada especial para calzar (esta ruta no lleva
+    # query nunca).
+    re.compile(r"^/api/%s/contacts/[^/]+$" % SESION),
 )
 
 # Las etiquetas de WhatsApp que son del telefono y no nuestras.
@@ -167,7 +172,13 @@ def telefono_de_la_tarjeta(descripcion):
 
 
 def leads_del_crm():
-    """[{ref, nombre, pp, estado, resp, interes, te_toca, telefono}] vivos."""
+    """[{ref, nombre, pp, estado, resp, interes, te_toca, telefono, cerrado}]
+
+    TODOS los issues del equipo LEAD, vivos Y cerrados (Ganado/Perdido). Se
+    necesitan los cerrados tambien para poder limpiarles el chat cuando
+    entran a ese estado; `cerrado` es la senal que usa el resto del
+    sincronizador para saber que a ese chat no le toca ni etiqueta de
+    estado ni Responder."""
     nodos = linear(CONSULTA, {"equipo": EQUIPO_LEAD})["issues"]["nodes"]
     # El telefono manda Twenty; la tarjeta de Linear es el respaldo.
     por_pp = {}
@@ -179,6 +190,7 @@ def leads_del_crm():
     except Exception as fallo:
         print("   (Twenty no contesto para los leadsWeb: %s)" % str(fallo)[:60])
     telefonos = {}
+    nombres_persona = {}
     if por_pp:
         try:
             j = twenty("people?limit=200")
@@ -187,14 +199,24 @@ def leads_del_crm():
                 cc = ((p.get("phones") or {}).get("primaryPhoneCallingCode") or "")
                 if crudo:
                     telefonos[p["id"]] = solo_digitos(cc + crudo)
+                nom = p.get("name") or {}
+                nombres_persona[p["id"]] = (
+                    (nom.get("firstName") or "").strip(),
+                    (nom.get("lastName") or "").strip())
         except Exception as fallo:
             print("   (Twenty no contesto para las Person: %s)" % str(fallo)[:60])
 
     leads = []
     for n in nodos:
         estado = (n["state"] or {}).get("name") or ""
-        if (n["state"] or {}).get("type") in ("completed", "canceled"):
-            continue  # Ganado y Perdido: el chat se queda sin etiquetas
+        # Ganado y Perdido SI entran (bug del 25/09: antes se saltaban aqui,
+        # asi que el sincronizador nunca volvia a mirar su chat y las
+        # etiquetas de estado y Responder se quedaban puestas para siempre).
+        # `cerrado` es lo que usa `quiere_para()` para tratar a este lead
+        # con la regla de RESTA (solo quitar estado y Responder de lo que
+        # el chat ya tiene, nunca agregar nada) en vez de la regla normal
+        # de `deseadas()`, que arma la lista desde Linear y puede agregar.
+        cerrado = (n["state"] or {}).get("type") in ("completed", "canceled")
         grupos = {}
         for l in n["labels"]["nodes"]:
             grupos[((l.get("parent") or {}).get("name") or "")] = l["name"]
@@ -205,8 +227,13 @@ def leads_del_crm():
         m = re.search(r"\((PP-[A-Z0-9]+)\)", titulo)
         pp = m.group(1) if m else ""
         resp = grupos.get("Responsable", "")
-        tel = telefonos.get(por_pp.get(pp.upper(), ""), "") \
+        persona_id = por_pp.get(pp.upper(), "")
+        tel = telefonos.get(persona_id, "") \
             or telefono_de_la_tarjeta(n.get("description"))
+        # El nombre real de la Person en Twenty (firstName, lastName). Vacio
+        # si Twenty no la tiene o si el lead no caso con ninguna leadWeb: NO
+        # se inventa, lo llena `nombre_deseado()` con la referencia PP-XXXXX.
+        n_primero, n_segundo = nombres_persona.get(persona_id, ("", ""))
         leads.append({
             "ref": n["identifier"],
             "nombre": titulo.split(" (PP-")[0].strip() or titulo,
@@ -216,6 +243,9 @@ def leads_del_crm():
             "interes": grupos.get("Interés", ""),
             "te_toca": "Te toca" in nombres,
             "telefono": tel,
+            "nombre_primero": n_primero,
+            "nombre_segundo": n_segundo,
+            "cerrado": cerrado,
         })
     return leads
 
@@ -398,7 +428,14 @@ def chats_por_etiqueta(etiquetas):
 
 
 def deseadas(lead, disponibles):
-    """Las etiquetas que ese chat deberia tener, con lo que existe hoy."""
+    """Las etiquetas que ese chat deberia tener, con lo que existe hoy.
+
+    SOLO para leads vivos: arma la lista desde cero, a partir de lo que
+    dice Linear, y por eso puede tanto poner como quitar. Para un lead
+    cerrado (Ganado/Perdido) esto NO se usa — ver `quiere_para()` — porque
+    un cerrado no se rige por lo que Linear "querria": se rige por resta
+    sobre lo que el chat ya tiene, y nunca agrega nada nuevo.
+    """
     quiere = []
     if lead["estado"] in ESTADOS_CON_ETIQUETA:
         quiere.append(lead["estado"])
@@ -410,6 +447,230 @@ def deseadas(lead, disponibles):
         quiere.append(RESPONDER)
     faltan = [q for q in quiere if q not in disponibles]
     return [q for q in quiere if q in disponibles], faltan
+
+
+def quiere_para(lead, tiene, disponibles):
+    """Lo que ese chat deberia quedar teniendo, sea vivo o cerrado.
+
+    Vivo: lo decide Linear (`deseadas()`) — puede poner y puede quitar.
+
+    Cerrado (Ganado o Perdido, `lead["cerrado"]`): SOLO resta, nunca
+    agrega. La regla del dueno es literal: "mantener representante e
+    interes" es conservar lo que el chat YA tiene, no estrenar algo que
+    nunca tuvo. No existe una etiqueta "Perdido" ni "Ganado" en WhatsApp
+    (los 6 estados con etiqueta son los EN CURSO) y no se crea una — las
+    etiquetas nunca se crean solas.
+
+        quedar = (lo que el chat tiene hoy) - (las 6 de estado) - (Responder)
+
+    Si el chat no tiene nada, `quedar` sale vacio y no hay nada que quitar
+    — no se manda un PUT que no cambia nada.
+    """
+    if lead.get("cerrado"):
+        quiere = [t for t in tiene if t not in ESTADOS_CON_ETIQUETA and t != RESPONDER]
+        return quiere, []
+    return deseadas(lead, disponibles)
+
+
+# ---------------------------------------------------------------------------
+# Nombres de contacto (punto 0b): el WhatsApp del negocio no muestra nombre
+# en los chats de los leads. Se probo a mano con un interno (Mary, 6108-7413)
+# y se ve en el telefono; esto lo hace solo, de a uno, para todos los leads.
+#
+# REGLA DURA: solo se toca un contacto SIN nombre (vacio, o el "nombre" es
+# nomas el numero). Un nombre puesto A MANO en el telefono siempre gana y
+# nunca se pisa — por eso primero se LEE, nunca se escribe a ciegas.
+#
+# `@c.us` y `@lid` son registros independientes (verificado con Mary):
+# escribir uno no llena el otro, asi que cada uno se lee y se decide por
+# separado.
+#
+# DOS TRAMPAS YA PAGADAS, y las dos las resuelve el MISMO payload:
+#
+# 1. Omitir `lastName` hace que WAHA invente el apellido "Doe" (paso con
+#    Mary: quedo `name = "Mary Doe"`). No basta con no mandarlo: hay que
+#    mandarlo VACIO, siempre presente.
+# 2. Partir el nombre en dos campos VOLTEA el orden en el `@c.us`. Mandando
+#    {"firstName": "Laura", "lastName": "Porcell"} el `@lid` queda «Laura
+#    Porcell» y el `@c.us` deriva a «Porcell Laura», minutos despues de la
+#    escritura. Paso en 11 de los 19 contactos del 25/09 — en todos los de
+#    dos palabras. No se controla desde el payload: el orden mandado era el
+#    correcto; es WAHA re-derivando el contacto.
+#
+# Por eso el nombre va COMPLETO en `firstName` y `lastName` explicitamente
+# vacio: sin dos campos no hay nada que ordenar y los dos ids quedan
+# identicos. Es la unica forma probada contra el WhatsApp real (los 19 del
+# 25/09 salieron asi, 19/19 correctos por los dos ids).
+#
+# Y de ahi sale otra regla: NO releer el contacto justo despues del PUT. La
+# lectura inmediata MIENTE — devolvio «Mary» y minutos mas tarde el registro
+# decia «Doe Mary». Si algun dia se verifica, se verifica con pausa.
+# ---------------------------------------------------------------------------
+
+_RE_SOLO_NUMERO = re.compile(r"^[\d\s+()\-]+$")
+
+# Escribir el nombre es una escritura real al directorio de contactos de
+# WhatsApp (no una etiqueta): se hace de a uno, con esta pausa entre cada
+# escritura (no solo entre leads: tambien entre el @c.us y el @lid del mismo
+# lead), para no rafaguear el directorio con muchas escrituras seguidas. No
+# hay una prueba de limite de tasa todavia -si algun dia aparece un 429,
+# subir este numero-, pero unos segundos por escritura no atrasa nada: el
+# cron corre cada 2 minutos y hoy hay unas pocas decenas de leads.
+PAUSA_ENTRE_NOMBRES = 2.0
+
+
+def _contacto(chat_id):
+    """El contacto de WAHA para ese chat, o None si no se pudo leer.
+
+    None (no {}） es a proposito: si no se sabe que dice el contacto hoy, no
+    se toca — mas vale saltarlo que arriesgarse a pisar un nombre puesto a
+    mano que no se pudo leer bien.
+    """
+    try:
+        return _waha("/api/%s/contacts/%s" % (SESION, chat_id))
+    except Exception:
+        return None
+
+
+def _le_falta_nombre(contacto):
+    """True si ese contacto no tiene nombre, o si el 'nombre' es solo el
+    numero. El campo que importa es `name` (el de la libreta), NUNCA
+    `pushname` (el que el dueno del numero se puso a si mismo en su
+    WhatsApp: no es nuestro y no dice si YA le pusimos nombre).
+
+    Se mira `name` ENTERO, una sola cadena — que es justo la forma en que
+    lo escribimos (todo en `firstName`): aqui no hay dos mitades que
+    comparar, ni hace falta adivinar como quedo repartido."""
+    if contacto is None:
+        return False
+    crudo = (contacto.get("name") or "").strip()
+    if not crudo:
+        return True
+    return bool(_RE_SOLO_NUMERO.match(crudo))
+
+
+def _tiene_letras(texto):
+    """True si el texto trae al menos UNA letra, de cualquier alfabeto.
+
+    Un nombre sin ninguna letra no es un nombre — es lo que aprobo el
+    dueno para ':' y '🤍' (dos leads reales del 25/09): ni un signo de
+    puntuacion ni un emoji cuentan. 'soy pobre pero digno.' SI tiene
+    letras y se deja tal cual: no es trabajo de este codigo decidir si un
+    nombre es "bonito", solo si es un nombre.
+    """
+    return any(c.isalpha() for c in (texto or ""))
+
+
+def nombre_deseado(lead):
+    """(nombre_completo, origen) para ese lead — UNA sola cadena.
+
+    Una cadena y no dos campos a proposito: partirla voltea el `@c.us`
+    (ver las dos trampas arriba). Nombre y apellido de Twenty se juntan
+    con un espacio y `.strip()`, asi que si uno de los dos viene vacio el
+    nombre no empieza ni termina con espacio.
+
+    Si Twenty tiene el nombre de la Person Y trae al menos una letra, ese
+    manda tal cual. Si no —vacio, o solo simbolos/emoji, que no es un
+    nombre— NUNCA se inventa uno: se usa "Cliente PP-XXXXX" con la
+    referencia del lead, tambien en una sola cadena (partido voltearia a
+    «PP-XXXXX Cliente»). Esto se reevalua en cada pasada, asi que sigue
+    funcionando solo para el proximo lead que entre con un emoji por
+    nombre.
+    """
+    primero = (lead.get("nombre_primero") or "").strip()
+    segundo = (lead.get("nombre_segundo") or "").strip()
+    if _tiene_letras(primero) or _tiene_letras(segundo):
+        return (primero + " " + segundo).strip(), "Twenty (nombre de la Person)"
+    referencia = lead.get("pp") or lead["ref"]
+    return ("Cliente " + referencia,
+            "la referencia del lead (Twenty no tiene nombre con letras)")
+
+
+def _poner_nombre(chat_id, nombre, aplicar):
+    """Un PUT de nombre, o nada si es en seco.
+
+    El payload es SIEMPRE el mismo y no se toca: el nombre completo en
+    `firstName` y `lastName` vacio pero presente. Las dos claves van
+    siempre (sin `lastName` WAHA inventa "Doe") y el nombre nunca se
+    parte (partido, el `@c.us` voltea el orden). Ver las dos trampas
+    arriba."""
+    if not aplicar:
+        return True, ""
+    try:
+        _waha("/api/%s/contacts/%s" % (SESION, chat_id),
+              datos={"firstName": nombre, "lastName": ""}, metodo="PUT")
+        return True, ""
+    except Exception as fallo:
+        return False, str(fallo)[:90]
+
+
+def nombres_de_contactos(leads, aplicar):
+    """Le pone el nombre de Twenty (o "Cliente PP-XXXXX") a cada contacto de
+    lead VIVO que hoy no tiene nombre propio. Los cerrados (Ganado/Perdido)
+    se saltan con el motivo "cerrado": llegan aqui porque `leads_del_crm()`
+    los trae para el camino de las ETIQUETAS, que en un cerrado solo resta.
+    Vuelve (tocaria, saltaria, hechos, errores):
+
+      tocaria  = [(lead, nombre_nuevo, origen, [(id_etiqueta, chat_id,
+                   nombre_actual), ...])]   - uno o los dos ids de ese lead
+      saltaria = [(lead, motivo)]
+      hechos   = cuantas escrituras salieron bien (solo si aplicar)
+      errores  = [(ref, motivo)]
+
+    De a uno, con pausa entre cada escritura — ver PAUSA_ENTRE_NOMBRES.
+    """
+    tocaria, saltaria = [], []
+    for lead in sorted(leads, key=lambda l: l["ref"]):
+        # Un lead CERRADO (Ganado/Perdido) no se nombra. `leads_del_crm()`
+        # trae los cerrados a proposito -es el arreglo del bug de Perdido-,
+        # pero ese camino, el de las etiquetas, solo RESTA. Poner un nombre
+        # es estrenar algo, y para un cerrado la regla del dueno es la
+        # misma que para las etiquetas: solo quitar, nunca agregar. No se
+        # pierde nada: un Perdido que vuelve a escribir revive a Hablando y
+        # en la pasada siguiente recibe su nombre por el camino normal.
+        if lead.get("cerrado"):
+            saltaria.append((lead, "cerrado (%s): un cerrado no estrena nombre"
+                             % (lead["estado"] or "-")))
+            continue
+        if not lead["telefono"]:
+            saltaria.append((lead, "sin telefono en Twenty/Linear: no hay chat"))
+            continue
+        cus = solo_digitos(lead["telefono"]) + "@c.us"
+        lid = chat_id_real(lead["telefono"])
+        if not lid:
+            saltaria.append((lead, "el numero no tiene WhatsApp"))
+            continue
+        ids_a_tocar, no_se_pudo_leer = [], []
+        for id_etiqueta, chat_id in (("@c.us", cus), ("@lid", lid)):
+            contacto = _contacto(chat_id)
+            if contacto is None:
+                no_se_pudo_leer.append(id_etiqueta)
+                continue
+            if _le_falta_nombre(contacto):
+                ids_a_tocar.append((id_etiqueta, chat_id, (contacto.get("name") or "")))
+        if not ids_a_tocar:
+            if no_se_pudo_leer:
+                saltaria.append((lead, "no se pudo leer el contacto (%s)"
+                                  % ", ".join(no_se_pudo_leer)))
+            else:
+                saltaria.append((lead, "los dos ids ya tienen nombre puesto a mano"))
+            continue
+        nombre_nuevo, origen = nombre_deseado(lead)
+        tocaria.append((lead, nombre_nuevo, origen, ids_a_tocar))
+
+    hechos, errores = 0, []
+    if aplicar:
+        for lead, nombre_nuevo, origen, ids_a_tocar in tocaria:
+            # El mismo `nombre_nuevo` que se imprimio en seco: una cadena,
+            # no dos mitades que haya que volver a armar.
+            for id_etiqueta, chat_id, _antes in ids_a_tocar:
+                ok, motivo = _poner_nombre(chat_id, nombre_nuevo, aplicar)
+                if ok:
+                    hechos += 1
+                else:
+                    errores.append((lead["ref"] + " " + id_etiqueta, motivo))
+                time.sleep(PAUSA_ENTRE_NOMBRES)
+    return tocaria, saltaria, hechos, errores
 
 
 def cargar_estado():
@@ -524,7 +785,7 @@ def sincronizar_uno(ref, aplicar=False):
         return {"lead": ref, "motivo": "el numero no tiene WhatsApp",
                 "puestas": [], "quitadas": []}
     tiene = etiquetas_del_chat(chat)
-    quiere, faltan = deseadas(lead, etiquetas)
+    quiere, faltan = quiere_para(lead, tiene, etiquetas)
     poner = [q for q in quiere if q not in tiene]
     quitar = [t for t in tiene if t not in quiere]
     if aplicar and (poner or quitar):
@@ -541,8 +802,15 @@ def sincronizar_uno(ref, aplicar=False):
 
 def main():
     aplicar = "--aplicar" in sys.argv
-    print("SINCRONIZADOR CRM -> WhatsApp   ·   %s" %
-          ("APLICANDO" if aplicar else "EN SECO (no escribe nada)"))
+    # Los nombres de contacto llevan SU PROPIA bandera, separada de
+    # `--aplicar` (etiquetas): son escrituras nuevas, nunca probadas en
+    # produccion mas alla de un contacto a mano, y conviene poder aplicar
+    # etiquetas sin que eso encienda tambien los nombres. Por defecto, en
+    # seco: no manda ni un PUT.
+    aplicar_nombres = "--aplicar-nombres" in sys.argv
+    print("SINCRONIZADOR CRM -> WhatsApp   ·   %s   ·   nombres: %s" % (
+        "APLICANDO" if aplicar else "EN SECO (no escribe nada)",
+        "APLICANDO" if aplicar_nombres else "EN SECO (no escribe nada)"))
     print("=" * 76)
 
     sesion = _waha("/api/sessions/%s" % SESION)
@@ -557,7 +825,9 @@ def main():
     leads = leads_del_crm()
     lista_interna, de_donde = internos()
     print("numeros internos: %d · %s" % (len(lista_interna), de_donde))
-    print("leads vivos en Linear: %d" % len(leads))
+    cerrados = [l for l in leads if l["cerrado"]]
+    print("leads en Linear: %d (%d vivos, %d cerrados -Ganado/Perdido-)" % (
+        len(leads), len(leads) - len(cerrados), len(cerrados)))
     print()
 
     estado_previo = cargar_estado()
@@ -578,29 +848,34 @@ def main():
             sin_whatsapp.append(lead)
             continue
         tiene = etiquetas_del_chat(chat)
-        quiere, faltan = deseadas(lead, nuestras)
+        quiere, faltan = quiere_para(lead, tiene, nuestras)
         faltantes.update(faltan)
         poner = [q for q in quiere if q not in tiene]
         quitar = [t for t in tiene if t not in quiere]
 
         # --- lectura de vuelta: empleado e interes ---
+        # Nunca para un lead cerrado (Ganado/Perdido): un issue cerrado no
+        # se reabre para pisarle el responsable o el interes porque alguien
+        # cambio la etiqueta en el telefono. Esta lectura de vuelta es solo
+        # para leads en curso.
         previo = estado_previo.get(lead["ref"], {})
-        for grupo, valores, campo in (
-                ("responsable", [t for t in tiene if t in REPRESENTANTES], "resp"),
-                ("interes", [t for t in tiene if t in INTERESES], "interes")):
-            en_wa = valores[0] if valores else ""
-            si_resp = campo == "resp"
-            en_wa_limpio = a_whatsapp(en_wa) if si_resp else en_wa
-            en_crm = lead[campo]
-            if en_wa_limpio and en_wa_limpio != en_crm and previo.get(campo, "") == en_crm:
-                # WhatsApp cambio y el CRM no: manda el telefono.
-                devoluciones.append((lead, grupo, en_crm or "(nada)", en_wa_limpio))
-                if si_resp:
-                    poner = [p for p in poner if p not in REPRESENTANTES]
-                    quitar = [q for q in quitar if q not in REPRESENTANTES]
-                else:
-                    poner = [p for p in poner if p not in INTERESES]
-                    quitar = [q for q in quitar if q not in INTERESES]
+        if not lead["cerrado"]:
+            for grupo, valores, campo in (
+                    ("responsable", [t for t in tiene if t in REPRESENTANTES], "resp"),
+                    ("interes", [t for t in tiene if t in INTERESES], "interes")):
+                en_wa = valores[0] if valores else ""
+                si_resp = campo == "resp"
+                en_wa_limpio = a_whatsapp(en_wa) if si_resp else en_wa
+                en_crm = lead[campo]
+                if en_wa_limpio and en_wa_limpio != en_crm and previo.get(campo, "") == en_crm:
+                    # WhatsApp cambio y el CRM no: manda el telefono.
+                    devoluciones.append((lead, grupo, en_crm or "(nada)", en_wa_limpio))
+                    if si_resp:
+                        poner = [p for p in poner if p not in REPRESENTANTES]
+                        quitar = [q for q in quitar if q not in REPRESENTANTES]
+                    else:
+                        poner = [p for p in poner if p not in INTERESES]
+                        quitar = [q for q in quitar if q not in INTERESES]
         if poner or quitar:
             planes.append((lead, chat, sorted(tiene), poner, quitar))
 
@@ -621,7 +896,7 @@ def main():
         if quitar:
             print("          QUITAR: %s" % ", ".join(quitar))
         if aplicar:
-            quiere, _f = deseadas(lead, nuestras)
+            quiere, _f = quiere_para(lead, tiene, nuestras)
             try:
                 # El PUT REEMPLAZA la lista completa del chat: se manda lo
                 # que debe quedar, no el delta.
@@ -681,17 +956,45 @@ def main():
     hechos_eq, err_eq = etiquetar_equipo(lista_interna, aplicar)
     errores.extend(err_eq)
 
+    # --- nombres de contacto (0b) ---
+    print("-" * 76)
+    tocaria_n, saltaria_n, hechos_n, errores_n = \
+        nombres_de_contactos(leads, aplicar_nombres)
+    print("NOMBRES DE CONTACTO   ·   %s   (%d a tocar · %d se saltan)" % (
+        "APLICANDO" if aplicar_nombres else "EN SECO (no escribe nada)",
+        len(tocaria_n), len(saltaria_n)))
+    print("-" * 76)
+    for lead, nombre_nuevo, origen, ids_a_tocar in tocaria_n:
+        print("%-9s %-24s tel %s" % (
+            lead["ref"], lead["nombre"][:22], lead["telefono"]))
+        for id_etiqueta, chat_id, antes in ids_a_tocar:
+            print("          %-6s %-22s tiene hoy: %-22s -> pondria: %s" % (
+                id_etiqueta, chat_id, antes or "(vacio)", nombre_nuevo))
+        print("          de donde sale el nombre nuevo: %s" % origen)
+        print()
+    if saltaria_n:
+        print("SE SALTAN (cerrado / nombre a mano / sin chat / sin telefono): %d"
+              % len(saltaria_n))
+        for lead, motivo in saltaria_n:
+            print("   %-9s %-24s %s" % (lead["ref"], lead["nombre"][:22], motivo))
+        print()
+    errores.extend(errores_n)
+
     print("=" * 76)
-    if not aplicar:
-        print("EN SECO: no se escribio nada, ni en WhatsApp ni en Linear.")
+    if not aplicar and not aplicar_nombres:
+        print("EN SECO: no se escribio nada, ni en WhatsApp ni en Linear "
+              "ni en los nombres de contacto.")
         return 0
 
-    # El estado se guarda DESPUES de aplicar: si la pasada reventó a medias,
-    # la próxima vuelve a comparar contra lo de antes y no pierde el hilo.
-    guardar_estado(leads)
-    print("APLICADO · %d chats de leads · %d internos · %d leads sin cambio"
-          " · %d errores"
-          % (hechos, hechos_eq, len(leads) - len(planes), len(errores)))
+    # El estado se guarda DESPUES de aplicar etiquetas: si la pasada reventó
+    # a medias, la próxima vuelve a comparar contra lo de antes y no pierde
+    # el hilo. Los nombres no llevan estado propio: se leen del contacto
+    # real en cada pasada, asi que un lead nuevo entra solo, sin migracion.
+    if aplicar:
+        guardar_estado(leads)
+    print("APLICADO · %d chats de leads · %d internos · %d nombres puestos"
+          " · %d leads sin cambio · %d errores"
+          % (hechos, hechos_eq, hechos_n, len(leads) - len(planes), len(errores)))
     for ref, motivo in errores:
         print("   ERROR %s: %s" % (ref, motivo))
     return 1 if errores else 0
