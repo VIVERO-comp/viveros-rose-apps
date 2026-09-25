@@ -172,6 +172,21 @@ def test_lo_que_escribe_el_sistema_si_entra_al_hilo():
     assert internas == []
 
 
+def test_la_firma_va_anclada_al_final_no_contiene_suelto():
+    """Un suceso del sistema que CITE algo con el patrón «_— » en medio del
+    texto no debe clasificarse como nota de empleado: la firma real va
+    SIEMPRE al final («_— Nombre desde Control Viverorose_»). Si la
+    detección fuera un «contiene» suelto, este suceso caería (mal) del
+    lado de las notas internas."""
+    del_sistema = nota(
+        'Cliente escribió: "necesito la entrega _— gracias" '
+        "(Cotización S00089 generada · $55.00)"
+    )
+    sucesos, internas = control.separar_notas([del_sistema])
+    assert internas == []
+    assert sucesos == [del_sistema]
+
+
 def test_el_eco_de_quien_respondio_no_se_repite_en_el_hilo():
     """La Fase B anota «Mary respondió: «…»» en Linear. Es cierto, pero el
     hilo ya muestra ese mismo mensaje con el nombre de Mary encima."""
@@ -192,7 +207,6 @@ def test_sin_twenty_la_ficha_vive_y_dice_que_no_hay_chat(monkeypatch):
     monkeypatch.delenv("TWENTY_API_KEY", raising=False)
     abierta = control.ficha("LEAD-87")
     assert abierta is not None
-    assert abierta["hay_chat"] is False
     assert abierta["hilo"] == []
 
 
@@ -204,7 +218,7 @@ def test_si_twenty_revienta_la_ficha_sigue_en_pie(monkeypatch):
         control.crm_twenty.ficha_de_lead({})      # el doble está puesto
     monkeypatch.setattr(control.crm_twenty, "ficha_de_lead", lambda lead: None)
     abierta = control.ficha("LEAD-87")
-    assert abierta["hay_chat"] is False
+    assert abierta["hilo"] == []
 
 
 # ---------------------------------------------------------------------------

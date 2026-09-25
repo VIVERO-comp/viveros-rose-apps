@@ -372,11 +372,17 @@ def escribir_nota(ref, texto, autor=""):
 # ninguna decisión.
 # ---------------------------------------------------------------------------
 
-# La firma que `linear_leads.comentar()` le pone a lo que escribe una
-# PERSONA desde Control. Su ausencia es la señal de que ese comentario lo
-# escribió el sistema; no se compara contra el nombre del bot a propósito,
-# que es un dato que puede cambiar en Linear sin avisar.
-FIRMA_PERSONA = "_— "
+# La firma que `linear_leads.comentar()` y `calendario.comentar()` le ponen
+# a lo que escribe una PERSONA desde Control: «_— <nombre> desde Control
+# Viverorose_», siempre al FINAL del comentario. Su ausencia es la señal de
+# que ese comentario lo escribió el sistema; no se compara contra el nombre
+# del bot a propósito, que es un dato que puede cambiar en Linear sin
+# avisar.
+#
+# Anclada al final (no un «contiene» suelto): un comentario del sistema que
+# cite el mensaje de un cliente podría traer «_— » en medio del texto sin
+# ser, por eso, una nota de una persona.
+_FIRMA_PERSONA_RE = re.compile(r"_— .+ desde Control Viverorose_\s*$")
 
 # Los ecos: comentarios del sistema que REPITEN un mensaje que el hilo ya
 # muestra dos líneas más arriba. Son ciertos y en el issue de Linear tienen
@@ -434,7 +440,7 @@ def separar_notas(notas):
     sucesos, internas = [], []
     for nota in notas or []:
         texto = (nota.get("texto") or "").strip()
-        if FIRMA_PERSONA in texto:
+        if _FIRMA_PERSONA_RE.search(texto):
             internas.append(nota)
             continue
         if _es_eco(texto):
@@ -520,7 +526,6 @@ def ficha(ref):
     ficha_twenty = crm_twenty.ficha_de_lead(lead) or {}
     mensajes = ficha_twenty.get("mensajes") or []
     abierta["hilo"] = hilo(mensajes, sucesos, lead.get("nombre") or "")
-    abierta["hay_chat"] = bool(mensajes)
     abierta["twenty_url"] = ficha_twenty.get("twenty_url") or ""
     # El teléfono de Twenty completa al del issue cuando allá no quedó.
     if not abierta.get("celular") and ficha_twenty.get("telefono"):

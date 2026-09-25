@@ -744,9 +744,18 @@ a{color:inherit}
 }
 .ficha-hilo-cab a{font-size:10.8px;text-transform:none;letter-spacing:0}
 .ficha-hilo{
+  /* .panel-der es una columna flex. Por spec, el tamaño minimo automatico
+     de un hijo flex se recorta a 0 en cuanto tiene overflow != visible
+     (aca, el overflow-y:auto de abajo) — asi que sin flex-shrink:0 este
+     era el UNICO bloque del panel que el navegador podia aplastar para
+     que todo cupiera en el alto fijo del panel, y se aplastaba a ~20px
+     aunque su max-height pidiera 46vh. Con flex-shrink:0 conserva su
+     alto (hasta el tope de max-height, con su propio scroll) y es el
+     panel entero (.panel-der, ya con overflow-y:auto) el que se
+     desplaza para llegar a RESPONSABLE/ORIGEN/TELÉFONO/ISSUE. */
   background:var(--crema-2,#F4F1E9);border-radius:13px;padding:10px 11px 13px;
   display:flex;flex-direction:column;gap:10px;max-height:46vh;overflow-y:auto;
-  overscroll-behavior:contain;
+  overscroll-behavior:contain;flex-shrink:0;
 }
 .hilo-dia{
   align-self:center;font-size:10px;letter-spacing:.08em;text-transform:uppercase;
