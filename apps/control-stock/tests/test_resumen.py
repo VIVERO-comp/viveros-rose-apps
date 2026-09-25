@@ -146,6 +146,35 @@ def test_el_hace_cuanto_sale_del_mensaje_del_cliente(monkeypatch):
     assert esperando["espera"] == "hace 3 horas"
 
 
+def test_la_consulta_del_mensaje_no_parte_el_filtro_en_dos(monkeypatch):
+    """Dos `filter=` en la misma URL NO se suman en Twenty: el segundo pisa
+    al primero y la respuesta es el último entrante de TODO el sistema, el
+    de otra persona, igual para todos los leads.
+
+    Pasó de verdad contra Twenty: los tres leads esperando decían "hace 32
+    min" —el mensaje de un desconocido— mientras dos llevaban desde el día
+    anterior. Se ve solo en vivo, así que la FORMA de la consulta se cuida
+    aquí.
+    """
+    monkeypatch.setenv("TWENTY_API_KEY", "clave-de-prueba")
+    monkeypatch.setenv("TWENTY_URL", "http://twenty-de-prueba")
+    pedidas = []
+
+    def falso(ruta):
+        pedidas.append(ruta)
+        if ruta.startswith("leadsWeb"):
+            return {"data": {"leadsWeb": [{"personaId": "p-1"}]}}
+        return {"data": {"mensajesWhatsapp": []}}
+
+    monkeypatch.setattr("app.crm_twenty._twenty", falso)
+    resumen._ultimo_mensaje_del_cliente({"id": "i-1", "pp": "PP-XX"})
+
+    consulta = next(r for r in pedidas if r.startswith("mensajesWhatsapp"))
+    assert consulta.count("filter=") == 1, "dos filter= se pisan entre sí"
+    assert "and(" in consulta
+    assert "personaId[eq]" in consulta and "direccion[eq]" in consulta
+
+
 @pytest.mark.parametrize("horas, texto", [
     (0.2, "hace 12 min"), (1.0, "hace 1 hora"), (2.5, "hace 2 horas"),
     (25, "hace 1 día"), (50, "hace 2 días"),

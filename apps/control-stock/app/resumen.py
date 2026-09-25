@@ -202,9 +202,15 @@ def _ultimo_mensaje_del_cliente(lead):
             persona = (filas[0].get("personaId") or "") if filas else ""
         if not persona:
             return ""
+        # UN solo `filter` con `and(...)`. Dos `filter=` en la misma URL NO
+        # se suman: el segundo pisa al primero, y Twenty devuelve el último
+        # entrante de TODO el sistema —el de otra persona— igual para todos
+        # los leads. Se vio en pruebas: los tres decían "hace 32 min", que
+        # era el mensaje de un desconocido, mientras dos de ellos llevaban
+        # esperando desde el día anterior.
         j = crm_twenty._twenty(
-            "mensajesWhatsapp?filter=personaId[eq]:%22" + quote(persona)
-            + "%22&filter=direccion[eq]:%22ENTRANTE%22"
+            "mensajesWhatsapp?filter=and(personaId[eq]:%22" + quote(persona)
+            + "%22,direccion[eq]:%22ENTRANTE%22)"
             + "&order_by=fecha[DescNullsLast]&limit=1")
         mensajes = (j.get("data") or {}).get("mensajesWhatsapp") or []
         return (mensajes[0].get("fecha") or mensajes[0].get("createdAt") or "") \
