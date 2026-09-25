@@ -219,7 +219,7 @@ a UTC como en Vercel):
   http://127.0.0.1:8092/avisos/resumen >> ~/resumen.log 2>&1
 ```
 
-### El enganche con WhatsApp (`SINCRO_URL`, `SINCRO_SECRETO`)
+### El enganche con WhatsApp (`SINCRO_URL`, `SINCRO_SECRET`)
 
 Al asignar o mover un lead en Control, se le pide al **sincronizador de
 etiquetas** —que vive en el droplet del CRM, junto a WAHA— que deje ya las

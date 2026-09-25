@@ -100,7 +100,10 @@ def _sincro_url():
 
 
 def _sincro_secreto():
-    return (os.environ.get("SINCRO_SECRETO") or "").strip()
+    # `SINCRO_SECRET`, el MISMO nombre que en ~/waha/.env del droplet del
+    # CRM. Es el mismo secreto para la misma puerta: dos nombres para una
+    # sola cosa es cómo se pierde media hora buscando por qué no anda.
+    return (os.environ.get("SINCRO_SECRET") or "").strip()
 
 
 def etiquetar_en_whatsapp(lead_ref):
@@ -144,7 +147,7 @@ def waha_activo():
     """¿Ya se puede etiquetar en WhatsApp desde el código?
 
     Es True cuando están puestas las dos variables del endpoint de
-    sincronización (`SINCRO_URL` y `SINCRO_SECRETO`). Mientras falte
+    sincronización (`SINCRO_URL` y `SINCRO_SECRET`). Mientras falte
     alguna, la pantalla sigue pidiendo el aviso manual («Pon en WhatsApp la
     etiqueta: X»): prenderlo antes de que funcione dejaría al equipo
     creyendo que la etiqueta se puso sola.

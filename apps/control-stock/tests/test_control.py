@@ -197,16 +197,16 @@ def test_un_responsable_que_no_existe_en_linear_se_rechaza():
 
 def test_sin_las_variables_el_enganche_esta_apagado(monkeypatch):
     monkeypatch.delenv("SINCRO_URL", raising=False)
-    monkeypatch.delenv("SINCRO_SECRETO", raising=False)
+    monkeypatch.delenv("SINCRO_SECRET", raising=False)
     assert control.waha_activo() is False
     assert control.etiquetar_en_whatsapp("LEAD-91") is False
 
 
 def test_hace_falta_la_url_Y_el_secreto(monkeypatch):
     monkeypatch.setenv("SINCRO_URL", "http://10.116.0.3:3002/sincro/lead")
-    monkeypatch.delenv("SINCRO_SECRETO", raising=False)
+    monkeypatch.delenv("SINCRO_SECRET", raising=False)
     assert control.waha_activo() is False, "con la URL sola no alcanza"
-    monkeypatch.setenv("SINCRO_SECRETO", "el-secreto")
+    monkeypatch.setenv("SINCRO_SECRET", "el-secreto")
     assert control.waha_activo() is True
 
 
@@ -214,7 +214,7 @@ def test_el_enganche_no_bloquea_ni_cuando_el_endpoint_revienta(monkeypatch):
     """La regla del dueño: si el endpoint falla o tarda, Control sigue
     igual. Sale en un hilo y el error solo queda en el log."""
     monkeypatch.setenv("SINCRO_URL", "http://10.116.0.3:3002/sincro/lead")
-    monkeypatch.setenv("SINCRO_SECRETO", "el-secreto")
+    monkeypatch.setenv("SINCRO_SECRET", "el-secreto")
     avisos_log = []
     monkeypatch.setattr(control, "registro_aviso", avisos_log.append)
 
