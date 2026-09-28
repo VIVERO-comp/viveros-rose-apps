@@ -8,7 +8,8 @@ domingo en blanco, y que el «hace cuánto» salga del mensaje del cliente y
 no del `updatedAt` del issue.
 
 Los leads de muestra con «Te toca» son LEAD-87 (Ximena, sin dueño) y
-LEAD-86 (Nedjaira, de Salomón).
+LEAD-86 (Nedjaira, también sin dueño: era de Salomón, que ya salió del
+equipo).
 """
 
 from datetime import date, timedelta
@@ -122,9 +123,10 @@ def test_el_horario_es_el_que_dijo_el_dueno():
 def test_los_leads_sin_dueno_salen_de_los_vivos():
     datos = resumen.del_dia()
     # De los 9 de muestra, 7 están vivos (Soledad está Ganada y Monica
-    # Perdida), y 3 de esos no tienen Resp: (LEAD-90, LEAD-87, LEAD-85).
+    # Perdida), y 4 de esos no tienen Resp: (LEAD-90, LEAD-87, LEAD-85, y
+    # LEAD-86, que era de Salomón antes de que saliera del equipo).
     assert datos["sin_resp"]["de"] == 7
-    assert datos["sin_resp"]["total"] == 3
+    assert datos["sin_resp"]["total"] == 4
     refs = {f["ref"] for f in datos["sin_resp"]["filas"]}
     assert "LEAD-84" not in refs and "LEAD-83" not in refs   # los cerrados
 
@@ -134,7 +136,8 @@ def test_quien_tiene_clientes_esperando_va_agrupado():
     assert datos["esperando"]["total"] == 2
     por_resp = {g["resp"]: [l["ref"] for l in g["leads"]]
                 for g in datos["esperando"]["por_resp"]}
-    assert por_resp == {"": ["LEAD-87"], "Salomón": ["LEAD-86"]}
+    # LEAD-87 y LEAD-86 quedan las dos sin dueño (LEAD-86 era de Salomón).
+    assert por_resp == {"": ["LEAD-87", "LEAD-86"]}
     # Sin dueño va primero: es el que nadie va a contestar.
     assert datos["esperando"]["por_resp"][0]["resp"] == ""
 
@@ -317,7 +320,7 @@ def test_el_titular_no_nombra_los_ceros(con_odoo):
     titular = resumen.titular(resumen.del_dia())
     assert "1 cotizado" in titular
     assert "1 pago ($500.00)" in titular
-    assert "3 sin dueño" in titular
+    assert "4 sin dueño" in titular
     assert "2 esperando" in titular
     assert "0 " not in titular          # un cero gasta el espacio del titular
 

@@ -51,7 +51,7 @@ def test_los_seis_motivos_de_perdida():
 
 def test_los_responsables_salen_de_las_etiquetas():
     # Sumar a alguien al equipo es crear su etiqueta en Linear, sin código.
-    assert linear_leads.responsables() == ["Abraham", "Mary", "Ruben", "Salomón"]
+    assert linear_leads.responsables() == ["Abraham", "Mary", "Ruben"]
 
 
 # ---------------------------------------------------------------------------
@@ -226,8 +226,8 @@ def test_el_responsable_se_puede_quitar():
 def test_un_lead_sin_responsable_puede_recibir_uno():
     lead = linear_leads.uno("LEAD-90")
     assert lead["resp"] == ""
-    linear_leads.poner_responsable(lead["id"], "Salomón")
-    assert linear_leads.uno("LEAD-90")["resp"] == "Salomón"
+    linear_leads.poner_responsable(lead["id"], "Ruben")
+    assert linear_leads.uno("LEAD-90")["resp"] == "Ruben"
 
 
 def test_el_grupo_pago_deja_una_sola_etiqueta():

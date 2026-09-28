@@ -218,8 +218,8 @@ def test_un_lead_sin_resp_hereda_el_del_que_marco_hecha():
     assert linear_leads.uno("LEAD-90")["resp"] == ""
     actividad = next(a for a in calendario.listar(dia, dia)
                      if a["cliente"] == "Juan Carlos Lopez")
-    agenda.al_marcar_hecha(actividad, autor="Salomón")
-    assert linear_leads.uno("LEAD-90")["resp"] == "Salomón"
+    agenda.al_marcar_hecha(actividad, autor="Mary")
+    assert linear_leads.uno("LEAD-90")["resp"] == "Mary"
 
 
 def test_sin_saldo_confiable_no_se_cierra_nada(odoo_caido):

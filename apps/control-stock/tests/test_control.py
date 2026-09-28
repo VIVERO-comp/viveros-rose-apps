@@ -13,7 +13,7 @@ Los leads de muestra (app/linear_leads.py):
     LEAD-89  Boda Las Nubes      Agendado     Resp: Mary
     LEAD-88  Hotel Bristol       Entregado    Resp: Ruben
     LEAD-87  Ximena Dávila       Cotizado     sin Resp:, Te toca
-    LEAD-86  Nedjaira            Hablando     Resp: Salomón, Te toca
+    LEAD-86  Nedjaira            Hablando     sin Resp:, Te toca
     LEAD-85  Diego Armando       Nuevo        sin Resp:
     LEAD-84  Soledad             Ganado       Resp: Abraham
     LEAD-83  Monica Gama         Perdido      sin Resp:
@@ -80,7 +80,7 @@ def test_lo_unico_que_guarda_es_el_acuse_de_los_avisos():
 def test_las_columnas_son_las_etiquetas_de_responsable():
     columnas = control.tablero_por_empleado()
     assert [c["titulo"] for c in columnas] == [
-        "Sin asignar", "Abraham", "Mary", "Ruben", "Salomón"]
+        "Sin asignar", "Abraham", "Mary", "Ruben"]
 
 
 def test_cada_lead_cae_en_la_columna_de_su_responsable():
@@ -88,7 +88,9 @@ def test_cada_lead_cae_en_la_columna_de_su_responsable():
                   for c in control.tablero_por_empleado()}
     assert por_titulo["Ruben"] == {"LEAD-91", "LEAD-88"}
     assert por_titulo["Mary"] == {"LEAD-89"}
-    assert por_titulo["Sin asignar"] == {"LEAD-90", "LEAD-87", "LEAD-85"}
+    # LEAD-86 (Nedjaira) cae aquí: era de Salomón, y sin su etiqueta queda
+    # sin responsable, igual que cualquier lead que nunca tuvo uno.
+    assert por_titulo["Sin asignar"] == {"LEAD-90", "LEAD-87", "LEAD-85", "LEAD-86"}
 
 
 def test_los_cerrados_no_se_reparten():
@@ -339,7 +341,7 @@ def test_el_dueno_abre_en_por_empleado(cliente, de_dueno):
     assert "Por empleado" in cuerpo and "Por estado" in cuerpo
     assert "Tamara" in cuerpo
     # Las columnas de los responsables, sacadas de las etiquetas de Linear.
-    for nombre in ("Abraham", "Mary", "Ruben", "Salomón"):
+    for nombre in ("Abraham", "Mary", "Ruben"):
         assert nombre in cuerpo
 
 

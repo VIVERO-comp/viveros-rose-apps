@@ -900,7 +900,10 @@ def marcar_perdido(id_issue, motivo_clave, nota="", autor=""):
 # pago, uno agendado, uno entregado con saldo y varios conversando.
 # ---------------------------------------------------------------------------
 
-_RESPONSABLES_MUESTRA = ("Abraham", "Mary", "Ruben", "Salomón")
+# Salomón salió del equipo (28/09/2026): sus 4 etiquetas de WhatsApp y
+# `Resp: Salomón` de Linear ya se borraron (no la tenía ningún issue). Solo
+# quedan los tres que siguen repartiendo trabajo.
+_RESPONSABLES_MUESTRA = ("Abraham", "Mary", "Ruben")
 
 # En modo muestra, DOS de las tres señales "existen" (como si Abraham ya
 # las hubiera creado a mano) y una no — a propósito, para poder probar el
@@ -935,7 +938,7 @@ _SEMILLA = [
     ("LEAD-87", "Ximena Dávila", "PP-70203", "COTIZADO", 4, "6455-1832",
      ["viverorose.com", "Eventos", "Te toca"]),
     ("LEAD-86", "Nedjaira", "PP-70202", "HABLANDO", 2, "6114-9077",
-     ["WhatsApp", "Plantas", "Te toca", "Resp: Salomón"]),
+     ["WhatsApp", "Plantas", "Te toca"]),
     ("LEAD-85", "Diego Armando", "PP-70199", "NUEVO", 0, "6987-5510",
      ["TikTok", "Mayorista"]),
     ("LEAD-84", "Soledad", "PP-70195", "GANADO", 8, "6740-0923",

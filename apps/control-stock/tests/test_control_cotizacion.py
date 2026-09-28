@@ -15,7 +15,7 @@ Los leads de muestra (ver también tests/test_control.py):
     LEAD-89  Boda Las Nubes      Agendado     Resp: Mary
     LEAD-88  Hotel Bristol       Entregado    Resp: Ruben
     LEAD-87  Ximena Dávila       Cotizado     sin Resp:, Te toca
-    LEAD-86  Nedjaira            Hablando     Resp: Salomón, Te toca
+    LEAD-86  Nedjaira            Hablando     sin Resp:, Te toca
     LEAD-85  Diego Armando       Nuevo        sin Resp:
 """
 

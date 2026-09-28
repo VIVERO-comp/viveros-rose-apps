@@ -144,9 +144,18 @@ def _nombre_en_catalogo(nombre_deseado, disponibles):
 # extra aqui para excluirlas.
 SENALES_QUE_BAJAN = ("Importante",)
 
-# Las cuatro familias de etiquetas de WhatsApp, cada una con su color
+# Las etiquetas de representante de WhatsApp, cada una con su color
 # (25/09/2026). El color dice de que familia es; el nombre, cual.
-REPRESENTANTES = ("Mary", "Ruben", "Salomón", "Abraham")
+#
+# Salomón salió del equipo (28/09/2026): sus 4 etiquetas de WhatsApp
+# (Mary/Ruben/Salomón/Abraham eran las cuatro) YA se borraron del catálogo
+# del teléfono, y `Resp: Salomón` YA se borró de Linear -no la tenía
+# ningún issue-. No hace falta ningún candado especial: `deseadas()` deja
+# de pedirla (no está en esta tupla) y la lectura de vuelta ya no la
+# reconoce como representante; el chat que la tuviera puesta la pierde
+# sola en la pasada siguiente, igual que cualquier etiqueta que Linear
+# deja de pedir.
+REPRESENTANTES = ("Mary", "Ruben", "Abraham")
 
 # El interruptor para apagar por un rato los NOMBRES de empleados en
 # WhatsApp, sin tocar Linear ni Twenty y sin borrar la etiqueta del
