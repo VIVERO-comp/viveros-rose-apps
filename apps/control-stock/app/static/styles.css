@@ -1427,6 +1427,12 @@ nav .hamb{display:none}
   /* Con la barra arriba, el encabezado grande con logo y el "← Volver"
      viejo sobran en el teléfono (en computadora siguen). */
   .barra-m ~ header, .barra-m ~ main > .volver, .solo-pc{display:none}
+  /* El botón "+ Venta" de Vender (venta.html): en el teléfono ya vive en
+     la barra única de arriba, así que aquí se esconde — con SU PROPIA
+     clase, no con .solo-pc (esa se quedaba display:none en todos los
+     anchos: solo la reactivan las tarjetas de Stock, más abajo, dentro de
+     su propio media query de computadora — 28/09/2026). */
+  .venta-boton-pc{display:none}
   /* El botón flotante de Crear planta se muda a la barra. */
   .fab{display:none}
   /* Los formularios cortos (Modificar stock, Crear planta, foto) suben

@@ -21,7 +21,7 @@
    negro de Nueva venta vive aquí; el grande de abajo queda para computadora. #}
 {% with bm_titulo='Vender', bm_sub='Ventas locales del vivero',
         bm_accion_url=('/venta/nueva' if ventas_activo else None),
-        bm_accion_texto='+ Nueva venta' %}{% include '_barra_movil.html' %}{% endwith %}
+        bm_accion_texto='+ Venta' %}{% include '_barra_movil.html' %}{% endwith %}
 <header>
   <div class="brand">
     <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
@@ -55,9 +55,15 @@
   {% else %}
   {# Pantalla simple (pedido del dueño, 22/09/2026): sin textos de ayuda y
      sin el botón "Ver PDF de ejemplo" con su párrafo. Solo las acciones. #}
-  {# solo-pc: en el teléfono este botón vive en la barra de arriba. #}
-  <a class="btn btn-dorado btn-grande solo-pc" href="/venta/nueva" style="margin-bottom:6px">
-    + NUEVA VENTA{% if en_curso %} ({{ en_curso }} planta{{ '' if en_curso == 1 else 's' }} en curso){% endif %}
+  {# venta-boton-pc, NO .solo-pc: el 28/09/2026 se encontró que .solo-pc
+     queda display:none en TODOS los anchos (solo la reactivan las
+     tarjetas de Stock, dentro de su propio media query de computadora) —
+     este botón llevaba esa clase creyendo que era genérica y no se veía
+     nunca, en ningún ancho. Clase propia, escondida SOLO en el media
+     query móvil de la barra única (styles.css), donde ya vive el mismo
+     patrón para el header y el "← Volver" grandes. #}
+  <a class="btn btn-dorado btn-grande venta-boton-pc" href="/venta/nueva" style="margin-bottom:6px">
+    + VENTA{% if en_curso %} ({{ en_curso }} planta{{ '' if en_curso == 1 else 's' }} en curso){% endif %}
   </a>
 
   <div class="seccion-titulo" style="margin-top:16px">Cotizar un servicio</div>
