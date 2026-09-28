@@ -228,6 +228,9 @@ main{position:relative;z-index:1;flex:1;overflow-y:auto;padding:6px 20px 110px}
 .planta .info .precio b{display:inline;font-size:12.5px;font-weight:800;color:#2e6c40}
 .planta.agotada .info .precio{color:var(--texto-suave)}
 .planta.agotada .info .precio b{color:var(--dorado-suave)}
+/* El stock del buscador de Vender, junto al precio (28/09/2026). */
+.planta .info .stock-mini{display:block;font-size:10.5px;color:var(--texto-suave);margin-top:1px}
+.planta .info .stock-mini.stock-agotado{color:var(--critico);font-weight:700}
 .planta .qty{text-align:right}
 .planta .qty b{display:block;font-size:20px;font-weight:800}
 .badge{
@@ -704,6 +707,9 @@ a.boton-enlace{
 }
 .venta-item.pagado{border-left-color:var(--ok)}
 .venta-item.cotizacion{border-left-color:var(--dorado)}
+/* "vendida" (28/09/2026, Guardar venta): confirmada, sin nada pendiente
+   de este lado — el cobro vive en el kanban de Odoo. */
+.venta-item.vendida{border-left-color:var(--ok)}
 .venta-item .fila1{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
 .venta-item .titulo{font-size:13.5px;font-weight:700}
 .venta-item small{display:block;font-size:11px;color:var(--texto-suave);margin-top:2px}

@@ -39,6 +39,12 @@ ESTADOS = ("cotizacion", "confirmada", "entregada", "facturada", "pagado")
 
 ETIQUETAS_ESTADO = {
     "cotizacion": "Cotización",
+    # "vendida" (28/09/2026): "Guardar venta" — la MISMA orden que una
+    # cotización, con action_confirm encima. A propósito NO entra en
+    # ESTADOS/_PASOS_COBRO: esta no sigue el pipeline local de
+    # facturar/cobrar (Facturar, más abajo) — el cobro vive en el kanban
+    # de Odoo (etapa_cobro), igual que las cotizaciones de servicio.
+    "vendida": "Venta confirmada · cobro en Odoo",
     "confirmada": "Confirmada · factura pendiente",
     "entregada": "Entregada · factura pendiente",
     "facturada": "Facturada · pago pendiente",
@@ -260,6 +266,17 @@ def opcion_de_linea_envio(nombre):
     return "personalizado", ""
 
 
+def _tiene_letras(texto):
+    """True si el texto trae al menos UNA letra, de cualquier alfabeto.
+
+    Misma regla que ya rige los nombres de WhatsApp (waha/sincronizador.py,
+    `_tiene_letras`): un ':' o un '🤍' no son un nombre, aunque no estén
+    vacíos. No se reusa ese módulo (vive en otro deployable, `waha/`, fuera
+    de esta app) — es un one-liner, así que se repite en vez de acoplar
+    dos servicios por una línea."""
+    return any(c.isalpha() for c in (texto or ""))
+
+
 def _id_producto_cargo(codigo, nombre):
     if codigo in _cache_cargos:
         return _cache_cargos[codigo]
@@ -319,6 +336,124 @@ def lineas_de_cargos(cargos):
             if parrafo:
                 lineas.append({"display_type": "line_subsection", "name": parrafo})
     return lineas
+
+
+# ---------------------------------------------------------------------------
+# "Planta personalizada": un renglón LIBRE para una planta o producto que
+# no está en el inventario de Odoo (dueño, 28/09/2026). A diferencia de los
+# CARGOS y de SV-PERSONALIZADO (cotizaciones.py), el comodín CUSTOM-PLANTA
+# NO se crea solo: se crea UNA vez, a mano y por fuera de esta app (tipo
+# consu, sin impuesto, precio 0), y esta app JAMÁS lo crea.
+#
+# Estado real al escribir esto: en odoo-pruebas ya existe (id 216, creado
+# por la coordinadora el 28/09/2026). En el Odoo real TODAVÍA NO existe —
+# se crea recién al desplegar esta función a producción. Se busca SIEMPRE
+# por su código, nunca por id fijo (los ids difieren entre los dos Odoo).
+# Mientras no exista en el Odoo al que apunta este servidor, el renglón
+# libre se apaga con un aviso en vez de reventar (o de inventar el
+# producto).
+# ---------------------------------------------------------------------------
+
+CODIGO_PERSONALIZADA_PLANTA = "CUSTOM-PLANTA"
+_id_personalizada_planta = {"id": None}
+
+
+def id_producto_personalizada_planta():
+    """El id del comodín «Planta personalizada», o None si este Odoo
+    todavía no lo tiene. A diferencia de _id_producto_cargo, un "no
+    encontrado" NO se cachea: el producto puede crearse en Odoo sin que el
+    servidor se reinicie, y la próxima venta debe verlo."""
+    if _id_personalizada_planta["id"] is not None:
+        return _id_personalizada_planta["id"]
+    ids = _ejecutar("product.product", "search",
+                    [[["default_code", "=", CODIGO_PERSONALIZADA_PLANTA]]],
+                    {"limit": 1, "context": {"active_test": False}})
+    if not ids:
+        return None
+    _id_personalizada_planta["id"] = ids[0]
+    return ids[0]
+
+
+def _num_positivo(crudo, defecto=None, permitir_cero=False):
+    """Un número escrito a mano -> float redondeado a 2 decimales, o
+    `defecto` si viene vacío, o None si es ilegible o negativo (y, salvo
+    `permitir_cero`, si es cero)."""
+    crudo = str(crudo if crudo is not None else "").strip().replace(",", ".")
+    if not crudo:
+        return defecto
+    try:
+        valor = round(float(crudo), 2)
+    except ValueError:
+        return None
+    if valor < 0 or (valor == 0 and not permitir_cero):
+        return None
+    return valor
+
+
+def agregar_renglon_planta(usuario, texto, cantidad, precio):
+    """Un renglón libre de "planta personalizada": nombre, cantidad y
+    precio escritos a mano, agregado de a uno (como el carrito de
+    plantas). Valida acá mismo, como cambiar_precio: un error se muestra
+    en pantalla en vez de agregar un renglón a medias. El nombre sin
+    ninguna letra no es un nombre (regla del proyecto, `_tiene_letras`)."""
+    texto = (texto or "").strip()[:200]
+    if not texto or not _tiene_letras(texto):
+        raise ValueError(
+            "Escribe el nombre de la planta o el producto (un signo o un "
+            "emoji solo no cuenta).")
+    cantidad = _num_positivo(cantidad, defecto=1.0)
+    if cantidad is None:
+        raise ValueError("La cantidad no es válida.")
+    precio = _num_positivo(precio, defecto=None, permitir_cero=True)
+    if precio is None:
+        raise ValueError("Escribe el precio de la planta personalizada.")
+    with _db() as con:
+        con.execute(
+            "INSERT INTO venta_renglon_libre (usuario, texto, cantidad, precio)"
+            " VALUES (?,?,?,?)", (usuario, texto, cantidad, precio))
+
+
+def renglones_planta_de(usuario):
+    """[{n, texto, cantidad, precio, importe}] de los renglones libres en
+    curso de esta empleada, en el orden en que se agregaron."""
+    with _db() as con:
+        filas = con.execute(
+            "SELECT n, texto, cantidad, precio FROM venta_renglon_libre"
+            " WHERE usuario=? ORDER BY n", (usuario,)).fetchall()
+    return [{**dict(f), "importe": round(f["cantidad"] * f["precio"], 2)}
+            for f in filas]
+
+
+def quitar_renglon_planta(usuario, n):
+    with _db() as con:
+        con.execute("DELETE FROM venta_renglon_libre WHERE usuario=? AND n=?",
+                    (usuario, int(n)))
+
+
+def vaciar_renglones_planta(usuario):
+    with _db() as con:
+        con.execute("DELETE FROM venta_renglon_libre WHERE usuario=?", (usuario,))
+
+
+def lineas_de_renglones_planta(renglones):
+    """Las líneas de Odoo de los renglones libres de "planta
+    personalizada": cada uno usa el comodín CUSTOM-PLANTA con el nombre
+    escrito a mano como descripción de la línea (`name`) y el precio
+    también a mano (`price_unit`) — sin tocar impuestos: Odoo aplica los
+    que ya tenga el producto (ninguno, en este caso). [] si no hay
+    ninguno. Si hay alguno y el comodín no existe en este Odoo, un
+    ValueError claro en vez de perder el renglón en silencio (la pantalla
+    ya debería haber apagado el formulario antes de llegar aquí)."""
+    if not renglones:
+        return []
+    producto_id = id_producto_personalizada_planta()
+    if producto_id is None:
+        raise ValueError(
+            "La planta personalizada no está disponible en este Odoo "
+            "todavía (falta el producto CUSTOM-PLANTA): avísale a Abraham.")
+    return [{"product_id": producto_id, "product_uom_qty": r["cantidad"],
+             "price_unit": r["precio"], "name": r["texto"]}
+            for r in renglones]
 
 
 # ---------------------------------------------------------------------------
@@ -529,6 +664,18 @@ def iniciar_tablas():
                 nombre TEXT NOT NULL DEFAULT ''
             )
         """)
+        # Los renglones libres de "planta personalizada" (28/09/2026): una
+        # fila por renglón, igual que venta_carrito pero sin producto_id
+        # (no hay ninguno que elegir — el nombre lo escribe la empleada).
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS venta_renglon_libre (
+                n INTEGER PRIMARY KEY AUTOINCREMENT,
+                usuario TEXT NOT NULL,
+                texto TEXT NOT NULL,
+                cantidad REAL NOT NULL DEFAULT 1,
+                precio REAL NOT NULL DEFAULT 0
+            )
+        """)
 
 
 # Cómo se cobra una cotización de alquiler (decisión del dueño,
@@ -640,6 +787,29 @@ def tomar_lead_pendiente(usuario):
     if lead:
         quitar_lead_pendiente(usuario)
     return lead
+
+
+def _pp_del_lead_pendiente(usuario):
+    """El PP-XXXXX (Twenty) del lead pendiente, para escribirlo en
+    `lead_ref` del sale.order nuevo (dueño, 28/09/2026): con eso la orden
+    cae directo en «Conectar cotización» de la ficha. `venta_lead_pendiente`
+    solo guarda el LEAD-NN de Linear, así que se resuelve contra
+    linear_leads (import diferido: linear_leads no depende de ventas, pero
+    así se sigue el mismo patrón que `from . import cotizaciones` de
+    _espejar_en_crm). PEEK, no consume — _espejar_en_crm es quien más
+    adelante hace el tomar_lead_pendiente real.
+
+    Best-effort: sin lead pendiente, o si Linear no contesta o no lo
+    encuentra, no se escribe nada — nunca bloquea la venta."""
+    pendiente = lead_pendiente(usuario)
+    if not pendiente:
+        return None
+    try:
+        from . import linear_leads
+        lead = linear_leads.uno(pendiente["ref"])
+    except Exception:
+        return None
+    return (lead or {}).get("pp") or None
 
 
 def vincular_lead(n, issue):
@@ -876,31 +1046,57 @@ def _linea_de_planta(linea):
 
 
 def crear_cotizacion(empleada, nombre_cliente, celular="", datos=None,
-                     cargos=None):
-    """Crea el sale.order borrador (etiqueta LOCAL, diario de ventas normal)
-    y el registro local. Devuelve el registro. El carrito y el borrador se
-    limpian solo si Odoo aceptó la orden. `cargos` son los opcionales de
-    envío/instalación ({clave: monto}); entran como líneas de la orden."""
+                     cargos=None, confirmar=False):
+    """Crea el sale.order (etiqueta LOCAL, diario de ventas normal) y el
+    registro local. Devuelve el registro. El carrito, los renglones libres
+    y el borrador se limpian solo si Odoo aceptó la orden.
+
+    `cargos` son los opcionales de envío/instalación ({clave: monto}); los
+    renglones libres de "planta personalizada" (comodín CUSTOM-PLANTA) se
+    leen del servidor (`renglones_planta_de`), igual que el carrito.
+
+    `confirmar=False` (default) deja la orden en borrador: "Generar
+    cotización". `confirmar=True` es "Guardar venta" (dueño, 28/09/2026):
+    la MISMA orden, con action_confirm encima. El cobro no lo hace la app
+    — de aquí en más la orden vive en el kanban de cobro de Odoo
+    (etapa_cobro), igual que las cotizaciones de servicio."""
     usuario = empleada["id"]
     lineas, _total_visto = carrito_de(usuario)
-    if not lineas:
+    renglones_libres = renglones_planta_de(usuario)
+    lineas_libres = lineas_de_renglones_planta(renglones_libres)
+    if not lineas and not lineas_libres:
         raise ValueError("Agrega al menos una planta a la venta.")
     extras = lineas_de_cargos(cargos)
     partner = _cliente_id(nombre_cliente, celular, datos)
-    orden_id = _ejecutar("sale.order", "create", [{
+    # El PP-XXXXX del lead pendiente (si hay): se resuelve ANTES de crear
+    # la orden y ANTES de que _espejar_en_crm consuma el lead pendiente.
+    pp_lead = _pp_del_lead_pendiente(usuario)
+    valores_orden = {
         "partner_id": partner,
         "tag_ids": [[6, 0, [_id_config("VENTA_TAG_LOCAL")]]],
         # El precio lo pone Odoo (lista de precios vigente), salvo que la
         # empleada lo haya escrito a mano en el carrito — ahí manda el
-        # suyo. Los cargos siempre lo traen (es el monto digitado).
+        # suyo. Los cargos y los renglones libres siempre lo traen (es el
+        # monto digitado). Ninguna línea toca impuestos: Odoo aplica solo
+        # los que cada producto ya tiene.
         "order_line": [[0, 0, _linea_de_planta(l)] for l in lineas]
+                      + [[0, 0, x] for x in lineas_libres]
                       + [[0, 0, x] for x in extras],
-    }])
+    }
+    if pp_lead:
+        valores_orden["lead_ref"] = pp_lead
+    orden_id = _ejecutar("sale.order", "create", [valores_orden])
     if isinstance(orden_id, list):
         orden_id = orden_id[0]
+    if confirmar:
+        _ejecutar("sale.order", "action_confirm", [[orden_id]])
     leido = _ejecutar("sale.order", "read", [[orden_id]],
                       {"fields": ["name", "amount_total"]})[0]
     resumen = ", ".join(f"{l['cantidad']}× {l['nombre']}" for l in lineas)
+    if renglones_libres:
+        libres_txt = ", ".join(
+            f"{'%g' % r['cantidad']}× {r['texto']}" for r in renglones_libres)
+        resumen = f"{resumen}, {libres_txt}" if resumen else libres_txt
     if extras:
         con_monto = [c["nombre"] for c in CARGOS
                      if float((cargos or {}).get(c["clave"]) or 0) > 0]
@@ -908,15 +1104,16 @@ def crear_cotizacion(empleada, nombre_cliente, celular="", datos=None,
     espejo, oportunidad_id = _espejar_en_crm(
         empleada, nombre_cliente, celular, partner, orden_id,
         leido["name"], leido["amount_total"])
+    estado = "vendida" if confirmar else "cotizacion"
     with _db() as con:
         cursor = con.execute(
             "INSERT INTO ventas_locales (creado_en, empleada, cliente, celular,"
             " orden_id, orden, total, estado, resumen, lead_ref, lead_issue,"
             " lead_url, oportunidad_id)"
-            " VALUES (?,?,?,?,?,?,?, 'cotizacion', ?,?,?,?,?)",
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (_ahora(), empleada["nombre"], (nombre_cliente or "").strip() or "Cliente Local",
              (celular or "").strip() or None,
-             orden_id, leido["name"], leido["amount_total"], resumen,
+             orden_id, leido["name"], leido["amount_total"], estado, resumen,
              (espejo or {}).get("codigoRef"), (espejo or {}).get("identifier"),
              (espejo or {}).get("url"), oportunidad_id))
         n = cursor.lastrowid
@@ -927,6 +1124,7 @@ def crear_cotizacion(empleada, nombre_cliente, celular="", datos=None,
     if lead and not (espejo or {}).get("identifier"):
         vincular_lead(n, lead["ref"])
     vaciar_carrito(usuario)
+    vaciar_renglones_planta(usuario)
     _limpiar_borrador(usuario)
     return obtener_venta(n)
 
@@ -972,16 +1170,18 @@ def pdf_vista_previa(empleada, nombre_cliente, celular="", datos=None, cargos=No
     """El PDF de la cotización tal como saldría, sin crear la venta.
 
     Mismas líneas que crear_cotizacion —las plantas del carrito con el
-    precio que ponga Odoo, más los cargos con monto— para que lo que se ve
+    precio que ponga Odoo, los renglones libres de planta personalizada
+    con su precio a mano, y los cargos con monto— para que lo que se ve
     sea lo que después se genera."""
     usuario = empleada["id"]
     lineas, _total = carrito_de(usuario)
-    if not lineas:
+    lineas_libres = lineas_de_renglones_planta(renglones_planta_de(usuario))
+    if not lineas and not lineas_libres:
         raise ValueError("Agrega al menos una planta para ver la cotización.")
     partner = _cliente_id(nombre_cliente, celular, datos)
     orden = _orden_vista_previa(usuario, partner, [
         {"product_id": l["producto_id"], "product_uom_qty": l["cantidad"]}
-        for l in lineas] + lineas_de_cargos(cargos))
+        for l in lineas] + lineas_libres + lineas_de_cargos(cargos))
     return descargar_pdf("sale.report_saleorder", orden)
 
 
