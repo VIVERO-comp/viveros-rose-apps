@@ -130,6 +130,14 @@ GRUPOS = (GRUPO_ORIGEN, GRUPO_INTERES, GRUPO_MOTIVO, GRUPO_PAGO,
 # la quita nuestra respuesta.
 LABEL_TE_TOCA = "Te toca"
 
+# Las tres señales sueltas del panel de Control (25/09/2026, pedido de
+# Abraham): banderas binarias, independientes entre sí y de ningún grupo —
+# un lead puede llevar las tres a la vez. UN renglón por señal: sumar o
+# quitar una es tocar esta lista sola. El botón de cada una solo aparece en
+# la pantalla si Abraham ya creó su etiqueta en Linear (`senales_disponibles`
+# más abajo); el código nunca la crea.
+LABELS_SENAL = ("Seguimiento", "Importante", "Cliente potencial")
+
 # El prefijo del grupo Responsable. El responsable es `Resp: Abraham`, no
 # el assignee: sumar a alguien al equipo es crear su etiqueta en Linear,
 # sin tocar código (por eso la lista sale del catálogo y no está aquí).
@@ -279,6 +287,24 @@ def responsables():
         return catalogo()["responsables"]
     except ErrorLeads:
         return []
+
+
+def senales_disponibles():
+    """Los nombres de `LABELS_SENAL` que YA existen como etiqueta en Linear.
+
+    El catálogo decide qué botón de señal aparece, nunca al revés: la
+    etiqueta no se crea desde acá (regla que no se rompe), así que el día
+    que Abraham la crea a mano, el botón aparece solo, sin desplegar nada.
+    Si Linear no contesta, ningún botón se muestra — mejor un botón de menos
+    que uno que falle al tocarlo.
+    """
+    if not configurado():
+        return set(_MUESTRA_SENALES_EXISTENTES)
+    try:
+        existentes = catalogo()["etiquetas"]
+    except ErrorLeads:
+        return set()
+    return {n for n in LABELS_SENAL if n in existentes}
 
 
 def _pedir(consulta, variables=None):
@@ -594,11 +620,18 @@ def poner_pago(id_issue, nombre):
     return poner_label_de_grupo(id_issue, GRUPO_PAGO, nombre)
 
 
+def poner_etiqueta_suelta(id_issue, nombre, prendida):
+    """El interruptor genérico: prende o apaga UNA etiqueta suelta (fuera
+    de cualquier grupo) en el issue. «Te toca» y las tres señales del panel
+    de Control comparten este mismo mecanismo — una etiqueta por nombre,
+    sin categoría."""
+    return poner_label(id_issue, nombre) if prendida else quitar_label(id_issue, nombre)
+
+
 def poner_te_toca(id_issue, prendida):
     """La señal «Te toca»: la pone el mensaje del cliente, la quita nuestra
     respuesta. Suelta a propósito, no es de ningún grupo."""
-    return (poner_label(id_issue, LABEL_TE_TOCA) if prendida
-            else quitar_label(id_issue, LABEL_TE_TOCA))
+    return poner_etiqueta_suelta(id_issue, LABEL_TE_TOCA, prendida)
 
 
 def comentar(id_issue, texto, autor=""):
@@ -747,6 +780,11 @@ def marcar_perdido(id_issue, motivo_clave, nota="", autor=""):
 # ---------------------------------------------------------------------------
 
 _RESPONSABLES_MUESTRA = ("Abraham", "Mary", "Ruben", "Salomón")
+
+# En modo muestra, DOS de las tres señales "existen" (como si Abraham ya
+# las hubiera creado a mano) y una no — a propósito, para poder probar el
+# candado «si la etiqueta no existe, no hay botón» sin tocar Linear real.
+_MUESTRA_SENALES_EXISTENTES = {"Seguimiento", "Importante"}
 
 _MUESTRA_GRUPOS = {
     GRUPO_ORIGEN: ["WhatsApp", "plantaspanama.com", "viverorose.com",

@@ -169,21 +169,52 @@
     {% if abierta.motivo %}<span class="etq at">{{ abierta.motivo }}</span>{% endif %}
   </div>
 
-  {# --- Qué hago. Los tres botones del diseño están reservados y apagados:
-         los construye la sesión de Control. Lo único vivo es abrir el chat,
-         y por eso es el botón negro de esta pantalla. --- #}
+  {# --- Qué hago. Responder, las señales y Cotizar ya viven aquí
+         (28/09/2026); Adjuntar venta sigue reservado y apagado, para
+         cuando la cotización conectada llegue del lado de Odoo. Lo negro
+         sigue siendo solo abrir el chat: el resto son interruptores
+         grises, incluido Cotizar (es un enlace, no toca el lead). --- #}
   <div class="acciones">
     {% if abierta.wa %}
     <a class="btn oro" href="{{ abierta.wa }}" target="_blank" rel="noopener">💬 WhatsApp</a>
     {% endif %}
-    <button class="btn" type="button" disabled>🔴 Responder</button>
-    {% if abierta.estado in ('NUEVO', 'HABLANDO') %}
-    <button class="btn" type="button" disabled>Cotizar</button>
+    {% if puede_tocar_abierta %}
+    <form method="post" action="/control/responder?vista={{ vista }}">
+      <input type="hidden" name="ref" value="{{ abierta.ref }}">
+      <button class="btn{{ ' peligro' if abierta.te_toca }}" type="submit"
+              data-guardando="…">
+        {% if abierta.te_toca %}🔴 Responder · apagalo{% else %}Prender 🔴 Responder{% endif %}
+      </button>
+    </form>
+    {% for s in abierta.senales %}
+    <form method="post" action="/control/senal?vista={{ vista }}">
+      <input type="hidden" name="ref" value="{{ abierta.ref }}">
+      <input type="hidden" name="nombre" value="{{ s.nombre }}">
+      <button class="btn{{ ' peligro' if s.prendida }}" type="submit"
+              data-guardando="…">{{ s.nombre }}{{ ' ✓' if s.prendida }}</button>
+    </form>
+    {% endfor %}
+    {% else %}
+    <button class="btn{{ ' peligro' if abierta.te_toca }}" type="button" disabled>
+      {{ '🔴 Responder · prendido' if abierta.te_toca else 'Responder · apagado' }}
+    </button>
+    {% for s in abierta.senales %}
+    <button class="btn{{ ' peligro' if s.prendida }}" type="button" disabled>
+      {{ s.nombre }}{{ ' ✓' if s.prendida }}</button>
+    {% endfor %}
     {% endif %}
+    {# Disponible siempre (pedido de Abraham, 28/09/2026): un enlace, no
+       un formulario — no toca el lead, solo abre Vender con el cliente
+       puesto. El camino ya existía para Retail (GET /venta?lead=...):
+       deja el lead pendiente y redirige a /venta/nueva. #}
+    <a class="btn" href="/venta?lead={{ abierta.ref | urlencode }}&cliente={{ abierta.nombre | urlencode }}&cel={{ abierta.celular | urlencode }}">Cotizar</a>
     <button class="btn" type="button" disabled>Adjuntar venta</button>
   </div>
-  <p class="pie-nota" style="margin:-4px 0 0">Los tres botones apagados llegan
-    con la cotización conectada.</p>
+  <p class="pie-nota" style="margin:-4px 0 0">Responder lo prende el mensaje
+    del cliente y lo apaga nuestra respuesta por WhatsApp — si lo apagás vos
+    y el cliente vuelve a escribir, se prende solo. Cotizar abre Vender con
+    el cliente ya puesto. Adjuntar venta (se va a llamar «Conectar
+    cotización») llega en la fase de Odoo.</p>
 
   {# --- Cuánto es. El lugar de la cotización conectada, todavía vacío. --- #}
   <div class="ficha-cot-vacia">Sin cotización conectada.</div>

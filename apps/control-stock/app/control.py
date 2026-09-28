@@ -31,11 +31,12 @@ dos veces en cada recarga de la pantalla.
 
 import os
 import re
+import time
 
 import httpx
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from . import agenda, avisos, calendario, crm_twenty, linear_leads
+from . import agenda, avisos, calendario, crm_twenty, linear_leads, resumen
 from .datos import ZONA_PANAMA, _db
 
 VISTAS = ("empleado", "estado")
@@ -55,6 +56,17 @@ def iniciar_tablas():
             CREATE TABLE IF NOT EXISTS control_acuse (
                 clave TEXT PRIMARY KEY,
                 cuando TEXT NOT NULL
+            )
+        """)
+        # La caché del orden (25/09/2026): cuándo fue el último mensaje del
+        # CLIENTE de cada lead, como EPOCH — nunca texto: comparar horas
+        # escritas entre máquinas de zonas distintas ya costó caro una vez
+        # (el almacén de WAHA). Es caché, no dato del negocio: si la tabla
+        # se borra, se vuelve a llenar sola en la próxima pasada de fondo.
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS control_espera (
+                ref TEXT PRIMARY KEY,
+                epoch INTEGER NOT NULL
             )
         """)
 
@@ -156,6 +168,117 @@ def waha_activo():
 
 
 # ---------------------------------------------------------------------------
+# El orden dentro de cada columna (25/09/2026, pedido de Abraham): primero
+# las tarjetas con «Te toca», y entre esas, arriba la que más tiempo lleva
+# esperando. El reloj es el ÚLTIMO MENSAJE ENTRANTE del cliente en Twenty —
+# el mismo que ya usa `resumen._ultimo_mensaje_del_cliente` — nunca
+# `updatedAt` del issue, que la migración del 24/09 dejó mintiendo en los
+# 29 issues viejos.
+#
+# Son ~20 consultas a Twenty (una por lead), así que la pantalla no las
+# espera (regla del 22/09: cambiar de vista se siente como una app). Una
+# tabla local chica (`control_espera`) guarda el epoch de cada lead y se
+# refresca por detrás, con el mismo patrón que `avisar_en_fondo` y
+# `wa_autor.aplicar_en_fondo`: la pintada lee lo guardado y sigue.
+# ---------------------------------------------------------------------------
+
+TTL_ESPERA = 120  # la misma cadencia del sincronizador de WhatsApp
+
+
+def _espera_guardada(ref):
+    """El epoch guardado del último mensaje del cliente de ese lead, o
+    `None` si la caché todavía no lo tiene (fría, o el lead es nuevo)."""
+    iniciar_tablas()
+    with _db() as con:
+        fila = con.execute(
+            "SELECT epoch FROM control_espera WHERE ref = ?", (ref,)).fetchone()
+    return fila["epoch"] if fila else None
+
+
+def _guardar_espera(ref, epoch):
+    iniciar_tablas()
+    with _db() as con:
+        con.execute(
+            "INSERT INTO control_espera (ref, epoch) VALUES (?, ?) "
+            "ON CONFLICT(ref) DO UPDATE SET epoch = excluded.epoch",
+            (ref, int(epoch)))
+
+
+def _refrescar_espera(leads):
+    """Trae de Twenty el último mensaje del cliente de cada lead vivo.
+
+    Un lead cerrado (Ganado, Perdido) no entra: a nadie le importa hace
+    cuánto esperó uno que ya no está en juego. Reusa la MISMA lógica del
+    resumen de las 7 (`resumen._ultimo_mensaje_del_cliente`) en vez de
+    volver a escribirla: es la que ya sabe pedirle a Twenty UN solo
+    `filter` con `and(...)`, la trampa que costó encontrar una vez.
+    """
+    for lead in leads:
+        if lead["estado"] in linear_leads.CERRADOS:
+            continue
+        try:
+            iso = resumen._ultimo_mensaje_del_cliente(lead)
+        except Exception:
+            continue  # era un refresco: lo guardado sigue sirviendo
+        if not iso:
+            continue
+        try:
+            cuando = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            continue
+        _guardar_espera(lead["ref"], cuando.timestamp())
+
+
+_espera_estado = {"en": 0}
+
+
+def refrescar_espera_en_fondo(leads):
+    """Pide el refresco de la caché de espera, sin que la pantalla lo
+    espere. `TTL_ESPERA` evita mandar ~20 consultas a Twenty en cada
+    recarga; `calendario._en_fondo` evita dos refrescos a la vez."""
+    if time.time() - _espera_estado["en"] < TTL_ESPERA:
+        return
+
+    def tarea():
+        _refrescar_espera(leads)
+        _espera_estado["en"] = time.time()
+
+    calendario._en_fondo("control-espera", tarea)
+
+
+def _epoch_de_creado(lead):
+    """El desempate cuando la caché no tiene el lead (fría, o recién
+    llegado): el epoch de `createdAt` si Linear lo dio, o — en modo
+    muestra, que no trae fecha real — `dias` restado de ahora. Nunca un
+    orden que baile entre recargas."""
+    creado = lead.get("creado") or ""
+    if creado:
+        try:
+            return datetime.fromisoformat(
+                str(creado).replace("Z", "+00:00")).timestamp()
+        except (ValueError, TypeError):
+            pass
+    dias = lead.get("dias") or 0
+    return (datetime.now(ZONA_PANAMA) - timedelta(days=dias)).timestamp()
+
+
+def _clave_espera(lead):
+    """El epoch guardado si la caché lo tiene; si no, el de `createdAt` —
+    más chico, más urgente: el que espera desde hace más lleva arriba."""
+    epoch = _espera_guardada(lead["ref"])
+    return epoch if epoch is not None else _epoch_de_creado(lead)
+
+
+def _orden_columna(leads):
+    """Primero «Te toca», ordenados por hace-cuánto-espera; después, el
+    resto tal como venía (por `dias`, lo que ya hacía `linear_leads._buscar`)."""
+    con_te_toca = [l for l in leads if l.get("te_toca")]
+    resto = [l for l in leads if not l.get("te_toca")]
+    con_te_toca.sort(key=_clave_espera)
+    return con_te_toca + resto
+
+
+# ---------------------------------------------------------------------------
 # Las dos vistas
 # ---------------------------------------------------------------------------
 
@@ -192,7 +315,8 @@ def tablero_por_empleado(leads=None):
         columnas.append({"clave": nombre, "titulo": nombre,
                          "pie": f"Lo que le toca a {nombre}."})
     for columna in columnas:
-        columna["leads"] = [l for l in leads if (l["resp"] or "") == columna["clave"]]
+        columna["leads"] = _orden_columna(
+            [l for l in leads if (l["resp"] or "") == columna["clave"]])
     return columnas
 
 
@@ -213,7 +337,8 @@ def tablero_por_estado(solo_resp="", leads=None):
             "clave": estado["clave"], "titulo": estado["nombre"],
             "color": estado["color"], "chip": estado["chip"],
             "pie": estado["auto"],
-            "leads": [l for l in todos if l["estado"] == estado["clave"]],
+            "leads": _orden_columna(
+                [l for l in todos if l["estado"] == estado["clave"]]),
         })
     return columnas
 
@@ -353,6 +478,74 @@ def escribir_nota(ref, texto, autor=""):
     except linear_leads.ErrorLeads as fallo:
         return "", str(fallo)
     return "Nota guardada en el issue.", ""
+
+
+# ---------------------------------------------------------------------------
+# El interruptor «🔴 Responder» y las señales sueltas (25/09/2026, pedido
+# de Abraham): el mismo mecanismo genérico —prender o apagar UNA etiqueta
+# suelta del issue—, con Responder como primer caso y su propio botón
+# destacado. Solo Responder (la etiqueta «Te toca») sale al chat de
+# WhatsApp; las tres señales son internas y ninguna manda nada al cliente.
+# ---------------------------------------------------------------------------
+
+def alternar_responder(ref, autor=""):
+    """Prende o apaga «Te toca» a mano: el botón 🔴 Responder de la ficha.
+
+    Queda anotado en el issue quién lo cambió (un comentario firmado, corto,
+    en el estilo de `mover_a_estado`) y, si WAHA ya anda, se pide la
+    sincronización inmediata al chat en vez de esperar los 2 minutos del
+    sincronizador. Nunca manda nada al cliente: esto solo cambia una
+    etiqueta, no manda WhatsApp saliente.
+
+    Apagarlo a mano no evita que vuelva: si el cliente escribe, el receptor
+    del frontend la pone otra vez — eso ya funciona, aquí no hay que
+    tocarlo.
+    """
+    lead = linear_leads.uno(ref)
+    if lead is None:
+        return "", "Ese lead ya no está en Linear."
+    prender = not lead.get("te_toca")
+    try:
+        linear_leads.poner_te_toca(lead["id"], prender)
+        linear_leads.comentar(
+            lead["id"],
+            "🔴 Responder " + ("prendido" if prender else "apagado") + ".",
+            autor=autor)
+    except linear_leads.ErrorLeads as fallo:
+        return "", str(fallo)
+    linear_leads.refrescar()
+    if waha_activo():
+        etiquetar_en_whatsapp(lead["ref"])
+    return (f"{lead['nombre']}: Responder "
+            + ("prendido." if prender else "apagado."), "")
+
+
+def alternar_senal(ref, nombre, autor=""):
+    """Prende o apaga una señal suelta (Seguimiento, Importante, Cliente
+    potencial): el mismo interruptor que Responder, pero sin comentario en
+    el issue y sin tocar WhatsApp — son internas, y `etiquetar_en_whatsapp`
+    nunca se llama para ellas.
+
+    El candado no es solo del navegador: si el botón no debería haber
+    aparecido (la etiqueta todavía no existe en Linear) y el POST llegó
+    igual, acá no se toca nada.
+    """
+    lead = linear_leads.uno(ref)
+    if lead is None:
+        return "", "Ese lead ya no está en Linear."
+    if nombre not in linear_leads.senales_disponibles():
+        registro_aviso(
+            f"Se pidió la señal «{nombre}» para {ref}, pero esa etiqueta no "
+            f"existe en Linear: no se tocó nada.")
+        return "", ""
+    prender = nombre not in lead["etiquetas"]
+    try:
+        linear_leads.poner_etiqueta_suelta(lead["id"], nombre, prender)
+    except linear_leads.ErrorLeads as fallo:
+        return "", str(fallo)
+    linear_leads.refrescar()
+    return (f"{lead['nombre']}: {nombre} "
+            + ("puesta." if prender else "quitada."), "")
 
 
 
@@ -520,6 +713,13 @@ def ficha(ref):
     if lead is None:
         return None
     abierta = _tarjeta(lead)
+    # Las señales sueltas del panel: solo las que Abraham ya creó en
+    # Linear, en el orden fijo de `LABELS_SENAL`, cada una con su estado
+    # actual en ESTE lead.
+    disponibles = linear_leads.senales_disponibles()
+    abierta["senales"] = [
+        {"nombre": n, "prendida": n in lead["etiquetas"]}
+        for n in linear_leads.LABELS_SENAL if n in disponibles]
     sucesos, internas = separar_notas(linear_leads.comentarios(lead["id"]))
     abierta["notas"] = internas
 

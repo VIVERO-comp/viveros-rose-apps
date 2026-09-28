@@ -2194,6 +2194,10 @@ def control_pantalla(request: Request):
     # OpenWA guardara su mensaje. También por detrás: esta pantalla no
     # espera a Twenty.
     wa_autor.aplicar_en_fondo()
+    # El orden de las columnas (quién lleva más esperando) lee una caché
+    # local que se refresca acá mismo, por detrás: la pintada de HOY usa lo
+    # que ya estaba guardado.
+    control.refrescar_espera_en_fondo(leads)
 
     abierta = control.ficha(request.query_params.get("abrir", ""))
     # El modal de la corrección manual: a un estado nuevo no se llega sin
@@ -2313,6 +2317,35 @@ async def control_nota(request: Request):
         return _control_vuelve(vista, error=error, abrir=ref)
     autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
     aviso, error = control.escribir_nota(ref, form.get("texto", ""), autor=autor)
+    return _control_vuelve(vista, aviso=aviso, error=error, abrir=ref)
+
+
+@app.post("/control/responder")
+async def control_responder(request: Request):
+    """El interruptor 🔴 Responder de la ficha: prende o apaga «Te toca» a
+    mano, deja el comentario firmado y pide la sincronización a WhatsApp."""
+    form = await request.form()
+    ref = form.get("ref", "")
+    _alc, vista, error = _control_permiso(request, ref)
+    if error:
+        return _control_vuelve(vista, error=error, abrir=ref)
+    autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
+    aviso, error = control.alternar_responder(ref, autor=autor)
+    return _control_vuelve(vista, aviso=aviso, error=error, abrir=ref)
+
+
+@app.post("/control/senal")
+async def control_senal(request: Request):
+    """Una señal suelta del panel (Seguimiento, Importante, Cliente
+    potencial): el mismo interruptor que Responder, pero interna — sin
+    comentario en el issue y sin tocar WhatsApp."""
+    form = await request.form()
+    ref, nombre = form.get("ref", ""), form.get("nombre", "")
+    _alc, vista, error = _control_permiso(request, ref)
+    if error:
+        return _control_vuelve(vista, error=error, abrir=ref)
+    autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
+    aviso, error = control.alternar_senal(ref, nombre, autor=autor)
     return _control_vuelve(vista, aviso=aviso, error=error, abrir=ref)
 
 

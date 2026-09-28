@@ -107,6 +107,10 @@ def test_el_nombre_se_saca_del_titulo_con_su_codigo():
     ("ENTREGADO", "POR_AGENDAR", False),
     ("COTIZADO", "HABLANDO", False),
     ("AGENDADO", "AGENDADO", False),
+    # Cotizar de nuevo un lead que ya avanzó (botón "Cotizar" de Control,
+    # 28/09/2026) tampoco lo devuelve a Cotizado.
+    ("AGENDADO", "COTIZADO", False),
+    ("ENTREGADO", "COTIZADO", False),
     # Un lead cerrado no lo mueve ningún automático.
     ("GANADO", "ENTREGADO", False),
     ("PERDIDO", "HABLANDO", False),
@@ -126,6 +130,33 @@ def test_el_automatico_no_devuelve_un_lead_entregado():
     lead = linear_leads.uno("LEAD-88")  # Entregado
     assert linear_leads.mover_estado(lead["id"], "POR_AGENDAR") is False
     assert linear_leads.uno("LEAD-88")["estado"] == "ENTREGADO"
+
+
+def test_cotizar_de_nuevo_no_devuelve_a_cotizado_un_lead_mas_avanzado():
+    """El botón «Cotizar» de Control (28/09/2026) está disponible SIEMPRE,
+    también en Agendado o Entregado — no solo en Nuevo/Hablando. Por eso
+    importa que un automático hacia "Cotizado" nunca degrade: acá se
+    amarra con `mover_estado(manual=False)`, el mismo camino que usa
+    cualquier avance automático del embudo.
+
+    OJO: el camino REAL de una cotización creada desde Vender no pasa por
+    `linear_leads.py` — control-stock (`app/cotizaciones.py`) llama a
+    `crm_leads.marcar_odoo(ref, etapa="COTIZADO")` sin mirar el estado del
+    lead, y es el PUENTE del frontend (otro repo:
+    `viveros-rose-frontend/src/lib/server/linear.ts`,
+    `moverACotizadoPorVenta` → `moverSiEstadoActual(issueId,
+    ['nuevo','hablando'], 'cotizado')`) el que de verdad decide si el
+    issue se mueve — y solo lo hace si el estado ACTUAL es Nuevo o
+    Hablando. Verificado leyendo ese código (no se puede ejecutar un test
+    de TypeScript desde esta suite): un lead en cualquier otro estado deja
+    la llamada como no-op. Esta prueba amarra la MISMA regla del lado de
+    Python, que es lo que se puede ejecutar desde aquí.
+    """
+    for ref, estado in (("LEAD-89", "AGENDADO"), ("LEAD-88", "ENTREGADO")):
+        lead = linear_leads.uno(ref)
+        assert lead["estado"] == estado
+        assert linear_leads.mover_estado(lead["id"], "COTIZADO") is False
+        assert linear_leads.uno(ref)["estado"] == estado
 
 
 def test_la_correccion_manual_exige_motivo():
@@ -219,6 +250,42 @@ def test_te_toca_se_prende_y_se_apaga():
     assert linear_leads.uno("LEAD-91")["te_toca"] is True
     linear_leads.poner_te_toca(lead["id"], False)
     assert linear_leads.uno("LEAD-91")["te_toca"] is False
+
+
+# ---------------------------------------------------------------------------
+# El mecanismo genérico detrás de «Te toca»: prender o apagar UNA etiqueta
+# suelta por nombre (25/09/2026, para el panel de Control).
+# ---------------------------------------------------------------------------
+
+def test_poner_etiqueta_suelta_es_el_mismo_mecanismo_que_te_toca():
+    lead = linear_leads.uno("LEAD-90")
+    linear_leads.poner_etiqueta_suelta(lead["id"], linear_leads.LABEL_TE_TOCA, True)
+    assert linear_leads.uno("LEAD-90")["te_toca"] is True
+    linear_leads.poner_etiqueta_suelta(lead["id"], linear_leads.LABEL_TE_TOCA, False)
+    assert linear_leads.uno("LEAD-90")["te_toca"] is False
+
+
+# ---------------------------------------------------------------------------
+# Las señales sueltas del panel (25/09/2026): el mismo interruptor que
+# «Te toca», sobre `poner_etiqueta_suelta`, y el candado de qué botón
+# aparece.
+# ---------------------------------------------------------------------------
+
+def test_una_senal_se_prende_y_se_apaga_con_el_mismo_interruptor():
+    lead = linear_leads.uno("LEAD-90")
+    linear_leads.poner_etiqueta_suelta(lead["id"], "Seguimiento", True)
+    assert "Seguimiento" in linear_leads.uno("LEAD-90")["etiquetas"]
+    linear_leads.poner_etiqueta_suelta(lead["id"], "Seguimiento", False)
+    assert "Seguimiento" not in linear_leads.uno("LEAD-90")["etiquetas"]
+
+
+def test_senales_disponibles_solo_trae_las_que_existen_en_linear():
+    # En modo muestra, dos de las tres "existen" a propósito (ver
+    # `_MUESTRA_SENALES_EXISTENTES`): Cliente potencial no, para poder
+    # probar el candado sin tocar Linear real.
+    disponibles = linear_leads.senales_disponibles()
+    assert disponibles == {"Seguimiento", "Importante"}
+    assert "Cliente potencial" not in disponibles
 
 
 def test_las_etiquetas_nunca_se_crean(monkeypatch):
