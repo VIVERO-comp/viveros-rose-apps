@@ -5,6 +5,13 @@ Mismo patrón que test_cotizaciones.py y test_ventas.py: se reemplaza
 `ventas._ejecutar` con un doble que entiende SOLO lo que cot_lead.py
 produce (dominios simples, sin relaciones), y `ventas.descargar_pdf` para
 el PDF. No se toca sqlite: cot_lead.py no guarda nada propio.
+
+La conexión es por `lead_ref`/`lead_real` (corregido el 28/09/2026):
+`client_order_ref` es del order-api (el VR-XXXXXX de un pedido en línea) y
+aquí solo se usa de solo lectura, para descartar referencias internas. El
+doble de Odoo simula los dos campos nuevos del addon aunque hoy no existan
+todavía en el Odoo real — este módulo se prueba contra el contrato, no
+contra el estado actual de producción.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -42,8 +49,8 @@ class OdooCotLead:
 
     def agregar_orden(self, partner_id, name, dias_atras=0, amount_total=0.0,
                       state="draft", etapa_cobro="cotizado", total_pagado=0.0,
-                      client_order_ref=None, linear_issue_url=None,
-                      reemplazada_por_id=False):
+                      client_order_ref=None, lead_ref=None, lead_real=False,
+                      linear_issue_url=None, reemplazada_por_id=False):
         self._siguiente_orden += 1
         oid = self._siguiente_orden
         self.ordenes[oid] = {
@@ -56,7 +63,11 @@ class OdooCotLead:
             "etapa_cobro": etapa_cobro,
             "total_pagado": total_pagado,
             "saldo_pendiente": round(amount_total - total_pagado, 2),
+            # client_order_ref: el VR-XXXXXX del order-api (o una ref
+            # interna de la app) — nunca lo escribe cot_lead.py.
             "client_order_ref": client_order_ref or False,
+            "lead_ref": lead_ref or False,
+            "lead_real": bool(lead_real),
             "linear_issue_url": linear_issue_url or False,
             "reemplazada_por_id": reemplazada_por_id,
         }
@@ -126,10 +137,9 @@ def test_dos_ordenes_conectadas_una_es_la_real(odoo):
            "celular": "6552-0966", "url": "https://linear.app/x/issue/LEAD-91"}
     partner = odoo.agregar_partner("Tamara", "6552-0966")
     o1 = odoo.agregar_orden(partner, "S00079", dias_atras=5, amount_total=787.0,
-                            client_order_ref="PP-70211",
-                            linear_issue_url=lead["url"])
+                            lead_ref="PP-70211", lead_real=True)
     o2 = odoo.agregar_orden(partner, "S00081", dias_atras=1, amount_total=1525.0,
-                            client_order_ref="PP-70211")
+                            lead_ref="PP-70211")
 
     resultado = cot_lead.ordenes_del_lead(lead)
     assert resultado["ok"] is True
@@ -148,10 +158,9 @@ def test_marcar_real_se_lo_quita_a_la_otra(odoo):
            "celular": "6552-0966", "url": "https://linear.app/x/issue/LEAD-91"}
     partner = odoo.agregar_partner("Tamara", "6552-0966")
     o1 = odoo.agregar_orden(partner, "S00079", amount_total=787.0,
-                            client_order_ref="PP-70211",
-                            linear_issue_url=lead["url"])
+                            lead_ref="PP-70211", lead_real=True)
     o2 = odoo.agregar_orden(partner, "S00081", amount_total=1525.0,
-                            client_order_ref="PP-70211")
+                            lead_ref="PP-70211")
 
     cot_lead.marcar_real(o2, lead)
 
@@ -169,17 +178,19 @@ def test_marcar_real_exige_estar_conectada(odoo):
         cot_lead.marcar_real(suelta, lead)
 
 
-def test_desconectar_limpia_las_dos_cosas(odoo):
+def test_desconectar_limpia_lead_ref_y_lead_real(odoo):
     lead = {"ref": "LEAD-91", "pp": "PP-70211", "nombre": "Tamara",
            "celular": "", "url": "https://x/issue/LEAD-91"}
     partner = odoo.agregar_partner("Tamara")
     o1 = odoo.agregar_orden(partner, "S00079", amount_total=787.0,
-                            client_order_ref="PP-70211",
-                            linear_issue_url=lead["url"])
+                            lead_ref="PP-70211", lead_real=True,
+                            linear_issue_url="https://x/issue/LEAD-91")
     cot_lead.desconectar(o1)
     fila = odoo.ordenes[o1]
-    assert fila["client_order_ref"] is False
-    assert fila["linear_issue_url"] is False
+    assert fila["lead_ref"] is False
+    assert fila["lead_real"] is False
+    # El link del kanban de cobro NO es la conexión: desconectar no lo toca.
+    assert fila["linear_issue_url"] == "https://x/issue/LEAD-91"
 
 
 def test_quitar_real_no_desconecta(odoo):
@@ -187,18 +198,17 @@ def test_quitar_real_no_desconecta(odoo):
            "celular": "", "url": "https://x/issue/LEAD-91"}
     partner = odoo.agregar_partner("Tamara")
     o1 = odoo.agregar_orden(partner, "S00079", amount_total=787.0,
-                            client_order_ref="PP-70211",
-                            linear_issue_url=lead["url"])
+                            lead_ref="PP-70211", lead_real=True)
     cot_lead.quitar_real(o1)
     fila = odoo.ordenes[o1]
-    assert fila["linear_issue_url"] is False
-    assert fila["client_order_ref"] == "PP-70211"
+    assert fila["lead_real"] is False
+    assert fila["lead_ref"] == "PP-70211"
 
 
 def test_conectar_rechaza_orden_de_otro_lead(odoo):
     partner = odoo.agregar_partner("Ximena")
     orden = odoo.agregar_orden(partner, "S00050", amount_total=50.0,
-                               client_order_ref="PP-70203")
+                               lead_ref="PP-70203")
     lead_ajeno = {"ref": "LEAD-1", "pp": "PP-11111", "nombre": "Otro",
                  "celular": "", "url": ""}
     with pytest.raises(ValueError, match="ya está conectada a otro lead"):
@@ -212,6 +222,48 @@ def test_conectar_sin_pp_avisa(odoo):
         cot_lead.conectar(orden, {"ref": "LEAD-9", "pp": "", "nombre": "x"})
 
 
+def test_conectar_no_toca_client_order_ref(odoo):
+    """El candado del cambio del 28/09/2026: conectar/desconectar/marcar
+    real nunca escriben `client_order_ref` — ese campo es del order-api
+    (el VR-XXXXXX de un pedido en línea) y aquí es de solo lectura."""
+    lead = {"ref": "LEAD-1", "pp": "PP-11111", "nombre": "Cliente en línea",
+           "celular": "", "url": "https://x/issue/LEAD-1"}
+    partner = odoo.agregar_partner("Cliente en línea")
+    orden = odoo.agregar_orden(partner, "S00200", amount_total=200.0,
+                               total_pagado=200.0, etapa_cobro="pagado",
+                               client_order_ref="VR-549312")
+
+    cot_lead.conectar(orden, lead)
+    assert odoo.ordenes[orden]["client_order_ref"] == "VR-549312"
+    assert odoo.ordenes[orden]["lead_ref"] == "PP-11111"
+
+    cot_lead.marcar_real(orden, lead)
+    assert odoo.ordenes[orden]["client_order_ref"] == "VR-549312"
+
+    cot_lead.desconectar(orden)
+    assert odoo.ordenes[orden]["client_order_ref"] == "VR-549312"
+    assert odoo.ordenes[orden]["lead_ref"] is False
+
+
+def test_conectar_llena_el_link_solo_si_estaba_vacio(odoo):
+    lead = {"ref": "LEAD-1", "pp": "PP-11111", "nombre": "x",
+           "celular": "", "url": "https://x/issue/LEAD-1-nuevo"}
+    partner = odoo.agregar_partner("x")
+    con_link_previo = odoo.agregar_orden(
+        partner, "S00001", amount_total=10.0,
+        linear_issue_url="https://x/issue/LEAD-1-viejo")
+    sin_link = odoo.agregar_orden(partner, "S00002", amount_total=10.0)
+
+    cot_lead.conectar(con_link_previo, lead)
+    cot_lead.conectar(sin_link, lead)
+
+    # El que ya tenía un link no se pisa; el que no tenía se llena.
+    assert odoo.ordenes[con_link_previo]["linear_issue_url"] == \
+        "https://x/issue/LEAD-1-viejo"
+    assert odoo.ordenes[sin_link]["linear_issue_url"] == \
+        "https://x/issue/LEAD-1-nuevo"
+
+
 # ---------------------------------------------------------------------------
 # Candidatas
 # ---------------------------------------------------------------------------
@@ -221,11 +273,34 @@ def test_orden_de_otro_lead_no_es_candidata(odoo):
            "celular": "", "url": ""}
     partner = odoo.agregar_partner("Ilayda Yerusalmi")
     odoo.agregar_orden(partner, "S00090", dias_atras=2, amount_total=158.75,
-                       client_order_ref="PP-99999")  # de otro lead
+                       lead_ref="PP-99999")  # de otro lead
 
     resultado = cot_lead.candidatas_del_lead(lead)
     assert resultado["ok"] is True
     assert resultado["candidatas"] == []
+
+
+def test_pedido_en_linea_vr_es_candidata_y_client_order_ref_no_cambia(odoo):
+    """El caso que motivó el cambio del 28/09/2026: un pedido en línea
+    (`client_order_ref = "VR-549312"`, ya pagado) tiene que poder
+    conectarse a un lead, y su número público no se toca en ningún paso."""
+    lead = {"ref": "LEAD-70", "pp": "PP-70070", "nombre": "Cliente Online",
+           "celular": "6000-1234", "url": "https://x/issue/LEAD-70"}
+    partner = odoo.agregar_partner("Cliente Online", "6000-1234")
+    orden = odoo.agregar_orden(
+        partner, "S00095", dias_atras=3, amount_total=99.99,
+        total_pagado=99.99, etapa_cobro="pagado",
+        client_order_ref="VR-549312")
+
+    candidatas = cot_lead.candidatas_del_lead(lead)
+    assert [c["orden_id"] for c in candidatas["candidatas"]] == [orden]
+
+    cot_lead.conectar(orden, lead)
+    cot_lead.marcar_real(orden, lead)
+    cot_lead.desconectar(orden)
+
+    # El VR- sobrevive intacto a conectar, marcar real y desconectar.
+    assert odoo.ordenes[orden]["client_order_ref"] == "VR-549312"
 
 
 def test_busqueda_por_telefono_con_y_sin_guion(odoo):
@@ -328,7 +403,7 @@ def test_plata_de_la_real_calcula_el_abono(odoo):
            "celular": "", "url": "https://x/issue/LEAD-62"}
     partner = odoo.agregar_partner("Ilayda Yerusalmi")
     odoo.agregar_orden(partner, "S00090", amount_total=158.75, total_pagado=0.0,
-                       client_order_ref="PP-8HTJC", linear_issue_url=lead["url"])
+                       lead_ref="PP-8HTJC", lead_real=True)
 
     resultado = cot_lead.plata_de_la_real(lead)
     assert resultado["ok"] is True
@@ -351,8 +426,7 @@ def test_estado_sugerido_por_etapa_de_pago(odoo, etapa_cobro, pagado,
            "celular": "", "url": "https://x/issue/LEAD-1"}
     partner = odoo.agregar_partner("Cliente")
     odoo.agregar_orden(partner, "S00100", amount_total=100.0, total_pagado=pagado,
-                       etapa_cobro=etapa_cobro, client_order_ref="PP-11111",
-                       linear_issue_url=lead["url"])
+                       etapa_cobro=etapa_cobro, lead_ref="PP-11111", lead_real=True)
 
     resultado = cot_lead.estado_sugerido(lead)
     assert resultado["ok"] is True
