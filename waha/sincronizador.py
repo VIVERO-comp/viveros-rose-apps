@@ -100,6 +100,30 @@ PEDIDO_COMPLETADO = "‎Pedido completado"
 # (25/09/2026). El color dice de que familia es; el nombre, cual.
 REPRESENTANTES = ("Mary", "Ruben", "Salomón", "Abraham")
 
+# El interruptor para apagar por un rato los NOMBRES de empleados en
+# WhatsApp, sin tocar Linear ni Twenty y sin borrar la etiqueta del
+# catalogo del telefono -- solo deja de PEDIRLA. `ETIQUETAS_REPRESENTANTE`
+# vive en el .env; cualquier valor que no sea "off"/"0"/"no" (incluida su
+# ausencia) deja el interruptor PRENDIDO, que es el comportamiento de
+# siempre.
+_REPRESENTANTE_APAGADO = ("off", "0", "no")
+
+
+def representantes_activos():
+    """False si `ETIQUETAS_REPRESENTANTE` esta apagado en el .env.
+
+    Al apagarlo, `deseadas()` deja de pedir el nombre del representante y
+    en la pasada siguiente el PUT (que reemplaza la lista completa del
+    chat) lo QUITA solo de los chats vivos: no hace falta ningun codigo de
+    "quitar", con no pedirlo alcanza. No borra la etiqueta del catalogo del
+    telefono (`etiquetas_de_whatsapp()` la sigue viendo), no toca `Resp:`
+    en Linear ni el campo `representante` de Twenty: esos siguen guardados
+    tal cual. Al volver a prender, `deseadas()` lo repone leyendolo de
+    Linear, igual que ya pasa al revivir un Perdido.
+    """
+    valor = (ENV.get("ETIQUETAS_REPRESENTANTE") or "on").strip().lower()
+    return valor not in _REPRESENTANTE_APAGADO
+
 # EL PUENTE DE NOMBRES. En Linear la etiqueta es `Resp: Mary`; en WhatsApp,
 # solo `Mary`. Los dos vocabularios se quedan como estan y el traductor
 # vive aqui, en un solo lugar: asi nadie tiene que renombrar nada a los
@@ -459,13 +483,18 @@ def deseadas(lead, disponibles):
     cerrado (Ganado/Perdido) esto NO se usa — ver `quiere_para()` — porque
     un cerrado no se rige por lo que Linear "querria": se rige por resta
     sobre lo que el chat ya tiene, y nunca agrega nada nuevo.
+
+    El nombre del representante entra solo si `representantes_activos()`:
+    con el interruptor apagado, este chat sencillamente no lo pide, y la
+    pasada siguiente lo quita del telefono sin que haga falta ningun
+    camino de "quitar" aparte.
     """
     quiere = []
     if lead["estado"] in ESTADOS_CON_ETIQUETA:
         quiere.append(lead["estado"])
     if lead["interes"] in INTERESES:
         quiere.append(lead["interes"])
-    if lead["resp"]:
+    if lead["resp"] and representantes_activos():
         quiere.append(a_whatsapp(lead["resp"]))
     if lead["te_toca"]:
         quiere.append(RESPONDER)
@@ -882,6 +911,12 @@ def main():
     print("etiquetas en WhatsApp: %d (%d de WhatsApp, %d nuestras)" % (
         len(etiquetas), len(etiquetas) - len(nuestras), len(nuestras)))
 
+    repr_activos = representantes_activos()
+    if not repr_activos:
+        print("etiquetas de representante: APAGADAS "
+              "(ETIQUETAS_REPRESENTANTE=%s) — se quitan de los chats"
+              % (ENV.get("ETIQUETAS_REPRESENTANTE") or ""))
+
     leads = leads_del_crm()
     lista_interna, de_donde = internos()
     print("numeros internos: %d · %s" % (len(lista_interna), de_donde))
@@ -923,6 +958,12 @@ def main():
             for grupo, valores, campo in (
                     ("responsable", [t for t in tiene if t in REPRESENTANTES], "resp"),
                     ("interes", [t for t in tiene if t in INTERESES], "interes")):
+                if grupo == "responsable" and not repr_activos:
+                    # Apagado: un nombre puesto a mano en el telefono no
+                    # escribe nada en Linear mientras el interruptor este
+                    # asi -- la regla es que en Linear no se toca nada. El
+                    # interes sigue subiendo igual que siempre.
+                    continue
                 en_wa = valores[0] if valores else ""
                 si_resp = campo == "resp"
                 en_wa_limpio = a_whatsapp(en_wa) if si_resp else en_wa
