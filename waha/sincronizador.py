@@ -6,14 +6,16 @@ telefono de Twenty, y deja en cada chat de WhatsApp las etiquetas que
 tocan. Lee de vuelta el empleado y el interes si alguien los cambio a mano
 en el telefono.
 
-  Linear/Twenty  --(estado, 🔴 Responder)-->  WhatsApp     solo bajan
-  Linear/Twenty  <--(empleado, interes)-->    WhatsApp     suben y bajan
+  Linear/Twenty  --(estado, 🔴 Responder, señales sueltas)-->  WhatsApp   solo bajan
+  Linear/Twenty  <--(empleado, interes)-->                     WhatsApp   suben y bajan
 
 Por que esa division: el estado lo mueve el embudo (el mensaje del cliente,
-la cotizacion, el pago, el calendario) y «🔴 Responder» lo pone y lo quita
-el mensaje. Esos dos no se corrigen desde el telefono. El empleado y el
-interes SI: quien atiende el chat es quien mejor sabe de quien es y de que
-se trata.
+la cotizacion, el pago, el calendario), «🔴 Responder» lo pone y lo quita
+el mensaje, y las señales sueltas (hoy «Importante») las pone o las quita
+Abraham a mano EN LINEAR. Esos no se corrigen desde el telefono: si alguien
+las cambia en WhatsApp, la pasada siguiente las repone o las quita segun lo
+que diga Linear. El empleado y el interes SI se corrigen desde el telefono:
+quien atiende el chat es quien mejor sabe de quien es y de que se trata.
 
 REGLAS QUE NO SE ROMPEN
 
@@ -81,6 +83,50 @@ ESTADOS_CON_ETIQUETA = ("Nuevo", "Hablando", "Cotizado", "Por agendar",
                         "Agendado", "Entregado")
 INTERESES = ("Plantas", "Eventos", "Paisajismo", "Mantenimiento", "Mayorista")
 RESPONDER = "🔴 Responder"
+
+# Etiquetas sueltas de Linear que SOLO BAJAN, igual que el estado y
+# «🔴 Responder»: las pone o las quita Abraham a mano en Linear; si alguien
+# las cambia en el telefono, la pasada siguiente las repone o las quita
+# segun lo que diga Linear, sin escribir nada de vuelta. Nunca se crean
+# solas (regla 3): si el nombre no existe todavia en el catalogo de
+# WhatsApp, el chat se queda sin ella y el log lo avisa.
+#
+# Hoy solo «Importante» esta habilitada. «Seguimiento» y «Cliente
+# potencial» son las otras dos que Abraham va a crear a mano; sumarlas
+# aqui es la unica linea que hace falta cuando llegue el momento -no
+# antes, para no encenderlas sin que el existan sus botones.
+SENALES_QUE_BAJAN = ("Importante",)
+
+# Las etiquetas SUGERIDAS de fabrica de WhatsApp Business (Seguimiento,
+# Cliente potencial, Pedido completado, y las que vengan) llevan esta marca
+# invisible al inicio del nombre que devuelve la API («‎Pedido
+# completado»). Sin tenerla en cuenta, comparar por texto nunca calza y el
+# codigo reporta "falta" para siempre sin ningun aviso -la misma trampa que
+# ya costo cara con el @lid y con el apellido "Doe" inventado-. Toda
+# comparacion de nombres de etiqueta de WhatsApp pasa por aqui, tambien
+# para una etiqueta creada a mano como «Importante»: si el catalogo la
+# devuelve con la marca (por lo que sea), igual casa.
+MARCA_INVISIBLE = "‎"
+
+
+def _sin_marca(nombre):
+    return (nombre or "").lstrip(MARCA_INVISIBLE).strip()
+
+
+def _nombre_en_catalogo(nombre_deseado, disponibles):
+    """El nombre TAL COMO esta en `disponibles` (con o sin marca), o None
+    si no esta -ni tal cual ni tolerando la marca invisible-.
+
+    Se usa para las dos cosas: decidir si algo "falta" en WhatsApp, y para
+    devolver el nombre EXACTO del catalogo (el que hace falta para buscar
+    su id y para que calce con lo que el chat ya tiene puesto)."""
+    if nombre_deseado in disponibles:
+        return nombre_deseado
+    for real in disponibles:
+        if _sin_marca(real) == _sin_marca(nombre_deseado):
+            return real
+    return None
+
 
 # Las cuatro familias de etiquetas de WhatsApp, cada una con su color
 # (25/09/2026). El color dice de que familia es; el nombre, cual.
@@ -182,7 +228,8 @@ def telefono_de_la_tarjeta(descripcion):
 
 
 def leads_del_crm():
-    """[{ref, nombre, pp, estado, resp, interes, te_toca, telefono, cerrado}]
+    """[{ref, nombre, pp, estado, resp, interes, te_toca, senales, telefono,
+        cerrado}]
 
     TODOS los issues del equipo LEAD, vivos Y cerrados (Ganado/Perdido). Se
     necesitan los cerrados tambien para poder limpiarles el chat cuando
@@ -252,6 +299,10 @@ def leads_del_crm():
             "resp": resp[len(PREFIJO_RESP):] if resp.startswith(PREFIJO_RESP) else "",
             "interes": grupos.get("Interés", ""),
             "te_toca": "Te toca" in nombres,
+            # Las señales sueltas que este issue trae puestas en Linear, de
+            # las que hoy bajan (ver SENALES_QUE_BAJAN). Un set, no una
+            # lista: solo importa si esta o no.
+            "senales": {s for s in SENALES_QUE_BAJAN if s in nombres},
             "telefono": tel,
             "nombre_primero": n_primero,
             "nombre_segundo": n_segundo,
@@ -455,8 +506,18 @@ def deseadas(lead, disponibles):
         quiere.append(a_whatsapp(lead["resp"]))
     if lead["te_toca"]:
         quiere.append(RESPONDER)
-    faltan = [q for q in quiere if q not in disponibles]
-    return [q for q in quiere if q in disponibles], faltan
+    # Las señales sueltas (hoy «Importante») solo bajan, igual que el
+    # estado y Responder arriba.
+    quiere.extend(sorted(lead.get("senales") or ()))
+    # Se casa por el nombre TAL COMO esta en el catalogo -tolerando el
+    # U+200E de las sugeridas de fabrica- y ese es el nombre que se
+    # devuelve: hace falta para buscar el id y para calzar con lo que el
+    # chat ya tiene puesto.
+    resueltas, faltan = [], []
+    for q in quiere:
+        real = _nombre_en_catalogo(q, disponibles)
+        (resueltas if real is not None else faltan).append(real or q)
+    return resueltas, faltan
 
 
 def quiere_para(lead, tiene, disponibles):
@@ -472,12 +533,20 @@ def quiere_para(lead, tiene, disponibles):
     etiquetas nunca se crean solas.
 
         quedar = (lo que el chat tiene hoy) - (las 6 de estado) - (Responder)
+                 - (las señales sueltas que solo bajan)
+
+    Las señales sueltas (hoy «Importante») tampoco entran a un cerrado, por
+    la misma razon que el estado y Responder: las decide el embudo/Linear
+    de un lead EN CURSO, y un issue cerrado ya no esta en curso. Se comparan
+    tolerando el U+200E, igual que en `deseadas()`.
 
     Si el chat no tiene nada, `quedar` sale vacio y no hay nada que quitar
     — no se manda un PUT que no cambia nada.
     """
     if lead.get("cerrado"):
-        quiere = [t for t in tiene if t not in ESTADOS_CON_ETIQUETA and t != RESPONDER]
+        sin_marca_senales = {_sin_marca(s) for s in SENALES_QUE_BAJAN}
+        quiere = [t for t in tiene if t not in ESTADOS_CON_ETIQUETA
+                  and t != RESPONDER and _sin_marca(t) not in sin_marca_senales]
         return quiere, []
     return deseadas(lead, disponibles)
 
@@ -910,9 +979,11 @@ def main():
     hechos, errores = 0, []
     for lead, chat, tiene, poner, quitar in planes:
         print("%-9s %-24s %s" % (lead["ref"], lead["nombre"][:22], chat))
-        print("          estado=%-12s interes=%-14s resp=%s%s" % (
+        print("          estado=%-12s interes=%-14s resp=%s%s%s" % (
             lead["estado"], lead["interes"] or "-", lead["resp"] or "-",
-            "  🔴" if lead["te_toca"] else ""))
+            "  🔴" if lead["te_toca"] else "",
+            ("  " + ", ".join(sorted(lead.get("senales") or ())))
+            if lead.get("senales") else ""))
         print("          tiene:  %s" % (", ".join(tiene) or "(ninguna)"))
         if poner:
             print("          PONER:  %s" % ", ".join(poner))
