@@ -268,11 +268,49 @@ def test_adjuntar_venta_sigue_reservado_y_apagado(cliente, de_dueno):
     assert "disabled" in trozo
 
 
-def test_cotizar_solo_asoma_en_nuevo_y_hablando(cliente, de_dueno):
+def test_cotizar_esta_disponible_siempre(cliente, de_dueno):
+    # Abraham (28/09/2026): ya no se limita a Nuevo/Hablando — es un
+    # enlace a Vender, no un cambio de estado, así que no hay razón para
+    # escondérselo a un lead más avanzado.
     hablando = cliente.get("/control", params={"abrir": "LEAD-86"}).text
     agendado = cliente.get("/control", params={"abrir": "LEAD-89"}).text
     assert ">Cotizar<" in hablando[hablando.index('class="panel-der"'):]
-    assert ">Cotizar<" not in agendado[agendado.index('class="panel-der"'):]
+    assert ">Cotizar<" in agendado[agendado.index('class="panel-der"'):]
+
+
+def test_cotizar_es_un_enlace_a_vender_con_el_lead(cliente, de_dueno):
+    cuerpo = cliente.get("/control", params={"abrir": "LEAD-91"}).text
+    panel = cuerpo[cuerpo.index('class="panel-der"'):]
+    trozo = panel[panel.index(">Cotizar<") - 200:panel.index(">Cotizar<")]
+    assert '<a class="btn"' in trozo
+    assert "/venta?lead=LEAD-91" in trozo
+    assert "cliente=Tamara" in trozo
+    assert "cel=6552-0966" in trozo
+
+
+def test_cotizar_no_duplica_el_lead_en_el_selector_de_vender(
+        cliente, de_dueno, monkeypatch):
+    # El camino real, de punta a punta: clic en Cotizar -> /venta -> deja
+    # el lead pendiente -> /venta/nueva. La referencia que manda Control
+    # (LEAD-91, la de linear_leads) tiene que ser la MISMA que arma el
+    # selector de Vender (_leads_para_elegir, la misma fuente) — si no
+    # coincidieran, el lead saldría duplicado en el <select>. El selector
+    # solo se pinta con Odoo "configurado" (el carrito vacío no lo toca:
+    # `carrito_de` sale local si no hay filas, sin llamar a Odoo).
+    for variable, valor in {"ODOO_URL": "http://odoo-de-prueba:8069",
+                            "ODOO_DB": "pruebas", "ODOO_USER": "prueba",
+                            "ODOO_PASSWORD": "prueba"}.items():
+        monkeypatch.setenv(variable, valor)
+    r = cliente.get("/venta", params={
+        "lead": "LEAD-91", "cliente": "Tamara", "cel": "6552-0966"},
+        follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/venta/nueva"
+    cuerpo = cliente.get("/venta/nueva").text
+    assert cuerpo.count('value="LEAD-91"') == 1
+    opcion = cuerpo[cuerpo.index('value="LEAD-91"'):cuerpo.index('value="LEAD-91"') + 200]
+    assert 'data-nombre="Tamara"' in opcion
+    assert "selected" in opcion
 
 
 def test_sin_chat_lo_dice_en_vez_de_dejar_el_hueco(cliente, de_dueno):

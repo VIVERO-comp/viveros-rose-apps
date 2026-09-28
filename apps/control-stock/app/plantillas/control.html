@@ -169,10 +169,11 @@
     {% if abierta.motivo %}<span class="etq at">{{ abierta.motivo }}</span>{% endif %}
   </div>
 
-  {# --- Qué hago. Responder y las señales ya viven aquí (25/09/2026);
-         Cotizar y Adjuntar venta siguen reservados y apagados, para
-         cuando la cotización conectada llegue. Lo negro sigue siendo
-         solo abrir el chat: el resto son interruptores grises. --- #}
+  {# --- Qué hago. Responder, las señales y Cotizar ya viven aquí
+         (28/09/2026); Adjuntar venta sigue reservado y apagado, para
+         cuando la cotización conectada llegue del lado de Odoo. Lo negro
+         sigue siendo solo abrir el chat: el resto son interruptores
+         grises, incluido Cotizar (es un enlace, no toca el lead). --- #}
   <div class="acciones">
     {% if abierta.wa %}
     <a class="btn oro" href="{{ abierta.wa }}" target="_blank" rel="noopener">💬 WhatsApp</a>
@@ -202,15 +203,18 @@
       {{ s.nombre }}{{ ' ✓' if s.prendida }}</button>
     {% endfor %}
     {% endif %}
-    {% if abierta.estado in ('NUEVO', 'HABLANDO') %}
-    <button class="btn" type="button" disabled>Cotizar</button>
-    {% endif %}
+    {# Disponible siempre (pedido de Abraham, 28/09/2026): un enlace, no
+       un formulario — no toca el lead, solo abre Vender con el cliente
+       puesto. El camino ya existía para Retail (GET /venta?lead=...):
+       deja el lead pendiente y redirige a /venta/nueva. #}
+    <a class="btn" href="/venta?lead={{ abierta.ref | urlencode }}&cliente={{ abierta.nombre | urlencode }}&cel={{ abierta.celular | urlencode }}">Cotizar</a>
     <button class="btn" type="button" disabled>Adjuntar venta</button>
   </div>
   <p class="pie-nota" style="margin:-4px 0 0">Responder lo prende el mensaje
     del cliente y lo apaga nuestra respuesta por WhatsApp — si lo apagás vos
-    y el cliente vuelve a escribir, se prende solo. Cotizar y Adjuntar venta
-    llegan con la cotización conectada.</p>
+    y el cliente vuelve a escribir, se prende solo. Cotizar abre Vender con
+    el cliente ya puesto. Adjuntar venta (se va a llamar «Conectar
+    cotización») llega en la fase de Odoo.</p>
 
   {# --- Cuánto es. El lugar de la cotización conectada, todavía vacío. --- #}
   <div class="ficha-cot-vacia">Sin cotización conectada.</div>
