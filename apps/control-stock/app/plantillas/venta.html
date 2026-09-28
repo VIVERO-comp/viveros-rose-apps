@@ -23,11 +23,22 @@
         bm_accion_url=('/venta/nueva' if ventas_activo else None),
         bm_accion_texto='+ Venta' %}{% include '_barra_movil.html' %}{% endwith %}
 <header>
-  <div class="brand">
-    <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
-    <div>
-      <h1>Vender</h1>
-      <small>Ventas locales del vivero</small>
+  {# La hamburguesa de computadora (28/09/2026) va junto al título, a su
+     izquierda; .cab-izq los agrupa en un solo bloque para que el
+     space-between del header no los separe (el mismo problema que ya
+     resuelve .cabecera-venta en otras pantallas). En el teléfono no
+     existe: ya está la propia en la barra móvil de arriba. #}
+  <div class="cab-izq">
+    <button class="hamb" type="button" aria-label="Mostrar u ocultar el menú"
+            aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+    <div class="brand">
+      <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
+      <div>
+        <h1>Vender</h1>
+        <small>Ventas locales del vivero</small>
+      </div>
     </div>
   </div>
 </header>

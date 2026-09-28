@@ -1358,28 +1358,57 @@ button.enlace-sub{
   user-select:all;-webkit-user-select:all;
 }
 
-/* ---------- la hamburguesa: esconder/mostrar el sidebar (22/09/2026) ----------
-   Pedido del dueño: un botón como el de Google Calendar que guarda el menú.
-   En el teléfono no existe (el menú es el navbar de abajo). En computadora
-   vive de primero en el sidebar; al colapsar, el sidebar queda como un riel
-   de puros iconos y la hamburguesa lo vuelve a abrir. El estado lo pinta el
-   servidor (cookie `menu`, la clase va en <body>) y menu.js solo la voltea. */
-nav .hamb{display:none}
+/* ---------- la marca del sidebar (28/09/2026, reemplaza a la hamburguesa
+   que vivía aquí) ---------- Arriba del todo va el logo + "Control
+   Viverorose", igual que en Control/Calendario (calendario.css .marca).
+   La hamburguesa se mudó a la zona de CONTENIDO de cada pantalla (junto
+   al título en Vender, sola arriba a la izquierda en Stock/Ajustes/
+   Inicio) — ver más abajo, ".hamb" ya no vive dentro de nav. En el
+   teléfono el cajón la conserva (abajo, @media max-width:899px); en el
+   cajón que comparten Control/Calendario (mismo _nav.html) la esconde
+   calendario.css: esas pantallas ya tienen su marca propia en .lado. */
+nav .marca{display:none}
 @media (min-width: 900px){
-  nav .hamb{
-    display:flex;flex:0 0 auto;flex-direction:row;justify-content:flex-start;
-    gap:11px;background:#ffffff;border:1px solid #e4e4e7;border-radius:14px;
-    padding:13px 15px;color:var(--texto);cursor:pointer;align-self:flex-start;
-  }
-  nav .hamb:hover{background:#f4f4f5}
+  nav .marca{display:flex;align-items:center;gap:9px;padding:4px 6px 12px}
+  nav .marca img{width:28px;height:28px;border-radius:50%;object-fit:cover}
+  nav .marca span{font-size:12.5px;font-weight:700;color:var(--texto)}
   .phone{transition:grid-template-columns .18s ease}
   body.menu-oculto .phone{grid-template-columns:78px 1fr}
   body.menu-oculto nav{padding:22px 12px}
+  /* Al colapsar el sidebar a un riel de iconos, la marca se oculta con
+     él (el mismo pedido del dueño que ya cumplía la hamburguesa). */
+  body.menu-oculto nav .marca{display:none}
   /* font-size:0 esconde el texto de la píldora; el icono (.ic) conserva
      su tamaño y el riel queda de puros iconos centrados. */
-  body.menu-oculto nav button, body.menu-oculto nav a, body.menu-oculto nav .hamb{
+  body.menu-oculto nav button, body.menu-oculto nav a{
     font-size:0;gap:0;justify-content:center;padding:13px 0;width:100%;
   }
+}
+
+/* ---------- la hamburguesa, mudada a la zona de contenido (28/09/2026)
+   ---------- Sigue siendo el mismo botón — Google Calendar, cookie `menu`,
+   menu.js sin tocar (escucha `.hamb` donde sea que esté) —, pero ya no
+   vive dentro del sidebar: vive junto al título (Vender) o sola arriba a
+   la izquierda del contenido (Stock, Ajustes, Inicio), igual que ya hace
+   Control (calendario.css .btn.icono.hamb). En el teléfono no existe: ya
+   está la propia hamburguesa de la barra móvil (.hamb-movil). */
+.hamb{display:none}
+@media (min-width: 900px){
+  .hamb{
+    display:flex;flex:0 0 auto;align-items:center;justify-content:center;
+    width:38px;height:38px;background:#ffffff;border:1px solid #e4e4e7;
+    border-radius:11px;color:var(--texto);cursor:pointer;
+  }
+  .hamb:hover{background:#f4f4f5}
+  /* La fila suelta de Inicio/Ajustes: solo la hamburguesa, sin título
+     nuevo (pedido del dueño, 22/09/2026: Inicio no lleva cabecera). En
+     el teléfono no ocupa nada — adentro solo hay un botón display:none. */
+  .fila-hamb{margin-bottom:12px}
+  /* Vender: agrupa la hamburguesa y la marca del título en un solo bloque
+     para que el justify-content:space-between del <header> no los separe
+     a los extremos (el mismo recurso que .cabecera-venta usa con
+     .volver-cabecera). */
+  .cab-izq{display:flex;align-items:center;gap:14px}
 }
 
 /* ---------- el menú hamburguesa del teléfono (dueño, 23/09/2026) ----------
