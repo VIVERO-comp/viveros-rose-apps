@@ -1036,3 +1036,49 @@ def test_la_pantalla_de_exito_tambien_baja_con_target_blank_y_download(
             assert 'rel="noopener"' in enlace
             assert "download" in enlace
     assert encontrado, "no se encontró el botón de la factura en la pantalla de éxito"
+
+
+# --- El botón «Compartir» (28/09/2026): mismo nombre, oculto por defecto --
+
+def _tag_con(pagina, buscar):
+    """El tag HTML completo que contiene `buscar` en alguno de sus
+    atributos: desde el '<' que lo abre hasta el primer '>' que lo cierra."""
+    pos = pagina.index(buscar)
+    inicio = pagina.rindex("<", 0, pos)
+    fin = pagina.index(">", pos)
+    return pagina[inicio:fin + 1]
+
+
+def test_la_factura_tiene_boton_compartir_oculto_con_su_nombre(cliente_venta, odoo):
+    """Junto a «Factura» va «Compartir»: mismo archivo, mismo nombre que
+    calcula Python, oculto hasta que compartir.js confirme que el
+    navegador sabe compartir archivos."""
+    _agregar(cliente_venta, 501)
+    r = cliente_venta.post("/venta/pagar", data={"cliente": "María"},
+                           follow_redirects=False)
+    n = r.headers["location"].rsplit("/", 1)[1]
+    cliente_venta.post(f"/venta/cobrar/{n}", data={"metodo": "yappy"})
+    registro = ventas.obtener_venta(int(n))
+    esperado = ventas.nombre_de_pdf(
+        (registro["factura"] or str(n)).replace("/", "-"), registro["cliente"])
+    pagina = cliente_venta.get("/venta").text
+    tag = _tag_con(pagina, f'data-compartir="/venta/{n}/factura.pdf"')
+    assert "hidden" in tag
+    assert f'data-nombre="{esperado}"' in tag
+
+
+def test_la_pantalla_de_exito_tambien_tiene_boton_compartir(cliente_venta, odoo):
+    """El botón grande de "Venta cobrada" gana su «Compartir» secundario
+    (nunca un segundo botón dorado): mismo `pdf_href`, mismo nombre."""
+    _agregar(cliente_venta, 501)
+    r = cliente_venta.post("/venta/pagar", data={"cliente": "María"},
+                           follow_redirects=False)
+    n = r.headers["location"].rsplit("/", 1)[1]
+    pagina = cliente_venta.post(f"/venta/cobrar/{n}", data={"metodo": "yappy"}).text
+    registro = ventas.obtener_venta(int(n))
+    esperado = ventas.nombre_de_pdf(
+        (registro["factura"] or str(n)).replace("/", "-"), registro["cliente"])
+    tag = _tag_con(pagina, f'data-compartir="/venta/{n}/factura.pdf"')
+    assert "hidden" in tag
+    assert f'data-nombre="{esperado}"' in tag
+    assert "btn-dorado" not in tag  # secundario: el primario sigue siendo Descargar

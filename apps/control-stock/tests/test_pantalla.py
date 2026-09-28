@@ -118,6 +118,37 @@ def test_datos_json_lleva_precio_y_foto(cliente, con_inventario, monkeypatch):
     assert "$0.00" not in r.text
 
 
+# ---------------------------------------------------------------------------
+# El botón «Compartir» de la foto (28/09/2026): el nombre lo calcula
+# Python — "el-nombre-de-la-planta.jpg" — y el botón nace oculto en el
+# HTML; el navegador (compartir.js) decide si lo destapa.
+# ---------------------------------------------------------------------------
+
+def test_datos_json_lleva_nombre_de_foto_para_compartir(cliente, con_inventario, monkeypatch):
+    from app import fotos
+
+    base = "https://res.cloudinary.com/demo123/image/upload"
+    monkeypatch.setattr(fotos, "info_foto", lambda sku, hash_subido=None: (
+        {"img": f"{base}/f_auto/productos/PL-IXORA/abc111",
+         "grande": f"{base}/c_limit/productos/PL-IXORA/abc111",
+         "descarga": f"{base}/fl_attachment:PL-IXORA/productos/PL-IXORA/abc111"}
+        if sku == "PL-IXORA" else None))
+    r = cliente.get("/?tab=stock")
+    assert r.status_code == 200
+    # "Ixora Roja" slugificado: sin acentos, en minúscula, un solo guion.
+    assert '"nombreCompartir": "ixora-roja.jpg"' in r.text
+    # Romero no tiene foto en este caso, pero de todos modos lleva su
+    # propio nombre listo (por si algún día la tiene sin recargar el JS).
+    assert '"nombreCompartir": "romero.jpg"' in r.text
+
+
+def test_el_boton_compartir_de_la_foto_nace_oculto(cliente, con_inventario):
+    r = cliente.get("/?tab=stock")
+    assert 'id="btn-compartir-foto"' in r.text
+    trozo = r.text.split('id="btn-compartir-foto"', 1)[1].split(">", 1)[0]
+    assert "hidden" in trozo
+
+
 def test_sin_odoo_configurado_no_hay_respaldo_de_foto(cliente, con_inventario, monkeypatch):
     from app import fotos
 

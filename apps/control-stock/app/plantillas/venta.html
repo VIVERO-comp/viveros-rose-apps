@@ -112,8 +112,14 @@
           </form>
         {% elif v.estado == "vendida" %}
           {# Sin Facturar/Reintentar: esta orden no sigue el pipeline local
-             de cobro. El pago se registra en el kanban de Odoo. #}
-          <a href="/venta/{{ v.n }}/cotizacion.pdf">Descargar orden (PDF)</a>
+             de cobro. El pago se registra en el kanban de Odoo.
+             target="_blank" + download (28/09/2026, la misma regla de
+             Factura de aquí abajo): a esta le faltaba, y es el mismo PDF
+             que atrapa en el celular si se abre en la pantalla actual. #}
+          <a href="/venta/{{ v.n }}/cotizacion.pdf" target="_blank" rel="noopener" download>Descargar orden (PDF)</a>
+          <button type="button" class="enlace-sub" hidden
+                  data-compartir="/venta/{{ v.n }}/cotizacion.pdf"
+                  data-nombre="{{ v.nombre_cotizacion_pdf }}">Compartir</button>
         {% elif v.estado == "pagado" %}
           {# REGLA NUEVA (Abraham, 28/09/2026), que reemplaza la del
              22/09/2026: antes el PDF NO abría pestaña nueva para no dejar
@@ -125,6 +131,11 @@
              nombre que puso el servidor) Y `target="_blank"` lo hace en
              otra pestaña, así la app nunca queda tapada. #}
           <a href="/venta/{{ v.n }}/factura.pdf" target="_blank" rel="noopener" download>Factura</a>
+          {# Compartir (Abraham, 28/09/2026): nace oculto, lo muestra
+             compartir.js solo si el navegador sabe compartir ARCHIVOS. #}
+          <button type="button" class="enlace-sub" hidden
+                  data-compartir="/venta/{{ v.n }}/factura.pdf"
+                  data-nombre="{{ v.nombre_factura_pdf }}">Compartir</button>
           {% if v.whatsapp %}
           <a class="enlace-sub" href="{{ v.whatsapp }}" target="_blank" rel="noopener">Mandar factura</a>
           {% endif %}
@@ -154,7 +165,16 @@
       {% else %}<span class="badge b-bajo">Cotización</span>{% endif %}
     </div>
     <div class="venta-acciones">
-      <span><a href="/venta/servicio/{{ c.n }}/propuesta.pdf" target="_blank" rel="noopener" download>Descargar propuesta (PDF)</a>{% if c.editable %}
+      <span><a href="/venta/servicio/{{ c.n }}/propuesta.pdf" target="_blank" rel="noopener" download>Descargar propuesta (PDF)</a>
+        {# Compartir (Abraham, 28/09/2026): el "·" va DENTRO del mismo
+           `hidden` que el botón — si fuera un separador suelto, se vería
+           un punto colgando en los navegadores que no saben compartir
+           archivos. compartir.js quita el `hidden` de los dos juntos. #}
+        <span hidden data-compartir="/venta/servicio/{{ c.n }}/propuesta.pdf"
+              data-nombre="{{ c.nombre_pdf }}">
+          · <button type="button" class="enlace-sub">Compartir</button>
+        </span>
+        {% if c.editable %}
         · <a href="/venta/servicio/{{ c.n }}/editar">Editar</a>{% endif %}</span>
       <span class="venta-monto">{{ c.total | dinero }}</span>
     </div>

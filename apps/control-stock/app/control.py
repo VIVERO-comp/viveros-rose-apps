@@ -827,19 +827,22 @@ def _cotizacion_de(lead, buscar_cotizacion=""):
     return {
         "ok": not fallos,
         "error": fallos[0] if fallos else "",
-        "ordenes": _con_edicion(ordenes.get("ordenes") or []),
+        "ordenes": _con_edicion(ordenes.get("ordenes") or [], lead.get("nombre") or ""),
         "plata": plata if plata.get("hay_real") else None,
         "candidatas": candidatas.get("candidatas") or [],
         "buscar": buscar_cotizacion,
     }
 
 
-def _con_edicion(ordenes):
-    """Cada orden conectada, con su badge de cobro y, si nació como
-    cotización de SERVICIO en Vender y todavía es editable ahí (ni
-    facturada ni cancelada), el `n` de su registro local para el enlace
-    «Editar» (`/venta/servicio/{n}/editar`) — nunca se inventa edición
-    para una orden que no nació en Vender.
+def _con_edicion(ordenes, cliente=""):
+    """Cada orden conectada, con su badge de cobro, el nombre del PDF
+    (mismo cálculo que arma `/control/cotizacion/{id}.pdf`, para que el
+    botón «Compartir» comparta con el nombre EXACTO que va a bajar —
+    28/09/2026) y, si nació como cotización de SERVICIO en Vender y
+    todavía es editable ahí (ni facturada ni cancelada), el `n` de su
+    registro local para el enlace «Editar»
+    (`/venta/servicio/{n}/editar`) — nunca se inventa edición para una
+    orden que no nació en Vender.
 
     Cruza por `orden_id` contra `cotizaciones.cotizaciones_todas()` (el
     registro local, solo lectura — esta app nunca escribe ahí desde
@@ -864,7 +867,9 @@ def _con_edicion(ordenes):
         badge = _BADGES_ETAPA_COBRO.get(o.get("etapa_cobro"), _BADGE_SIN_COBRO)
         n_local = locales.get(o["orden_id"])
         editar_n = n_local if (n_local is not None and o["orden_id"] in editables) else None
-        resultado.append({**o, "badge": badge, "editar_n": editar_n})
+        nombre_pdf = ventas.nombre_de_pdf((o.get("nombre") or str(o["orden_id"])).replace("/", "-"),
+                                          cliente)
+        resultado.append({**o, "badge": badge, "editar_n": editar_n, "nombre_pdf": nombre_pdf})
     return resultado
 
 
