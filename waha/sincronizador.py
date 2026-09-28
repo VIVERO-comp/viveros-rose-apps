@@ -464,18 +464,27 @@ def quiere_para(lead, tiene, disponibles):
 
     Vivo: lo decide Linear (`deseadas()`) — puede poner y puede quitar.
 
-    Cerrado (Ganado o Perdido, `lead["cerrado"]`): SOLO resta, nunca
-    agrega. La regla del dueno es literal: "mantener representante e
-    interes" es conservar lo que el chat YA tiene, no estrenar algo que
-    nunca tuvo. No existe una etiqueta "Perdido" ni "Ganado" en WhatsApp
-    (los 6 estados con etiqueta son los EN CURSO) y no se crea una — las
-    etiquetas nunca se crean solas.
+    Perdido (regla del dueno, 28/09/2026): el chat queda LIMPIO del todo —
+    representante, interes, estado y Responder se quitan los cuatro. Nada
+    de esto toca Linear ni Twenty: Resp:, interes y motivo se quedan
+    guardados ahi como estan: es solo el telefono el que se limpia. Si el
+    cliente vuelve a escribir, el lead revive a Hablando y en la pasada
+    siguiente `deseadas()` los vuelve a poner solos, leyendolos de Linear
+    (no hace falta nada especial aqui para eso).
+
+    Ganado (`lead["cerrado"]` y no Perdido): sigue la regla vieja, SOLO
+    resta y nunca agrega. "mantener representante e interes" es conservar
+    lo que el chat YA tiene, no estrenar algo que nunca tuvo. No existe una
+    etiqueta "Perdido" ni "Ganado" en WhatsApp (los 6 estados con etiqueta
+    son los EN CURSO) y no se crea una — las etiquetas nunca se crean solas.
 
         quedar = (lo que el chat tiene hoy) - (las 6 de estado) - (Responder)
 
     Si el chat no tiene nada, `quedar` sale vacio y no hay nada que quitar
     — no se manda un PUT que no cambia nada.
     """
+    if lead.get("estado") == "Perdido":
+        return [], []
     if lead.get("cerrado"):
         quiere = [t for t in tiene if t not in ESTADOS_CON_ETIQUETA and t != RESPONDER]
         return quiere, []
