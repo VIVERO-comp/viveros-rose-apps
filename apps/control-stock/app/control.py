@@ -36,7 +36,8 @@ import time
 import httpx
 from datetime import date, datetime, timedelta
 
-from . import agenda, avisos, calendario, cot_lead, cotizaciones, crm_twenty, linear_leads, resumen, ventas
+from . import (agenda, avisos, calendario, cot_lead, cotizaciones, crm_twenty,
+               linear_leads, mantenimiento, resumen, ventas)
 from .datos import ZONA_PANAMA, _db
 
 VISTAS = ("empleado", "estado")
@@ -777,6 +778,9 @@ def ficha(ref, buscar_cotizacion=""):
     sucesos, internas = separar_notas(linear_leads.comentarios(lead["id"]))
     abierta["notas"] = internas
     abierta["cot"] = _cotizacion_de(lead, buscar_cotizacion)
+    # El botón «Parar mantenimiento» (28/09/2026) solo aparece si el lead
+    # tiene una serie activa — mantenimiento.py es quien lo sabe.
+    abierta["mantenimiento_activo"] = mantenimiento.activo(lead["ref"])
 
     ficha_twenty = crm_twenty.ficha_de_lead(lead) or {}
     mensajes = ficha_twenty.get("mensajes") or []
@@ -1005,6 +1009,45 @@ def marcar_real_cotizacion(ref, orden_id, autor=""):
         return "", ventas._mensaje_de_error(fallo)
     aviso_avance, error = _avanzar_segun_sugerido(lead)
     return (aviso_avance or "Marcada como la real.", error)
+
+
+def quitar_real_cotizacion(ref, orden_id, autor=""):
+    """Le quita a esta orden la marca de «la real» — el lead se queda SIN
+    ninguna (no pasa a otra sola; para eso está «Marcar la real» en la que
+    corresponda). No toca el estado del embudo: quitar una marca no es una
+    noticia del negocio que avance o retroceda nada, igual que
+    desconectar. Deja un comentario firmado en el issue."""
+    lead = linear_leads.uno(ref)
+    if lead is None:
+        return "", "Ese lead ya no está en Linear."
+    orden_id = _orden_id(orden_id)
+    if orden_id is None:
+        return "", "Esa orden no es válida."
+    nombre_orden = _nombre_de_orden(lead, orden_id)
+    try:
+        cot_lead.quitar_real(orden_id)
+    except Exception as fallo:
+        return "", ventas._mensaje_de_error(fallo)
+    try:
+        linear_leads.comentar(
+            lead["id"], f"{nombre_orden} dejó de ser la real.", autor=autor)
+    except linear_leads.ErrorLeads as fallo:
+        return "Ya no es la real.", str(fallo)
+    return f"{nombre_orden} ya no es la real.", ""
+
+
+# ---------------------------------------------------------------------------
+# El mantenimiento mensual (28/09/2026): el botón «Parar mantenimiento» de
+# la ficha. Todo lo demás (arrancar la serie, crear la cita siguiente)
+# corre solo desde agenda.py al ganar y al marcar Hecha — acá solo el
+# apagado a mano, que es lo único que le toca a esta pantalla.
+# ---------------------------------------------------------------------------
+
+def parar_mantenimiento(ref, autor=""):
+    """Apaga la serie de mantenimiento mensual del lead: ver
+    `mantenimiento.parar`. Un envoltorio chico, para que la ruta de
+    main.py llame a `control.*` igual que las demás acciones de la ficha."""
+    return mantenimiento.parar(ref, autor=autor)
 
 
 # ---------------------------------------------------------------------------
