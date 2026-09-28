@@ -138,6 +138,16 @@ LABEL_TE_TOCA = "Te toca"
 # más abajo); el código nunca la crea.
 LABELS_SENAL = ("Seguimiento", "Importante", "Cliente potencial")
 
+# La segunda etiqueta que «Responder» prende junto a «Te toca» cuando se
+# enciende A MANO (28/09/2026, pedido de Abraham: "que no se vaya hasta
+# que responda"). El receptor del frontend NO quita «Te toca» con nuestra
+# respuesta mientras el issue tenga esta etiqueta puesta — así lo que un
+# empleado prende a mano solo lo apaga el mismo botón, nunca el próximo
+# mensaje saliente. Puede no existir todavía en Linear (Abraham la crea a
+# mano, como las señales): si no está en el catálogo, no se pone y no es
+# un error — el botón sigue prendiendo y apagando «Te toca» igual.
+LABEL_RESPONDER_A_MANO = "Responder a mano"
+
 # El prefijo del grupo Responsable. El responsable es `Resp: Abraham`, no
 # el assignee: sumar a alguien al equipo es crear su etiqueta en Linear,
 # sin tocar código (por eso la lista sale del catálogo y no está aquí).
@@ -287,6 +297,18 @@ def responsables():
         return catalogo()["responsables"]
     except ErrorLeads:
         return []
+
+
+def responder_a_mano_disponible():
+    """¿Ya existe «Responder a mano» en Linear (o en la muestra)? Mismo
+    candado que `senales_disponibles()`: si Abraham no la creó todavía,
+    no se pone y no es un error."""
+    if not configurado():
+        return _MUESTRA_RESPONDER_A_MANO_EXISTE
+    try:
+        return LABEL_RESPONDER_A_MANO in catalogo()["etiquetas"]
+    except ErrorLeads:
+        return False
 
 
 def senales_disponibles():
@@ -442,6 +464,20 @@ def _normalizar(issue):
 
 _lista_cache = {"en": 0, "dato": None}
 
+# La generación de la caché (28/09/2026): sube en cada `refrescar()`, o
+# sea en cada escritura de Control. `_buscar()` anota con qué generación
+# arrancó y, si cambió para cuando termina, TIRA lo que trajo en vez de
+# guardarlo — es una foto de ANTES de esa escritura.
+#
+# Sin esto: un refresco de fondo que arrancó ANTES de una escritura (lo
+# dispara el TTL de una pintada anterior) puede terminar DESPUÉS y
+# sobreescribir la caché con la foto vieja, pisando el cambio que se
+# acababa de hacer. La pantalla parecía no haber hecho nada hasta un
+# segundo clic — el bug de "hay que apretar el botón dos veces", y no
+# era solo de Responder: pasa con cualquier escritura (estado,
+# responsable, señales).
+_generacion = {"n": 0}
+
 
 def listar(refrescar=False):
     """Todos los leads del equipo LEAD, normalizados.
@@ -460,6 +496,7 @@ def listar(refrescar=False):
 
 
 def _buscar():
+    generacion = _generacion["n"]
     filas = []
     for issue in (_pedir(CONSULTA_LISTA).get("issues") or {}).get("nodes") or []:
         lead = _normalizar(issue)
@@ -467,14 +504,91 @@ def _buscar():
             continue  # Backlog, Duplicate y demás: no son del embudo
         filas.append(lead)
     filas.sort(key=lambda l: -l["dias"])  # el más viejo arriba: es el urgente
-    _lista_cache.update({"en": time.time(), "dato": filas})
+    if _generacion["n"] == generacion:
+        # Nadie escribió mientras esto viajaba: esta foto sigue vigente.
+        _lista_cache.update({"en": time.time(), "dato": filas})
+    # Si la generación cambió, `filas` es de antes del cambio: se
+    # devuelve igual (por si alguien la está esperando en el camino
+    # sincrónico), pero NO se guarda — guardarla pisaría lo escrito.
     return filas
 
 
 def refrescar():
-    """Olvida la lista: la próxima vista trae Linear fresco. Lo llama toda
-    escritura, para que la pantalla no cuente lo viejo por 60 segundos."""
-    _lista_cache.update({"en": 0, "dato": None})
+    """Marca la caché vencida y sube su generación. Lo llama toda
+    escritura, para que la próxima pintada reconcilie con Linear.
+
+    NO vacía `dato`: los `poner_*`/`mover_estado` ya parchean el lead que
+    tocaron (`_parchear_etiqueta`/`_parchear_estado`) antes de llamar
+    esto, así que lo que queda cacheado sigue sirviendo para todo lo
+    demás. Vaciar forzaría una consulta sincrónica a Linear en la
+    próxima pintada — justo lo que la generación de arriba ya vuelve
+    innecesario, y más lento.
+    """
+    _generacion["n"] += 1
+    _lista_cache["en"] = 0
+
+
+def _lead_en_cache(id_o_ref):
+    """El dict del lead TAL CUAL vive en la caché (el objeto, no una
+    copia) — para parchearlo in situ después de escribir en Linear. None
+    si la caché está fría o el lead no aparece ahí."""
+    for lead in _lista_cache["dato"] or []:
+        if lead["id"] == id_o_ref or lead["ref"] == id_o_ref:
+            return lead
+    return None
+
+
+def _campos_derivados(etiquetas):
+    """Los campos que `_normalizar()` deriva de la lista de etiquetas de
+    un issue (origen, interés, pago, motivo, responsable, «Te toca»),
+    recalculados desde el catálogo de grupos — mismo criterio, para que
+    un parche de la caché y una lectura fresca de Linear nunca se
+    contradigan."""
+    grupos = catalogo()["grupos"]
+
+    def una(grupo):
+        del_grupo = [n for n in etiquetas if n in (grupos.get(grupo) or [])]
+        return del_grupo[0] if del_grupo else ""
+
+    resp = una(GRUPO_RESPONSABLE)
+    motivo = una(GRUPO_MOTIVO)
+    return {
+        "origen": una(GRUPO_ORIGEN), "interes": una(GRUPO_INTERES),
+        "pago": una(GRUPO_PAGO), "motivo": motivo,
+        "motivo_clave": MOTIVO_POR_NOMBRE.get(motivo, ""),
+        "resp": resp[len(PREFIJO_RESP):] if resp.startswith(PREFIJO_RESP) else "",
+        "te_toca": LABEL_TE_TOCA in etiquetas,
+    }
+
+
+def _parchear_etiqueta(id_issue, nombre, puesta):
+    """Aplica a la caché, EN EL MOMENTO, un cambio de etiqueta que Linear
+    ya confirmó — para que la pintada de después de un clic muestre la
+    verdad al instante, sin esperar el refresco de fondo (que igual
+    reconcilia después, y ya no puede pisar esto: ver `refrescar()`)."""
+    lead = _lead_en_cache(id_issue)
+    if lead is None:
+        return
+    etiquetas = lead["etiquetas"]
+    if puesta and nombre not in etiquetas:
+        etiquetas.append(nombre)
+    if not puesta and nombre in etiquetas:
+        etiquetas.remove(nombre)
+    try:
+        lead.update(_campos_derivados(etiquetas))
+    except ErrorLeads:
+        pass  # la etiqueta ya quedó parcheada; los derivados los trae el refresco
+
+
+def _parchear_estado(id_issue, clave):
+    """Lo mismo que `_parchear_etiqueta`, para un cambio de columna que
+    Linear ya confirmó."""
+    lead = _lead_en_cache(id_issue)
+    if lead is None:
+        return
+    ficha = POR_CLAVE[clave]
+    lead.update({"estado": clave, "estado_nombre": ficha["nombre"],
+                "estado_ficha": ficha, "cerrado": clave in CERRADOS})
 
 
 def en_estado(clave, leads=None):
@@ -563,8 +677,11 @@ def poner_label(id_issue, nombre):
     if not label:
         return False
     datos = _pedir(MUTACION_PONER_LABEL, {"id": id_issue, "label": label})
+    exito = bool((datos.get("issueAddLabel") or {}).get("success"))
+    if exito:
+        _parchear_etiqueta(id_issue, nombre, puesta=True)
     refrescar()
-    return bool((datos.get("issueAddLabel") or {}).get("success"))
+    return exito
 
 
 def quitar_label(id_issue, nombre):
@@ -576,8 +693,11 @@ def quitar_label(id_issue, nombre):
     if not label:
         return False
     datos = _pedir(MUTACION_QUITAR_LABEL, {"id": id_issue, "label": label})
+    exito = bool((datos.get("issueRemoveLabel") or {}).get("success"))
+    if exito:
+        _parchear_etiqueta(id_issue, nombre, puesta=False)
     refrescar()
-    return bool((datos.get("issueRemoveLabel") or {}).get("success"))
+    return exito
 
 
 def poner_label_de_grupo(id_issue, grupo, nombre):
@@ -740,6 +860,7 @@ def mover_estado(id_issue, clave, manual=False, nota="", autor=""):
         datos = _pedir(MUTACION_ESTADO, {"id": id_issue, "estado": estado})
         if not (datos.get("issueUpdate") or {}).get("success"):
             raise ErrorLeads("Linear no pudo mover la tarjeta.")
+        _parchear_estado(id_issue, clave)
         refrescar()
 
     if manual:
@@ -785,6 +906,11 @@ _RESPONSABLES_MUESTRA = ("Abraham", "Mary", "Ruben", "Salomón")
 # las hubiera creado a mano) y una no — a propósito, para poder probar el
 # candado «si la etiqueta no existe, no hay botón» sin tocar Linear real.
 _MUESTRA_SENALES_EXISTENTES = {"Seguimiento", "Importante"}
+
+# En modo muestra, "Responder a mano" SÍ existe por defecto — el camino
+# feliz es el más común de probar; una prueba que necesite el camino sin
+# ella la apaga con monkeypatch.
+_MUESTRA_RESPONDER_A_MANO_EXISTE = True
 
 _MUESTRA_GRUPOS = {
     GRUPO_ORIGEN: ["WhatsApp", "plantaspanama.com", "viverorose.com",

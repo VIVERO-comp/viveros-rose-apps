@@ -496,7 +496,8 @@ def test_sin_claves_vapid_no_suena_nada():
 
 
 # ---------------------------------------------------------------------------
-# El interruptor «🔴 Responder» (25/09/2026)
+# El interruptor «🔴 Responder» (25/09/2026) — `prender` viaja explícito
+# desde el formulario (28/09/2026): nunca se recalcula acá.
 # ---------------------------------------------------------------------------
 
 def test_responder_prende_te_toca_lo_anota_y_sincroniza(monkeypatch):
@@ -504,7 +505,7 @@ def test_responder_prende_te_toca_lo_anota_y_sincroniza(monkeypatch):
     monkeypatch.setattr(control, "waha_activo", lambda: True)
     monkeypatch.setattr(control, "etiquetar_en_whatsapp",
                         lambda ref: pedidos.append(ref) or True)
-    aviso, error = control.alternar_responder("LEAD-90", autor="Ruben")
+    aviso, error = control.alternar_responder("LEAD-90", True, autor="Ruben")
     assert error == ""
     assert "prendido" in aviso
     lead = linear_leads.uno("LEAD-90")
@@ -518,7 +519,7 @@ def test_responder_se_apaga_y_tambien_queda_anotado(monkeypatch):
     monkeypatch.setattr(control, "waha_activo", lambda: False)
     lead = linear_leads.uno("LEAD-87")  # ya tiene Te toca en la muestra
     assert lead["te_toca"] is True
-    aviso, error = control.alternar_responder("LEAD-87", autor="Mary")
+    aviso, error = control.alternar_responder("LEAD-87", False, autor="Mary")
     assert error == ""
     assert "apagado" in aviso
     lead = linear_leads.uno("LEAD-87")
@@ -533,31 +534,101 @@ def test_responder_sin_waha_no_intenta_sincronizar(monkeypatch):
     llamado = []
     monkeypatch.setattr(control, "etiquetar_en_whatsapp",
                         lambda ref: llamado.append(ref) or True)
-    control.alternar_responder("LEAD-90")
+    control.alternar_responder("LEAD-90", True)
     assert llamado == []
 
 
 def test_responder_de_un_lead_que_no_existe():
-    aviso, error = control.alternar_responder("LEAD-999")
+    aviso, error = control.alternar_responder("LEAD-999", True)
     assert aviso == ""
     assert "ya no está en Linear" in error
 
 
+def test_responder_fija_el_estado_que_pide_el_boton_aunque_ya_este_asi(monkeypatch):
+    """El bug de "hay que apretar dos veces": antes se negaba una lectura
+    (`not lead["te_toca"]`), así que con una lectura vieja el primer clic
+    podía terminar pidiendo lo mismo que ya había. Fijar el estado del
+    formulario es idempotente — pedirlo dos veces con la misma intención
+    dos veces no rompe nada."""
+    linear_leads.poner_te_toca(linear_leads.uno("LEAD-90")["id"], True)
+    aviso, error = control.alternar_responder("LEAD-90", True, autor="Ruben")
+    assert error == ""
+    assert linear_leads.uno("LEAD-90")["te_toca"] is True
+    aviso, error = control.alternar_responder("LEAD-90", True, autor="Ruben")
+    assert error == ""
+    assert linear_leads.uno("LEAD-90")["te_toca"] is True
+
+
 def test_responder_desde_la_pantalla(cliente, de_dueno):
-    respuesta = cliente.post("/control/responder", params={"vista": "estado"},
-                             data={"ref": "LEAD-90"}, follow_redirects=False)
+    respuesta = cliente.post(
+        "/control/responder", params={"vista": "estado"},
+        data={"ref": "LEAD-90", "prender": "1"}, follow_redirects=False)
     assert respuesta.status_code == 303
     assert "aviso=" in respuesta.headers["location"]
     assert linear_leads.uno("LEAD-90")["te_toca"] is True
 
 
 def test_responder_no_lo_puede_un_empleado_de_otro(cliente):
-    respuesta = cliente.post("/control/responder",
-                             data={"ref": "LEAD-89"},  # Resp: Mary
-                             follow_redirects=False)
+    respuesta = cliente.post(
+        "/control/responder",
+        data={"ref": "LEAD-89", "prender": "1"},  # Resp: Mary
+        follow_redirects=False)
     assert respuesta.status_code == 303
     assert "error=" in respuesta.headers["location"]
     assert linear_leads.uno("LEAD-89")["te_toca"] is False
+
+
+# ---------------------------------------------------------------------------
+# «Responder a mano» (28/09/2026): la segunda etiqueta que Responder
+# prende junto a «Te toca», para que nuestra respuesta no lo apague solo.
+# ---------------------------------------------------------------------------
+
+def test_prender_pone_te_toca_y_responder_a_mano():
+    lead = linear_leads.uno("LEAD-90")
+    aviso, error = control.alternar_responder("LEAD-90", True, autor="Ruben")
+    assert error == ""
+    etiquetas = linear_leads.uno("LEAD-90")["etiquetas"]
+    assert "Te toca" in etiquetas
+    assert "Responder a mano" in etiquetas
+
+
+def test_apagar_quita_las_dos():
+    lead = linear_leads.uno("LEAD-90")
+    control.alternar_responder("LEAD-90", True, autor="Ruben")
+    aviso, error = control.alternar_responder("LEAD-90", False, autor="Ruben")
+    assert error == ""
+    etiquetas = linear_leads.uno("LEAD-90")["etiquetas"]
+    assert "Te toca" not in etiquetas
+    assert "Responder a mano" not in etiquetas
+
+
+def test_sin_la_etiqueta_en_el_catalogo_prende_igual_y_lo_avisa(monkeypatch):
+    monkeypatch.setattr(linear_leads, "responder_a_mano_disponible", lambda: False)
+    aviso, error = control.alternar_responder("LEAD-90", True, autor="Ruben")
+    assert error == ""
+    lead = linear_leads.uno("LEAD-90")
+    assert lead["te_toca"] is True
+    assert "Responder a mano" not in lead["etiquetas"]
+    # No se intentó crear ni poner: no hay ningún aviso de "no existe" en
+    # el log (eso solo lo escribe `_label_id` si de verdad se llamó).
+    assert "nuestra respuesta lo va a apagar" in aviso
+
+
+def test_el_orden_es_te_toca_primero_al_prender_y_al_reves_al_apagar(monkeypatch):
+    orden = []
+    original_suelta = linear_leads.poner_etiqueta_suelta
+
+    def espia(id_issue, nombre, prendida):
+        orden.append((nombre, prendida))
+        return original_suelta(id_issue, nombre, prendida)
+
+    monkeypatch.setattr(linear_leads, "poner_etiqueta_suelta", espia)
+    control.alternar_responder("LEAD-90", True, autor="Ruben")
+    control.alternar_responder("LEAD-90", False, autor="Ruben")
+    assert orden == [
+        ("Te toca", True), ("Responder a mano", True),
+        ("Responder a mano", False), ("Te toca", False),
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -565,11 +636,11 @@ def test_responder_no_lo_puede_un_empleado_de_otro(cliente):
 # ---------------------------------------------------------------------------
 
 def test_senal_disponible_se_prende_y_se_apaga():
-    aviso, error = control.alternar_senal("LEAD-90", "Seguimiento", autor="Mary")
+    aviso, error = control.alternar_senal("LEAD-90", "Seguimiento", True, autor="Mary")
     assert error == ""
     assert "puesta" in aviso
     assert "Seguimiento" in linear_leads.uno("LEAD-90")["etiquetas"]
-    aviso, error = control.alternar_senal("LEAD-90", "Seguimiento", autor="Mary")
+    aviso, error = control.alternar_senal("LEAD-90", "Seguimiento", False, autor="Mary")
     assert error == ""
     assert "quitada" in aviso
     assert "Seguimiento" not in linear_leads.uno("LEAD-90")["etiquetas"]
@@ -579,7 +650,8 @@ def test_una_senal_sin_etiqueta_en_linear_no_hace_nada():
     # "Cliente potencial" no existe en el catálogo de muestra a propósito:
     # el botón no debería haber aparecido, y si el POST llega igual, acá
     # no se crea nada ni se avisa un error.
-    aviso, error = control.alternar_senal("LEAD-90", "Cliente potencial", autor="Mary")
+    aviso, error = control.alternar_senal(
+        "LEAD-90", "Cliente potencial", True, autor="Mary")
     assert aviso == "" and error == ""
     assert "Cliente potencial" not in linear_leads.uno("LEAD-90")["etiquetas"]
 
@@ -589,17 +661,26 @@ def test_las_senales_no_piden_sincronizacion_de_whatsapp(monkeypatch):
     pedidos = []
     monkeypatch.setattr(control, "etiquetar_en_whatsapp",
                         lambda ref: pedidos.append(ref) or True)
-    control.alternar_senal("LEAD-90", "Seguimiento", autor="Mary")
-    control.alternar_senal("LEAD-90", "Importante", autor="Mary")
+    control.alternar_senal("LEAD-90", "Seguimiento", True, autor="Mary")
+    control.alternar_senal("LEAD-90", "Importante", True, autor="Mary")
     assert pedidos == []
 
 
 def test_las_senales_no_dejan_comentario_en_el_issue():
     lead = linear_leads.uno("LEAD-90")
     antes = len(linear_leads.comentarios(lead["id"]))
-    control.alternar_senal("LEAD-90", "Seguimiento", autor="Mary")
+    control.alternar_senal("LEAD-90", "Seguimiento", True, autor="Mary")
     despues = len(linear_leads.comentarios(lead["id"]))
     assert despues == antes
+
+
+def test_senal_fija_el_estado_que_pide_el_boton():
+    linear_leads.poner_etiqueta_suelta(
+        linear_leads.uno("LEAD-90")["id"], "Seguimiento", True)
+    aviso, error = control.alternar_senal("LEAD-90", "Seguimiento", True, autor="Mary")
+    assert error == ""
+    assert "puesta" in aviso
+    assert "Seguimiento" in linear_leads.uno("LEAD-90")["etiquetas"]
 
 
 def test_la_ficha_trae_solo_las_senales_disponibles_con_su_estado():
@@ -614,9 +695,10 @@ def test_la_ficha_trae_solo_las_senales_disponibles_con_su_estado():
 
 
 def test_senal_desde_la_pantalla(cliente, de_dueno):
-    respuesta = cliente.post("/control/senal", params={"vista": "estado"},
-                             data={"ref": "LEAD-90", "nombre": "Seguimiento"},
-                             follow_redirects=False)
+    respuesta = cliente.post(
+        "/control/senal", params={"vista": "estado"},
+        data={"ref": "LEAD-90", "nombre": "Seguimiento", "prender": "1"},
+        follow_redirects=False)
     assert respuesta.status_code == 303
     assert "Seguimiento" in linear_leads.uno("LEAD-90")["etiquetas"]
 
@@ -624,9 +706,10 @@ def test_senal_desde_la_pantalla(cliente, de_dueno):
 def test_una_senal_a_mano_por_una_etiqueta_inexistente_no_crea_nada(cliente, de_dueno):
     # El candado no es solo del navegador: un POST a mano con un nombre que
     # no está en el catálogo tampoco toca el issue.
-    respuesta = cliente.post("/control/senal", params={"vista": "estado"},
-                             data={"ref": "LEAD-90", "nombre": "Cliente potencial"},
-                             follow_redirects=False)
+    respuesta = cliente.post(
+        "/control/senal", params={"vista": "estado"},
+        data={"ref": "LEAD-90", "nombre": "Cliente potencial", "prender": "1"},
+        follow_redirects=False)
     assert respuesta.status_code == 303
     assert "Cliente potencial" not in linear_leads.uno("LEAD-90")["etiquetas"]
 

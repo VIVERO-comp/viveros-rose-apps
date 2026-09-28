@@ -178,8 +178,13 @@
     <a class="btn oro" href="{{ abierta.wa }}" target="_blank" rel="noopener">💬 WhatsApp</a>
     {% endif %}
     {% if puede_tocar_abierta %}
+    {# `prender` viaja con lo que ESTE botón pinta ahora mismo (28/09/2026):
+       nunca se recalcula en el servidor a partir de una lectura, que puede
+       venir de una caché vieja — esa negación era el bug de "hay que
+       apretar dos veces". #}
     <form method="post" action="/control/responder?vista={{ vista }}">
       <input type="hidden" name="ref" value="{{ abierta.ref }}">
+      <input type="hidden" name="prender" value="{{ '0' if abierta.te_toca else '1' }}">
       <button class="btn{{ ' peligro' if abierta.te_toca }}" type="submit"
               data-guardando="…">
         {% if abierta.te_toca %}🔴 Responder · apagalo{% else %}Prender 🔴 Responder{% endif %}
@@ -189,6 +194,7 @@
     <form method="post" action="/control/senal?vista={{ vista }}">
       <input type="hidden" name="ref" value="{{ abierta.ref }}">
       <input type="hidden" name="nombre" value="{{ s.nombre }}">
+      <input type="hidden" name="prender" value="{{ '0' if s.prendida else '1' }}">
       <button class="btn{{ ' peligro' if s.prendida }}" type="submit"
               data-guardando="…">{{ s.nombre }}{{ ' ✓' if s.prendida }}</button>
     </form>

@@ -9,7 +9,7 @@ assignee, una sola etiqueta por grupo, y que las etiquetas no se creen.
 
 import pytest
 
-from app import linear_leads
+from app import calendario, linear_leads
 
 
 @pytest.fixture(autouse=True)
@@ -375,3 +375,108 @@ def test_el_estado_se_reconoce_por_el_nombre_de_la_columna():
         {"state": {"name": "Por agendar", "type": "started"}}) == "POR_AGENDAR"
     assert linear_leads._estado_de(
         {"state": {"name": "Backlog", "type": "backlog"}}) == ""
+
+
+# ---------------------------------------------------------------------------
+# La caché de la lista, en modo real (no la muestra: no usa `_lista_cache`):
+# una generación por escritura, para que un refresco en vuelo no pise lo
+# que se acaba de escribir (28/09/2026, el bug de "hay que apretar el
+# botón dos veces").
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def con_linear_real(monkeypatch):
+    """El modo "escritura" con un catálogo mínimo y un lead ya cacheado —
+    el harness que necesitan las pruebas de la caché real. `_en_fondo` se
+    neutraliza para que ningún hilo de fondo real corra durante la prueba
+    con el `_pedir` fingido (que no sobrevive al monkeypatch)."""
+    monkeypatch.setenv("LINEAR_API_KEY", "clave-de-prueba")
+    monkeypatch.setenv("CALENDARIO_ESCRITURA", "1")
+    monkeypatch.setattr(calendario, "_en_fondo", lambda clave, tarea: None)
+    linear_leads._catalogo_cache.update({
+        "en": 9e9, "dato": {
+            "equipo": "eq", "estados": {}, "grupos": {},
+            "etiquetas": {"Te toca": "lbl-te-toca"}, "responsables": []}})
+    lead = {
+        "id": "i1", "ref": "LEAD-1", "etiquetas": [], "te_toca": False,
+        "estado": "HABLANDO", "resp": "", "origen": "", "interes": "",
+        "pago": "", "motivo": "", "motivo_clave": "", "dias": 0,
+    }
+    linear_leads._lista_cache.update({"en": 9e9, "dato": [lead]})
+    yield lead
+
+
+def test_prender_llama_a_linear_una_vez_y_el_segundo_clic_no_repite(
+        con_linear_real, monkeypatch):
+    llamadas = []
+
+    def falso_pedir(consulta, variables=None):
+        llamadas.append(consulta)
+        return {"issueAddLabel": {"success": True}}
+
+    monkeypatch.setattr(linear_leads, "_pedir", falso_pedir)
+    assert linear_leads.poner_te_toca("i1", True) is True
+    assert linear_leads.poner_te_toca("i1", True) is True  # la misma intención, otra vez
+    assert len(llamadas) == 1  # la segunda ya lo vio puesto: no vuelve a escribir
+    assert linear_leads.uno("LEAD-1")["te_toca"] is True
+
+
+def test_con_lectura_vieja_un_clic_deja_el_estado_que_pide_el_boton():
+    """Antes, `control.alternar_responder` negaba `lead["te_toca"]` de una
+    lectura que podía venir de una caché de hasta 60 s: si entre que la
+    pantalla se pintó y el clic esa lectura cambiaba, el primer clic hacía
+    lo CONTRARIO de lo que el botón prometía (el segundo ya acertaba).
+
+    Acá se simula justo eso: el botón se pintó con `te_toca=False`
+    ("Prender"), y ANTES del clic el lead cambió por otro lado — pero como
+    ahora la intención viaja explícita desde el formulario, el clic sigue
+    haciendo lo que el botón decía, sin importar la lectura de ahora.
+    """
+    from app import control
+    lead = linear_leads.uno("LEAD-90")
+    assert lead["te_toca"] is False  # lo que la pantalla pintó: "Prender"
+    linear_leads.poner_te_toca(lead["id"], True)  # cambió por otro lado
+    assert linear_leads.uno("LEAD-90")["te_toca"] is True
+
+    aviso, error = control.alternar_responder("LEAD-90", True, autor="Ruben")
+    assert error == ""
+    assert linear_leads.uno("LEAD-90")["te_toca"] is True
+
+
+def test_un_buscar_en_vuelo_no_pisa_una_escritura_mas_reciente(
+        con_linear_real, monkeypatch):
+    """El bug de fondo: un `_buscar()` que arrancó ANTES de una escritura
+    puede terminar DESPUÉS — sin la generación, pisaba la caché con la
+    foto de antes del cambio."""
+    def falso_pedir(consulta, variables=None):
+        if "mutation" in consulta:
+            return {"issueAddLabel": {"success": True}}
+        # La consulta de la lista está "en vuelo": mientras tarda, alguien
+        # más escribe — a propósito, para simular que la escritura terminó
+        # DESPUÉS de que este refresco arrancara.
+        linear_leads.poner_te_toca("i1", True)
+        return {"issues": {"nodes": [{
+            "id": "i1", "identifier": "LEAD-1", "title": "X (PP-1)", "url": "",
+            "createdAt": "", "updatedAt": "",
+            "state": {"id": "s1", "name": "Hablando", "type": "started"},
+            "labels": {"nodes": []},
+        }]}}
+
+    monkeypatch.setattr(linear_leads, "_pedir", falso_pedir)
+    linear_leads._buscar()
+    # La foto que trajo el refresco en vuelo no tenía "Te toca" (es de
+    # antes del cambio) — pero cambió la generación en el medio, así que
+    # NO se guardó: lo que queda es lo que la escritura dejó.
+    parcheado = next(l for l in linear_leads._lista_cache["dato"] if l["id"] == "i1")
+    assert parcheado["te_toca"] is True
+
+
+def test_la_primera_pintada_ya_muestra_prendido_sin_esperar_el_ttl(
+        con_linear_real, monkeypatch):
+    monkeypatch.setattr(
+        linear_leads, "_pedir",
+        lambda consulta, variables=None: {"issueAddLabel": {"success": True}})
+    linear_leads.poner_te_toca("i1", True)
+    # `listar()`/`uno()` no esperan ningún refresco: lo que devuelven YA
+    # trae el cambio, porque `poner_te_toca` lo parcheó en el momento.
+    assert linear_leads.uno("LEAD-1")["te_toca"] is True

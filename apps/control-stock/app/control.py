@@ -486,27 +486,55 @@ def escribir_nota(ref, texto, autor=""):
 # suelta del issue—, con Responder como primer caso y su propio botón
 # destacado. Solo Responder (la etiqueta «Te toca») sale al chat de
 # WhatsApp; las tres señales son internas y ninguna manda nada al cliente.
+#
+# La INTENCIÓN viaja en el formulario (28/09/2026): el botón manda
+# `prender=1`/`prender=0` según lo que él mismo pintó, y estas funciones
+# FIJAN ese estado — nunca lo niegan a partir de una lectura. Negarlo
+# (`not lead["te_toca"]`) era el bug de "hay que apretar dos veces": la
+# lectura podía venir de una caché de hasta 60 s, y con la caché vieja el
+# primer clic hacía lo CONTRARIO de lo que el botón prometía (ponía una
+# etiqueta que ya estaba, o quitaba una que no estaba) sin que la pantalla
+# cambiara. Fijar el estado es idempotente: da igual la lectura, apretar
+# dos veces seguidas con la misma intención no deshace nada.
 # ---------------------------------------------------------------------------
 
-def alternar_responder(ref, autor=""):
+def alternar_responder(ref, prender, autor=""):
     """Prende o apaga «Te toca» a mano: el botón 🔴 Responder de la ficha.
 
-    Queda anotado en el issue quién lo cambió (un comentario firmado, corto,
-    en el estilo de `mover_a_estado`) y, si WAHA ya anda, se pide la
-    sincronización inmediata al chat en vez de esperar los 2 minutos del
-    sincronizador. Nunca manda nada al cliente: esto solo cambia una
-    etiqueta, no manda WhatsApp saliente.
+    Prender pone, ADEMÁS, «Responder a mano» (28/09/2026, pedido de
+    Abraham: "que no se vaya hasta que responda") — si Abraham ya la creó
+    en Linear, con el mismo candado que las señales: si no existe, no se
+    pone y no es un error, el botón sigue prendiendo y apagando «Te toca»
+    igual. Con ella puesta, el receptor del frontend no apaga «Te toca»
+    con nuestra respuesta: lo que un empleado prende a mano solo lo apaga
+    el mismo botón, nunca el próximo mensaje saliente.
 
-    Apagarlo a mano no evita que vuelva: si el cliente escribe, el receptor
-    del frontend la pone otra vez — eso ya funciona, aquí no hay que
-    tocarlo.
+    El orden importa para no dejar un estado a medias: al prender, primero
+    «Te toca» (la señal que todo lo demás — el sincronizador de WhatsApp,
+    el aviso al celular — ya entiende) y recién después «Responder a
+    mano»; al apagar, al revés, para que «Responder a mano» nunca
+    sobreviva sin «Te toca».
+
+    Queda anotado en el issue quién lo cambió (un comentario firmado, corto)
+    y, si WAHA ya anda, se pide la sincronización inmediata al chat en vez
+    de esperar los 2 minutos del sincronizador. Nunca manda nada al
+    cliente: esto solo cambia etiquetas, no manda WhatsApp saliente.
     """
     lead = linear_leads.uno(ref)
     if lead is None:
         return "", "Ese lead ya no está en Linear."
-    prender = not lead.get("te_toca")
+    hay_responder_a_mano = linear_leads.responder_a_mano_disponible()
     try:
-        linear_leads.poner_te_toca(lead["id"], prender)
+        if prender:
+            linear_leads.poner_te_toca(lead["id"], True)
+            if hay_responder_a_mano:
+                linear_leads.poner_etiqueta_suelta(
+                    lead["id"], linear_leads.LABEL_RESPONDER_A_MANO, True)
+        else:
+            if hay_responder_a_mano:
+                linear_leads.poner_etiqueta_suelta(
+                    lead["id"], linear_leads.LABEL_RESPONDER_A_MANO, False)
+            linear_leads.poner_te_toca(lead["id"], False)
         linear_leads.comentar(
             lead["id"],
             "🔴 Responder " + ("prendido" if prender else "apagado") + ".",
@@ -516,15 +544,20 @@ def alternar_responder(ref, autor=""):
     linear_leads.refrescar()
     if waha_activo():
         etiquetar_en_whatsapp(lead["ref"])
-    return (f"{lead['nombre']}: Responder "
-            + ("prendido." if prender else "apagado."), "")
+    aviso = (f"{lead['nombre']}: Responder "
+            + ("prendido." if prender else "apagado."))
+    if prender and not hay_responder_a_mano:
+        aviso += (" Ojo: como «Responder a mano» todavía no existe en "
+                  "Linear, nuestra respuesta lo va a apagar igual que "
+                  "siempre.")
+    return aviso, ""
 
 
-def alternar_senal(ref, nombre, autor=""):
+def alternar_senal(ref, nombre, prender, autor=""):
     """Prende o apaga una señal suelta (Seguimiento, Importante, Cliente
-    potencial): el mismo interruptor que Responder, pero sin comentario en
-    el issue y sin tocar WhatsApp — son internas, y `etiquetar_en_whatsapp`
-    nunca se llama para ellas.
+    potencial) A LO QUE PIDE EL FORMULARIO — mismo criterio que
+    `alternar_responder`. Sin comentario en el issue y sin tocar WhatsApp:
+    son internas, y `etiquetar_en_whatsapp` nunca se llama para ellas.
 
     El candado no es solo del navegador: si el botón no debería haber
     aparecido (la etiqueta todavía no existe en Linear) y el POST llegó
@@ -538,7 +571,6 @@ def alternar_senal(ref, nombre, autor=""):
             f"Se pidió la señal «{nombre}» para {ref}, pero esa etiqueta no "
             f"existe en Linear: no se tocó nada.")
         return "", ""
-    prender = nombre not in lead["etiquetas"]
     try:
         linear_leads.poner_etiqueta_suelta(lead["id"], nombre, prender)
     except linear_leads.ErrorLeads as fallo:

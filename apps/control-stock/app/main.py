@@ -2324,14 +2324,20 @@ async def control_nota(request: Request):
 @app.post("/control/responder")
 async def control_responder(request: Request):
     """El interruptor 🔴 Responder de la ficha: prende o apaga «Te toca» a
-    mano, deja el comentario firmado y pide la sincronización a WhatsApp."""
+    mano, deja el comentario firmado y pide la sincronización a WhatsApp.
+
+    `prender` viaja en el formulario con lo que el BOTÓN pintaba (nunca se
+    recalcula acá): así la acción es idempotente aunque la lectura del
+    servidor esté un poco vieja — el bug de "hay que apretar dos veces".
+    """
     form = await request.form()
     ref = form.get("ref", "")
     _alc, vista, error = _control_permiso(request, ref)
     if error:
         return _control_vuelve(vista, error=error, abrir=ref)
     autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
-    aviso, error = control.alternar_responder(ref, autor=autor)
+    aviso, error = control.alternar_responder(
+        ref, form.get("prender") == "1", autor=autor)
     return _control_vuelve(vista, aviso=aviso, error=error, abrir=ref)
 
 
@@ -2339,14 +2345,16 @@ async def control_responder(request: Request):
 async def control_senal(request: Request):
     """Una señal suelta del panel (Seguimiento, Importante, Cliente
     potencial): el mismo interruptor que Responder, pero interna — sin
-    comentario en el issue y sin tocar WhatsApp."""
+    comentario en el issue y sin tocar WhatsApp. Mismo `prender` explícito
+    del formulario, por la misma razón."""
     form = await request.form()
     ref, nombre = form.get("ref", ""), form.get("nombre", "")
     _alc, vista, error = _control_permiso(request, ref)
     if error:
         return _control_vuelve(vista, error=error, abrir=ref)
     autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
-    aviso, error = control.alternar_senal(ref, nombre, autor=autor)
+    aviso, error = control.alternar_senal(
+        ref, nombre, form.get("prender") == "1", autor=autor)
     return _control_vuelve(vista, aviso=aviso, error=error, abrir=ref)
 
 
