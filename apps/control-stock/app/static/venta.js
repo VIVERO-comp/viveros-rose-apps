@@ -110,6 +110,8 @@ function sincronizarCliente() {
     // perderían. Se recorren TODOS los .dato-cliente de la página, no solo
     // los del bloque Cliente: los cargos viven en su propia sección.
     for (const campo of document.querySelectorAll(".dato-cliente")) {
+      // Los radios de la opción de envío: solo viaja el marcado.
+      if (campo.type === "radio" && !campo.checked) continue;
       datos.append(campo.name, campo.value);
     }
     if (contenedorServicios) {
@@ -174,13 +176,40 @@ if (leadCrm) {
    imprimir el PDF. Lo inicial lo pinta el servidor (con el borrador); el
    monto que manda es el que confirma Odoo al crear la orden. */
 const desglose = document.getElementById("desglose");
+
+/* El envío en vivo espeja a ventas.resolver_envio del servidor (que es
+   quien decide de verdad al generar): la opción marcada pone su precio,
+   el monto escrito manda, «Sin envío» cobra 0 aunque haya monto. */
+function envioEnVivo() {
+  const marcado = document.querySelector('input[name="envio_opcion"]:checked');
+  const campo = document.querySelector('.dato-cliente[name="envio"]');
+  const escrito = campo ? Math.max(parseFloat(campo.value) || 0, 0) : 0;
+  if (!marcado) return { monto: escrito, nombre: "Envío a domicilio" };
+  if (!marcado.value) return { monto: 0, nombre: "Envío a domicilio" };
+  if (marcado.value === "personalizado") {
+    const nota = document.querySelector('.dato-cliente[name="envio_nota"]');
+    const texto = nota && nota.value.trim();
+    return { monto: escrito, nombre: texto ? "Envío · " + texto : "Envío a domicilio" };
+  }
+  const precio = parseFloat(marcado.dataset.precio) || 0;
+  return { monto: escrito > 0 ? escrito : precio,
+           nombre: marcado.dataset.nombre || "Envío a domicilio" };
+}
+
 function pintarDesglose() {
   if (!desglose) return;
   let total = parseFloat(desglose.dataset.plantas) || 0;
   for (const clave of ["envio", "instalacion"]) {
-    const campo = document.querySelector(`.dato-cliente[name="${clave}"]`);
     const fila = document.getElementById("linea-" + clave);
-    const monto = campo ? Math.max(parseFloat(campo.value) || 0, 0) : 0;
+    let monto;
+    if (clave === "envio") {
+      const envio = envioEnVivo();
+      monto = envio.monto;
+      if (fila) fila.querySelector("span").textContent = envio.nombre;
+    } else {
+      const campo = document.querySelector(`.dato-cliente[name="${clave}"]`);
+      monto = campo ? Math.max(parseFloat(campo.value) || 0, 0) : 0;
+    }
     if (fila) {
       fila.style.display = monto > 0 ? "" : "none";
       fila.querySelector("b").textContent = "$" + monto.toFixed(2);
@@ -191,9 +220,13 @@ function pintarDesglose() {
   if (totalFinal) totalFinal.textContent = "$" + total.toFixed(2);
 }
 if (desglose) {
-  for (const clave of ["envio", "instalacion"]) {
-    const campo = document.querySelector(`.dato-cliente[name="${clave}"]`);
-    if (campo) campo.addEventListener("input", pintarDesglose);
+  const campos = ['.dato-cliente[name="envio"]', '.dato-cliente[name="instalacion"]',
+                  '.dato-cliente[name="envio_nota"]', 'input[name="envio_opcion"]'];
+  for (const selector of campos) {
+    for (const campo of document.querySelectorAll(selector)) {
+      campo.addEventListener("input", pintarDesglose);
+      if (campo.type === "radio") campo.addEventListener("change", pintarDesglose);
+    }
   }
 }
 

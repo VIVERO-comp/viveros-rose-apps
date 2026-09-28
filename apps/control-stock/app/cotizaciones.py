@@ -1059,6 +1059,14 @@ def cargar_para_editar(n):
             if producto and producto.get("default_code") in ventas.CODIGOS_CARGO:
                 clave = ventas.CODIGOS_CARGO[producto["default_code"]]
                 cargos[clave] = _numero_form(linea.get("price_unit") or 0)
+                if clave == "envio":
+                    # La opción elegida vuelve a su casilla del formulario
+                    # leyéndola del nombre de la línea («Envío · Carro ·
+                    # Ciudad de Panamá»); lo que no calza se edita como
+                    # Personalizado.
+                    (cargos["envio_opcion"],
+                     cargos["envio_nota"]) = ventas.opcion_de_linea_envio(
+                        linea.get("name"))
                 ultimo = None
                 continue
             if producto and producto.get("type") != "service":

@@ -211,7 +211,7 @@
         {% for cargo in cargos_catalogo %}
         <div class="linea-total" id="linea-{{ cargo.clave }}"
              {% if not cargos_montos[cargo.clave] %}style="display:none"{% endif %}>
-          <span>{{ cargo.nombre }}</span><b>{{ cargos_montos[cargo.clave] | dinero }}</b></div>
+          <span>{{ nombre_linea_envio(cargos_montos) if cargo.clave == 'envio' else cargo.nombre }}</span><b>{{ cargos_montos[cargo.clave] | dinero }}</b></div>
         {% endfor %}
         <div class="linea-total total-final"><span>Total</span><b id="total-final">{{ total_con_cargos | dinero }}</b></div>
       </div>

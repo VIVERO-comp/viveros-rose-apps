@@ -551,6 +551,11 @@ nav button.on, nav a.on{color:var(--dorado);background:rgba(24,24,27,.06)}
 .campos-cliente .campo input[readonly]{color:var(--texto-suave)}
 .nota-campo{display:block;font-size:10.5px;color:var(--texto-suave);margin-top:4px}
 .nota-cliente{font-size:11px;color:var(--texto-suave);margin:7px 2px 0}
+/* Las opciones de envio de Vender (28/09/2026): radios apilados, cada
+   uno con su precio en el rotulo. */
+.opciones-envio{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.opcion-envio{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
+.opcion-envio input{accent-color:var(--dorado, #b8860b);margin:0;flex-shrink:0}
 .planta-boton{width:100%;border:none;font-family:inherit;text-align:left}
 .agregar-venta{
   width:38px;height:38px;border-radius:12px;flex-shrink:0;

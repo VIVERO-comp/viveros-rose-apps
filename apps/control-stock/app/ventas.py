@@ -30,7 +30,7 @@ import time
 import xmlrpc.client
 from datetime import datetime
 
-from .datos import ZONA_PANAMA, _db
+from .datos import ZONA_PANAMA, _db, config_valores
 from . import crm_leads
 
 # Estados del registro local, en orden. Cada uno es un paso YA logrado en
@@ -151,6 +151,115 @@ CODIGOS_CARGO["SV-INSTALACION"] = "instalacion"
 _cache_cargos = {}
 
 
+# ---------------------------------------------------------------------------
+# Opciones de envío al cotizar en Vender (dueño, 28/09/2026): el empleado
+# elige UNA —vehículo y zona— con su precio ya puesto, o Personalizado con
+# monto y nota a mano (más de 30 minutos no tiene opción fija). Los precios
+# se editan en Ajustes (tabla config, claves envio_precio_*) para
+# cambiarlos sin desplegar; el de fábrica solo aplica si nadie los tocó.
+# «Camioneta» se dice así en pantalla y en el PDF —«Camioneta (pick up)» en
+# el formulario— para que nadie crea que es el cliente recogiendo.
+# La línea de Odoo (y el PDF) sale «Envío · Carro · Ciudad de Panamá»,
+# siempre sobre el mismo producto SV-ENVIO con los impuestos que ya tenga.
+# ---------------------------------------------------------------------------
+
+OPCIONES_ENVIO = (
+    {"clave": "carro_ciudad", "vehiculo": "Carro",
+     "vehiculo_pantalla": "Carro", "zona": "Ciudad de Panamá",
+     "tiempo": "hasta 15 min", "precio_fabrica": 10.0},
+    {"clave": "carro_fuera", "vehiculo": "Carro",
+     "vehiculo_pantalla": "Carro", "zona": "Fuera de la ciudad",
+     "tiempo": "16 a 30 min", "precio_fabrica": 25.0},
+    {"clave": "camioneta_ciudad", "vehiculo": "Camioneta",
+     "vehiculo_pantalla": "Camioneta (pick up)", "zona": "Ciudad de Panamá",
+     "tiempo": "hasta 15 min", "precio_fabrica": 25.0},
+    {"clave": "camioneta_fuera", "vehiculo": "Camioneta",
+     "vehiculo_pantalla": "Camioneta (pick up)", "zona": "Fuera de la ciudad",
+     "tiempo": "16 a 30 min", "precio_fabrica": 45.0},
+)
+PREFIJO_PRECIO_ENVIO = "envio_precio_"
+
+
+def precios_envio():
+    """{clave: precio} de las 4 opciones fijas: lo guardado en Ajustes o,
+    si nadie lo cambió (o el valor guardado no sirve), el de fábrica."""
+    guardados = config_valores(PREFIJO_PRECIO_ENVIO)
+    precios = {}
+    for opcion in OPCIONES_ENVIO:
+        try:
+            precio = float(guardados.get(opcion["clave"]) or 0)
+        except (TypeError, ValueError):
+            precio = 0.0
+        precios[opcion["clave"]] = precio if precio > 0 else opcion["precio_fabrica"]
+    return precios
+
+
+def opcion_envio(clave):
+    for opcion in OPCIONES_ENVIO:
+        if opcion["clave"] == clave:
+            return opcion
+    return None
+
+
+def _monto_escrito(form):
+    crudo = str(form.get("envio") or "").strip().replace(",", ".")
+    try:
+        return max(float(crudo), 0.0) if crudo else 0.0
+    except ValueError:
+        return 0.0
+
+
+def resolver_envio(form):
+    """El envío que va a cobrarse, a partir del formulario: la opción
+    elegida con su precio de Ajustes —salvo que el empleado haya escrito
+    otro monto, que entonces manda— o Personalizado con monto y nota.
+    «Sin envío» (la opción por defecto) cobra 0 aunque el campo de monto
+    traiga algo escrito. Un formulario SIN envio_opcion es de antes del
+    cambio (o un borrador viejo): el monto suelto sigue mandando, como
+    siempre."""
+    if "envio_opcion" not in form:
+        return {"envio": _monto_escrito(form)}
+    eleccion = str(form.get("envio_opcion") or "").strip()
+    escrito = _monto_escrito(form)
+    if eleccion == "personalizado":
+        nota = str(form.get("envio_nota") or "").strip()[:120]
+        return {"envio": escrito, "envio_opcion": "personalizado",
+                "envio_nota": nota}
+    if not opcion_envio(eleccion):
+        # Sin envío, o un valor que no existe: no se cobra nada.
+        return {"envio": 0.0, "envio_opcion": "", "envio_nota": ""}
+    monto = escrito if escrito > 0 else precios_envio()[eleccion]
+    return {"envio": monto, "envio_opcion": eleccion, "envio_nota": ""}
+
+
+def nombre_linea_envio(cargos):
+    """El rótulo de la línea de envío en Odoo y el PDF: «Envío · Carro ·
+    Ciudad de Panamá», o «Envío · <nota>» en el personalizado. Sin opción
+    (cotizaciones de antes del cambio) queda el de siempre."""
+    eleccion = str((cargos or {}).get("envio_opcion") or "")
+    opcion = opcion_envio(eleccion)
+    if opcion:
+        return f"Envío · {opcion['vehiculo']} · {opcion['zona']}"
+    nota = str((cargos or {}).get("envio_nota") or "").strip()
+    if eleccion == "personalizado" and nota:
+        return "Envío · " + nota
+    return "Envío a domicilio"
+
+
+def opcion_de_linea_envio(nombre):
+    """(opción, nota) desde el nombre de la línea de envío de una
+    cotización ya hecha, para que al editarla la elección vuelva a su
+    casilla. Lo que no calza con ninguna opción fija se edita como
+    Personalizado (con la nota si el nombre la trae)."""
+    nombre = str(nombre or "").strip()
+    for opcion in OPCIONES_ENVIO:
+        if nombre == f"Envío · {opcion['vehiculo']} · {opcion['zona']}":
+            return opcion["clave"], ""
+    if nombre.startswith("Envío · "):
+        return "personalizado", nombre[len("Envío · "):]
+    return "personalizado", ""
+
+
 def _id_producto_cargo(codigo, nombre):
     if codigo in _cache_cargos:
         return _cache_cargos[codigo]
@@ -198,11 +307,13 @@ def lineas_de_cargos(cargos):
                 "product_id": _id_producto_cargo(cargo["codigo"], cargo["nombre"]),
                 "product_uom_qty": 1,
                 "price_unit": round(monto, 2),
-                # El nombre pelado ("Envío a domicilio", "Instalación") y
-                # no la descripción de venta del producto, que en Odoo
-                # promete "preparación de suelo, siembra…": el rótulo no
-                # debe prometer lo que el cargo no es (rótulos honestos).
-                "name": cargo["nombre"],
+                # El nombre pelado ("Instalación") y no la descripción
+                # de venta del producto, que en Odoo promete "preparación
+                # de suelo, siembra…": el rótulo no debe prometer lo que el
+                # cargo no es (rótulos honestos). El envío lleva su opción
+                # elegida: «Envío · Carro · Ciudad de Panamá».
+                "name": (nombre_linea_envio(cargos)
+                         if cargo["clave"] == "envio" else cargo["nombre"]),
             })
             parrafo = descripcion_de_cargo(cargo["clave"], cargos)
             if parrafo:
@@ -693,7 +804,10 @@ CAMPOS_CLIENTE = ("ruc", "cedula", "correo", "direccion")
 # también tienen que sobrevivir a los reloads de agregar/quitar plantas.
 CAMPOS_EXTRA = (CAMPOS_CLIENTE
                 + tuple(c["clave"] for c in CARGOS)
-                + tuple(c["clave"] + "_desc" for c in CARGOS))
+                + tuple(c["clave"] + "_desc" for c in CARGOS)
+                # La opción de envío elegida y la nota del personalizado
+                # sobreviven a los reloads igual que los montos.
+                + ("envio_opcion", "envio_nota"))
 
 
 def valores_de_cliente(datos):
