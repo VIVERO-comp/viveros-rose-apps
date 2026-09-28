@@ -36,7 +36,8 @@ import time
 import httpx
 from datetime import date, datetime, timedelta
 
-from . import agenda, avisos, calendario, cot_lead, cotizaciones, crm_twenty, linear_leads, resumen, ventas
+from . import (agenda, avisos, calendario, cot_lead, cotizaciones, crm_twenty,
+               linear_leads, mantenimiento, resumen, ventas)
 from .datos import ZONA_PANAMA, _db
 
 VISTAS = ("empleado", "estado")
@@ -777,6 +778,9 @@ def ficha(ref, buscar_cotizacion=""):
     sucesos, internas = separar_notas(linear_leads.comentarios(lead["id"]))
     abierta["notas"] = internas
     abierta["cot"] = _cotizacion_de(lead, buscar_cotizacion)
+    # El botón «Parar mantenimiento» (28/09/2026) solo aparece si el lead
+    # tiene una serie activa — mantenimiento.py es quien lo sabe.
+    abierta["mantenimiento_activo"] = mantenimiento.activo(lead["ref"])
 
     ficha_twenty = crm_twenty.ficha_de_lead(lead) or {}
     mensajes = ficha_twenty.get("mensajes") or []
@@ -1000,6 +1004,20 @@ def marcar_real_cotizacion(ref, orden_id, autor=""):
         return "", ventas._mensaje_de_error(fallo)
     aviso_avance, error = _avanzar_segun_sugerido(lead)
     return (aviso_avance or "Marcada como la real.", error)
+
+
+# ---------------------------------------------------------------------------
+# El mantenimiento mensual (28/09/2026): el botón «Parar mantenimiento» de
+# la ficha. Todo lo demás (arrancar la serie, crear la cita siguiente)
+# corre solo desde agenda.py al ganar y al marcar Hecha — acá solo el
+# apagado a mano, que es lo único que le toca a esta pantalla.
+# ---------------------------------------------------------------------------
+
+def parar_mantenimiento(ref, autor=""):
+    """Apaga la serie de mantenimiento mensual del lead: ver
+    `mantenimiento.parar`. Un envoltorio chico, para que la ruta de
+    main.py llame a `control.*` igual que las demás acciones de la ficha."""
+    return mantenimiento.parar(ref, autor=autor)
 
 
 # ---------------------------------------------------------------------------
