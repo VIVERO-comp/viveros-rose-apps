@@ -132,9 +132,13 @@ main{position:relative;z-index:1;flex:1;overflow-y:auto;padding:6px 20px 110px}
    arriba de main (que es el contenedor que scrollea) con el mismo fondo
    difuminado del nav inferior, para que las tarjetas pasen por debajo. */
 .stock-top{
-  position:sticky;top:0;z-index:30;
-  /* margin-top -6px anula el padding-top de main para quedar al ras del
-     borde: sin esa franja no se ve la lista pasar por encima del buscador */
+  /* El sticky se ancla al borde del CONTENIDO de main, 6px abajo de su
+     borde (el padding-top de main): con top:0 quedaba ese hueco de 6px por
+     donde se colaban las tarjetas al hacer scroll. top:-6px lo sube al ras. */
+  position:sticky;top:-6px;z-index:30;
+  /* margin-top -6px solo arregla la posición INICIAL en el flujo (antes de
+     engancharse); no toca dónde queda anclado una vez sticky, que lo decide
+     el top de arriba */
   margin:-6px -20px 0;padding:12px 20px 8px;
   /* Fondo sólido: con el traslúcido se veían pasar las tarjetas por
      detrás y parecía que la barra no estaba pegada. */
