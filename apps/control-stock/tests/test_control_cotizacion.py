@@ -397,3 +397,30 @@ def test_el_badge_de_cobro_muestra_el_texto_correcto(odoo):
     conectada = ficha["cot"]["ordenes"][0]
     assert conectada["badge"]["texto"] == "Abono 50%"
     assert conectada["badge"]["clase"] == "b-critico"
+
+
+# ---------------------------------------------------------------------------
+# El PDF conectado baja con nombre orden+cliente, pestaña nueva y descarga
+# (28/09/2026)
+# ---------------------------------------------------------------------------
+
+def test_el_pdf_conectado_baja_con_target_blank_download_y_cliente(
+        cliente, de_dueno, odoo):
+    import urllib.parse
+
+    lead, partner = _lead_y_partner(odoo, "LEAD-85")  # Diego Armando
+    odoo.agregar_orden(partner, "S00500", amount_total=10.0,
+                       lead_ref=lead["pp"], lead_real=True)
+    pagina = cliente.get("/control", params={"abrir": "LEAD-85"}).text
+    encontrado = False
+    for trozo in pagina.split("<a ")[1:]:
+        enlace = trozo.split(">")[0]
+        if "/control/cotizacion/" in enlace and ".pdf" in enlace:
+            encontrado = True
+            assert 'target="_blank"' in enlace
+            assert 'rel="noopener"' in enlace
+            assert "download" in enlace
+            href = enlace.split('href="', 1)[1].split('"', 1)[0]
+            parametros = urllib.parse.parse_qs(urllib.parse.urlparse(href).query)
+            assert parametros["cliente"][0] == lead["nombre"]
+    assert encontrado, "no se encontró el enlace del PDF conectado"

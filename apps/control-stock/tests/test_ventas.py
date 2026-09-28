@@ -958,3 +958,74 @@ def test_los_precios_de_envio_solo_los_toca_un_admin(cliente_venta, monkeypatch)
         follow_redirects=False)
     assert r.status_code == 403
     assert ventas.precios_envio()["carro_ciudad"] == 10.0
+
+
+# --- El nombre del archivo del PDF (28/09/2026: orden + cliente) -----------
+#
+# Abraham, en el celular: los botones de PDF abrían el visor en la misma
+# pantalla y no había cómo volver. La regla nueva es bajar Y abrir en
+# pestaña nueva a la vez (ver tests/test_descarga_pdf.py); esto de acá es
+# solo el nombre del archivo que le llega al teléfono.
+
+def test_nombre_de_pdf_con_acentos_y_espacios():
+    assert ventas.nombre_de_pdf("S00092", "José Núñez") == "S00092-jose-nunez.pdf"
+
+
+def test_nombre_de_pdf_con_varios_espacios_y_puntuacion():
+    assert ventas.nombre_de_pdf("S00050", "  Salomón   Kortovich, S.A. ") == \
+        "S00050-salomon-kortovich-s-a.pdf"
+
+
+def test_nombre_de_pdf_sin_cliente_es_solo_la_orden():
+    assert ventas.nombre_de_pdf("S00092", "") == "S00092.pdf"
+    assert ventas.nombre_de_pdf("S00092", None) == "S00092.pdf"
+
+
+def test_nombre_de_pdf_con_cliente_de_puros_simbolos_cae_a_la_orden():
+    # Ni una letra ni un número: el mismo camino que un cliente vacío, sin
+    # dejar un nombre con un guion colgando (ej. "S00092-.pdf").
+    assert ventas.nombre_de_pdf("S00092", ":") == "S00092.pdf"
+    assert ventas.nombre_de_pdf("S00092", "🤍") == "S00092.pdf"
+    assert ventas.nombre_de_pdf("S00092", "***") == "S00092.pdf"
+
+
+def test_la_factura_baja_con_target_blank_y_download(cliente_venta, odoo):
+    """El botón «Factura» de una venta pagada: la regla nueva del
+    28/09/2026 (revierte la del 22/09/2026) es bajar Y abrir en pestaña
+    nueva a la vez, para que la app nunca quede tapada en el celular."""
+    _agregar(cliente_venta, 501)
+    r = cliente_venta.post("/venta/pagar", data={"cliente": "María"},
+                           follow_redirects=False)
+    n = r.headers["location"].rsplit("/", 1)[1]
+    cliente_venta.post(f"/venta/cobrar/{n}", data={"metodo": "yappy"})
+    pagina = cliente_venta.get("/venta").text
+    encontrado = False
+    for trozo in pagina.split("<a ")[1:]:
+        enlace = trozo.split(">")[0]
+        if f"/venta/{n}/factura.pdf" in enlace:
+            encontrado = True
+            assert 'target="_blank"' in enlace
+            assert 'rel="noopener"' in enlace
+            assert "download" in enlace
+    assert encontrado, "no se encontró el enlace de la factura"
+
+
+def test_la_pantalla_de_exito_tambien_baja_con_target_blank_y_download(
+        cliente_venta, odoo):
+    """El botón grande de "Venta cobrada" (venta_exito.html) usa `pdf_href`:
+    misma regla del 28/09/2026 que el enlace de Factura en /venta."""
+    _agregar(cliente_venta, 501)
+    r = cliente_venta.post("/venta/pagar", data={"cliente": "María"},
+                           follow_redirects=False)
+    n = r.headers["location"].rsplit("/", 1)[1]
+    pagina = cliente_venta.post(f"/venta/cobrar/{n}", data={"metodo": "yappy"}).text
+    assert "Venta cobrada" in pagina
+    encontrado = False
+    for trozo in pagina.split("<a ")[1:]:
+        enlace = trozo.split(">")[0]
+        if f"/venta/{n}/factura.pdf" in enlace:
+            encontrado = True
+            assert 'target="_blank"' in enlace
+            assert 'rel="noopener"' in enlace
+            assert "download" in enlace
+    assert encontrado, "no se encontró el botón de la factura en la pantalla de éxito"

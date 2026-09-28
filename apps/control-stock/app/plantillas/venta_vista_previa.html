@@ -37,7 +37,10 @@
   </div>
   <p class="tenue previa-pie">
     ¿No se ve el documento?
-    <a href="/venta/vista-previa.pdf">Ábrelo aquí</a>.
+    {# Vista previa inline a propósito (no se toca la ruta): sin `download`,
+       pero con pestaña nueva para que esta pantalla, con su propio botón
+       de salida, no quede tapada (28/09/2026). #}
+    <a href="/venta/vista-previa.pdf" target="_blank" rel="noopener">Ábrelo aquí</a>.
   </p>
 </main>
 {% endblock %}

@@ -18,9 +18,15 @@
       {% endfor %}
     </div>
     <div class="botones-venta" style="margin-top:20px">
-      {# Sin target="_blank": el PDF baja con cabeceras de descarga sin salir
-         de esta pantalla (la pestaña nueva atrapaba en el celular). #}
-      <a class="btn btn-dorado btn-grande" href="{{ pdf_href }}">
+      {# REGLA NUEVA (Abraham, 28/09/2026), que reemplaza la del 22/09/2026:
+         antes se evitaba target="_blank" para no dejar una pestaña sin
+         salida en el celular, pero sin pestaña nueva el PDF tapaba esta
+         MISMA pantalla igual — peor si la app se abrió desde el ícono del
+         inicio, sin barra del navegador para volver. Ahora las dos a la
+         vez: `download` fuerza la descarga con el nombre que puso el
+         servidor, y `target="_blank"` la manda a otra pestaña, así esta
+         pantalla queda viva detrás. #}
+      <a class="btn btn-dorado btn-grande" href="{{ pdf_href }}" target="_blank" rel="noopener" download>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         {{ pdf_texto }}
       </a>

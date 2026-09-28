@@ -108,10 +108,16 @@
             <button type="submit" class="enlace-sub">Cancelar</button>
           </form>
         {% elif v.estado == "pagado" %}
-          {# Sin target="_blank" en los PDF: bajan con cabeceras de descarga
-             sin salir de la pantalla; la pestaña nueva era la "ventana sin
-             poder salir" del celular (Abraham, 22/09/2026). #}
-          <a href="/venta/{{ v.n }}/factura.pdf">Factura</a>
+          {# REGLA NUEVA (Abraham, 28/09/2026), que reemplaza la del
+             22/09/2026: antes el PDF NO abría pestaña nueva para no dejar
+             una "ventana sin poder salir" en el celular. Pero sin pestaña
+             nueva, el PDF se abría en la MISMA pantalla y ahí quedaba
+             trabado igual — sobre todo abriendo la app desde el ícono del
+             inicio, donde no hay barra del navegador para volver. Ahora
+             las dos cosas a la vez: `download` fuerza la descarga (con el
+             nombre que puso el servidor) Y `target="_blank"` lo hace en
+             otra pestaña, así la app nunca queda tapada. #}
+          <a href="/venta/{{ v.n }}/factura.pdf" target="_blank" rel="noopener" download>Factura</a>
           {% if v.whatsapp %}
           <a class="enlace-sub" href="{{ v.whatsapp }}" target="_blank" rel="noopener">Mandar factura</a>
           {% endif %}
@@ -141,7 +147,7 @@
       {% else %}<span class="badge b-bajo">Cotización</span>{% endif %}
     </div>
     <div class="venta-acciones">
-      <span><a href="/venta/servicio/{{ c.n }}/propuesta.pdf">Descargar propuesta (PDF)</a>{% if c.editable %}
+      <span><a href="/venta/servicio/{{ c.n }}/propuesta.pdf" target="_blank" rel="noopener" download>Descargar propuesta (PDF)</a>{% if c.editable %}
         · <a href="/venta/servicio/{{ c.n }}/editar">Editar</a>{% endif %}</span>
       <span class="venta-monto">{{ c.total | dinero }}</span>
     </div>

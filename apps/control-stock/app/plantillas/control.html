@@ -254,8 +254,8 @@
         </div>
         <div class="ficha-cot-monto">{{ o.total | dinero }}{% if o.pagado %} · pagó {{ o.pagado | dinero }}{% endif %}</div>
         <div class="ficha-cot-acciones">
-          <a href="/control/cotizacion/{{ o.orden_id }}.pdf?nombre={{ o.nombre | urlencode }}"
-             target="_blank" rel="noopener">PDF</a>
+          <a href="/control/cotizacion/{{ o.orden_id }}.pdf?nombre={{ o.nombre | urlencode }}&cliente={{ abierta.nombre | urlencode }}"
+             target="_blank" rel="noopener" download>PDF</a>
           {% if puede_tocar_abierta %}
           {% if o.editar_n %}<span class="sep">·</span><a href="/venta/servicio/{{ o.editar_n }}/editar">Editar</a>{% endif %}
           {% if not o.es_real %}
