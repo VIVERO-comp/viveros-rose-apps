@@ -200,7 +200,7 @@ input.campo:focus,textarea.campo:focus,select.sel:focus{border-color:var(--dorad
    negro debajo, centrado). Con inline-flex el círculo quedaba EN LA MISMA
    LÍNEA que el «Lun» y se encimaban (captura del dueño, 28/09/2026). */
 .carril-cab .col-hoy .dnum{
-  background:var(--texto);color:#fff;border-radius:999px;width:26px;height:26px;
+  background:var(--dorado);color:#fff;border-radius:999px;width:26px;height:26px;
   display:flex;align-items:center;justify-content:center;font-size:13px;margin:0 auto;
 }
 .carril-cuerpo{position:relative;min-height:0;overflow-y:auto}
