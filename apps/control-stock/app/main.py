@@ -23,7 +23,7 @@ from fastapi.templating import Jinja2Templates
 
 from . import (acceso_google, agenda, avisos, calculos, calendario,
                calendario_google, colores,
-               calendario_ics, conteos, control, cotizaciones,
+               calendario_ics, conteos, control, cot_lead, cotizaciones,
                coworkers, crm_twenty, datos, fichas, fotos,
                linear_leads, resumen, seguridad, ventas, wa_autor)
 
@@ -2199,7 +2199,8 @@ def control_pantalla(request: Request):
     # que ya estaba guardado.
     control.refrescar_espera_en_fondo(leads)
 
-    abierta = control.ficha(request.query_params.get("abrir", ""))
+    abierta = control.ficha(request.query_params.get("abrir", ""),
+                           request.query_params.get("buscar", ""))
     # El modal de la corrección manual: a un estado nuevo no se llega sin
     # motivo, así que el drag (y el botón) pasan por aquí.
     moviendo = None
@@ -2347,6 +2348,65 @@ async def control_senal(request: Request):
     autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
     aviso, error = control.alternar_senal(ref, nombre, autor=autor)
     return _control_vuelve(vista, aviso=aviso, error=error, abrir=ref)
+
+
+@app.post("/control/cotizacion/conectar")
+async def control_cotizacion_conectar(request: Request):
+    """Conecta una orden de Odoo (candidata o buscada por número) al lead:
+    avanza el embudo según lo que sugiera esa orden, nunca hacia atrás."""
+    form = await request.form()
+    ref = form.get("ref", "")
+    _alc, vista, error = _control_permiso(request, ref)
+    if error:
+        return _control_vuelve(vista, error=error, abrir=ref)
+    autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
+    aviso, error = control.conectar_cotizacion(
+        ref, form.get("orden_id", ""), autor=autor)
+    return _control_vuelve(vista, aviso=aviso, error=error, abrir=ref)
+
+
+@app.post("/control/cotizacion/desconectar")
+async def control_cotizacion_desconectar(request: Request):
+    """Quita una orden ya conectada. No toca el estado del embudo."""
+    form = await request.form()
+    ref = form.get("ref", "")
+    _alc, vista, error = _control_permiso(request, ref)
+    if error:
+        return _control_vuelve(vista, error=error, abrir=ref)
+    autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
+    aviso, error = control.desconectar_cotizacion(
+        ref, form.get("orden_id", ""), autor=autor)
+    return _control_vuelve(vista, aviso=aviso, error=error, abrir=ref)
+
+
+@app.post("/control/cotizacion/marcar-real")
+async def control_cotizacion_marcar_real(request: Request):
+    """Marca una orden ya conectada como LA real del lead (se la quita a
+    cualquier otra) y avanza el embudo con su plata, nunca hacia atrás."""
+    form = await request.form()
+    ref = form.get("ref", "")
+    _alc, vista, error = _control_permiso(request, ref)
+    if error:
+        return _control_vuelve(vista, error=error, abrir=ref)
+    autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
+    aviso, error = control.marcar_real_cotizacion(
+        ref, form.get("orden_id", ""), autor=autor)
+    return _control_vuelve(vista, aviso=aviso, error=error, abrir=ref)
+
+
+@app.get("/control/cotizacion/{orden_id}.pdf")
+def control_cotizacion_pdf(request: Request, orden_id: int, nombre: str = ""):
+    """El PDF nativo de Odoo de una orden conectada — mismo camino que
+    `/venta/{n}/cotizacion.pdf`, pero con el id de la orden de Odoo
+    directo (esto no vive en la tabla local de ventas)."""
+    try:
+        contenido = cot_lead.pdf_de_orden(orden_id)
+    except RuntimeError as error:
+        return RedirectResponse(
+            "/control?error=" + quote(str(error)), status_code=303)
+    archivo = f"cotizacion-{(nombre or str(orden_id)).replace('/', '-')}.pdf"
+    return Response(contenido, media_type="application/pdf",
+                    headers=cabeceras_descarga(archivo))
 
 
 # ---------------------------------------------------------------------------

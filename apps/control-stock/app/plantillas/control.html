@@ -169,10 +169,9 @@
     {% if abierta.motivo %}<span class="etq at">{{ abierta.motivo }}</span>{% endif %}
   </div>
 
-  {# --- Qué hago. Responder, las señales y Cotizar ya viven aquí
-         (28/09/2026); Adjuntar venta sigue reservado y apagado, para
-         cuando la cotización conectada llegue del lado de Odoo. Lo negro
-         sigue siendo solo abrir el chat: el resto son interruptores
+  {# --- Qué hago. Responder, las señales, Cotizar y (más abajo, junto a
+         "Cuánto es") Conectar cotización ya viven aquí (28/09/2026). Lo
+         negro sigue siendo solo abrir el chat: el resto son interruptores
          grises, incluido Cotizar (es un enlace, no toca el lead). --- #}
   <div class="acciones">
     {% if abierta.wa %}
@@ -208,16 +207,86 @@
        puesto. El camino ya existía para Retail (GET /venta?lead=...):
        deja el lead pendiente y redirige a /venta/nueva. #}
     <a class="btn" href="/venta?lead={{ abierta.ref | urlencode }}&cliente={{ abierta.nombre | urlencode }}&cel={{ abierta.celular | urlencode }}">Cotizar</a>
-    <button class="btn" type="button" disabled>Adjuntar venta</button>
   </div>
-  <p class="pie-nota" style="margin:-4px 0 0">Responder lo prende el mensaje
-    del cliente y lo apaga nuestra respuesta por WhatsApp — si lo apagás vos
-    y el cliente vuelve a escribir, se prende solo. Cotizar abre Vender con
-    el cliente ya puesto. Adjuntar venta (se va a llamar «Conectar
-    cotización») llega en la fase de Odoo.</p>
 
-  {# --- Cuánto es. El lugar de la cotización conectada, todavía vacío. --- #}
-  <div class="ficha-cot-vacia">Sin cotización conectada.</div>
+  {# --- Cuánto es: la cotización conectada (28/09/2026). Todo el dato sale
+         de cot_lead.py; acá solo se pinta lo que control.ficha() compuso
+         (abierta.cot). "No se pudo leer Odoo" nunca se confunde con "sin
+         cotización conectada": son cosas distintas. --- #}
+  {% set cot = abierta.cot %}
+  {% if not cot.ok %}
+  <div class="ficha-cot-vacia">No se pudo leer Odoo: {{ cot.error }}</div>
+  {% else %}
+
+    {% if cot.plata %}
+    <div class="ret-cotizs">
+      <div class="tenue ret-cotiz-titulo">La real · {{ cot.plata.orden }}</div>
+      <div class="dato"><b>Total</b><span>{{ cot.plata.total | dinero }}</span></div>
+      <div class="dato"><b>Abono 50%</b><span>{{ cot.plata.abono_50 | dinero }}</span></div>
+      <div class="dato"><b>Pagado</b><span>{{ cot.plata.pagado | dinero }}</span></div>
+      <div class="dato"><b>Saldo</b><span>{{ cot.plata.saldo | dinero }}</span></div>
+    </div>
+    {% endif %}
+
+    {% if cot.ordenes %}
+    <div class="ret-cotizs">
+      <div class="tenue ret-cotiz-titulo">Conectadas</div>
+      {% for o in cot.ordenes %}
+      <div class="crm-nota">
+        <small>{{ o.nombre }}{% if o.fecha %} · {{ o.fecha | fecha_bonita }}{% endif %}
+          · {{ o.total | dinero }} · {{ o.estado }} · pagó {{ o.pagado | dinero }}
+          {% if o.es_real %} · <b>LA REAL</b>{% endif %}</small>
+        <div class="acciones">
+          <a class="btn chico" href="/control/cotizacion/{{ o.orden_id }}.pdf?nombre={{ o.nombre | urlencode }}"
+             target="_blank" rel="noopener">PDF</a>
+          {% if puede_tocar_abierta %}
+          <form method="post" action="/control/cotizacion/desconectar?vista={{ vista }}">
+            <input type="hidden" name="ref" value="{{ abierta.ref }}">
+            <input type="hidden" name="orden_id" value="{{ o.orden_id }}">
+            <button class="btn chico" type="submit">Desconectar</button>
+          </form>
+          {% if not o.es_real %}
+          <form method="post" action="/control/cotizacion/marcar-real?vista={{ vista }}">
+            <input type="hidden" name="ref" value="{{ abierta.ref }}">
+            <input type="hidden" name="orden_id" value="{{ o.orden_id }}">
+            <button class="btn chico" type="submit">Marcar como la real</button>
+          </form>
+          {% endif %}
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="ficha-cot-vacia">Sin cotización conectada.</div>
+    {% endif %}
+
+    {% if puede_tocar_abierta %}
+    <div class="ret-cotizs">
+      <div class="tenue ret-cotiz-titulo">Conectar cotización</div>
+      <form method="get" action="/control" class="campo-caja" style="flex-direction:row;gap:6px">
+        <input type="hidden" name="vista" value="{{ vista }}">
+        <input type="hidden" name="abrir" value="{{ abierta.ref }}">
+        <input class="campo" type="text" name="buscar" value="{{ cot.buscar }}"
+               placeholder="Buscar por número, ej. S00089" maxlength="40" autocomplete="off">
+        <button class="btn chico" type="submit">Buscar</button>
+      </form>
+      {% for c in cot.candidatas %}
+      <div class="crm-nota">
+        <small>{{ c.nombre }} · {{ c.cliente }}{% if c.fecha %} · {{ c.fecha | fecha_bonita }}{% endif %}
+          · {{ c.total | dinero }}</small>
+        <form method="post" action="/control/cotizacion/conectar?vista={{ vista }}">
+          <input type="hidden" name="ref" value="{{ abierta.ref }}">
+          <input type="hidden" name="orden_id" value="{{ c.orden_id }}">
+          <button class="btn chico" type="submit">Conectar</button>
+        </form>
+      </div>
+      {% else %}
+      <p class="pie-nota" style="margin:4px 0 0">Sin candidatas por ahora.</p>
+      {% endfor %}
+    </div>
+    {% endif %}
+  {% endif %}
 
   {# --- Qué se dijo: el hilo. Cliente a la izquierda, equipo a la derecha
          con el nombre de quien respondió; los sucesos del sistema en lila,

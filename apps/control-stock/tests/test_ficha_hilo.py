@@ -12,7 +12,7 @@ Lo que se cuida aquí es lo que se rompe callado:
 
 import pytest
 
-from app import control, linear_leads
+from app import control, linear_leads, ventas
 
 
 @pytest.fixture(autouse=True)
@@ -230,13 +230,16 @@ def de_dueno(monkeypatch):
     monkeypatch.setenv("AJUSTES_ADMINS", "genesis")
 
 
-def test_el_panel_va_en_el_orden_de_c1(cliente, de_dueno):
+def test_el_panel_va_en_el_orden_de_c1(cliente, de_dueno, monkeypatch):
     """Cabecera, botones, cotización, conversación, notas y datos al final.
 
     El orden es la decisión de diseño del 25/09/2026 (C1): se mira de
     arriba abajo en el orden en que se usa, y los datos, que se consultan
-    y no se leen, quedan de último.
+    y no se leen, quedan de último. Con un Odoo fingido sin órdenes: así
+    "Sin cotización conectada" de verdad sale en pantalla (28/09/2026).
     """
+    from test_cot_lead import OdooCotLead
+    monkeypatch.setattr(ventas, "_ejecutar", OdooCotLead().ejecutar)
     cuerpo = cliente.get("/control", params={"abrir": "LEAD-91"}).text
     panel = cuerpo[cuerpo.index('class="panel-der"'):]
     orden = [panel.index(t) for t in (
@@ -258,14 +261,15 @@ def test_responder_ya_no_es_un_boton_de_mentira(cliente, de_dueno):
     assert 'action="/control/responder' in panel
 
 
-def test_adjuntar_venta_sigue_reservado_y_apagado(cliente, de_dueno):
-    """Lo construye otra tanda: aquí solo se guarda su lugar."""
+def test_conectar_cotizacion_ya_no_es_un_boton_de_mentira(cliente, de_dueno, monkeypatch):
+    """«Adjuntar venta» se renombró a «Conectar cotización» y quedó
+    cableado (28/09/2026): ya no hay ningún botón disabled con ese texto."""
+    from test_cot_lead import OdooCotLead
+    monkeypatch.setattr(ventas, "_ejecutar", OdooCotLead().ejecutar)
     cuerpo = cliente.get("/control", params={"abrir": "LEAD-91"}).text
     panel = cuerpo[cuerpo.index('class="panel-der"'):]
-    boton = "Adjuntar venta"
-    assert boton in panel
-    trozo = panel[panel.index(boton) - 90:panel.index(boton)]
-    assert "disabled" in trozo
+    assert "Adjuntar venta" not in panel
+    assert "Conectar cotización" in panel
 
 
 def test_cotizar_esta_disponible_siempre(cliente, de_dueno):

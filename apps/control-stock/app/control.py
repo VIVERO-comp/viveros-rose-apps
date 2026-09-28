@@ -36,7 +36,7 @@ import time
 import httpx
 from datetime import datetime, timedelta
 
-from . import agenda, avisos, calendario, crm_twenty, linear_leads, resumen
+from . import agenda, avisos, calendario, cot_lead, crm_twenty, linear_leads, resumen, ventas
 from .datos import ZONA_PANAMA, _db
 
 VISTAS = ("empleado", "estado")
@@ -703,11 +703,14 @@ def hilo(mensajes, sucesos=(), nombre_cliente=""):
     return bloques
 
 
-def ficha(ref):
-    """El lead con su conversación y sus notas, para el panel de la derecha.
+def ficha(ref, buscar_cotizacion=""):
+    """El lead con su conversación, sus notas y su cotización conectada,
+    para el panel de la derecha.
 
     El chat es un extra: si Twenty no contesta, el panel se pinta igual y
-    dice que no hay chat, en vez de quedarse en blanco.
+    dice que no hay chat, en vez de quedarse en blanco. Lo mismo con Odoo
+    (`_cotizacion_de`): "no se pudo leer Odoo" nunca se confunde con "sin
+    cotización conectada".
     """
     lead = linear_leads.uno(ref)
     if lead is None:
@@ -722,6 +725,7 @@ def ficha(ref):
         for n in linear_leads.LABELS_SENAL if n in disponibles]
     sucesos, internas = separar_notas(linear_leads.comentarios(lead["id"]))
     abierta["notas"] = internas
+    abierta["cot"] = _cotizacion_de(lead, buscar_cotizacion)
 
     ficha_twenty = crm_twenty.ficha_de_lead(lead) or {}
     mensajes = ficha_twenty.get("mensajes") or []
@@ -731,6 +735,171 @@ def ficha(ref):
     if not abierta.get("celular") and ficha_twenty.get("telefono"):
         abierta["celular"] = ficha_twenty["telefono"]
     return abierta
+
+
+# ---------------------------------------------------------------------------
+# La cotización conectada (28/09/2026, pedido de Abraham): qué órdenes de
+# Odoo están amarradas a este lead, cuál es la real, su plata, y las
+# candidatas para conectar una más. Todo el dato sale de `cot_lead.py`
+# (capa aparte, ya probada contra Odoo); acá solo se compone para la
+# pantalla y se cablea el avance del embudo.
+# ---------------------------------------------------------------------------
+
+def _cotizacion_de(lead, buscar_cotizacion=""):
+    """{"ok", "error", "ordenes", "plata", "candidatas", "buscar"} — todo
+    lo que el panel necesita sobre Odoo, en una sola composición.
+
+    Fail-soft con criterio: si CUALQUIERA de las tres consultas falló,
+    "ok" es False y "error" trae el primer motivo — la pantalla tiene que
+    poder decir "no se pudo leer Odoo" en vez de "sin cotización
+    conectada", que sería mentir.
+    """
+    ordenes = cot_lead.ordenes_del_lead(lead)
+    plata = cot_lead.plata_de_la_real(lead)
+    candidatas = cot_lead.candidatas_del_lead(lead, buscar_cotizacion)
+    fallos = [r["error"] for r in (ordenes, plata, candidatas) if not r["ok"]]
+    return {
+        "ok": not fallos,
+        "error": fallos[0] if fallos else "",
+        "ordenes": ordenes.get("ordenes") or [],
+        "plata": plata if plata.get("hay_real") else None,
+        "candidatas": candidatas.get("candidatas") or [],
+        "buscar": buscar_cotizacion,
+    }
+
+
+def _nombre_de_orden(lead, orden_id):
+    """El "S000xx" de una orden ya conectada, para nombrarla en el aviso y
+    en el comentario del issue. "#<id>" si por lo que sea no aparece (Odoo
+    no contestó al releer, por ejemplo) — nunca se inventa un nombre."""
+    resultado = cot_lead.ordenes_del_lead(lead)
+    for orden in resultado.get("ordenes") or []:
+        if orden["orden_id"] == orden_id:
+            return orden["nombre"] or f"#{orden_id}"
+    return f"#{orden_id}"
+
+
+def _avanzar_segun_sugerido(lead):
+    """Aplica al embudo lo que sugiera la orden real, vía
+    `cot_lead.estado_sugerido()`: sin pago -> Cotizado; con pago -> Por
+    agendar + su etiqueta. NUNCA hacia atrás — `mover_estado(manual=False)`
+    ya solo avanza, así que un lead más adelantado (Agendado, Entregado) se
+    queda donde está. Devuelve ("aviso", "error")."""
+    sugerido = cot_lead.estado_sugerido(lead)
+    if not sugerido["ok"]:
+        return "", f"No se pudo leer Odoo: {sugerido['error']}"
+    if not sugerido["estado"]:
+        return "", ""
+    try:
+        avanzo = linear_leads.mover_estado(lead["id"], sugerido["estado"])
+        if sugerido["etiqueta_pago"]:
+            linear_leads.poner_pago(lead["id"], sugerido["etiqueta_pago"])
+    except linear_leads.ErrorLeads as fallo:
+        return "", str(fallo)
+    if avanzo:
+        nombre_estado = linear_leads.POR_CLAVE[sugerido["estado"]]["nombre"]
+        return f"Pasó a {nombre_estado}.", ""
+    return "", ""
+
+
+def _orden_id(crudo):
+    """El id de orden del formulario, o None si no es un número — nunca se
+    manda algo raro a Odoo."""
+    try:
+        return int(str(crudo).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def conectar_cotizacion(ref, orden_id, autor=""):
+    """Conecta una orden de Odoo al lead: la deja en su lista, comenta en
+    el issue quién la conectó («Venta S000xx conectada.», firmado, como
+    `alternar_responder`) y avanza el estado según lo que sugiera esa
+    orden — nunca hacia atrás. Devuelve ("aviso", "error").
+
+    `estado_sugerido()` mira SOLO la orden real (`cot_lead._orden_real`,
+    interno): conectar una orden no la hace real por sí sola. Si el lead
+    todavía no tenía ninguna real, la que se acaba de conectar es la única
+    candidata a serlo — se vuelve la real acá mismo, para que "el estado
+    avanza al conectar" sea cierto en el caso normal (un lead, una
+    cotización). Si YA había una real, esto no se la quita: conectar una
+    segunda orden (el caso de Tamara, dos trabajos) es solo sumarla a la
+    lista — cuál manda para el embudo es una decisión aparte, "marcar como
+    la real".
+    """
+    lead = linear_leads.uno(ref)
+    if lead is None:
+        return "", "Ese lead ya no está en Linear."
+    orden_id = _orden_id(orden_id)
+    if orden_id is None:
+        return "", "Esa orden no es válida."
+    try:
+        cot_lead.conectar(orden_id, lead)
+    except ValueError as fallo:
+        return "", str(fallo)
+    except Exception as fallo:
+        return "", ventas._mensaje_de_error(fallo)
+
+    resultado = cot_lead.ordenes_del_lead(lead)
+    ordenes = resultado.get("ordenes") or []
+    nombre_orden = next(
+        (o["nombre"] for o in ordenes if o["orden_id"] == orden_id),
+        f"#{orden_id}")
+    if resultado["ok"] and not any(
+            o["es_real"] for o in ordenes if o["orden_id"] != orden_id):
+        try:
+            cot_lead.marcar_real(orden_id, lead)
+        except Exception:
+            pass  # no bloquea la conexión: el aviso de conectar ya salió
+
+    try:
+        linear_leads.comentar(
+            lead["id"], f"Venta {nombre_orden} conectada.", autor=autor)
+    except linear_leads.ErrorLeads as fallo:
+        return "", str(fallo)
+    aviso_avance, error = _avanzar_segun_sugerido(lead)
+    aviso = f"{nombre_orden} conectada a {lead['nombre']}."
+    if aviso_avance:
+        aviso += " " + aviso_avance
+    return aviso, error
+
+
+def desconectar_cotizacion(ref, orden_id, autor=""):
+    """Quita una orden de la lista del lead. No toca el estado del embudo
+    — desconectar corrige un error de conexión, no es una noticia del
+    negocio que avance o retroceda nada."""
+    lead = linear_leads.uno(ref)
+    if lead is None:
+        return "", "Ese lead ya no está en Linear."
+    orden_id = _orden_id(orden_id)
+    if orden_id is None:
+        return "", "Esa orden no es válida."
+    try:
+        cot_lead.desconectar(orden_id)
+    except Exception as fallo:
+        return "", ventas._mensaje_de_error(fallo)
+    return "Cotización desconectada.", ""
+
+
+def marcar_real_cotizacion(ref, orden_id, autor=""):
+    """Marca esta orden como LA real del lead (se la quita a cualquier
+    otra, la invariante la garantiza `cot_lead.marcar_real`) y, con la
+    plata que trae, avanza el embudo — nunca hacia atrás, igual que al
+    conectar."""
+    lead = linear_leads.uno(ref)
+    if lead is None:
+        return "", "Ese lead ya no está en Linear."
+    orden_id = _orden_id(orden_id)
+    if orden_id is None:
+        return "", "Esa orden no es válida."
+    try:
+        cot_lead.marcar_real(orden_id, lead)
+    except ValueError as fallo:
+        return "", str(fallo)
+    except Exception as fallo:
+        return "", ventas._mensaje_de_error(fallo)
+    aviso_avance, error = _avanzar_segun_sugerido(lead)
+    return (aviso_avance or "Marcada como la real.", error)
 
 
 # ---------------------------------------------------------------------------
