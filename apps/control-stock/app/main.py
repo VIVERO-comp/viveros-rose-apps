@@ -2316,6 +2316,20 @@ async def control_nota(request: Request):
     return _control_vuelve(vista, aviso=aviso, error=error, abrir=ref)
 
 
+@app.post("/control/responder")
+async def control_responder(request: Request):
+    """El interruptor 🔴 Responder de la ficha: prende o apaga «Te toca» a
+    mano, deja el comentario firmado y pide la sincronización a WhatsApp."""
+    form = await request.form()
+    ref = form.get("ref", "")
+    _alc, vista, error = _control_permiso(request, ref)
+    if error:
+        return _control_vuelve(vista, error=error, abrir=ref)
+    autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
+    aviso, error = control.alternar_responder(ref, autor=autor)
+    return _control_vuelve(vista, aviso=aviso, error=error, abrir=ref)
+
+
 # ---------------------------------------------------------------------------
 
 @app.get("/sw-avisos.js")

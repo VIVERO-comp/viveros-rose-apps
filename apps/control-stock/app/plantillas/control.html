@@ -169,21 +169,36 @@
     {% if abierta.motivo %}<span class="etq at">{{ abierta.motivo }}</span>{% endif %}
   </div>
 
-  {# --- Qué hago. Los tres botones del diseño están reservados y apagados:
-         los construye la sesión de Control. Lo único vivo es abrir el chat,
-         y por eso es el botón negro de esta pantalla. --- #}
+  {# --- Qué hago. Responder ya vive aquí (25/09/2026); Cotizar y Adjuntar
+         venta siguen reservados y apagados, para cuando la cotización
+         conectada llegue. Lo negro sigue siendo solo abrir el chat: el
+         resto son interruptores grises. --- #}
   <div class="acciones">
     {% if abierta.wa %}
     <a class="btn oro" href="{{ abierta.wa }}" target="_blank" rel="noopener">💬 WhatsApp</a>
     {% endif %}
-    <button class="btn" type="button" disabled>🔴 Responder</button>
+    {% if puede_tocar_abierta %}
+    <form method="post" action="/control/responder?vista={{ vista }}">
+      <input type="hidden" name="ref" value="{{ abierta.ref }}">
+      <button class="btn{{ ' peligro' if abierta.te_toca }}" type="submit"
+              data-guardando="…">
+        {% if abierta.te_toca %}🔴 Responder · apagalo{% else %}Prender 🔴 Responder{% endif %}
+      </button>
+    </form>
+    {% else %}
+    <button class="btn{{ ' peligro' if abierta.te_toca }}" type="button" disabled>
+      {{ '🔴 Responder · prendido' if abierta.te_toca else 'Responder · apagado' }}
+    </button>
+    {% endif %}
     {% if abierta.estado in ('NUEVO', 'HABLANDO') %}
     <button class="btn" type="button" disabled>Cotizar</button>
     {% endif %}
     <button class="btn" type="button" disabled>Adjuntar venta</button>
   </div>
-  <p class="pie-nota" style="margin:-4px 0 0">Los tres botones apagados llegan
-    con la cotización conectada.</p>
+  <p class="pie-nota" style="margin:-4px 0 0">Responder lo prende el mensaje
+    del cliente y lo apaga nuestra respuesta por WhatsApp — si lo apagás vos
+    y el cliente vuelve a escribir, se prende solo. Cotizar y Adjuntar venta
+    llegan con la cotización conectada.</p>
 
   {# --- Cuánto es. El lugar de la cotización conectada, todavía vacío. --- #}
   <div class="ficha-cot-vacia">Sin cotización conectada.</div>

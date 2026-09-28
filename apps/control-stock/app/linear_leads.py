@@ -594,11 +594,18 @@ def poner_pago(id_issue, nombre):
     return poner_label_de_grupo(id_issue, GRUPO_PAGO, nombre)
 
 
+def poner_etiqueta_suelta(id_issue, nombre, prendida):
+    """El interruptor genérico: prende o apaga UNA etiqueta suelta (fuera
+    de cualquier grupo) en el issue. «Te toca» y las tres señales del panel
+    de Control comparten este mismo mecanismo — una etiqueta por nombre,
+    sin categoría."""
+    return poner_label(id_issue, nombre) if prendida else quitar_label(id_issue, nombre)
+
+
 def poner_te_toca(id_issue, prendida):
     """La señal «Te toca»: la pone el mensaje del cliente, la quita nuestra
     respuesta. Suelta a propósito, no es de ningún grupo."""
-    return (poner_label(id_issue, LABEL_TE_TOCA) if prendida
-            else quitar_label(id_issue, LABEL_TE_TOCA))
+    return poner_etiqueta_suelta(id_issue, LABEL_TE_TOCA, prendida)
 
 
 def comentar(id_issue, texto, autor=""):

@@ -221,6 +221,19 @@ def test_te_toca_se_prende_y_se_apaga():
     assert linear_leads.uno("LEAD-91")["te_toca"] is False
 
 
+# ---------------------------------------------------------------------------
+# El mecanismo genérico detrás de «Te toca»: prender o apagar UNA etiqueta
+# suelta por nombre (25/09/2026, para el panel de Control).
+# ---------------------------------------------------------------------------
+
+def test_poner_etiqueta_suelta_es_el_mismo_mecanismo_que_te_toca():
+    lead = linear_leads.uno("LEAD-90")
+    linear_leads.poner_etiqueta_suelta(lead["id"], linear_leads.LABEL_TE_TOCA, True)
+    assert linear_leads.uno("LEAD-90")["te_toca"] is True
+    linear_leads.poner_etiqueta_suelta(lead["id"], linear_leads.LABEL_TE_TOCA, False)
+    assert linear_leads.uno("LEAD-90")["te_toca"] is False
+
+
 def test_las_etiquetas_nunca_se_crean(monkeypatch):
     """Con Linear de verdad, una etiqueta que no existe deja el aviso en el
     log y el issue se va sin ella — no se crea NUNCA (ya pasó una vez).

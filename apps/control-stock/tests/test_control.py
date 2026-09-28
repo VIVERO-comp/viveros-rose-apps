@@ -491,3 +491,68 @@ def test_vaciar_la_tabla_no_vuelve_a_parecer_un_estreno(con_avisos):
 
 def test_sin_claves_vapid_no_suena_nada():
     assert control.avisar_a_quien_le_toca() == []
+
+
+# ---------------------------------------------------------------------------
+# El interruptor «🔴 Responder» (25/09/2026)
+# ---------------------------------------------------------------------------
+
+def test_responder_prende_te_toca_lo_anota_y_sincroniza(monkeypatch):
+    pedidos = []
+    monkeypatch.setattr(control, "waha_activo", lambda: True)
+    monkeypatch.setattr(control, "etiquetar_en_whatsapp",
+                        lambda ref: pedidos.append(ref) or True)
+    aviso, error = control.alternar_responder("LEAD-90", autor="Ruben")
+    assert error == ""
+    assert "prendido" in aviso
+    lead = linear_leads.uno("LEAD-90")
+    assert lead["te_toca"] is True
+    nota = linear_leads.comentarios(lead["id"])[0]["texto"]
+    assert "Responder" in nota and "prendido" in nota and "Ruben" in nota
+    assert pedidos == ["LEAD-90"]
+
+
+def test_responder_se_apaga_y_tambien_queda_anotado(monkeypatch):
+    monkeypatch.setattr(control, "waha_activo", lambda: False)
+    lead = linear_leads.uno("LEAD-87")  # ya tiene Te toca en la muestra
+    assert lead["te_toca"] is True
+    aviso, error = control.alternar_responder("LEAD-87", autor="Mary")
+    assert error == ""
+    assert "apagado" in aviso
+    lead = linear_leads.uno("LEAD-87")
+    assert lead["te_toca"] is False
+    nota = linear_leads.comentarios(lead["id"])[-1]["texto"]
+    assert "apagado" in nota and "Mary" in nota
+
+
+def test_responder_sin_waha_no_intenta_sincronizar(monkeypatch):
+    monkeypatch.delenv("SINCRO_URL", raising=False)
+    monkeypatch.delenv("SINCRO_SECRET", raising=False)
+    llamado = []
+    monkeypatch.setattr(control, "etiquetar_en_whatsapp",
+                        lambda ref: llamado.append(ref) or True)
+    control.alternar_responder("LEAD-90")
+    assert llamado == []
+
+
+def test_responder_de_un_lead_que_no_existe():
+    aviso, error = control.alternar_responder("LEAD-999")
+    assert aviso == ""
+    assert "ya no está en Linear" in error
+
+
+def test_responder_desde_la_pantalla(cliente, de_dueno):
+    respuesta = cliente.post("/control/responder", params={"vista": "estado"},
+                             data={"ref": "LEAD-90"}, follow_redirects=False)
+    assert respuesta.status_code == 303
+    assert "aviso=" in respuesta.headers["location"]
+    assert linear_leads.uno("LEAD-90")["te_toca"] is True
+
+
+def test_responder_no_lo_puede_un_empleado_de_otro(cliente):
+    respuesta = cliente.post("/control/responder",
+                             data={"ref": "LEAD-89"},  # Resp: Mary
+                             follow_redirects=False)
+    assert respuesta.status_code == 303
+    assert "error=" in respuesta.headers["location"]
+    assert linear_leads.uno("LEAD-89")["te_toca"] is False

@@ -249,14 +249,23 @@ def test_el_panel_va_en_el_orden_de_c1(cliente, de_dueno):
     assert orden == sorted(orden)
 
 
-def test_los_tres_botones_estan_reservados_y_apagados(cliente, de_dueno):
-    """Los construye la sesión de Control: aquí solo se guarda su lugar."""
+def test_responder_ya_no_es_un_boton_de_mentira(cliente, de_dueno):
+    """El primero de los tres se construyó (25/09/2026, otra tanda): ya no
+    es un botón apagado, es un <form> que prende o apaga «Te toca»."""
     cuerpo = cliente.get("/control", params={"abrir": "LEAD-91"}).text
     panel = cuerpo[cuerpo.index('class="panel-der"'):]
-    for boton in ("🔴 Responder", "Adjuntar venta"):
-        assert boton in panel
-        trozo = panel[panel.index(boton) - 90:panel.index(boton)]
-        assert "disabled" in trozo
+    assert "🔴 Responder" in panel
+    assert 'action="/control/responder' in panel
+
+
+def test_adjuntar_venta_sigue_reservado_y_apagado(cliente, de_dueno):
+    """Lo construye otra tanda: aquí solo se guarda su lugar."""
+    cuerpo = cliente.get("/control", params={"abrir": "LEAD-91"}).text
+    panel = cuerpo[cuerpo.index('class="panel-der"'):]
+    boton = "Adjuntar venta"
+    assert boton in panel
+    trozo = panel[panel.index(boton) - 90:panel.index(boton)]
+    assert "disabled" in trozo
 
 
 def test_cotizar_solo_asoma_en_nuevo_y_hablando(cliente, de_dueno):

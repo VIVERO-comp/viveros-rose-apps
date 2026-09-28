@@ -355,6 +355,44 @@ def escribir_nota(ref, texto, autor=""):
     return "Nota guardada en el issue.", ""
 
 
+# ---------------------------------------------------------------------------
+# El interruptor «🔴 Responder» (25/09/2026, pedido de Abraham): prender o
+# apagar la etiqueta «Te toca» a mano, con su comentario firmado y su
+# sincronización inmediata a WhatsApp.
+# ---------------------------------------------------------------------------
+
+def alternar_responder(ref, autor=""):
+    """Prende o apaga «Te toca» a mano: el botón 🔴 Responder de la ficha.
+
+    Queda anotado en el issue quién lo cambió (un comentario firmado, corto,
+    en el estilo de `mover_a_estado`) y, si WAHA ya anda, se pide la
+    sincronización inmediata al chat en vez de esperar los 2 minutos del
+    sincronizador. Nunca manda nada al cliente: esto solo cambia una
+    etiqueta, no manda WhatsApp saliente.
+
+    Apagarlo a mano no evita que vuelva: si el cliente escribe, el receptor
+    del frontend la pone otra vez — eso ya funciona, aquí no hay que
+    tocarlo.
+    """
+    lead = linear_leads.uno(ref)
+    if lead is None:
+        return "", "Ese lead ya no está en Linear."
+    prender = not lead.get("te_toca")
+    try:
+        linear_leads.poner_te_toca(lead["id"], prender)
+        linear_leads.comentar(
+            lead["id"],
+            "🔴 Responder " + ("prendido" if prender else "apagado") + ".",
+            autor=autor)
+    except linear_leads.ErrorLeads as fallo:
+        return "", str(fallo)
+    linear_leads.refrescar()
+    if waha_activo():
+        etiquetar_en_whatsapp(lead["ref"])
+    return (f"{lead['nombre']}: Responder "
+            + ("prendido." if prender else "apagado."), "")
+
+
 
 # ---------------------------------------------------------------------------
 # El hilo de la ficha (Fase C, 25/09/2026)
