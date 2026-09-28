@@ -82,6 +82,14 @@ ESTADOS_CON_ETIQUETA = ("Nuevo", "Hablando", "Cotizado", "Por agendar",
 INTERESES = ("Plantas", "Eventos", "Paisajismo", "Mantenimiento", "Mayorista")
 RESPONDER = "🔴 Responder"
 
+# La etiqueta de un Ganado (28/09/2026): a diferencia de Perdido, un cliente
+# que ya compro puede volver, asi que su chat NO se limpia -- se marca con
+# esta, que Abraham ya puso a mano en el telefono. El codigo solo la BUSCA
+# (busca_para(), via `disponibles`); si todavia no existe, se salta y sale
+# en los "faltan" del reporte, igual que cualquier otra etiqueta que no
+# esta creada.
+PEDIDO_COMPLETADO = "Pedido completado"
+
 # Las cuatro familias de etiquetas de WhatsApp, cada una con su color
 # (25/09/2026). El color dice de que familia es; el nombre, cual.
 REPRESENTANTES = ("Mary", "Ruben", "Salomón", "Abraham")
@@ -472,19 +480,28 @@ def quiere_para(lead, tiene, disponibles):
     siguiente `deseadas()` los vuelve a poner solos, leyendolos de Linear
     (no hace falta nada especial aqui para eso).
 
-    Ganado (`lead["cerrado"]` y no Perdido): sigue la regla vieja, SOLO
-    resta y nunca agrega. "mantener representante e interes" es conservar
-    lo que el chat YA tiene, no estrenar algo que nunca tuvo. No existe una
-    etiqueta "Perdido" ni "Ganado" en WhatsApp (los 6 estados con etiqueta
-    son los EN CURSO) y no se crea una — las etiquetas nunca se crean solas.
-
-        quedar = (lo que el chat tiene hoy) - (las 6 de estado) - (Responder)
+    Ganado (regla del dueno, 28/09/2026): es un cliente, no un lead cerrado
+    del todo — puede volver a comprar. Representante e interes se quedan
+    (nunca se pisan aqui). El estado pasa a "Pedido completado" (la unica
+    etiqueta de estado que SI se agrega para un cerrado, porque ya existe
+    en el telefono — no la crea el codigo). Se quita "🔴 Responder", salvo
+    que el cliente haya vuelto a escribir (`te_toca`): ahi SI se pone, para
+    que el chat avise igual que cualquier otro, pero el lead NO cambia de
+    estado por eso (`revivirDePerdido` en el frontend es exclusivo de
+    Perdido; Ganado nunca se revive).
 
     Si el chat no tiene nada, `quedar` sale vacio y no hay nada que quitar
     — no se manda un PUT que no cambia nada.
     """
     if lead.get("estado") == "Perdido":
         return [], []
+    if lead.get("estado") == "Ganado":
+        quiere = [t for t in tiene if t not in ESTADOS_CON_ETIQUETA and t != RESPONDER]
+        quiere.append(PEDIDO_COMPLETADO)
+        if lead.get("te_toca"):
+            quiere.append(RESPONDER)
+        faltan = [q for q in quiere if q not in disponibles]
+        return [q for q in quiere if q in disponibles], faltan
     if lead.get("cerrado"):
         quiere = [t for t in tiene if t not in ESTADOS_CON_ETIQUETA and t != RESPONDER]
         return quiere, []
