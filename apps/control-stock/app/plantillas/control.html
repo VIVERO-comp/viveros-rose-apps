@@ -237,27 +237,41 @@
     {% if cot.ordenes %}
     <div class="ret-cotizs">
       <div class="tenue ret-cotiz-titulo">Conectadas</div>
+      {# El mismo patrón de "Ventas y cotizaciones locales" de Vender
+         (venta-item/fila1/badge en venta.html), más chico — con sus
+         propias clases acá porque control.html no carga styles.css.
+         28/09/2026, pedido de Abraham: "que se vea como en Ventas pero
+         más chico, y editar también". #}
       {% for o in cot.ordenes %}
-      <div class="crm-nota">
-        <small>{{ o.nombre }}{% if o.fecha %} · {{ o.fecha | fecha_bonita }}{% endif %}
-          · {{ o.total | dinero }} · {{ o.estado }} · pagó {{ o.pagado | dinero }}
-          {% if o.es_real %} · <b>LA REAL</b>{% endif %}</small>
-        <div class="acciones">
-          <a class="btn chico" href="/control/cotizacion/{{ o.orden_id }}.pdf?nombre={{ o.nombre | urlencode }}"
+      <div class="ficha-cot-item {{ o.badge.clase }}{{ ' real' if o.es_real }}">
+        <div class="fila1">
+          <div>
+            <b class="titulo">{{ o.nombre }}</b>
+            {% if o.es_real %}<span class="badge b-real">La real</span>{% endif %}
+            <small>{{ o.fecha | fecha_bonita if o.fecha else '' }}</small>
+          </div>
+          <span class="badge {{ o.badge.clase }}">{{ o.badge.texto }}</span>
+        </div>
+        <div class="ficha-cot-monto">{{ o.total | dinero }}{% if o.pagado %} · pagó {{ o.pagado | dinero }}{% endif %}</div>
+        <div class="ficha-cot-acciones">
+          <a href="/control/cotizacion/{{ o.orden_id }}.pdf?nombre={{ o.nombre | urlencode }}"
              target="_blank" rel="noopener">PDF</a>
           {% if puede_tocar_abierta %}
-          <form method="post" action="/control/cotizacion/desconectar?vista={{ vista }}">
-            <input type="hidden" name="ref" value="{{ abierta.ref }}">
-            <input type="hidden" name="orden_id" value="{{ o.orden_id }}">
-            <button class="btn chico" type="submit">Desconectar</button>
-          </form>
+          {% if o.editar_n %}<span class="sep">·</span><a href="/venta/servicio/{{ o.editar_n }}/editar">Editar</a>{% endif %}
           {% if not o.es_real %}
+          <span class="sep">·</span>
           <form method="post" action="/control/cotizacion/marcar-real?vista={{ vista }}">
             <input type="hidden" name="ref" value="{{ abierta.ref }}">
             <input type="hidden" name="orden_id" value="{{ o.orden_id }}">
-            <button class="btn chico" type="submit">Marcar como la real</button>
+            <button type="submit" class="enlace-sub">Marcar la real</button>
           </form>
           {% endif %}
+          <span class="sep">·</span>
+          <form method="post" action="/control/cotizacion/desconectar?vista={{ vista }}">
+            <input type="hidden" name="ref" value="{{ abierta.ref }}">
+            <input type="hidden" name="orden_id" value="{{ o.orden_id }}">
+            <button type="submit" class="enlace-sub">Desconectar</button>
+          </form>
           {% endif %}
         </div>
       </div>

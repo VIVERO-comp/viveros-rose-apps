@@ -21,7 +21,7 @@ Los leads de muestra (ver también tests/test_control.py):
 
 import pytest
 
-from app import control, cot_lead, linear_leads, ventas
+from app import control, cot_lead, cotizaciones, linear_leads, ventas
 from test_cot_lead import OdooCotLead
 
 
@@ -45,6 +45,28 @@ def odoo(monkeypatch):
     falso = OdooCotLead()
     monkeypatch.setattr(ventas, "_ejecutar", falso.ejecutar)
     return falso
+
+
+@pytest.fixture
+def odoo_con_estados(odoo, monkeypatch):
+    """El mismo Odoo fingido, que ADEMÁS entiende `cotizaciones.
+    estados_en_odoo` — pide con el operador "in", que `OdooCotLead` no
+    soporta (su doble solo entiende `=ilike` y `!=`, las formas que arma
+    cot_lead.py). Acá se envuelve: todo sale editable (sin facturas, no
+    cancelada) salvo que la prueba cambie el estado a mano."""
+    original = odoo.ejecutar
+
+    def envuelto(modelo, metodo, args, kw=None):
+        kw = kw or {}
+        if modelo == "sale.order" and metodo == "search_read" \
+                and kw.get("fields") == ["state", "invoice_ids"]:
+            ids = args[0][0][2] if args and args[0] else []
+            return [{"id": oid, "state": odoo.ordenes[oid]["state"],
+                     "invoice_ids": []} for oid in ids if oid in odoo.ordenes]
+        return original(modelo, metodo, args, kw)
+
+    monkeypatch.setattr(ventas, "_ejecutar", envuelto)
+    return odoo
 
 
 def _lead_y_partner(odoo, ref, nombre=None):
@@ -295,3 +317,83 @@ def test_buscar_por_numero_llega_a_la_ficha(cliente, de_dueno, odoo):
         "vista": "estado", "abrir": "LEAD-85", "buscar": "s00600"}).text
     panel = cuerpo[cuerpo.index('class="panel-der"'):]
     assert "S00600" in panel
+
+
+# ---------------------------------------------------------------------------
+# El retoque de la ficha (28/09/2026): compacto como Ventas, y «Editar»
+# solo para lo que de verdad se puede editar en Vender.
+# ---------------------------------------------------------------------------
+
+def test_una_cotizacion_de_servicio_local_editable_trae_el_enlace_editar(
+        odoo_con_estados):
+    lead, partner = _lead_y_partner(odoo_con_estados, "LEAD-90")
+    orden = odoo_con_estados.agregar_orden(
+        partner, "S00700", amount_total=100.0, lead_ref=lead["pp"])
+    registro = cotizaciones._guardar_local(
+        {"nombre": "Prueba", "id": "prueba"}, "boda", "Juan Carlos Lopez",
+        "", orden, "S00700", 100.0)
+
+    ficha = control.ficha("LEAD-90")
+    conectada = next(o for o in ficha["cot"]["ordenes"] if o["orden_id"] == orden)
+    assert conectada["editar_n"] == registro["n"]
+
+
+def test_una_orden_sin_registro_local_no_trae_editar(odoo):
+    lead, partner = _lead_y_partner(odoo, "LEAD-90")
+    orden = odoo.agregar_orden(partner, "S00701", amount_total=50.0,
+                               lead_ref=lead["pp"])
+    ficha = control.ficha("LEAD-90")
+    conectada = next(o for o in ficha["cot"]["ordenes"] if o["orden_id"] == orden)
+    assert conectada["editar_n"] is None
+
+
+def test_una_cotizacion_local_ya_facturada_no_trae_editar(
+        odoo_con_estados, monkeypatch):
+    lead, partner = _lead_y_partner(odoo_con_estados, "LEAD-90")
+    orden = odoo_con_estados.agregar_orden(
+        partner, "S00702", amount_total=100.0, lead_ref=lead["pp"])
+    cotizaciones._guardar_local(
+        {"nombre": "Prueba", "id": "prueba"}, "boda", "Juan Carlos Lopez",
+        "", orden, "S00702", 100.0)
+
+    # La factura ya existe: el doble responde "facturada", nada editable.
+    def con_factura(modelo, metodo, args, kw=None):
+        kw = kw or {}
+        if modelo == "sale.order" and metodo == "search_read" \
+                and kw.get("fields") == ["state", "invoice_ids"]:
+            return [{"id": orden, "state": "sale", "invoice_ids": [999]}]
+        return odoo_con_estados.ejecutar(modelo, metodo, args, kw)
+
+    monkeypatch.setattr(ventas, "_ejecutar", con_factura)
+    ficha = control.ficha("LEAD-90")
+    conectada = next(o for o in ficha["cot"]["ordenes"] if o["orden_id"] == orden)
+    assert conectada["editar_n"] is None
+
+
+def test_conectadas_usa_el_patron_compacto_sin_botones_grandes(
+        cliente, de_dueno, odoo):
+    lead, partner = _lead_y_partner(odoo, "LEAD-91")
+    odoo.agregar_orden(partner, "S00091", amount_total=68.0,
+                       lead_ref=lead["pp"], lead_real=True,
+                       etapa_cobro="cotizado")
+    cuerpo = cliente.get("/control", params={"abrir": "LEAD-91"}).text
+    panel = cuerpo[cuerpo.index('class="panel-der"'):]
+    # Solo la tarjeta de la orden conectada (la sección de más abajo,
+    # "Conectar cotización", tiene su propio botón de Buscar — eso no es
+    # lo que este retoque cambió).
+    seccion = panel[panel.index('class="ficha-cot-item'):
+                    panel.index("Conectar cotización")]
+    assert 'class="badge' in seccion
+    assert '<button class="btn' not in seccion
+    assert '<a class="btn' not in seccion
+    assert "PDF" in seccion and "Desconectar" in seccion
+
+
+def test_el_badge_de_cobro_muestra_el_texto_correcto(odoo):
+    lead, partner = _lead_y_partner(odoo, "LEAD-91")
+    odoo.agregar_orden(partner, "S00800", amount_total=50.0,
+                       lead_ref=lead["pp"], etapa_cobro="abono")
+    ficha = control.ficha("LEAD-91")
+    conectada = ficha["cot"]["ordenes"][0]
+    assert conectada["badge"]["texto"] == "Abono 50%"
+    assert conectada["badge"]["clase"] == "b-critico"
