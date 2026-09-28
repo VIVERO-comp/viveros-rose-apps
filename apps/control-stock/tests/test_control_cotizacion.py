@@ -375,11 +375,11 @@ def test_el_enlace_quitar_real_solo_aparece_en_la_que_es_real(cliente, de_dueno,
     # · S00505"), ANTES de la lista de conectadas: hay que buscar desde
     # ahí, no desde el panel entero.
     conectadas = cuerpo[cuerpo.index(">Conectadas<"):]
-    # Una tarjeta entera (fila1 + monto + acciones) mide bien menos de
-    # 700 caracteres — el mismo margen que ya usan las otras pruebas de
-    # esta pantalla.
-    real = conectadas[conectadas.index("S00505"):][:900]
-    otra = conectadas[conectadas.index("S00506"):][:900]
+    # Una tarjeta entera (fila1 + monto + acciones) creció con el botón
+    # Compartir del 28/09/2026 — sus data-atributos llevan la URL del PDF
+    # dos veces — así que el margen es 1400, no los 900 de antes.
+    real = conectadas[conectadas.index("S00505"):][:1400]
+    otra = conectadas[conectadas.index("S00506"):][:1400]
     assert "Quitar real" in real and "Marcar la real" not in real
     assert "Marcar la real" in otra and "Quitar real" not in otra
 
