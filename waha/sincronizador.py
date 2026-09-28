@@ -486,14 +486,15 @@ def quiere_para(lead, tiene, disponibles):
     siguiente `deseadas()` los vuelve a poner solos, leyendolos de Linear
     (no hace falta nada especial aqui para eso).
 
-    Ganado (regla del dueno, 28/09/2026): es un cliente, no un lead cerrado
-    del todo — puede volver a comprar. Representante e interes se quedan
-    (nunca se pisan aqui). El estado pasa a "Pedido completado" (la unica
-    etiqueta de estado que SI se agrega para un cerrado, porque ya existe
-    en el telefono — no la crea el codigo). Se quita "🔴 Responder", salvo
-    que el cliente haya vuelto a escribir (`te_toca`): ahi SI se pone, para
-    que el chat avise igual que cualquier otro, pero el lead NO cambia de
-    estado por eso (`revivirDePerdido` en el frontend es exclusivo de
+    Ganado (regla del dueno, actualizada 28/09/2026): representante e
+    interes YA NO se conservan — se quitan los dos. El chat queda con
+    UNA sola etiqueta, "Pedido completado" (una sugerida de fabrica de
+    WhatsApp Business que Abraham ya puso — el codigo solo la busca,
+    nunca la crea). La unica excepcion es Mantenimiento: ese interes SI
+    se queda, junto a "Pedido completado", porque ese cliente vuelve por
+    el servicio recurrente. Si el cliente escribe de nuevo (`te_toca`),
+    "🔴 Responder" se pone igual que a cualquier chat, sin que el lead
+    cambie de estado (`revivirDePerdido` en el frontend es exclusivo de
     Perdido; Ganado nunca se revive).
 
     Si el chat no tiene nada, `quedar` sale vacio y no hay nada que quitar
@@ -502,8 +503,12 @@ def quiere_para(lead, tiene, disponibles):
     if lead.get("estado") == "Perdido":
         return [], []
     if lead.get("estado") == "Ganado":
-        quiere = [t for t in tiene if t not in ESTADOS_CON_ETIQUETA and t != RESPONDER]
-        quiere.append(PEDIDO_COMPLETADO)
+        # Cambio de regla (28/09/2026): representante e interes YA NO se
+        # conservan -- se quitan los dos. Unica excepcion: Mantenimiento se
+        # queda, porque ese cliente vuelve por el servicio recurrente.
+        quiere = [PEDIDO_COMPLETADO]
+        if lead.get("interes") == "Mantenimiento":
+            quiere.append("Mantenimiento")
         if lead.get("te_toca"):
             quiere.append(RESPONDER)
         faltan = [q for q in quiere if q not in disponibles]
