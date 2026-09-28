@@ -193,6 +193,7 @@
        23/09/2026) ---- Lo que se escriba acá se suma solo en la cuenta de
        arriba, sin recargar. #}
     {% with form_cargos="form-acciones", cargos=borrador %}{% include "_cargos.html" %}{% endwith %}
+    {% with form_casillas="form-acciones" %}{% include "_casillas.html" %}{% endwith %}
 
     {# Ver el PDF ANTES de generar (dueño, 23/09/2026). Mismo formulario: el
        botón solo cambia a dónde se manda, así viajan los mismos datos que

@@ -1,0 +1,25 @@
+{# Las dos casillas del PDF (dueño, 28/09/2026): deciden cómo imprime la
+   propuesta ESTA cotización. La venta normal nace desmarcada; el
+   personalizado, marcado. El campo escondido "casillas" marca que el
+   formulario es de la versión con casillas: sin él (borradores de antes
+   del cambio) rigen los defaults de la pantalla, que calcula Python
+   (ventas.banderas_de) — la plantilla solo pinta.
+
+   Variables (con {% with %} antes del include):
+   - form_casillas  id del <form> al que pertenecen los campos
+   - casillas       {"pago_50_50": bool, "con_garantia": bool} ya resuelto #}
+<div class="seccion-titulo" style="margin-top:16px">El PDF</div>
+<input type="hidden" class="dato-cliente" name="casillas" value="1"
+       form="{{ form_casillas }}">
+<label class="casilla-pdf">
+  <input class="dato-cliente" type="checkbox" name="pago_50_50" value="1"
+         form="{{ form_casillas }}" {{ 'checked' if casillas.pago_50_50 }}>
+  <span>Pago 50% abono / 50% contra entrega</span>
+</label>
+<label class="casilla-pdf">
+  <input class="dato-cliente" type="checkbox" name="con_garantia" value="1"
+         form="{{ form_casillas }}" {{ 'checked' if casillas.con_garantia }}>
+  <span>Incluir garantía</span>
+</label>
+<p class="nota-cliente">Sin la primera, el PDF dice «Forma de pago: pago
+completo al confirmar»; sin la segunda, la sección Garantía no se imprime.</p>

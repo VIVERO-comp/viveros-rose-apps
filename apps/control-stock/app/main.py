@@ -1147,6 +1147,8 @@ def venta_nueva(request: Request, q: str = "", error: str = ""):
     # confirma Odoo al crear.
     contexto["leads_crm"] = _leads_para_elegir()
     contexto["cargos_montos"] = _cargos_del_form(contexto["borrador"])
+    # Las casillas del PDF: en venta normal nacen DESMARCADAS.
+    contexto["casillas"] = ventas.banderas_de(contexto["borrador"], False)
     contexto["total_con_cargos"] = (
         contexto["total_carrito"] + contexto["total_renglones_planta"]
         + sum(v for v in contexto["cargos_montos"].values()
@@ -1410,7 +1412,8 @@ async def venta_vista_previa(request: Request):
     try:
         pdf = ventas.pdf_vista_previa(
             empleada, form.get("cliente", ""), form.get("celular", ""),
-            datos_cliente, _cargos_del_form(form))
+            datos_cliente, _cargos_del_form(form),
+            banderas=ventas.banderas_de(form, False))
     except ValueError as error:
         return _redirigir_venta(str(error), nueva=True)
     except Exception as error:
@@ -1450,7 +1453,8 @@ async def venta_cotizar(request: Request):
     try:
         registro = ventas.crear_cotizacion(
             request.state.empleada, form.get("cliente", ""), form.get("celular", ""),
-            _datos_cliente_del_form(form), _cargos_del_form(form))
+            _datos_cliente_del_form(form), _cargos_del_form(form),
+            banderas=ventas.banderas_de(form, False))
     except ValueError as error:
         return _redirigir_venta(str(error), nueva=True)
     except Exception as error:
@@ -1480,7 +1484,8 @@ async def venta_vender(request: Request):
     try:
         registro = ventas.crear_cotizacion(
             request.state.empleada, form.get("cliente", ""), form.get("celular", ""),
-            _datos_cliente_del_form(form), _cargos_del_form(form), confirmar=True)
+            _datos_cliente_del_form(form), _cargos_del_form(form), confirmar=True,
+            banderas=ventas.banderas_de(form, False))
     except ValueError as error:
         return _redirigir_venta(str(error), nueva=True)
     except Exception as error:
@@ -1542,6 +1547,10 @@ def _contexto_servicio(request, tipo, q="", error=None, servicios=None):
 def venta_servicio(request: Request, tipo: str, q: str = "", error: str = ""):
     if tipo not in cotizaciones.TIPOS:
         return RedirectResponse("/venta", status_code=303)
+    if cotizaciones.TIPOS[tipo].get("retirado"):
+        # Boda y evento se absorbieron en «Alquiler / Eventos»: un enlace
+        # viejo aterriza en el formulario unificado, no en un 404.
+        return RedirectResponse("/venta/servicio/renta", status_code=303)
     return plantillas.TemplateResponse(
         request, "venta_servicio.html",
         _contexto_servicio(request, tipo, q, error))
@@ -1549,7 +1558,7 @@ def venta_servicio(request: Request, tipo: str, q: str = "", error: str = ""):
 
 @app.post("/venta/servicio/{tipo}")
 async def venta_servicio_crear(request: Request, tipo: str):
-    if tipo not in cotizaciones.TIPOS:
+    if tipo not in cotizaciones.TIPOS             or cotizaciones.TIPOS[tipo].get("retirado"):
         return RedirectResponse("/venta", status_code=303)
     form = await request.form()
     usuario = request.state.empleada["id"]
@@ -1617,6 +1626,8 @@ def _contexto_personalizada(request, q="", error=None, renglones=None,
         "ventas_activo": ventas.configurado(), "q": (q or "").strip(),
         "resultados": None, "carrito": [], "total_carrito": 0.0,
         "borrador": borrador, "error_venta": error or None,
+        # Las casillas del PDF: en el personalizado nacen MARCADAS.
+        "casillas": ventas.banderas_de(borrador, True),
         "renglones": renglones or [{"texto": "", "cantidad": "", "precio": "", "descripcion": ""}],
         "servicios": servicios or [{"texto": "", "monto": "", "descripcion": ""}],
     }
@@ -1658,7 +1669,8 @@ async def venta_personalizada_crear(request: Request):
             request.state.empleada, form.get("cliente", ""),
             form.get("celular", ""), lineas_catalogo, renglones,
             _datos_cliente_del_form(form), servicios,
-            cargos=_cargos_del_form(form))
+            cargos=_cargos_del_form(form),
+            banderas=ventas.banderas_de(form, True))
     except ValueError as error:
         return plantillas.TemplateResponse(
             request, "venta_personalizada.html",
@@ -1730,6 +1742,9 @@ def _contexto_editar(request, datos_edicion, error=None):
         "plantas": datos_edicion["plantas"],
         "renglones": datos_edicion["renglones"],
         "cargos": datos_edicion.get("cargos") or {},
+        # Al editar, las casillas quedan como se guardaron en la orden.
+        "casillas": datos_edicion.get("banderas")
+                    or {"pago_50_50": True, "con_garantia": True},
         "error_venta": error or None,
     }
 
@@ -1750,8 +1765,12 @@ async def venta_servicio_editar_guardar(request: Request, n: int):
         [p[:20] for p in form.getlist("renglon_precio")],
         [d[:2000] for d in form.getlist("renglon_descripcion")])
     try:
-        cotizaciones.editar_cotizacion(n, servicios, plantas, renglones,
-                                       cargos=_cargos_del_form(form))
+        cotizaciones.editar_cotizacion(
+            n, servicios, plantas, renglones, cargos=_cargos_del_form(form),
+            # Solo el formulario del personalizado pinta las casillas; los
+            # demás tipos mandan None y la orden conserva lo que tenga.
+            banderas=(ventas.banderas_de(form, True)
+                      if str(form.get("casillas") or "") == "1" else None))
     except ValueError as error:
         # El formulario vuelve con lo escrito, como al crear: un redirect
         # perdería lo que la empleada ya corrigió.
@@ -1802,7 +1821,8 @@ async def venta_pagar(request: Request):
     try:
         registro = ventas.crear_cotizacion(
             request.state.empleada, form.get("cliente", ""), form.get("celular", ""),
-            _datos_cliente_del_form(form), _cargos_del_form(form))
+            _datos_cliente_del_form(form), _cargos_del_form(form),
+            banderas=ventas.banderas_de(form, False))
     except ValueError as error:
         return _redirigir_venta(str(error), nueva=True)
     except Exception as error:

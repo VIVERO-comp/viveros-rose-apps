@@ -70,6 +70,10 @@ class OdooCotLead:
             "lead_real": bool(lead_real),
             "linear_issue_url": linear_issue_url or False,
             "reemplazada_por_id": reemplazada_por_id,
+            # La casilla del 50/50 (28/09/2026): en el Odoo real nace en
+            # True; el falso hace lo mismo para que "no puesta" no se
+            # confunda con "apagada".
+            "pago_50_50": True,
         }
         return oid
 

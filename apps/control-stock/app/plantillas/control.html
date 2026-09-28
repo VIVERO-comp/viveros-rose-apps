@@ -245,7 +245,12 @@
     <div class="ret-cotizs">
       <div class="tenue ret-cotiz-titulo">La real · {{ cot.plata.orden }}</div>
       <div class="dato"><b>Total</b><span>{{ cot.plata.total | dinero }}</span></div>
+      {% if cot.plata.pide_abono %}
       <div class="dato"><b>Abono 50%</b><span>{{ cot.plata.abono_50 | dinero }}</span></div>
+      {% else %}
+      {# La casilla del 50/50 está apagada en la orden: no se pide abono. #}
+      <div class="dato"><b>Pago</b><span>Completo al confirmar</span></div>
+      {% endif %}
       <div class="dato"><b>Pagado</b><span>{{ cot.plata.pagado | dinero }}</span></div>
       <div class="dato"><b>Saldo</b><span>{{ cot.plata.saldo | dinero }}</span></div>
     </div>

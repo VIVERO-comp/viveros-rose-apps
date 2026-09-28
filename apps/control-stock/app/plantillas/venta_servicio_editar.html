@@ -28,6 +28,7 @@
   <p class="nada-venta">{{ registro.cliente }}{% if registro.celular %} · {{ registro.celular }}{% endif %}</p>
 
   {% with form_cargos="form-servicio", cargos=cargos %}{% include "_cargos.html" %}{% endwith %}
+  {% if es_personalizada %}{% with form_casillas="form-servicio" %}{% include "_casillas.html" %}{% endwith %}{% endif %}
 
   <form id="form-servicio" method="post"
         action="/venta/servicio/{{ registro.n }}/editar" style="display:none"></form>
