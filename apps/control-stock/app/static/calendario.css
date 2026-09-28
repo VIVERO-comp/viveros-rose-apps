@@ -190,13 +190,18 @@ input.campo:focus,textarea.campo:focus,select.sel:focus{border-color:var(--dorad
 .carril-int{min-width:760px;display:flex;flex-direction:column;flex:1}
 .carril-cuerpo{overflow-y:auto;flex:1;display:flex;flex-direction:column}
 .carril-cab{display:grid;background:var(--crema);border-bottom:1px solid var(--borde);position:sticky;top:0;z-index:3}
-.carril-cab div{padding:10px 6px;font-size:10.5px;font-weight:700;color:var(--suave);text-align:center;border-left:1px solid var(--borde-2)}
+.carril-cab div{padding:8px 6px 7px;font-size:10.5px;font-weight:700;color:var(--suave);text-align:center;border-left:1px solid var(--borde-2)}
 .carril-cab div:first-child{border-left:0}
-.carril-cab .dnum{display:block;font-size:18px;font-weight:800;color:var(--texto);line-height:1.3}
+/* El número apila DEBAJO del día; line-height 26px = el alto del círculo
+   de hoy, para que todas las columnas midan lo mismo. */
+.carril-cab .dnum{display:block;font-size:18px;font-weight:800;color:var(--texto);line-height:26px}
 .carril-cab .col-hoy{background:var(--hoy)}
+/* El día de HOY: mismo apilado que los demás («Lun» arriba, el círculo
+   negro debajo, centrado). Con inline-flex el círculo quedaba EN LA MISMA
+   LÍNEA que el «Lun» y se encimaban (captura del dueño, 28/09/2026). */
 .carril-cab .col-hoy .dnum{
   background:var(--texto);color:#fff;border-radius:999px;width:26px;height:26px;
-  display:inline-flex;align-items:center;justify-content:center;font-size:13px;margin:2px auto 0;
+  display:flex;align-items:center;justify-content:center;font-size:13px;margin:0 auto;
 }
 .carril-cuerpo{position:relative;min-height:0;overflow-y:auto}
 /* Las filas reparten el alto por flex-grow (peso que calcula Python): el
@@ -220,7 +225,9 @@ input.campo:focus,textarea.campo:focus,select.sel:focus{border-color:var(--dorad
   cursor:grab;text-align:left;font-family:inherit;overflow:hidden;z-index:2;
   box-shadow:0 1px 2px rgba(60,50,30,.05);transition:box-shadow .12s,transform .08s;
 }
-.bloque .tt{font-weight:700;font-size:11px;display:block}
+/* El título corta con «…» en vez de partirse a media palabra («Entreg»):
+   en una tira angosta una palabra cortada limpia se lee mejor. */
+.bloque .tt{font-weight:700;font-size:11px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bloque small{display:block;font-weight:500;color:var(--suave);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
 .bloque:hover{box-shadow:var(--sombra-2);z-index:5;transform:translateY(-1px)}
 .bloque:active{cursor:grabbing}
@@ -230,6 +237,22 @@ input.campo:focus,textarea.campo:focus,select.sel:focus{border-color:var(--dorad
 .bloque.cancel{opacity:.4;filter:grayscale(1)}
 .bloque.arrastrando{opacity:.35}
 .bloque .marca-at{position:absolute;top:5px;right:6px;width:6px;height:6px;border-radius:50%;background:var(--critico)}
+
+/* ---------- solapes: la tira partida se expande al pasar el mouse ----------
+   (dueño, 28/09/2026: con 7 columnas de semana las tiras partidas no se
+   leían). Los límites de la expansión —la columna COMPLETA del día— los
+   calcula Python en _bloque() y viajan en el estilo en línea como
+   --exp-izq / --exp-ancho; aquí solo se consumen. El !important es a
+   propósito: hay que ganarle al left/width del estilo en línea. Al quitar
+   el mouse la tira vuelve sola a su parte. En táctil no hay hover y el
+   tap ya abre la ficha: no hace falta nada más. */
+.bloque.partido{transition:left .14s ease,width .14s ease,box-shadow .12s,transform .08s}
+.bloque.partido .exp{display:none}
+.bloque.partido:hover,.bloque.partido:focus-visible{
+  left:var(--exp-izq)!important;width:var(--exp-ancho)!important;
+  z-index:8!important;min-height:38px;box-shadow:var(--sombra);
+}
+.bloque.partido:hover .exp,.bloque.partido:focus-visible .exp{display:block}
 
 /* ---------- mes ---------- */
 .mes{display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:auto repeat(6,1fr);border:1px solid var(--borde);border-radius:16px;overflow:hidden;background:var(--borde);min-width:0;height:100%}
@@ -314,11 +337,18 @@ input.campo:focus,textarea.campo:focus,select.sel:focus{border-color:var(--dorad
 .aviso.malo{background:var(--critico)}
 
 @media (max-width:860px){
-  .app{grid-template-columns:1fr;margin:0;border-radius:0;border:0;min-height:100vh}
-  .lado{flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--borde);padding:11px;scrollbar-width:none}
+  /* grid-template-rows:auto 1fr es lo que evita las tarjetas gigantes
+     (captura del dueño, 28/09/2026): con las dos filas en auto, el grid
+     repartía el alto sobrante de min-height:100vh entre ellas y la fila
+     del menú crecía a media pantalla, con las píldoras estiradas en cruz
+     dentro (align-items:stretch, el default del flex row). La fila del
+     menú mide lo suyo y el tablero se queda con el resto. */
+  .app{grid-template-columns:1fr;grid-template-rows:auto 1fr;margin:0;border-radius:0;border:0;min-height:100vh}
+  .lado{flex-direction:row;align-items:center;overflow-x:auto;border-right:0;border-bottom:1px solid var(--borde);padding:8px 11px;scrollbar-width:none}
   .lado::-webkit-scrollbar{display:none}
   .lado .marca,.lado .pie{display:none}
-  .lado .pil{white-space:nowrap;padding:9px 12px}
+  .lado .pil{flex:0 0 auto;white-space:nowrap;height:40px;padding:0 12px;font-size:12px}
+  .lado .pil svg{width:15px;height:15px}
   .tablero{padding:12px;gap:9px}
   /* La misma pantalla que en computadora, apretada: título arriba, una
      fila de controles que envuelve poco, y los chips en UNA fila que se
@@ -354,13 +384,48 @@ a{color:inherit}
 .act .etiquetas{display:flex;gap:5px;align-items:center}
 .etiquetas{display:flex;gap:6px;flex-wrap:wrap}
 .carril-cab a{text-decoration:none;color:inherit;display:block}
-.carril-cab .mas{display:inline-block;margin-top:2px}
 .bloque{text-decoration:none;display:block}
 .barrita{text-decoration:none;display:block}
 .mas{text-decoration:none;display:inline-block;padding:0 3px}
 .celda .num .n{text-decoration:none;color:inherit}
 .celda .num .punto-at{color:var(--critico);font-size:10px}
 .celda .num .mas{margin-left:auto}
+
+/* ---------- el renglón «2 +» de las cabeceras, con forma ----------
+   (dueño, 28/09/2026: el conteo y el «+» iban pegados y crípticos). El
+   conteo es una pastillita discreta y el «+» un botoncito redondo cuyo
+   borde se nota al hover; los dos miden 18px para que la cabecera no
+   salte de alto — ni cuando el conteo no está (con 0 actividades solo
+   queda el «+», centrado por el text-align de la celda). */
+.carril-cab .cant-dia{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:18px;height:18px;padding:0 6px;margin-top:3px;
+  background:var(--crema-2);border:1px solid var(--borde);border-radius:999px;
+  font-size:9.5px;font-weight:700;color:var(--muy-suave);vertical-align:top;
+}
+.carril-cab .mas{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:18px;height:18px;margin-top:3px;padding:0;
+  border:1px solid var(--borde);border-radius:999px;background:var(--lienzo);
+  font-size:12px;line-height:1;color:var(--muy-suave);vertical-align:top;
+}
+.carril-cab .cant-dia + .mas{margin-left:4px}
+.carril-cab .mas:hover{border-color:var(--texto);color:var(--texto);background:var(--crema-2)}
+/* El mismo lenguaje en la vista Mes: el «+» de la celda como botoncito
+   redondo y el «+N más» como pastillita, para que hablen igual. */
+.celda .num .mas{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:18px;height:18px;padding:0;border:1px solid var(--borde);
+  border-radius:999px;background:var(--lienzo);font-size:12px;line-height:1;
+  color:var(--muy-suave);
+}
+.celda .num .mas:hover{border-color:var(--texto);color:var(--texto);background:var(--crema-2)}
+.celda > .mas{
+  align-self:flex-start;display:inline-flex;align-items:center;
+  padding:1px 7px;border:1px solid var(--borde);border-radius:999px;
+  background:var(--crema-2);font-size:9.8px;font-weight:700;color:var(--muy-suave);
+}
+.celda > .mas:hover{border-color:var(--texto);color:var(--texto)}
 .par{display:flex;gap:7px}
 .sel.ancho{width:100%}
 .panel-der form{display:contents}

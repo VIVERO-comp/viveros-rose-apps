@@ -1088,20 +1088,36 @@ def _bloque(actividad, columna, columnas, indice, total_columnas, dia_hoy, filas
     color = (color_de_tipo or color_de)(actividad["tipo"])
     parte = 1 / columnas
     corrido = parte * columna
+    # Partido = comparte la columna del día con otra actividad a la misma
+    # hora. La tira queda angosta, así que al pasar el mouse el CSS la
+    # expande al ancho COMPLETO de la columna (dueño, 28/09/2026: con 7
+    # columnas de semana las tiras no se leían). Los límites de esa
+    # expansión se calculan AQUÍ y viajan como variables CSS (--exp-*);
+    # el CSS solo las consume en .bloque.partido:hover.
+    partido = columnas > 1
+    estilo = (f"top:calc({arriba:.4f}% + 2px);height:calc({alto:.4f}% - 6px);"
+              f"left:calc({izquierda} + {ancho} * {corrido:.4f} + 2px);"
+              f"width:calc({ancho} * {parte:.4f} - 5px);"
+              f"z-index:{2 + columna};"
+              f"background:{_tinta(color, 0.07)};border-color:{_tinta(color, 0.3)};"
+              f"border-left-color:{color}")
+    if partido:
+        estilo += (f";--exp-izq:calc({izquierda} + 2px);"
+                   f"--exp-ancho:calc({ancho} - 5px)")
     return {
         "a": actividad,
         "color": color,
         "fondo": _tinta(color, 0.07),
         "borde": _tinta(color, 0.3),
-        "estilo": (f"top:calc({arriba:.4f}% + 2px);height:calc({alto:.4f}% - 6px);"
-                   f"left:calc({izquierda} + {ancho} * {corrido:.4f} + 2px);"
-                   f"width:calc({ancho} * {parte:.4f} - 5px);"
-                   f"z-index:{2 + columna};"
-                   f"background:{_tinta(color, 0.07)};border-color:{_tinta(color, 0.3)};"
-                   f"border-left-color:{color}"),
+        "estilo": estilo,
+        "partido": partido,
         # Con la columna partida (o poco alto) el bloque solo dice el tipo:
         # más vale una línea legible que tres cortadas.
         "ver_cliente": actividad["dur"] >= 45 and columnas < 2,
+        # En un bloque partido el cliente SÍ viaja en el DOM (escondido en
+        # reposo): la expansión del hover lo deja leer completo sin ir a
+        # la ficha. La decisión es de Python; el CSS solo esconde/muestra.
+        "ver_cliente_expandido": partido,
         "ver_pie": actividad["dur"] >= 90 and columnas < 2,
         "atrasada": esta_atrasada(actividad, dia_hoy),
     }

@@ -138,6 +138,59 @@ def test_la_semana_reparte_las_actividades_que_chocan():
     assert carril["bloques"][0]["estilo"] != carril["bloques"][1]["estilo"]
 
 
+def _actividad(**extra):
+    base = {"id": "a", "ref": "VIV-1", "tipo": "entrega", "cliente": "A",
+            "lugar": "", "nota": "", "hora": "09:00", "dur": 60,
+            "fecha": calendario.hoy().isoformat(), "estado": "pend",
+            "prioridad": 3, "resp": "Juan", "resp_id": "juan",
+            "url": "", "titulo": ""}
+    base.update(extra)
+    return base
+
+
+def test_un_bloque_partido_lleva_los_limites_de_su_expansion():
+    """Los solapes (28/09/2026): la tira partida lleva la clase `partido` y
+    las variables --exp-* con la columna COMPLETA del día, que el CSS usa
+    para expandirla al pasar el mouse. El cálculo vive en Python."""
+    dia = calendario.hoy().isoformat()
+    choque = [_actividad(),
+              _actividad(id="b", ref="VIV-2", tipo="visita", cliente="B",
+                         hora="09:30", resp="Pedro", resp_id="pedro")]
+    carril = calendario.carril_semana(choque, [dia], dia)
+    for bloque in carril["bloques"]:
+        assert bloque["partido"] is True
+        # La expansión es al ancho completo de la columna del día (7 en
+        # la semana), con el mismo aire (+2 / -5) que la posición normal.
+        assert "--exp-izq:calc((46px + (100% - 46px) * 0.0) + 2px)" in bloque["estilo"]
+        assert "--exp-ancho:calc(((100% - 46px) / 7) - 5px)" in bloque["estilo"]
+
+
+def test_un_bloque_solo_no_lleva_expansion():
+    dia = calendario.hoy().isoformat()
+    carril = calendario.carril_semana([_actividad()], [dia], dia)
+    bloque = carril["bloques"][0]
+    assert bloque["partido"] is False
+    assert "--exp-" not in bloque["estilo"]
+    assert bloque["ver_cliente_expandido"] is False
+
+
+def test_el_cliente_escondido_viaja_solo_en_los_bloques_partidos():
+    """En un bloque partido el cliente SÍ va en el DOM (small.exp) aunque
+    en reposo no se vea: el hover que expande la tira lo muestra. En un
+    bloque solo manda la regla de siempre (ver_cliente por duración)."""
+    dia = calendario.hoy().isoformat()
+    choque = [_actividad(),
+              _actividad(id="b", ref="VIV-2", tipo="visita", cliente="B",
+                         hora="09:30", resp="Pedro", resp_id="pedro")]
+    carril = calendario.carril_semana(choque, [dia], dia)
+    for bloque in carril["bloques"]:
+        assert bloque["ver_cliente_expandido"] is True
+        assert bloque["ver_cliente"] is False  # en reposo, solo el tipo
+    solo = calendario.carril_semana([_actividad()], [dia], dia)["bloques"][0]
+    assert solo["ver_cliente"] is True  # 60 min y sin choque: como siempre
+    assert solo["ver_cliente_expandido"] is False
+
+
 def test_las_horas_vacias_miden_menos_y_los_bloques_siguen_en_su_lugar():
     """Regla del dueño: la fila de una hora sin trabajo se encoge."""
     dia = calendario.hoy().isoformat()
