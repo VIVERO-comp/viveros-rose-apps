@@ -1197,9 +1197,10 @@ def pdf_vista_previa(empleada, nombre_cliente, celular="", datos=None, cargos=No
     """El PDF de la cotización tal como saldría, sin crear la venta.
 
     Mismas líneas que crear_cotizacion —las plantas del carrito con el
-    precio que ponga Odoo, los renglones libres de planta personalizada
-    con su precio a mano, y los cargos con monto— para que lo que se ve
-    sea lo que después se genera."""
+    precio a mano cuando la empleada lo editó (si no, el que ponga Odoo),
+    los renglones libres de planta personalizada con su precio a mano, y
+    los cargos con monto— para que lo que se ve sea lo que después se
+    genera."""
     usuario = empleada["id"]
     lineas, _total = carrito_de(usuario)
     lineas_libres = lineas_de_renglones_planta(renglones_planta_de(usuario))
@@ -1207,8 +1208,8 @@ def pdf_vista_previa(empleada, nombre_cliente, celular="", datos=None, cargos=No
         raise ValueError("Agrega al menos una planta para ver la cotización.")
     partner = _cliente_id(nombre_cliente, celular, datos)
     orden = _orden_vista_previa(usuario, partner, [
-        {"product_id": l["producto_id"], "product_uom_qty": l["cantidad"]}
-        for l in lineas] + lineas_libres + lineas_de_cargos(cargos), banderas)
+        _linea_de_planta(l) for l in lineas]
+        + lineas_libres + lineas_de_cargos(cargos), banderas)
     return descargar_pdf("sale.report_saleorder", orden)
 
 

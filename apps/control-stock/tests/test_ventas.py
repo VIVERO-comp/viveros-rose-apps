@@ -798,6 +798,27 @@ def test_la_vista_previa_reusa_una_sola_orden_por_empleada(cliente_venta, odoo, 
     assert [r for r, _ in llamadas] == ["sale.report_saleorder"] * 2
 
 
+def test_la_vista_previa_lleva_el_precio_a_mano(cliente_venta, odoo, monkeypatch):
+    """El bug del 28/09/2026: la vista previa armaba sus líneas sin pasar
+    por _linea_de_planta y siempre salía con el precio de lista de Odoo,
+    aunque la empleada hubiera escrito uno a mano. Con precio editado la
+    orden temporal debe llevar price_unit; sin editar, Odoo sigue
+    poniendo el suyo."""
+    _pdf_falso(monkeypatch)
+    _agregar(cliente_venta, 501)
+    _agregar(cliente_venta, 502)
+    cliente_venta.post("/venta/carrito/precio",
+                       data={"producto_id": 501, "precio": "9.00"},
+                       follow_redirects=False)
+    cliente_venta.post("/venta/vista-previa", data={"cliente": "Marta"})
+    previa = next(o for o in odoo.ordenes.values()
+                 if (o.get("client_order_ref") or "").startswith(ventas.REF_VISTA_PREVIA))
+    editada = next(l for l in previa["lineas"] if l["product_id"] == 501)
+    sin_editar = next(l for l in previa["lineas"] if l["product_id"] == 502)
+    assert editada["price_unit"] == 9.0
+    assert "price_unit" not in sin_editar
+
+
 def test_el_pdf_de_la_vista_previa_se_ve_dentro_de_la_pantalla(cliente_venta, odoo, monkeypatch):
     _pdf_falso(monkeypatch)
     _agregar(cliente_venta, 501)
