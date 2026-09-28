@@ -34,12 +34,27 @@ import re
 import time
 
 import httpx
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from . import agenda, avisos, calendario, cot_lead, crm_twenty, linear_leads, resumen, ventas
 from .datos import ZONA_PANAMA, _db
 
 VISTAS = ("empleado", "estado")
+
+# Apagada una semana a pedido de Abraham (28/09/2026): "Por empleado" es
+# la vista de reparto, y mientras la prueba, prefiere que nadie la toque
+# por error. Vuelve SOLA el 5 de octubre — sin desplegar nada, la fecha es
+# la única bandera.
+VISTA_EMPLEADO_VUELVE = date(2026, 10, 5)
+
+
+def vista_empleado_apagada():
+    """¿Todavía no llegó el día en que "Por empleado" vuelve?
+
+    En zona de Panamá (`ZONA_PANAMA`), nunca la del servidor a secas — la
+    diferencia de zonas entre los dos droplets ya costó caro una vez.
+    """
+    return datetime.now(ZONA_PANAMA).date() < VISTA_EMPLEADO_VUELVE
 
 # El texto de "nadie lo tiene" en las tarjetas. La columna de Sin asignar
 # va primera a propósito: es la que hay que vaciar.
@@ -346,12 +361,16 @@ def tablero_por_estado(solo_resp="", leads=None):
 def alcance(empleada, es_admin):
     """Qué vistas puede ver quien está en la sesión, y con qué filtro.
 
-    El dueño ve las dos vistas y todo el equipo. Un empleado ve solo «Por
-    estado», y solo lo suyo: la vista «Por empleado» es de reparto, y
-    repartir es cosa del dueño.
+    El dueño ve las dos vistas y todo el equipo — salvo que «Por empleado»
+    esté apagada (`vista_empleado_apagada()`), en cuyo caso ni el dueño la
+    ve: es el candado del servidor, no solo el botón que no se pinta. Un
+    empleado ve solo «Por estado», y solo lo suyo: la vista «Por empleado»
+    es de reparto, y repartir es cosa del dueño.
     """
+    vistas_admin = [v for v in VISTAS
+                    if v != "empleado" or not vista_empleado_apagada()]
     if es_admin:
-        return {"vistas": list(VISTAS), "solo_resp": "", "admin": True}
+        return {"vistas": vistas_admin, "solo_resp": "", "admin": True}
     return {"vistas": ["estado"],
             "solo_resp": agenda.responsable_de_empleada(empleada),
             "admin": False}

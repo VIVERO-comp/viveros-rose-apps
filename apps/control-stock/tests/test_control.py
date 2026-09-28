@@ -20,6 +20,7 @@ Los leads de muestra (app/linear_leads.py):
 """
 
 import time
+from datetime import datetime
 
 import pytest
 
@@ -33,6 +34,10 @@ def muestra_limpia(monkeypatch, db_limpia):
     monkeypatch.delenv("AJUSTES_ADMINS", raising=False)
     linear_leads.reiniciar_muestra()
     control.iniciar_tablas()
+    # Las pruebas de este archivo son de ANTES de que "Por empleado" se
+    # apagara una semana (28/09/2026): por defecto corren como si ya
+    # hubiera vuelto. Las pruebas de la ventana apagada la prenden a mano.
+    monkeypatch.setattr(control, "vista_empleado_apagada", lambda: False)
 
 
 @pytest.fixture
@@ -46,6 +51,11 @@ def de_dueno(monkeypatch):
 
 ADMIN = {"vistas": ["empleado", "estado"], "solo_resp": "", "admin": True}
 EMPLEADO = {"vistas": ["estado"], "solo_resp": "Ruben", "admin": False}
+
+# La función real, capturada ANTES de que el autouse de arriba la tape con
+# un lambda: la necesitan las pruebas que congelan el reloj para probar la
+# comparación de fechas de verdad, no el atajo que usa el resto del archivo.
+_VISTA_EMPLEADO_APAGADA_REAL = control.vista_empleado_apagada
 
 
 # ---------------------------------------------------------------------------
@@ -764,3 +774,60 @@ def test_la_pantalla_se_pinta_igual_con_la_cache_vacia(cliente, de_dueno):
     # tiene que alcanzar solo, sin que la pantalla reviente.
     cuerpo = cliente.get("/control", params={"vista": "estado"}).text
     assert "Tamara" in cuerpo and "Juan Carlos Lopez" in cuerpo
+
+
+# ---------------------------------------------------------------------------
+# «Por empleado» apagada una semana (28/09/2026, pedido de Abraham): el
+# candado va en el servidor (`alcance()`/`vista_pedida()`), no solo en el
+# botón que no se pinta.
+# ---------------------------------------------------------------------------
+
+def test_apagada_vista_pedida_cae_a_estado_incluso_para_el_dueno(monkeypatch):
+    monkeypatch.setattr(control, "vista_empleado_apagada", lambda: True)
+    alc = control.alcance({"id": "abraham"}, es_admin=True)
+    assert alc["vistas"] == ["estado"]
+    assert control.vista_pedida("empleado", alc) == "estado"
+
+
+def test_llegada_la_fecha_vuelve_a_funcionar_sola(monkeypatch):
+    """Congela "ahora" en la fecha en que vuelve — no depende del reloj
+    real, así esta prueba sigue significando lo mismo después del 5 de
+    octubre de 2026."""
+    class _RelojFijo(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 5, 9, 0, tzinfo=tz)
+
+    monkeypatch.setattr(control, "vista_empleado_apagada", _VISTA_EMPLEADO_APAGADA_REAL)
+    monkeypatch.setattr(control, "datetime", _RelojFijo)
+    assert control.vista_empleado_apagada() is False
+    alc = control.alcance({"id": "abraham"}, es_admin=True)
+    assert alc["vistas"] == ["empleado", "estado"]
+
+
+def test_todavia_apagada_un_dia_antes(monkeypatch):
+    class _RelojFijo(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 4, 23, 59, tzinfo=tz)
+
+    monkeypatch.setattr(control, "vista_empleado_apagada", _VISTA_EMPLEADO_APAGADA_REAL)
+    monkeypatch.setattr(control, "datetime", _RelojFijo)
+    assert control.vista_empleado_apagada() is True
+
+
+def test_el_boton_de_por_empleado_no_se_pinta_mientras_esta_apagada(
+        cliente, de_dueno, monkeypatch):
+    monkeypatch.setattr(control, "vista_empleado_apagada", lambda: True)
+    cuerpo = cliente.get("/control").text
+    assert "Por empleado" not in cuerpo
+
+
+def test_el_reparto_por_detras_sigue_andando_aunque_la_vista_este_apagada(
+        monkeypatch):
+    """Se apaga LA VISTA, no el reparto: `mover_a_empleado` (la etiqueta
+    `Resp:`) no se toca."""
+    monkeypatch.setattr(control, "vista_empleado_apagada", lambda: True)
+    aviso, error = control.mover_a_empleado("LEAD-90", "Mary")
+    assert error == ""
+    assert linear_leads.uno("LEAD-90")["resp"] == "Mary"
