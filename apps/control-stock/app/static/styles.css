@@ -1380,15 +1380,14 @@ nav .marca{display:none}
   nav .marca img{width:28px;height:28px;border-radius:50%;object-fit:cover}
   nav .marca span{font-size:12.5px;font-weight:700;color:var(--texto)}
   .phone{transition:grid-template-columns .18s ease}
-  body.menu-oculto .phone{grid-template-columns:78px 1fr}
-  body.menu-oculto nav{padding:22px 12px}
-  /* Al colapsar el sidebar a un riel de iconos, la marca se oculta con
-     él (el mismo pedido del dueño que ya cumplía la hamburguesa). */
-  body.menu-oculto nav .marca{display:none}
-  /* font-size:0 esconde el texto de la píldora; el icono (.ic) conserva
-     su tamaño y el riel queda de puros iconos centrados. */
-  body.menu-oculto nav button, body.menu-oculto nav a{
-    font-size:0;gap:0;justify-content:center;padding:13px 0;width:100%;
+  /* Al cerrar la hamburguesa el sidebar se esconde COMPLETO (pedido del
+     dueño, 28/09/2026): antes quedaba un riel de 78px de puros iconos,
+     distinto de como cierra Control/Calendario (calendario.css
+     "body.menu-oculto .lado"). Ahora las dos imitan lo mismo. */
+  body.menu-oculto .phone{grid-template-columns:0px 1fr}
+  body.menu-oculto nav{
+    padding-left:0;padding-right:0;border-right:0;
+    opacity:0;pointer-events:none;overflow:hidden;
   }
 }
 
