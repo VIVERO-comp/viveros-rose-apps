@@ -990,7 +990,8 @@ def _enlace_whatsapp(request, venta):
 @app.get("/venta")
 def venta(request: Request, error: str = "", lead: str = "",
           cliente: str = "", cel: str = ""):
-    # La pestaña: el botón grande "+ Nueva venta" y el historial local.
+    # La pestaña: el botón grande "+ Venta" (arriba de los servicios,
+    # dueño 28/09/2026) y el historial local.
     usuario = request.state.empleada["id"]
     if lead:
         # "Cotizar en Vender" desde la ficha de Retail: queda anotado el
@@ -1007,7 +1008,11 @@ def venta(request: Request, error: str = "", lead: str = "",
     en_curso = 0
     if ventas.configurado():
         try:
-            en_curso = len(ventas.carrito_de(usuario)[0])
+            # Cuenta las plantas del catálogo Y los renglones libres de
+            # "planta personalizada" (28/09/2026): las dos son "algo en
+            # curso" de la misma venta.
+            en_curso = (len(ventas.carrito_de(usuario)[0])
+                       + len(ventas.renglones_planta_de(usuario)))
         except Exception:
             pass
     return plantillas.TemplateResponse(request, "venta.html", {
@@ -1072,6 +1077,22 @@ def venta_cancelar(request: Request, n: int):
     return RedirectResponse("/venta", status_code=303)
 
 
+def _resultados_con_stock(resultados):
+    """El stock de cada resultado del buscador de plantas, leído de donde
+    ya lo lee Stock (`datos.obtener_inventario`, mismo caché y TTL — no se
+    inventa otra fuente): así la empleada ve si alcanza antes de vender.
+    `disponible` sale en None por producto si el inventario no contestó
+    ahora — "no hay" nunca se confunde con "no sé" (regla del proyecto)."""
+    if not resultados:
+        return resultados
+    try:
+        inventario, _leido_en = datos.obtener_inventario()
+    except Exception:
+        return [{**r, "disponible": None} for r in resultados]
+    stock = {p["sku"]: p["disponible"] for p in inventario}
+    return [{**r, "disponible": stock.get(r["sku"])} for r in resultados]
+
+
 @app.get("/venta/nueva")
 def venta_nueva(request: Request, q: str = "", error: str = ""):
     # El formulario de la venta: cliente (nombre y celular), buscador en
@@ -1080,6 +1101,11 @@ def venta_nueva(request: Request, q: str = "", error: str = ""):
     contexto = {
         "ventas_activo": ventas.configurado(), "q": q.strip(),
         "resultados": None, "carrito": [], "total_carrito": 0.0,
+        "renglones_planta": [], "total_renglones_planta": 0.0,
+        # None = todavía no se sabe (Odoo no contestó): la plantilla no
+        # debe leerlo como "no disponible" y apagar el formulario por las
+        # puras. Ver `personalizada_activa` en venta_nueva.html.
+        "personalizada_activa": None,
         "borrador": ventas.borrador_de(usuario),
         # El aviso "quedará amarrada al lead X" también se ve aquí: llegar
         # desde Retail aterriza directo en este formulario (23/09/2026).
@@ -1089,18 +1115,25 @@ def venta_nueva(request: Request, q: str = "", error: str = ""):
     if contexto["ventas_activo"]:
         try:
             if contexto["q"]:
-                contexto["resultados"] = ventas.buscar_productos(contexto["q"])
+                contexto["resultados"] = _resultados_con_stock(
+                    ventas.buscar_productos(contexto["q"]))
             contexto["carrito"], contexto["total_carrito"] = ventas.carrito_de(usuario)
+            contexto["renglones_planta"] = ventas.renglones_planta_de(usuario)
+            contexto["total_renglones_planta"] = round(
+                sum(r["importe"] for r in contexto["renglones_planta"]), 2)
+            contexto["personalizada_activa"] = (
+                ventas.id_producto_personalizada_planta() is not None)
         except Exception:
             contexto["error_venta"] = ("Sin conexión con Odoo en este momento. "
                                        "Vuelve a intentar en un rato.")
-    # El desglose del total (plantas + envío + instalación) sale pintado
-    # del servidor con lo que diga el borrador; venta.js solo lo refresca
-    # mientras se escribe. El total real lo confirma Odoo al crear.
+    # El desglose del total (plantas + renglones libres + envío +
+    # instalación) sale pintado del servidor con lo que diga el borrador;
+    # venta.js solo lo refresca mientras se escribe. El total real lo
+    # confirma Odoo al crear.
     contexto["leads_crm"] = _leads_para_elegir()
     contexto["cargos_montos"] = _cargos_del_form(contexto["borrador"])
     contexto["total_con_cargos"] = (
-        contexto["total_carrito"]
+        contexto["total_carrito"] + contexto["total_renglones_planta"]
         + sum(v for v in contexto["cargos_montos"].values()
               if isinstance(v, (int, float))))
     return plantillas.TemplateResponse(request, "venta_nueva.html", contexto)
@@ -1124,9 +1157,11 @@ async def venta_borrador(request: Request):
 @app.get("/venta/buscar")
 def venta_buscar(request: Request, q: str = ""):
     # Alimenta el buscador en vivo (venta.js): mismo resultado que la
-    # búsqueda server-rendered, en JSON y con el precio ya formateado.
+    # búsqueda server-rendered, en JSON, con el precio ya formateado y el
+    # stock (28/09/2026) para que la búsqueda en vivo y la de recarga de
+    # página digan lo mismo.
     try:
-        resultados = ventas.buscar_productos(q)
+        resultados = _resultados_con_stock(ventas.buscar_productos(q))
     except Exception:
         return {"error": "Sin conexión con Odoo en este momento."}
     return {"resultados": [{**p, "precio": dinero_venta(p["precio"])} for p in resultados]}
@@ -1305,6 +1340,36 @@ async def venta_quitar(request: Request):
     return RedirectResponse(_volver_del_carrito(form), status_code=303)
 
 
+# Los renglones libres de "planta personalizada" (dueño, 28/09/2026): un
+# renglón por vez, como el carrito de plantas del catálogo, pero sin
+# producto_id — solo vive en Nueva Venta, así que el destino es siempre
+# esa pantalla (a diferencia de _volver_del_carrito, que reparte entre
+# varias). agregar_renglon_planta valida y avisa con un ValueError claro
+# (nombre sin letras, cantidad o precio ilegibles); nunca revienta.
+
+@app.post("/venta/renglon-planta/agregar")
+async def venta_renglon_planta_agregar(request: Request):
+    form = await request.form()
+    try:
+        ventas.agregar_renglon_planta(
+            request.state.empleada["id"], form.get("texto", ""),
+            form.get("cantidad", ""), form.get("precio", ""))
+    except ValueError as error:
+        return _redirigir_venta(str(error), nueva=True)
+    return RedirectResponse("/venta/nueva#personalizada", status_code=303)
+
+
+@app.post("/venta/renglon-planta/quitar")
+async def venta_renglon_planta_quitar(request: Request):
+    form = await request.form()
+    try:
+        ventas.quitar_renglon_planta(request.state.empleada["id"],
+                                     int(form.get("n", "")))
+    except (TypeError, ValueError):
+        pass
+    return RedirectResponse("/venta/nueva#personalizada", status_code=303)
+
+
 def _ruta_vista_previa(usuario):
     """El PDF del vistazo, uno por empleada. El usuario es su nombre de
     acceso: se limpia antes de usarlo como nombre de archivo."""
@@ -1386,11 +1451,39 @@ async def venta_cotizar(request: Request):
     })
 
 
+@app.post("/venta/vender")
+async def venta_vender(request: Request):
+    """«Guardar venta» (dueño, 28/09/2026): la MISMA orden que la
+    cotización, con action_confirm encima. El pago no lo cobra la app: de
+    aquí la orden entra sola al kanban de cobro de Odoo (etapa_cobro),
+    igual que las cotizaciones de servicio — no hay pantalla de cobro
+    nueva ni se toca la de Facturar/Reintentar de las cotizaciones."""
+    form = await request.form()
+    _amarrar_lead_del_form(request, form)
+    try:
+        registro = ventas.crear_cotizacion(
+            request.state.empleada, form.get("cliente", ""), form.get("celular", ""),
+            _datos_cliente_del_form(form), _cargos_del_form(form), confirmar=True)
+    except ValueError as error:
+        return _redirigir_venta(str(error), nueva=True)
+    except Exception as error:
+        return _redirigir_venta(f"Odoo no aceptó la venta: {ventas._mensaje_de_error(error)}",
+                                nueva=True)
+    return plantillas.TemplateResponse(request, "venta_exito.html", {
+        "titulo": "Venta confirmada",
+        "sub": f"{registro['orden']} · {registro['cliente']}",
+        "filas": [("Total", dinero_venta(registro["total"]), None),
+                  ("Estado", "Confirmada · el cobro se registra en Odoo", "dorado")],
+        "pdf_href": f"/venta/{registro['n']}/cotizacion.pdf",
+        "pdf_texto": "Descargar orden (PDF)",
+    })
+
+
 # ---------------------------------------------------------------------------
 # Cotizaciones de servicio (Alquiler, Boda, Mantenimiento…): botones por
-# tipo junto a "+ NUEVA VENTA", cada uno con su mini-formulario. Reusan el
-# mismo carrito de plantas de Nueva Venta (app/ventas.py) para los tipos
-# que llevan catálogo — es el mismo carrito por empleada, así que solo debe
+# tipo junto a "+ Venta", cada uno con su mini-formulario. Reusan el mismo
+# carrito de plantas de Nueva Venta (app/ventas.py) para los tipos que
+# llevan catálogo — es el mismo carrito por empleada, así que solo debe
 # haber un formulario en curso a la vez (igual que hoy con Nueva Venta).
 # ---------------------------------------------------------------------------
 

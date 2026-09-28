@@ -24,6 +24,18 @@ function pintarResultados(lista, q) {
       '<p class="nada-venta">Nada con "' + escaparHtml(q) + '". Prueba otro nombre o el SKU.</p>';
     return;
   }
+  // El stock junto al precio (28/09/2026, mínimo indispensable de JS: el
+  // servidor ya pintó esto mismo en la carga inicial, y aquí solo se
+  // repite para que escribir en vivo diga lo mismo). `disponible` puede
+  // venir null (Odoo no contestó ahora mismo) — nunca se dice "0" sin
+  // saberlo.
+  function stockHtml(p) {
+    if (p.disponible === null || p.disponible === undefined) {
+      return '<span class="stock-mini">stock: no disponible ahora</span>';
+    }
+    const agotado = p.disponible <= 0 ? " stock-agotado" : "";
+    return `<span class="stock-mini${agotado}">${p.disponible} en stock</span>`;
+  }
   contenedorResultados.innerHTML = lista.map(p => `
     <form method="post" action="/venta/carrito/agregar" class="sin-margen">
       <input type="hidden" name="producto_id" value="${p.id}">
@@ -32,7 +44,8 @@ function pintarResultados(lista, q) {
       <button class="planta planta-boton" type="submit">
         <div class="foto">🪴<img src="/venta/foto/${p.id}" alt="" loading="lazy" onerror="this.remove()"></div>
         <div class="info"><b>${escaparHtml(p.nombre)}</b><span>${escaparHtml(p.sku)}</span>
-          <span class="precio"><b>${escaparHtml(p.precio)}</b></span></div>
+          <span class="precio"><b>${escaparHtml(p.precio)}</b></span>
+          ${stockHtml(p)}</div>
         <div class="agregar-venta">+</div>
       </button>
     </form>`).join("");
@@ -198,7 +211,12 @@ function envioEnVivo() {
 
 function pintarDesglose() {
   if (!desglose) return;
-  let total = parseFloat(desglose.dataset.plantas) || 0;
+  // Plantas del catálogo + los renglones libres de "planta personalizada"
+  // (28/09/2026): estos últimos solo cambian con un reload del servidor
+  // (se agregan de a uno, por POST), así que su total ya viene fijo en el
+  // dataset; lo que se recalcula en vivo aquí son los cargos.
+  let total = (parseFloat(desglose.dataset.plantas) || 0)
+    + (parseFloat(desglose.dataset.personalizada) || 0);
   for (const clave of ["envio", "instalacion"]) {
     const fila = document.getElementById("linea-" + clave);
     let monto;

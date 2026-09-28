@@ -81,7 +81,7 @@
   <p class="nada-venta">Aún no hay ventas locales.</p>
   {% endif %}
   {% for v in ventas %}
-  <div class="venta-item {{ 'pagado' if v.estado == 'pagado' else ('cotizacion' if v.estado == 'cotizacion' else ('cancelada' if v.estado == 'cancelada' else 'parcial')) }}">
+  <div class="venta-item {{ 'pagado' if v.estado == 'pagado' else ('cotizacion' if v.estado == 'cotizacion' else ('vendida' if v.estado == 'vendida' else ('cancelada' if v.estado == 'cancelada' else 'parcial'))) }}">
     <div class="fila1">
       <div>
         <b class="titulo">{{ v.orden }} · {{ v.cliente }}{% if v.celular %} <span class="cel-titulo">· {{ v.celular }}</span>{% endif %}</b>
@@ -90,6 +90,9 @@
       </div>
       {% if v.estado == "pagado" %}<span class="badge b-ok">Pagado</span>
       {% elif v.estado == "cotizacion" %}<span class="badge b-bajo">Cotización</span>
+      {# "vendida" (28/09/2026): "Guardar venta" — confirmada, el cobro
+         vive en el kanban de Odoo, igual que las cotizaciones de servicio. #}
+      {% elif v.estado == "vendida" %}<span class="badge b-ok">Venta</span>
       {% elif v.estado == "cancelada" %}<span class="badge b-neutro">Cancelada</span>
       {% else %}<span class="badge b-critico">{{ v.etiqueta_estado }}</span>{% endif %}
     </div>
@@ -107,6 +110,10 @@
                 onsubmit="return confirm('Cancela la cotización {{ v.orden }} también en Odoo y no tiene marcha atrás desde la app: para revivirla habría que crear la venta de nuevo. ¿Cancelar?')">
             <button type="submit" class="enlace-sub">Cancelar</button>
           </form>
+        {% elif v.estado == "vendida" %}
+          {# Sin Facturar/Reintentar: esta orden no sigue el pipeline local
+             de cobro. El pago se registra en el kanban de Odoo. #}
+          <a href="/venta/{{ v.n }}/cotizacion.pdf">Descargar orden (PDF)</a>
         {% elif v.estado == "pagado" %}
           {# Sin target="_blank" en los PDF: bajan con cabeceras de descarga
              sin salir de la pantalla; la pestaña nueva era la "ventana sin

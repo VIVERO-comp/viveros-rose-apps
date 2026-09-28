@@ -78,7 +78,16 @@
       <button class="planta planta-boton" type="submit">
         <div class="foto">🪴<img src="/venta/foto/{{ p.id }}" alt="" loading="lazy" onerror="this.remove()"></div>
         <div class="info"><b>{{ p.nombre }}</b><span>{{ p.sku }}</span>
-          <span class="precio"><b>{{ p.precio | dinero }}</b></span></div>
+          <span class="precio"><b>{{ p.precio | dinero }}</b></span>
+          {# El stock junto al precio (dueño, 28/09/2026): el mismo que lee
+             Stock, para saber si alcanza antes de vender. None = Odoo no
+             contestó ahora mismo — nunca se dice "0" sin saberlo. #}
+          {% if p.disponible is none %}
+          <span class="stock-mini">stock: no disponible ahora</span>
+          {% else %}
+          <span class="stock-mini{{ ' stock-agotado' if p.disponible <= 0 else '' }}">{{ p.disponible }} en stock</span>
+          {% endif %}
+        </div>
         <div class="agregar-venta">+</div>
       </button>
     </form>
@@ -88,7 +97,7 @@
 
   {% if not carrito %}
   <p class="nada-venta">Todavía no has añadido plantas: búscalas arriba y
-    tócalas para sumarlas a la venta.</p>
+    tócalas para sumarlas a la venta, o agrega una personalizada más abajo.</p>
   {% else %}
     {# Una planta por renglón: nombre, precio escribible, cantidad e
        importe. El ancla #plantas de arriba es a donde vuelven agregar,
@@ -130,7 +139,56 @@
       </div>
       {% endfor %}
     </div>
+  {% endif %}
 
+  {# ---- 4. Planta personalizada (dueño, 28/09/2026): lo que no está en
+     el inventario de Odoo — nombre, cantidad y precio a mano, de a un
+     renglón por vez, con el comodín CUSTOM-PLANTA. Fuera del `if carrito`
+     de arriba: una venta puede ser SOLO de renglones libres. ---- #}
+  <div class="seccion-titulo" id="personalizada" style="margin-top:18px">Planta personalizada
+    <span class="cuenta-seccion">{{ renglones_planta | length }}</span></div>
+  {% if personalizada_activa is sameas false %}
+  <p class="nada-venta">No disponible en este servidor todavía (falta el
+    producto CUSTOM-PLANTA en Odoo). Avísale a Abraham.</p>
+  {% else %}
+  <p class="nada-venta">Para una planta o un producto que no está en el
+    inventario: escribe el nombre, la cantidad y el precio.</p>
+  <form method="post" action="/venta/renglon-planta/agregar" class="campos-cliente" style="margin-top:8px">
+    <div class="campo campo-ancho">
+      <span>Nombre de la planta o el producto</span>
+      <input type="text" name="texto" maxlength="200" autocomplete="off"
+             placeholder="Ej: Croton grande de otro vivero">
+    </div>
+    <div class="campo">
+      <span>Cantidad</span>
+      <input type="number" name="cantidad" min="1" step="1" inputmode="numeric" value="1">
+    </div>
+    <div class="campo">
+      <span>Precio ($)</span>
+      <input type="number" name="precio" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
+    </div>
+    <div class="campo campo-ancho" style="text-align:right">
+      <button class="btn btn-linea" type="submit">+ Agregar renglón</button>
+    </div>
+  </form>
+  {% if renglones_planta %}
+  <div class="lista-plantas" style="margin-top:10px">
+    {% for r in renglones_planta %}
+    <div class="fila-planta">
+      <div class="nombre"><b>{{ r.texto }}</b><span>Personalizada</span></div>
+      <div>{{ '%g' | format(r.cantidad) }} × {{ r.precio | dinero }}</div>
+      <div class="importe">{{ r.importe | dinero }}</div>
+      <form method="post" action="/venta/renglon-planta/quitar" class="sin-margen">
+        <input type="hidden" name="n" value="{{ r.n }}">
+        <button class="quitar-venta" type="submit">Quitar</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% endif %}{# personalizada_activa #}
+
+  {% if carrito or renglones_planta %}
     {# ---- 5. Envío e instalación, de último (pedido del dueño,
        23/09/2026) ---- Lo que se escriba acá se suma solo en la cuenta de
        arriba, sin recargar. #}
@@ -198,16 +256,22 @@
   {# ---- La cuenta: a la derecha en computadora, al final del formulario
        cuando se apila ---- #}
   <aside class="col-cuenta">
-    {% if carrito %}
+    {% if carrito or renglones_planta %}
     <div class="tarjeta-lado">
       <div class="rotulo-lado">Cuenta</div>
       {# Espeja los renglones del PDF: cada cargo es una línea. Lo inicial lo
          pinta el servidor (borrador); venta.js solo lo refresca mientras se
          escribe. El total real lo confirma Odoo. #}
       <div class="total-venta desglose" id="desglose"
-           data-plantas="{{ '%.2f' | format(total_carrito) }}">
+           data-plantas="{{ '%.2f' | format(total_carrito) }}"
+           data-personalizada="{{ '%.2f' | format(total_renglones_planta) }}">
+        {% if carrito %}
         {% set a_mano = carrito | selectattr('precio_editado') | list %}
         <div class="linea-total"><span>Plantas{{ ' (con precios a mano)' if a_mano else ' (precios de Odoo)' }}</span><b>{{ total_carrito | dinero }}</b></div>
+        {% endif %}
+        {% if renglones_planta %}
+        <div class="linea-total"><span>Planta personalizada</span><b>{{ total_renglones_planta | dinero }}</b></div>
+        {% endif %}
         {% for cargo in cargos_catalogo %}
         <div class="linea-total" id="linea-{{ cargo.clave }}"
              {% if not cargos_montos[cargo.clave] %}style="display:none"{% endif %}>
@@ -217,6 +281,10 @@
       </div>
 
       <button class="btn btn-dorado btn-generar" type="submit" form="form-acciones">GENERAR COTIZACIÓN</button>
+      {# "Guardar venta" (dueño, 28/09/2026): la MISMA orden, confirmada.
+         En gris: el negro de la pantalla sigue siendo uno solo. #}
+      <button class="btn btn-linea btn-generar" type="submit" form="form-acciones"
+              formaction="/venta/vender" style="margin-top:8px">GUARDAR VENTA</button>
     </div>
     {% endif %}
   </aside>

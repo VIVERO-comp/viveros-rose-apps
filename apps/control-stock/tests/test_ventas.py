@@ -316,17 +316,21 @@ def test_boton_venta_visible_en_computadora(cliente_venta):
     assert "solo-pc" not in r.text
 
 
-def test_buscar_muestra_precio_y_foto(cliente_venta):
+def test_buscar_muestra_precio_y_foto(cliente_venta, con_inventario):
     r = cliente_venta.get("/venta/nueva?q=romero")
     assert "ROMERO" in r.text and "$3.50" in r.text
     assert "/venta/foto/501" in r.text
+    # El stock junto al precio (28/09/2026), del mismo inventario que lee
+    # Stock: PL-ROMERO tiene 2 disponibles en el inventario falso.
+    assert "2 en stock" in r.text
 
 
-def test_buscar_en_vivo_devuelve_json(cliente_venta):
+def test_buscar_en_vivo_devuelve_json(cliente_venta, con_inventario):
     r = cliente_venta.get("/venta/buscar?q=romero")
     assert r.status_code == 200
     assert r.json()["resultados"] == [
-        {"id": 501, "sku": "PL-ROMERO", "nombre": "ROMERO", "precio": "$3.50"}]
+        {"id": 501, "sku": "PL-ROMERO", "nombre": "ROMERO", "precio": "$3.50",
+         "disponible": 2}]
 
 
 def test_agregar_limpia_la_busqueda_y_ancla_en_plantas(cliente_venta):
