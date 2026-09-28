@@ -65,6 +65,13 @@ plantillas.env.globals["v_estaticos"] = VERSION_ESTATICOS
 # pinta el parcial _cargos.html en las cuatro pantallas de venta: va como
 # global para no pasarlo por contexto en cada una.
 plantillas.env.globals["cargos_catalogo"] = ventas.CARGOS
+# Las opciones de envío de Vender (28/09/2026): el parcial las pinta como
+# radios con su precio de Ajustes, y el desglose rotula la línea con la
+# opción elegida. Globals por la misma razón que cargos_catalogo;
+# precios_envio va como función porque los precios cambian sin reiniciar.
+plantillas.env.globals["envio_opciones"] = ventas.OPCIONES_ENVIO
+plantillas.env.globals["envio_precios"] = ventas.precios_envio
+plantillas.env.globals["nombre_linea_envio"] = ventas.nombre_linea_envio
 # Retail y CRM se BORRARON en la Fase 5 (24/09/2026): no quedan pantallas
 # ni banderas que las escondan. `RETAIL_EN_MENU` y `CRM_EN_MENU` ya no
 # hacen nada y se pueden sacar del .env del droplet.
@@ -747,6 +754,33 @@ async def ajustes_coworker_quitar(request: Request):
                             status_code=303)
 
 
+@app.post("/ajustes/envio")
+async def ajustes_envio(request: Request):
+    """Los 4 precios de las opciones fijas de envío de Vender. Viven en la
+    tabla config (claves envio_precio_*) para cambiarlos sin desplegar;
+    Personalizado no tiene precio que guardar."""
+    if (rechazo := _solo_admin(request)) is not None:
+        return rechazo
+    form = await request.form()
+    nuevos = {}
+    for opcion in ventas.OPCIONES_ENVIO:
+        crudo = str(form.get(opcion["clave"]) or "").strip().replace(",", ".")
+        try:
+            precio = float(crudo)
+        except ValueError:
+            precio = 0.0
+        if precio <= 0:
+            return RedirectResponse("/?tab=ajustes&aviso=envio-invalido",
+                                    status_code=303)
+        nuevos[opcion["clave"]] = precio
+    # Se guarda todo o nada: un formulario con un precio ilegible no deja
+    # los otros tres a medias.
+    for clave, precio in nuevos.items():
+        datos.fijar_config(ventas.PREFIJO_PRECIO_ENVIO + clave, f"{precio:.2f}")
+    return RedirectResponse("/?tab=ajustes&aviso=envio-guardado",
+                            status_code=303)
+
+
 @app.post("/ajustes/dispositivos/nombrar")
 async def ajustes_dispositivo_nombrar(request: Request):
     """Le pone nombre al dispositivo que escribió por el WhatsApp del negocio.
@@ -1067,8 +1101,8 @@ def venta_nueva(request: Request, q: str = "", error: str = ""):
     contexto["cargos_montos"] = _cargos_del_form(contexto["borrador"])
     contexto["total_con_cargos"] = (
         contexto["total_carrito"]
-        + sum(v for k, v in contexto["cargos_montos"].items()
-              if not k.endswith("_desc")))
+        + sum(v for v in contexto["cargos_montos"].values()
+              if isinstance(v, (int, float))))
     return plantillas.TemplateResponse(request, "venta_nueva.html", contexto)
 
 
@@ -1156,14 +1190,19 @@ def _cargos_del_form(form):
     """Los cargos opcionales (envío, instalación, mantenimiento): el monto
     de cada uno y, en "<clave>_desc", el párrafo que se imprime debajo.
     Vacío o ilegible cuenta como 0: son opcionales, no motivo de error.
-    Un párrafo vacío NO se guarda: así el renglón sale con el de fábrica."""
+    Un párrafo vacío NO se guarda: así el renglón sale con el de fábrica.
+    El envío ya no es un monto suelto: es la opción elegida (radios) y
+    ventas.resolver_envio decide el monto, la opción y la nota."""
     cargos = {}
     for cargo in ventas.CARGOS:
-        crudo = str(form.get(cargo["clave"]) or "").strip().replace(",", ".")
-        try:
-            cargos[cargo["clave"]] = max(float(crudo), 0.0) if crudo else 0.0
-        except ValueError:
-            cargos[cargo["clave"]] = 0.0
+        if cargo["clave"] == "envio":
+            cargos.update(ventas.resolver_envio(form))
+        else:
+            crudo = str(form.get(cargo["clave"]) or "").strip().replace(",", ".")
+            try:
+                cargos[cargo["clave"]] = max(float(crudo), 0.0) if crudo else 0.0
+            except ValueError:
+                cargos[cargo["clave"]] = 0.0
         parrafo = str(form.get(cargo["clave"] + "_desc") or "").strip()[:600]
         if parrafo:
             cargos[cargo["clave"] + "_desc"] = parrafo

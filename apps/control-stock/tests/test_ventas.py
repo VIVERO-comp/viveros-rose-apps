@@ -795,3 +795,153 @@ def test_sin_carrito_la_vista_previa_avisa(cliente_venta, odoo, monkeypatch):
                            follow_redirects=False)
     assert r.status_code == 303
     assert "Agrega%20al%20menos%20una%20planta" in r.headers["location"]
+
+
+# --- Las opciones de envío al cotizar (dueño, 28/09/2026) -------------------
+# El empleado elige UNA: Carro o Camioneta (pick up), ciudad o fuera, con su
+# precio ya puesto —editable— o Personalizado con monto y nota. Los precios
+# viven en Ajustes (tabla config), no en el código.
+
+from app import datos as datos_app
+
+
+def test_precios_de_envio_de_fabrica(db_limpia):
+    """Sin nada guardado en Ajustes rigen los de fábrica: carro 10/25,
+    camioneta 25/45."""
+    assert ventas.precios_envio() == {
+        "carro_ciudad": 10.0, "carro_fuera": 25.0,
+        "camioneta_ciudad": 25.0, "camioneta_fuera": 45.0}
+
+
+def test_los_precios_se_editan_en_ajustes_no_en_el_codigo(db_limpia):
+    datos_app.fijar_config("envio_precio_carro_ciudad", "12.50")
+    assert ventas.precios_envio()["carro_ciudad"] == 12.5
+    # Un valor guardado que no sirve (ilegible o cero) no rompe la venta:
+    # vuelve el de fábrica.
+    datos_app.fijar_config("envio_precio_camioneta_fuera", "no-es-numero")
+    datos_app.fijar_config("envio_precio_carro_fuera", "0")
+    precios = ventas.precios_envio()
+    assert precios["camioneta_fuera"] == 45.0 and precios["carro_fuera"] == 25.0
+
+
+def test_la_opcion_fija_sale_con_su_precio_pero_el_escrito_manda(db_limpia):
+    assert ventas.resolver_envio({"envio_opcion": "carro_ciudad"}) == {
+        "envio": 10.0, "envio_opcion": "carro_ciudad", "envio_nota": ""}
+    # Si el viaje pasa de lo que cubre, el empleado escribe otro monto.
+    assert ventas.resolver_envio(
+        {"envio_opcion": "carro_ciudad", "envio": "18"})["envio"] == 18.0
+
+
+def test_sin_envio_cobra_cero_aunque_el_campo_traiga_algo(db_limpia):
+    """«Sin envío» es la opción por defecto y gana sobre un monto olvidado
+    en el campo: nadie cobra un envío que no se eligió."""
+    assert ventas.resolver_envio({"envio_opcion": "", "envio": "18"}) == {
+        "envio": 0.0, "envio_opcion": "", "envio_nota": ""}
+    # Un valor inventado en el radio tampoco cobra nada.
+    assert ventas.resolver_envio(
+        {"envio_opcion": "en-helicoptero", "envio": "18"})["envio"] == 0.0
+
+
+def test_personalizado_lleva_monto_y_nota(db_limpia):
+    """Más de 30 minutos no tiene opción fija: se usa Personalizado y la
+    nota sale en la línea («Envío · Chame, 50 min»)."""
+    cargos = ventas.resolver_envio({
+        "envio_opcion": "personalizado", "envio": "50",
+        "envio_nota": "Chame, 50 min"})
+    assert cargos == {"envio": 50.0, "envio_opcion": "personalizado",
+                      "envio_nota": "Chame, 50 min"}
+    assert ventas.nombre_linea_envio(cargos) == "Envío · Chame, 50 min"
+
+
+def test_un_formulario_viejo_sin_opcion_sigue_mandando_el_monto(db_limpia):
+    """Los formularios y borradores de antes del cambio no traen
+    envio_opcion: el monto suelto sigue funcionando como siempre."""
+    assert ventas.resolver_envio({"envio": "7"}) == {"envio": 7.0}
+    assert ventas.nombre_linea_envio({"envio": 7.0}) == "Envío a domicilio"
+
+
+def test_la_linea_de_odoo_dice_vehiculo_y_zona(db_limpia, monkeypatch):
+    monkeypatch.setattr(ventas, "_id_producto_cargo", lambda c, n: 7000)
+    cargos = ventas.resolver_envio({"envio_opcion": "camioneta_ciudad"})
+    lineas = ventas.lineas_de_cargos(cargos)
+    renglones = [l for l in lineas if not l.get("display_type")]
+    # En la línea va «Camioneta» a secas: el «(pick up)» es solo del
+    # formulario, para que nadie crea que es el cliente recogiendo.
+    assert renglones[0]["name"] == "Envío · Camioneta · Ciudad de Panamá"
+    assert renglones[0]["price_unit"] == 25.0
+    cargos = ventas.resolver_envio({"envio_opcion": "carro_ciudad"})
+    lineas = ventas.lineas_de_cargos(cargos)
+    assert [l["name"] for l in lineas if not l.get("display_type")] == [
+        "Envío · Carro · Ciudad de Panamá"]
+
+
+def test_la_opcion_vuelve_a_su_casilla_al_editar():
+    """Al releer una cotización, el nombre de la línea devuelve la opción;
+    lo que no calza (cotizaciones viejas) se edita como Personalizado."""
+    for opcion in ventas.OPCIONES_ENVIO:
+        nombre = f"Envío · {opcion['vehiculo']} · {opcion['zona']}"
+        assert ventas.opcion_de_linea_envio(nombre) == (opcion["clave"], "")
+    assert ventas.opcion_de_linea_envio("Envío · Chame, 50 min") == (
+        "personalizado", "Chame, 50 min")
+    assert ventas.opcion_de_linea_envio("Envío a domicilio") == (
+        "personalizado", "")
+
+
+def test_la_pantalla_ofrece_las_opciones_y_sin_envio_por_defecto(cliente_venta, odoo):
+    _agregar(cliente_venta, 501)
+    r = cliente_venta.get("/venta/nueva")
+    assert r.status_code == 200
+    assert "Sin envío" in r.text
+    assert "Camioneta (pick up)" in r.text
+    assert "$45.00" in r.text          # el precio de camioneta · fuera
+    # Sin borrador, «Sin envío» es la marcada.
+    import re
+    radio_sin = re.search(r'<input[^>]*name="envio_opcion" value=""[^>]*>', r.text)
+    assert radio_sin and "checked" in radio_sin.group(0)
+
+
+def test_la_cotizacion_generada_lleva_el_envio_elegido(cliente_venta, odoo, monkeypatch):
+    """De punta a punta por la vista previa: la opción elegida entra a la
+    orden de Odoo como su línea, con el precio de Ajustes."""
+    _pdf_falso(monkeypatch)
+    _agregar(cliente_venta, 501)
+    r = cliente_venta.post("/venta/vista-previa",
+                           data={"cliente": "Marta",
+                                 "envio_opcion": "camioneta_ciudad"},
+                           follow_redirects=False)
+    assert r.status_code == 200
+    previas = [o for o in odoo.ordenes.values()
+               if (o.get("client_order_ref") or "").startswith(ventas.REF_VISTA_PREVIA)]
+    renglones = [l for l in previas[0]["lineas"] if not l.get("display_type")]
+    envio = [l for l in renglones if str(l.get("name", "")).startswith("Envío")]
+    assert envio and envio[0]["name"] == "Envío · Camioneta · Ciudad de Panamá"
+    assert envio[0]["price_unit"] == 25.0
+
+
+def test_los_precios_de_envio_se_guardan_desde_ajustes(cliente_venta, monkeypatch):
+    monkeypatch.setenv("AJUSTES_ADMINS", "genesis")
+    r = cliente_venta.post("/ajustes/envio", data={
+        "carro_ciudad": "12", "carro_fuera": "28",
+        "camioneta_ciudad": "30", "camioneta_fuera": "55"},
+        follow_redirects=False)
+    assert r.status_code == 303 and "envio-guardado" in r.headers["location"]
+    assert ventas.precios_envio() == {
+        "carro_ciudad": 12.0, "carro_fuera": 28.0,
+        "camioneta_ciudad": 30.0, "camioneta_fuera": 55.0}
+    # Un precio ilegible o en cero no guarda NINGUNO: todo o nada.
+    r = cliente_venta.post("/ajustes/envio", data={
+        "carro_ciudad": "gratis", "carro_fuera": "28",
+        "camioneta_ciudad": "30", "camioneta_fuera": "55"},
+        follow_redirects=False)
+    assert "envio-invalido" in r.headers["location"]
+    assert ventas.precios_envio()["carro_ciudad"] == 12.0
+
+
+def test_los_precios_de_envio_solo_los_toca_un_admin(cliente_venta, monkeypatch):
+    monkeypatch.delenv("AJUSTES_ADMINS", raising=False)
+    r = cliente_venta.post("/ajustes/envio", data={
+        "carro_ciudad": "1", "carro_fuera": "1",
+        "camioneta_ciudad": "1", "camioneta_fuera": "1"},
+        follow_redirects=False)
+    assert r.status_code == 403
+    assert ventas.precios_envio()["carro_ciudad"] == 10.0

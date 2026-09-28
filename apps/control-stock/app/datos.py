@@ -507,6 +507,23 @@ def fijar_umbral(valor):
                     "ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor", (str(valor),))
 
 
+def config_valores(prefijo):
+    """{clave sin el prefijo: valor} de la tabla config. La usan los
+    precios de envío de Vender (claves envio_precio_*), que se editan en
+    Ajustes para cambiarlos sin desplegar."""
+    with _db() as con:
+        filas = con.execute("SELECT clave, valor FROM config WHERE clave LIKE ?",
+                            (prefijo + "%",)).fetchall()
+    return {f["clave"][len(prefijo):]: f["valor"] for f in filas}
+
+
+def fijar_config(clave, valor):
+    with _db() as con:
+        con.execute("INSERT INTO config (clave, valor) VALUES (?, ?) "
+                    "ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor",
+                    (clave, str(valor)))
+
+
 # ---------------------------------------------------------------------------
 # Fotos cambiadas desde la app
 # ---------------------------------------------------------------------------
