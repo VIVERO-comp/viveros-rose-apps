@@ -158,38 +158,47 @@ def test_importante_con_marca_no_se_duplica_si_el_chat_ya_la_tiene(sinc):
 
 # ---------------------------------------------------------------------------
 # (e) Perdido y Ganado: «Importante» no entra, aunque el chat ya la tuviera
-#     puesta de cuando el lead estaba vivo
+#     puesta de cuando el lead estaba vivo. Base nueva (28/09/2026): Perdido
+#     vuelve [] SIEMPRE (no mira `tiene` ni `disponibles`) y Ganado arma su
+#     lista aparte ("Pedido completado" ± Mantenimiento ± Responder) sin
+#     pedir señales -con no pedirlas alcanza en los dos casos-.
 # ---------------------------------------------------------------------------
 
-def test_perdido_no_lleva_importante_aunque_ya_la_tuviera(sinc):
-    disponibles = {"Plantas", "Mary", "Importante"}
-    tiene = {"Plantas", "Mary", "Importante"}
+@pytest.mark.parametrize("tiene, disponibles", [
+    (set(), set()),
+    ({"Plantas", "Mary", "Importante"}, {"Plantas", "Mary", "Importante"}),
+    ({"Plantas", MARCA + "Importante"}, {"Plantas", MARCA + "Importante"}),
+])
+def test_perdido_no_lleva_importante_aunque_ya_la_tuviera(
+        sinc, tiene, disponibles):
     perdido = lead(estado="Perdido", cerrado=True, senales={"Importante"})
     quiere, faltan = sinc.quiere_para(perdido, tiene, disponibles)
-    assert "Importante" not in quiere
+    # Perdido queda LIMPIO del todo -no solo sin Importante-, sea cual sea
+    # lo que el chat traiga puesto.
+    assert quiere == []
     assert faltan == []
-    # La regla de resta sigue viva para lo demas de este chat (no es parte
-    # de esta tarea tocarla).
-    assert "Plantas" in quiere and "Mary" in quiere
 
 
 def test_ganado_no_lleva_importante_aunque_ya_la_tuviera(sinc):
-    disponibles = {"Plantas", "Mary", "Importante"}
+    disponibles = {sinc.PEDIDO_COMPLETADO, "Plantas", "Mary", "Importante"}
     tiene = {"Plantas", "Mary", "Importante"}
     ganado = lead(estado="Ganado", cerrado=True, senales={"Importante"})
+    quiere, faltan = sinc.quiere_para(ganado, tiene, disponibles)
+    assert "Importante" not in quiere
+    assert quiere == [sinc.PEDIDO_COMPLETADO]
+    assert faltan == []
+
+
+def test_ganado_con_mantenimiento_y_te_toca_tampoco_lleva_importante(sinc):
+    disponibles = {sinc.PEDIDO_COMPLETADO, "Mantenimiento", sinc.RESPONDER,
+                   "Importante"}
+    tiene = {"Importante"}
+    ganado = lead(estado="Ganado", cerrado=True, interes="Mantenimiento",
+                  te_toca=True, senales={"Importante"})
     quiere, _faltan = sinc.quiere_para(ganado, tiene, disponibles)
     assert "Importante" not in quiere
-
-
-def test_perdido_con_importante_marcada_tambien_se_quita(sinc):
-    # El chat trae la version CON marca (una sugerida re-derivada, o
-    # cualquier motivo); la resta la reconoce igual por _sin_marca().
-    disponibles = {"Plantas", MARCA + "Importante"}
-    tiene = {"Plantas", MARCA + "Importante"}
-    perdido = lead(estado="Perdido", cerrado=True, senales={"Importante"})
-    quiere, _faltan = sinc.quiere_para(perdido, tiene, disponibles)
-    assert (MARCA + "Importante") not in quiere
-    assert "Plantas" in quiere
+    assert sorted(quiere) == sorted(
+        [sinc.PEDIDO_COMPLETADO, "Mantenimiento", sinc.RESPONDER])
 
 
 # ---------------------------------------------------------------------------

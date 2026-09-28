@@ -84,28 +84,26 @@ ESTADOS_CON_ETIQUETA = ("Nuevo", "Hablando", "Cotizado", "Por agendar",
 INTERESES = ("Plantas", "Eventos", "Paisajismo", "Mantenimiento", "Mayorista")
 RESPONDER = "🔴 Responder"
 
-# Etiquetas sueltas de Linear que SOLO BAJAN, igual que el estado y
-# «🔴 Responder»: las pone o las quita Abraham a mano en Linear; si alguien
-# las cambia en el telefono, la pasada siguiente las repone o las quita
-# segun lo que diga Linear, sin escribir nada de vuelta. Nunca se crean
-# solas (regla 3): si el nombre no existe todavia en el catalogo de
-# WhatsApp, el chat se queda sin ella y el log lo avisa.
+# La etiqueta de un Ganado (28/09/2026): a diferencia de Perdido, un cliente
+# que ya compro puede volver, asi que su chat NO se limpia -- se marca con
+# esta, que Abraham puso en el telefono. El codigo solo la BUSCA (via
+# `disponibles`); si todavia no existe, se salta y sale en los "faltan" del
+# reporte, igual que cualquier otra etiqueta que no esta creada.
 #
-# Hoy solo «Importante» esta habilitada. «Seguimiento» y «Cliente
-# potencial» son las otras dos que Abraham va a crear a mano; sumarlas
-# aqui es la unica linea que hace falta cuando llegue el momento -no
-# antes, para no encenderlas sin que el existan sus botones.
-SENALES_QUE_BAJAN = ("Importante",)
+# TRAMPA: es una de las etiquetas SUGERIDAS de fabrica de WhatsApp Business
+# ("Order completed" -> "Pedido completado" en español), no una escrita a
+# mano, y por eso trae una marca invisible al inicio (U+200E, LEFT-TO-RIGHT
+# MARK) -- igual que "Seguimiento" y "Cliente potencial", las otras dos
+# sugeridas que ya estaban puestas. Sin esa marca el nombre nunca calza y
+# la etiqueta se ve para siempre como "falta", sin ningun error que avise.
+PEDIDO_COMPLETADO = "‎Pedido completado"
 
-# Las etiquetas SUGERIDAS de fabrica de WhatsApp Business (Seguimiento,
-# Cliente potencial, Pedido completado, y las que vengan) llevan esta marca
-# invisible al inicio del nombre que devuelve la API («‎Pedido
-# completado»). Sin tenerla en cuenta, comparar por texto nunca calza y el
-# codigo reporta "falta" para siempre sin ningun aviso -la misma trampa que
-# ya costo cara con el @lid y con el apellido "Doe" inventado-. Toda
-# comparacion de nombres de etiqueta de WhatsApp pasa por aqui, tambien
-# para una etiqueta creada a mano como «Importante»: si el catalogo la
-# devuelve con la marca (por lo que sea), igual casa.
+# EL MECANISMO GENERAL de esa misma trampa, para cualquier etiqueta que se
+# sume despues (una suelta creada a mano como "Importante", o cualquier
+# sugerida nueva): comparar SIEMPRE tolerando el U+200E, a los dos lados.
+# `PEDIDO_COMPLETADO` de arriba quedo con la marca escrita a mano en la
+# constante porque ya se sabia que la traia; esto es para cuando no se sabe
+# de antemano si el catalogo la trae o no.
 MARCA_INVISIBLE = "‎"
 
 
@@ -128,9 +126,51 @@ def _nombre_en_catalogo(nombre_deseado, disponibles):
     return None
 
 
+# Etiquetas sueltas de Linear que SOLO BAJAN, igual que el estado y
+# «🔴 Responder»: las pone o las quita Abraham a mano en Linear; si alguien
+# las cambia en el telefono, la pasada siguiente las repone o las quita
+# segun lo que diga Linear, sin escribir nada de vuelta. Nunca se crean
+# solas (regla 3): si el nombre no existe todavia en el catalogo de
+# WhatsApp, el chat se queda sin ella y el log lo avisa.
+#
+# Hoy solo «Importante» esta habilitada. «Seguimiento» y «Cliente
+# potencial» son las otras dos que Abraham va a crear a mano; sumarlas
+# aqui es la unica linea que hace falta cuando llegue el momento -no
+# antes, para no encenderlas sin que existan sus botones.
+#
+# Nunca entran a un lead cerrado (Ganado/Perdido): Perdido ya vuelve []
+# sin mirar nada mas, y Ganado arma su lista aparte sin pedirlas -las dos
+# reglas de `quiere_para()` de mas abajo, sin que haga falta ningun codigo
+# extra aqui para excluirlas.
+SENALES_QUE_BAJAN = ("Importante",)
+
 # Las cuatro familias de etiquetas de WhatsApp, cada una con su color
 # (25/09/2026). El color dice de que familia es; el nombre, cual.
 REPRESENTANTES = ("Mary", "Ruben", "Salomón", "Abraham")
+
+# El interruptor para apagar por un rato los NOMBRES de empleados en
+# WhatsApp, sin tocar Linear ni Twenty y sin borrar la etiqueta del
+# catalogo del telefono -- solo deja de PEDIRLA. `ETIQUETAS_REPRESENTANTE`
+# vive en el .env; cualquier valor que no sea "off"/"0"/"no" (incluida su
+# ausencia) deja el interruptor PRENDIDO, que es el comportamiento de
+# siempre.
+_REPRESENTANTE_APAGADO = ("off", "0", "no")
+
+
+def representantes_activos():
+    """False si `ETIQUETAS_REPRESENTANTE` esta apagado en el .env.
+
+    Al apagarlo, `deseadas()` deja de pedir el nombre del representante y
+    en la pasada siguiente el PUT (que reemplaza la lista completa del
+    chat) lo QUITA solo de los chats vivos: no hace falta ningun codigo de
+    "quitar", con no pedirlo alcanza. No borra la etiqueta del catalogo del
+    telefono (`etiquetas_de_whatsapp()` la sigue viendo), no toca `Resp:`
+    en Linear ni el campo `representante` de Twenty: esos siguen guardados
+    tal cual. Al volver a prender, `deseadas()` lo repone leyendolo de
+    Linear, igual que ya pasa al revivir un Perdido.
+    """
+    valor = (ENV.get("ETIQUETAS_REPRESENTANTE") or "on").strip().lower()
+    return valor not in _REPRESENTANTE_APAGADO
 
 # EL PUENTE DE NOMBRES. En Linear la etiqueta es `Resp: Mary`; en WhatsApp,
 # solo `Mary`. Los dos vocabularios se quedan como estan y el traductor
@@ -496,23 +536,29 @@ def deseadas(lead, disponibles):
     cerrado (Ganado/Perdido) esto NO se usa — ver `quiere_para()` — porque
     un cerrado no se rige por lo que Linear "querria": se rige por resta
     sobre lo que el chat ya tiene, y nunca agrega nada nuevo.
+
+    El nombre del representante entra solo si `representantes_activos()`:
+    con el interruptor apagado, este chat sencillamente no lo pide, y la
+    pasada siguiente lo quita del telefono sin que haga falta ningun
+    camino de "quitar" aparte.
+
+    Las señales sueltas (hoy «Importante», ver SENALES_QUE_BAJAN) se
+    agregan igual que el estado y Responder: solo bajan.
     """
     quiere = []
     if lead["estado"] in ESTADOS_CON_ETIQUETA:
         quiere.append(lead["estado"])
     if lead["interes"] in INTERESES:
         quiere.append(lead["interes"])
-    if lead["resp"]:
+    if lead["resp"] and representantes_activos():
         quiere.append(a_whatsapp(lead["resp"]))
     if lead["te_toca"]:
         quiere.append(RESPONDER)
-    # Las señales sueltas (hoy «Importante») solo bajan, igual que el
-    # estado y Responder arriba.
     quiere.extend(sorted(lead.get("senales") or ()))
     # Se casa por el nombre TAL COMO esta en el catalogo -tolerando el
-    # U+200E de las sugeridas de fabrica- y ese es el nombre que se
-    # devuelve: hace falta para buscar el id y para calzar con lo que el
-    # chat ya tiene puesto.
+    # U+200E de las sugeridas de fabrica, ver `_nombre_en_catalogo()`- y
+    # ese es el nombre que se devuelve: hace falta para buscar el id y
+    # para calzar con lo que el chat ya tiene puesto.
     resueltas, faltan = [], []
     for q in quiere:
         real = _nombre_en_catalogo(q, disponibles)
@@ -525,25 +571,53 @@ def quiere_para(lead, tiene, disponibles):
 
     Vivo: lo decide Linear (`deseadas()`) — puede poner y puede quitar.
 
-    Cerrado (Ganado o Perdido, `lead["cerrado"]`): SOLO resta, nunca
-    agrega. La regla del dueno es literal: "mantener representante e
-    interes" es conservar lo que el chat YA tiene, no estrenar algo que
-    nunca tuvo. No existe una etiqueta "Perdido" ni "Ganado" en WhatsApp
-    (los 6 estados con etiqueta son los EN CURSO) y no se crea una — las
-    etiquetas nunca se crean solas.
+    Perdido (regla del dueno, 28/09/2026): el chat queda LIMPIO del todo —
+    representante, interes, estado y Responder se quitan los cuatro. Nada
+    de esto toca Linear ni Twenty: Resp:, interes y motivo se quedan
+    guardados ahi como estan: es solo el telefono el que se limpia. Si el
+    cliente vuelve a escribir, el lead revive a Hablando y en la pasada
+    siguiente `deseadas()` los vuelve a poner solos, leyendolos de Linear
+    (no hace falta nada especial aqui para eso).
 
-        quedar = (lo que el chat tiene hoy) - (las 6 de estado) - (Responder)
-                 - (las señales sueltas que solo bajan)
+    Ganado (regla del dueno, actualizada 28/09/2026): representante e
+    interes YA NO se conservan — se quitan los dos. El chat queda con
+    UNA sola etiqueta, "Pedido completado" (una sugerida de fabrica de
+    WhatsApp Business que Abraham ya puso — el codigo solo la busca,
+    nunca la crea). La unica excepcion es Mantenimiento: ese interes SI
+    se queda, junto a "Pedido completado", porque ese cliente vuelve por
+    el servicio recurrente. Si el cliente escribe de nuevo (`te_toca`),
+    "🔴 Responder" se pone igual que a cualquier chat, sin que el lead
+    cambie de estado (`revivirDePerdido` en el frontend es exclusivo de
+    Perdido; Ganado nunca se revive).
 
-    Las señales sueltas (hoy «Importante») tampoco entran a un cerrado, por
-    la misma razon que el estado y Responder: las decide el embudo/Linear
-    de un lead EN CURSO, y un issue cerrado ya no esta en curso. Se comparan
-    tolerando el U+200E, igual que en `deseadas()`.
+    Las señales sueltas (hoy «Importante») NUNCA entran a un cerrado, sea
+    Perdido o Ganado: Perdido ya vuelve [] sin mirar nada mas, y la lista
+    de Ganado se arma aparte, a mano, sin pedirlas. No hace falta ningun
+    codigo extra para excluirlas -no agregarlas alcanza-.
 
     Si el chat no tiene nada, `quedar` sale vacio y no hay nada que quitar
     — no se manda un PUT que no cambia nada.
     """
+    if lead.get("estado") == "Perdido":
+        return [], []
+    if lead.get("estado") == "Ganado":
+        # Cambio de regla (28/09/2026): representante e interes YA NO se
+        # conservan -- se quitan los dos. Unica excepcion: Mantenimiento se
+        # queda, porque ese cliente vuelve por el servicio recurrente. Las
+        # señales sueltas (Importante) tampoco entran aqui -con no pedirlas
+        # alcanza-.
+        quiere = [PEDIDO_COMPLETADO]
+        if lead.get("interes") == "Mantenimiento":
+            quiere.append("Mantenimiento")
+        if lead.get("te_toca"):
+            quiere.append(RESPONDER)
+        faltan = [q for q in quiere if q not in disponibles]
+        return [q for q in quiere if q in disponibles], faltan
     if lead.get("cerrado"):
+        # Red de seguridad para un cerrado que no calzara con "Perdido" ni
+        # "Ganado" arriba (hoy no deberia pasar): la misma resta de
+        # siempre, mas las señales sueltas -por si alguna quedo puesta de
+        # cuando el lead estaba vivo-, tolerando el U+200E.
         sin_marca_senales = {_sin_marca(s) for s in SENALES_QUE_BAJAN}
         quiere = [t for t in tiene if t not in ESTADOS_CON_ETIQUETA
                   and t != RESPONDER and _sin_marca(t) not in sin_marca_senales]
@@ -914,6 +988,12 @@ def main():
     print("etiquetas en WhatsApp: %d (%d de WhatsApp, %d nuestras)" % (
         len(etiquetas), len(etiquetas) - len(nuestras), len(nuestras)))
 
+    repr_activos = representantes_activos()
+    if not repr_activos:
+        print("etiquetas de representante: APAGADAS "
+              "(ETIQUETAS_REPRESENTANTE=%s) — se quitan de los chats"
+              % (ENV.get("ETIQUETAS_REPRESENTANTE") or ""))
+
     leads = leads_del_crm()
     lista_interna, de_donde = internos()
     print("numeros internos: %d · %s" % (len(lista_interna), de_donde))
@@ -955,6 +1035,12 @@ def main():
             for grupo, valores, campo in (
                     ("responsable", [t for t in tiene if t in REPRESENTANTES], "resp"),
                     ("interes", [t for t in tiene if t in INTERESES], "interes")):
+                if grupo == "responsable" and not repr_activos:
+                    # Apagado: un nombre puesto a mano en el telefono no
+                    # escribe nada en Linear mientras el interruptor este
+                    # asi -- la regla es que en Linear no se toca nada. El
+                    # interes sigue subiendo igual que siempre.
+                    continue
                 en_wa = valores[0] if valores else ""
                 si_resp = campo == "resp"
                 en_wa_limpio = a_whatsapp(en_wa) if si_resp else en_wa
