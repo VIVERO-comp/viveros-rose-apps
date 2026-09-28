@@ -1765,9 +1765,9 @@ def venta_servicio_pdf(request: Request, n: int):
     registro = cotizaciones.obtener(n)
     if registro is None:
         return RedirectResponse("/venta", status_code=303)
-    return _respuesta_pdf("vivero_rose_pedidos.reporte_propuesta_venta",
-                          registro["orden_id"],
-                          f"propuesta-{registro['orden'].replace('/', '-')}.pdf")
+    return _respuesta_pdf(
+        "vivero_rose_pedidos.reporte_propuesta_venta", registro["orden_id"],
+        ventas.nombre_de_pdf(registro["orden"].replace("/", "-"), registro["cliente"]))
 
 
 @app.post("/venta/pagar")
@@ -1875,8 +1875,9 @@ def venta_pdf_cotizacion(request: Request, n: int):
     registro = ventas.obtener_venta(n)
     if registro is None or not registro["orden_id"]:
         return RedirectResponse("/venta", status_code=303)
-    return _respuesta_pdf("sale.report_saleorder", registro["orden_id"],
-                          f"cotizacion-{registro['orden'].replace('/', '-')}.pdf")
+    return _respuesta_pdf(
+        "sale.report_saleorder", registro["orden_id"],
+        ventas.nombre_de_pdf(registro["orden"].replace("/", "-"), registro["cliente"]))
 
 
 @app.get("/venta/{n}/factura.pdf")
@@ -1884,8 +1885,12 @@ def venta_pdf_factura(request: Request, n: int):
     registro = ventas.obtener_venta(n)
     if registro is None or not registro["factura_id"]:
         return RedirectResponse("/venta", status_code=303)
-    return _respuesta_pdf("account.report_invoice", registro["factura_id"],
-                          f"factura-{(registro['factura'] or str(n)).replace('/', '-')}.pdf")
+    # El nombre lleva el número de FACTURA (no el de la orden/cotización):
+    # es el documento que el cliente reconoce.
+    return _respuesta_pdf(
+        "account.report_invoice", registro["factura_id"],
+        ventas.nombre_de_pdf((registro["factura"] or str(n)).replace("/", "-"),
+                             registro["cliente"]))
 
 
 MESES = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
@@ -2535,16 +2540,19 @@ async def control_cotizacion_marcar_real(request: Request):
 
 
 @app.get("/control/cotizacion/{orden_id}.pdf")
-def control_cotizacion_pdf(request: Request, orden_id: int, nombre: str = ""):
+def control_cotizacion_pdf(request: Request, orden_id: int, nombre: str = "",
+                           cliente: str = ""):
     """El PDF nativo de Odoo de una orden conectada — mismo camino que
     `/venta/{n}/cotizacion.pdf`, pero con el id de la orden de Odoo
-    directo (esto no vive en la tabla local de ventas)."""
+    directo (esto no vive en la tabla local de ventas). `cliente` es el
+    nombre del lead (`abierta.nombre` en control.html): no hace falta
+    ninguna consulta nueva a Odoo, ya viaja en la ficha."""
     try:
         contenido = cot_lead.pdf_de_orden(orden_id)
     except RuntimeError as error:
         return RedirectResponse(
             "/control?error=" + quote(str(error)), status_code=303)
-    archivo = f"cotizacion-{(nombre or str(orden_id)).replace('/', '-')}.pdf"
+    archivo = ventas.nombre_de_pdf((nombre or str(orden_id)).replace("/", "-"), cliente)
     return Response(contenido, media_type="application/pdf",
                     headers=cabeceras_descarga(archivo))
 

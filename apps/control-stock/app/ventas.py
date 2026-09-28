@@ -27,6 +27,7 @@ import re
 import secrets
 import sqlite3
 import time
+import unicodedata
 import xmlrpc.client
 from datetime import datetime
 
@@ -1408,6 +1409,27 @@ def _mensaje_de_error(error):
         lineas = [l.strip() for l in str(error.faultString).splitlines() if l.strip()]
         return (lineas[-1] if lineas else "Error de Odoo")[:300]
     return str(error)[:300]
+
+
+def _slug(texto):
+    """El nombre del cliente, listo para ir en un nombre de archivo: sin
+    acentos, en minúscula y con cualquier tramo de símbolos (espacios,
+    puntuación, emoji) convertido en UN solo guion, sin guiones colgando en
+    las puntas. Si no queda ni una letra o número, el resultado es ""."""
+    sin_acentos = unicodedata.normalize("NFKD", texto or "").encode(
+        "ascii", "ignore").decode()
+    return re.sub(r"\W+", "-", sin_acentos.lower()).strip("-")
+
+
+def nombre_de_pdf(orden, cliente):
+    """El nombre de archivo de un PDF: "<orden>-<cliente-slug>.pdf", o solo
+    "<orden>.pdf" si el cliente queda vacío al slugificar (nombre en
+    blanco, o solo símbolos/emoji) — nunca un nombre con un guion colgando.
+
+    Pensado para que quien recibe el archivo en su teléfono sepa qué es sin
+    tener que abrirlo (pedido de Abraham, 28/09/2026)."""
+    slug = _slug(cliente)
+    return f"{orden}-{slug}.pdf" if slug else f"{orden}.pdf"
 
 
 # ---------------------------------------------------------------------------

@@ -1086,3 +1086,42 @@ def test_editar_conserva_la_descripcion_del_renglon(odoo):
 def test_el_form_personalizada_trae_descripcion_de_renglon(cliente, odoo):
     pagina = cliente.get("/venta/servicio-personalizada")
     assert 'name="renglon_descripcion"' in pagina.text
+
+
+# ---------------------------------------------------------------------------
+# El nombre del PDF de la propuesta lleva orden + cliente (28/09/2026)
+# ---------------------------------------------------------------------------
+
+def test_la_propuesta_baja_con_el_nombre_de_la_orden_y_el_cliente(
+        cliente, odoo, monkeypatch):
+    cliente.post("/venta/servicio/renta",
+                 data={"cliente": "José Núñez", "celular": "",
+                       "servicio_texto": "Alquiler de 20 plantas",
+                       "servicio_monto": "850"})
+    registro = cotizaciones.cotizaciones_todas()[0]
+    monkeypatch.setattr(ventas, "descargar_pdf", lambda *a, **k: b"%PDF-1.4 x")
+    r = cliente.get(f"/venta/servicio/{registro['n']}/propuesta.pdf")
+    assert r.status_code == 200
+    disposicion = r.headers["content-disposition"]
+    assert disposicion.startswith("attachment;")
+    orden = registro["orden"].replace("/", "-")
+    assert f'filename="{orden}-jose-nunez.pdf"' in disposicion
+
+
+def test_el_enlace_de_la_propuesta_baja_con_target_blank_y_download(cliente, odoo):
+    """Misma regla del 28/09/2026 que la Factura de Vender: descarga Y
+    pestaña nueva a la vez."""
+    cliente.post("/venta/servicio/renta",
+                 data={"cliente": "María", "celular": "",
+                       "servicio_texto": "Alquiler de 20 plantas",
+                       "servicio_monto": "850"})
+    pagina = cliente.get("/venta").text
+    encontrado = False
+    for trozo in pagina.split("<a ")[1:]:
+        enlace = trozo.split(">")[0]
+        if "/propuesta.pdf" in enlace:
+            encontrado = True
+            assert 'target="_blank"' in enlace
+            assert 'rel="noopener"' in enlace
+            assert "download" in enlace
+    assert encontrado, "no se encontró el enlace de la propuesta"
