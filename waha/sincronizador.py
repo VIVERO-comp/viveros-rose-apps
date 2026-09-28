@@ -84,11 +84,17 @@ RESPONDER = "🔴 Responder"
 
 # La etiqueta de un Ganado (28/09/2026): a diferencia de Perdido, un cliente
 # que ya compro puede volver, asi que su chat NO se limpia -- se marca con
-# esta, que Abraham ya puso a mano en el telefono. El codigo solo la BUSCA
-# (busca_para(), via `disponibles`); si todavia no existe, se salta y sale
-# en los "faltan" del reporte, igual que cualquier otra etiqueta que no
-# esta creada.
-PEDIDO_COMPLETADO = "Pedido completado"
+# esta, que Abraham puso en el telefono. El codigo solo la BUSCA (via
+# `disponibles`); si todavia no existe, se salta y sale en los "faltan" del
+# reporte, igual que cualquier otra etiqueta que no esta creada.
+#
+# TRAMPA: es una de las etiquetas SUGERIDAS de fabrica de WhatsApp Business
+# ("Order completed" -> "Pedido completado" en español), no una escrita a
+# mano, y por eso trae una marca invisible al inicio (U+200E, LEFT-TO-RIGHT
+# MARK) -- igual que "Seguimiento" y "Cliente potencial", las otras dos
+# sugeridas que ya estaban puestas. Sin esa marca el nombre nunca calza y
+# la etiqueta se ve para siempre como "falta", sin ningun error que avise.
+PEDIDO_COMPLETADO = "‎Pedido completado"
 
 # Las cuatro familias de etiquetas de WhatsApp, cada una con su color
 # (25/09/2026). El color dice de que familia es; el nombre, cual.
