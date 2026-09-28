@@ -169,6 +169,55 @@ def test_el_color_del_bloque_es_opaco():
     assert "rgba(" not in bloque["estilo"]
 
 
+def _actividad(dia, **cambios):
+    base = {"id": "c1", "ref": "VIV-90", "tipo": "entrega", "cliente": "C",
+            "lugar": "", "nota": "", "hora": "10:00", "dur": 60, "fecha": dia,
+            "estado": "pend", "prioridad": 3, "resp": "Juan", "resp_id": "juan",
+            "url": "", "titulo": ""}
+    base.update(cambios)
+    return base
+
+
+def test_el_contador_del_dia_no_cuenta_canceladas():
+    """El dueño vio un día con «1» cuya única actividad estaba cancelada.
+    La cancelada se sigue pintando (tachada), pero el número no la cuenta."""
+    dia = calendario.hoy().isoformat()
+    cancelada = _actividad(dia, id="c1", estado="cancel")
+    carril = calendario.carril_semana([cancelada], [dia], dia)
+    assert carril["columnas"][0]["cant"] == 0  # sin contador en la cabecera
+    assert len(carril["bloques"]) == 1  # el bloque se pinta igual
+    # Con una viva al lado, el contador dice 1, no 2.
+    viva = _actividad(dia, id="c2", hora="12:00")
+    carril = calendario.carril_semana([cancelada, viva], [dia], dia)
+    assert carril["columnas"][0]["cant"] == 1
+    assert len(carril["bloques"]) == 2
+
+
+def test_el_contador_por_persona_tampoco_cuenta_canceladas():
+    dia = calendario.hoy().isoformat()
+    gente = [{"id": "juan", "nombre": "Juan"}]
+    actividades = [_actividad(dia, id="c1", estado="cancel"),
+                   _actividad(dia, id="c2", hora="12:00")]
+    carril = calendario.carril_dia(actividades, dia, gente, dia)
+    assert carril["columnas"][0]["cant"] == 1
+    assert len(carril["bloques"]) == 2
+
+
+def test_el_total_del_telefono_no_cuenta_canceladas():
+    dia = calendario.hoy().isoformat()
+    movil = calendario.vista_movil([_actividad(dia, estado="cancel")], dia, dia)
+    assert movil["total"] == 0  # el subtítulo no dice «1 actividad»
+    assert len(movil["actividades"]) == 1  # pero la lista la pinta tachada
+
+
+def test_el_carril_del_crm_tampoco_cuenta_canceladas():
+    from app import crm_twenty
+    dia = calendario.hoy().isoformat()
+    carril = crm_twenty.carril_dias([_actividad(dia, estado="cancel")], [dia], dia)
+    assert carril["columnas"][0]["cant"] == 0
+    assert len(carril["bloques"]) == 1
+
+
 def test_el_inicio_muestra_el_calendario(cliente):
     """La pestaña Inicio trae hoy, atrasadas, la agenda y los 7 días."""
     respuesta = cliente.get("/?tab=stock")

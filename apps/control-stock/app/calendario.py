@@ -1034,6 +1034,16 @@ def _del_dia(actividades, dia_iso):
                   key=lambda a: _minutos(a["hora"]))
 
 
+def contar_vivas(actividades):
+    """El número que ve el usuario en un contador de día.
+
+    Las canceladas se siguen PINTANDO (tachadas y atenuadas), pero no son
+    trabajo: un día cuya única actividad está cancelada no muestra un «1».
+    Es la misma regla que ya usan las fichas de Equipo (carga_equipo).
+    """
+    return len([a for a in actividades if a["estado"] != "cancel"])
+
+
 def _repartir(actividades):
     """Reparte en columnas las actividades que chocan a la misma hora."""
     orden = sorted(actividades, key=lambda a: _minutos(a["hora"]))
@@ -1186,7 +1196,8 @@ def carril_semana(actividades, dias, dia_hoy):
         fecha = _dia(dia_iso)
         columnas.append({
             "iso": dia_iso, "dow": DOW[i], "num": fecha.day,
-            "hoy": dia_iso == dia_hoy, "finde": i > 4, "cant": len(del_dia),
+            "hoy": dia_iso == dia_hoy, "finde": i > 4,
+            "cant": contar_vivas(del_dia),
             "estilo": (f"left:calc(46px + (100% - 46px) * {i / 7});"
                        f"width:calc((100% - 46px) / 7)"),
         })
@@ -1208,7 +1219,8 @@ def carril_dia(actividades, dia_iso, gente, dia_hoy):
         suyas = [a for a in del_dia if a["resp_id"] == persona["id"]]
         columnas.append({
             "iso": dia_iso, "dow": persona["nombre"], "num": "",
-            "persona": persona, "hoy": False, "finde": False, "cant": len(suyas),
+            "persona": persona, "hoy": False, "finde": False,
+            "cant": contar_vivas(suyas),
             "estilo": (f"left:calc(46px + (100% - 46px) * {i / total});"
                        f"width:calc((100% - 46px) / {total})"),
         })
@@ -1292,7 +1304,7 @@ def vista_movil(actividades, dia_iso, dia_hoy):
         "titulo": f"{MESES[fecha.month - 1].capitalize()} {fecha.year}",
         "subtitulo": ("Hoy" if dia_iso == dia_hoy else DOW_LARGO[fecha.weekday()])
                      + " " + dmy(dia_iso),
-        "tira": tira, "actividades": lista, "total": len(del_dia),
+        "tira": tira, "actividades": lista, "total": contar_vivas(del_dia),
         "semana_ant": (inicio_semana - timedelta(days=7)).isoformat(),
         "semana_sig": (inicio_semana + timedelta(days=7)).isoformat(),
     }

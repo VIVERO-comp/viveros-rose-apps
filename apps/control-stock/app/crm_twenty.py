@@ -58,7 +58,8 @@ def carril_dias(actividades, dias, dia_hoy):
         fecha = calendario._dia(dia_iso)
         columnas.append({
             "iso": dia_iso, "dow": calendario.DOW[fecha.weekday()], "num": fecha.day,
-            "hoy": dia_iso == dia_hoy, "finde": fecha.weekday() > 4, "cant": len(del_dia),
+            "hoy": dia_iso == dia_hoy, "finde": fecha.weekday() > 4,
+            "cant": calendario.contar_vivas(del_dia),
             "estilo": (f"left:calc(46px + (100% - 46px) * {i / n});"
                        f"width:calc((100% - 46px) / {n})"),
         })

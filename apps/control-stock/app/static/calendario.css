@@ -195,7 +195,7 @@ input.campo:focus,textarea.campo:focus,select.sel:focus{border-color:var(--dorad
 .carril-cab .dnum{display:block;font-size:18px;font-weight:800;color:var(--texto);line-height:1.3}
 .carril-cab .col-hoy{background:var(--hoy)}
 .carril-cab .col-hoy .dnum{
-  background:var(--texto);color:#fff;border-radius:999px;width:26px;height:26px;
+  background:var(--dorado);color:#fff;border-radius:999px;width:26px;height:26px;
   display:inline-flex;align-items:center;justify-content:center;font-size:13px;margin:2px auto 0;
 }
 .carril-cuerpo{position:relative;min-height:0;overflow-y:auto}
