@@ -82,6 +82,20 @@ ESTADOS_CON_ETIQUETA = ("Nuevo", "Hablando", "Cotizado", "Por agendar",
 INTERESES = ("Plantas", "Eventos", "Paisajismo", "Mantenimiento", "Mayorista")
 RESPONDER = "🔴 Responder"
 
+# La etiqueta de un Ganado (28/09/2026): a diferencia de Perdido, un cliente
+# que ya compro puede volver, asi que su chat NO se limpia -- se marca con
+# esta, que Abraham puso en el telefono. El codigo solo la BUSCA (via
+# `disponibles`); si todavia no existe, se salta y sale en los "faltan" del
+# reporte, igual que cualquier otra etiqueta que no esta creada.
+#
+# TRAMPA: es una de las etiquetas SUGERIDAS de fabrica de WhatsApp Business
+# ("Order completed" -> "Pedido completado" en español), no una escrita a
+# mano, y por eso trae una marca invisible al inicio (U+200E, LEFT-TO-RIGHT
+# MARK) -- igual que "Seguimiento" y "Cliente potencial", las otras dos
+# sugeridas que ya estaban puestas. Sin esa marca el nombre nunca calza y
+# la etiqueta se ve para siempre como "falta", sin ningun error que avise.
+PEDIDO_COMPLETADO = "‎Pedido completado"
+
 # Las cuatro familias de etiquetas de WhatsApp, cada una con su color
 # (25/09/2026). El color dice de que familia es; el nombre, cual.
 REPRESENTANTES = ("Mary", "Ruben", "Salomón", "Abraham")
@@ -464,18 +478,41 @@ def quiere_para(lead, tiene, disponibles):
 
     Vivo: lo decide Linear (`deseadas()`) — puede poner y puede quitar.
 
-    Cerrado (Ganado o Perdido, `lead["cerrado"]`): SOLO resta, nunca
-    agrega. La regla del dueno es literal: "mantener representante e
-    interes" es conservar lo que el chat YA tiene, no estrenar algo que
-    nunca tuvo. No existe una etiqueta "Perdido" ni "Ganado" en WhatsApp
-    (los 6 estados con etiqueta son los EN CURSO) y no se crea una — las
-    etiquetas nunca se crean solas.
+    Perdido (regla del dueno, 28/09/2026): el chat queda LIMPIO del todo —
+    representante, interes, estado y Responder se quitan los cuatro. Nada
+    de esto toca Linear ni Twenty: Resp:, interes y motivo se quedan
+    guardados ahi como estan: es solo el telefono el que se limpia. Si el
+    cliente vuelve a escribir, el lead revive a Hablando y en la pasada
+    siguiente `deseadas()` los vuelve a poner solos, leyendolos de Linear
+    (no hace falta nada especial aqui para eso).
 
-        quedar = (lo que el chat tiene hoy) - (las 6 de estado) - (Responder)
+    Ganado (regla del dueno, actualizada 28/09/2026): representante e
+    interes YA NO se conservan — se quitan los dos. El chat queda con
+    UNA sola etiqueta, "Pedido completado" (una sugerida de fabrica de
+    WhatsApp Business que Abraham ya puso — el codigo solo la busca,
+    nunca la crea). La unica excepcion es Mantenimiento: ese interes SI
+    se queda, junto a "Pedido completado", porque ese cliente vuelve por
+    el servicio recurrente. Si el cliente escribe de nuevo (`te_toca`),
+    "🔴 Responder" se pone igual que a cualquier chat, sin que el lead
+    cambie de estado (`revivirDePerdido` en el frontend es exclusivo de
+    Perdido; Ganado nunca se revive).
 
     Si el chat no tiene nada, `quedar` sale vacio y no hay nada que quitar
     — no se manda un PUT que no cambia nada.
     """
+    if lead.get("estado") == "Perdido":
+        return [], []
+    if lead.get("estado") == "Ganado":
+        # Cambio de regla (28/09/2026): representante e interes YA NO se
+        # conservan -- se quitan los dos. Unica excepcion: Mantenimiento se
+        # queda, porque ese cliente vuelve por el servicio recurrente.
+        quiere = [PEDIDO_COMPLETADO]
+        if lead.get("interes") == "Mantenimiento":
+            quiere.append("Mantenimiento")
+        if lead.get("te_toca"):
+            quiere.append(RESPONDER)
+        faltan = [q for q in quiere if q not in disponibles]
+        return [q for q in quiere if q in disponibles], faltan
     if lead.get("cerrado"):
         quiere = [t for t in tiene if t not in ESTADOS_CON_ETIQUETA and t != RESPONDER]
         return quiere, []
