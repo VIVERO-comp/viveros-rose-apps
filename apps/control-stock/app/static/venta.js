@@ -123,8 +123,9 @@ function sincronizarCliente() {
     // perderían. Se recorren TODOS los .dato-cliente de la página, no solo
     // los del bloque Cliente: los cargos viven en su propia sección.
     for (const campo of document.querySelectorAll(".dato-cliente")) {
-      // Los radios de la opción de envío: solo viaja el marcado.
-      if (campo.type === "radio" && !campo.checked) continue;
+      // Radios (opción de envío) y casillas (las del PDF): solo viaja
+      // lo marcado — un checkbox sin marcar no manda nada, como un form.
+      if ((campo.type === "radio" || campo.type === "checkbox") && !campo.checked) continue;
       datos.append(campo.name, campo.value);
     }
     if (contenedorServicios) {

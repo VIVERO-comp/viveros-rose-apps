@@ -978,7 +978,22 @@ CAMPOS_EXTRA = (CAMPOS_CLIENTE
                 + tuple(c["clave"] + "_desc" for c in CARGOS)
                 # La opción de envío elegida y la nota del personalizado
                 # sobreviven a los reloads igual que los montos.
-                + ("envio_opcion", "envio_nota"))
+                + ("envio_opcion", "envio_nota")
+                # Las dos casillas del PDF y su marcador (28/09/2026).
+                + ("casillas", "pago_50_50", "con_garantia"))
+
+
+def banderas_de(form, marcadas_por_defecto):
+    """Las dos casillas del PDF (dueño, 28/09/2026): pago 50/50 y
+    garantía. El campo escondido "casillas" marca que el formulario (o el
+    borrador) ES de la versión con casillas; sin él —formularios y
+    borradores de antes del cambio— rigen los defaults de la pantalla:
+    venta normal desmarcadas, personalizado marcadas."""
+    if str(form.get("casillas") or "") != "1":
+        return {"pago_50_50": bool(marcadas_por_defecto),
+                "con_garantia": bool(marcadas_por_defecto)}
+    return {"pago_50_50": str(form.get("pago_50_50") or "") == "1",
+            "con_garantia": str(form.get("con_garantia") or "") == "1"}
 
 
 def valores_de_cliente(datos):
@@ -1047,7 +1062,7 @@ def _linea_de_planta(linea):
 
 
 def crear_cotizacion(empleada, nombre_cliente, celular="", datos=None,
-                     cargos=None, confirmar=False):
+                     cargos=None, confirmar=False, banderas=None):
     """Crea el sale.order (etiqueta LOCAL, diario de ventas normal) y el
     registro local. Devuelve el registro. El carrito, los renglones libres
     y el borrador se limpian solo si Odoo aceptó la orden.
@@ -1086,6 +1101,10 @@ def crear_cotizacion(empleada, nombre_cliente, celular="", datos=None,
     }
     if pp_lead:
         valores_orden["lead_ref"] = pp_lead
+    if banderas is not None:
+        # Las casillas del PDF: cómo imprime la propuesta esta orden.
+        valores_orden["pago_50_50"] = bool(banderas["pago_50_50"])
+        valores_orden["con_garantia"] = bool(banderas["con_garantia"])
     orden_id = _ejecutar("sale.order", "create", [valores_orden])
     if isinstance(orden_id, list):
         orden_id = orden_id[0]
@@ -1148,9 +1167,13 @@ def crear_cotizacion(empleada, nombre_cliente, celular="", datos=None,
 REF_VISTA_PREVIA = "VISTA PREVIA"
 
 
-def _orden_vista_previa(usuario, partner, lineas):
+def _orden_vista_previa(usuario, partner, lineas, banderas=None):
     ref = f"{REF_VISTA_PREVIA} {usuario}"
     nuevas = [[0, 0, linea] for linea in lineas]
+    extra = {}
+    if banderas is not None:
+        extra = {"pago_50_50": bool(banderas["pago_50_50"]),
+                 "con_garantia": bool(banderas["con_garantia"])}
     ids = _ejecutar("sale.order", "search",
                     [[["client_order_ref", "=", ref], ["state", "=", "draft"]]],
                     {"limit": 1})
@@ -1158,16 +1181,19 @@ def _orden_vista_previa(usuario, partner, lineas):
         # El 5 borra las líneas del vistazo anterior antes de poner las de
         # ahora: la orden es siempre la misma, el contenido no.
         _ejecutar("sale.order", "write", [[ids[0]], {
-            "partner_id": partner, "order_line": [[5, 0, 0]] + nuevas}])
+            "partner_id": partner, "order_line": [[5, 0, 0]] + nuevas,
+            **extra}])
         return ids[0]
     orden = _ejecutar("sale.order", "create", [{
+        **extra,
         "partner_id": partner, "order_line": nuevas, "client_order_ref": ref,
         "tag_ids": [[6, 0, [_id_config("VENTA_TAG_LOCAL")]]],
     }])
     return orden[0] if isinstance(orden, list) else orden
 
 
-def pdf_vista_previa(empleada, nombre_cliente, celular="", datos=None, cargos=None):
+def pdf_vista_previa(empleada, nombre_cliente, celular="", datos=None, cargos=None,
+                     banderas=None):
     """El PDF de la cotización tal como saldría, sin crear la venta.
 
     Mismas líneas que crear_cotizacion —las plantas del carrito con el
@@ -1182,7 +1208,7 @@ def pdf_vista_previa(empleada, nombre_cliente, celular="", datos=None, cargos=No
     partner = _cliente_id(nombre_cliente, celular, datos)
     orden = _orden_vista_previa(usuario, partner, [
         {"product_id": l["producto_id"], "product_uom_qty": l["cantidad"]}
-        for l in lineas] + lineas_libres + lineas_de_cargos(cargos))
+        for l in lineas] + lineas_libres + lineas_de_cargos(cargos), banderas)
     return descargar_pdf("sale.report_saleorder", orden)
 
 

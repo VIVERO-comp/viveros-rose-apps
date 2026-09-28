@@ -821,7 +821,7 @@ def _lineas_personalizada(servicios, renglones, lineas_catalogo):
 
 def crear_personalizada(empleada, nombre, celular, lineas_catalogo=None,
                         renglones=None, datos_cliente=None, servicios=None,
-                        cargos=None):
+                        cargos=None, banderas=None):
     """La cotización personalizada: todo lo escribe la empleada. Va en tres
     secciones separadas, como las plantillas de los otros tipos (pedido del
     dueño 17/09/2026): las plantas y materiales del catálogo (con el precio
@@ -836,11 +836,16 @@ def crear_personalizada(empleada, nombre, celular, lineas_catalogo=None,
     # Los cargos opcionales (envío a domicilio, instalación) al final.
     lineas += ventas.lineas_de_cargos(cargos)
     partner = _cliente_id(nombre, celular, datos_cliente)
-    orden_id = ventas._ejecutar("sale.order", "create", [{
+    valores = {
         "partner_id": partner,
         "tipo_servicio": "general",
         "order_line": [[0, 0, linea] for linea in lineas],
-    }])
+    }
+    if banderas is not None:
+        # Las casillas del PDF (en el personalizado nacen marcadas).
+        valores["pago_50_50"] = bool(banderas["pago_50_50"])
+        valores["con_garantia"] = bool(banderas["con_garantia"])
+    orden_id = ventas._ejecutar("sale.order", "create", [valores])
     if isinstance(orden_id, list):
         orden_id = orden_id[0]
     leido = ventas._ejecutar("sale.order", "read", [[orden_id]],
@@ -1046,6 +1051,10 @@ def cargar_para_editar(n):
     estado = estados_en_odoo([orden_id]).get(orden_id)
     if estado is None:
         return None
+    # Las casillas del PDF, tal como están HOY en la orden: al editar
+    # quedan como se guardaron.
+    flags = ventas._ejecutar("sale.order", "read", [[orden_id]],
+                             {"fields": ["pago_50_50", "con_garantia"]})[0]
     lineas = ventas._ejecutar(
         "sale.order.line", "search_read", [[["order_id", "=", orden_id]]],
         {"fields": ["name", "display_type", "product_id",
@@ -1133,6 +1142,8 @@ def cargar_para_editar(n):
         "renglones": renglones or [{"texto": "", "cantidad": "", "precio": "",
                                     "descripcion": ""}],
         "cargos": cargos,
+        "banderas": {"pago_50_50": bool(flags["pago_50_50"]),
+                     "con_garantia": bool(flags["con_garantia"])},
     }
 
 
@@ -1187,7 +1198,8 @@ def _plantas_limpias(plantas):
     return limpias
 
 
-def editar_cotizacion(n, servicios, plantas, renglones=None, cargos=None):
+def editar_cotizacion(n, servicios, plantas, renglones=None, cargos=None,
+                      banderas=None):
     """Reescribe los renglones de la cotización en Odoo (misma estructura
     que al crearla, descripciones incluidas) y actualiza el total local y
     el ingreso esperado de la oportunidad. Antes de escribir re-verifica
@@ -1222,8 +1234,13 @@ def editar_cotizacion(n, servicios, plantas, renglones=None, cargos=None):
     lineas += ventas.lineas_de_cargos(cargos)
     # [5,0,0] vacía los renglones actuales y los [0,0,...] crean los nuevos,
     # en el mismo write: la orden nunca queda a medias.
-    ventas._ejecutar("sale.order", "write", [[orden_id], {
-        "order_line": [[5, 0, 0]] + [[0, 0, linea] for linea in lineas]}])
+    cambios = {"order_line": [[5, 0, 0]] + [[0, 0, linea] for linea in lineas]}
+    if banderas is not None:
+        # Solo el formulario del personalizado trae las casillas; un
+        # None (los otros tipos) no toca lo que la orden ya tenga.
+        cambios["pago_50_50"] = bool(banderas["pago_50_50"])
+        cambios["con_garantia"] = bool(banderas["con_garantia"])
+    ventas._ejecutar("sale.order", "write", [[orden_id], cambios])
     leido = ventas._ejecutar(
         "sale.order", "read", [[orden_id]],
         {"fields": ["name", "amount_total", "opportunity_id"]})[0]

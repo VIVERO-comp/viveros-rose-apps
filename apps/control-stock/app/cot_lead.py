@@ -90,6 +90,9 @@ CAMPOS_ORDEN = [
     "name", "date_order", "amount_total", "state", "etapa_cobro",
     "total_pagado", "saldo_pendiente", "linear_issue_url",
     "client_order_ref", "reemplazada_por_id", "lead_ref", "lead_real",
+    # La casilla del 50/50 (28/09/2026): sin ella la tarjeta no pide
+    # el abono del 50%.
+    "pago_50_50",
 ]
 
 
@@ -135,6 +138,8 @@ def _orden_legible(fila):
         "etapa_cobro": fila.get("etapa_cobro") or "",
         # "la real": la única conectada con lead_real en True.
         "es_real": bool(fila.get("lead_real")),
+        # Ausente (Odoo viejo) cuenta como True: es el default del addon.
+        "pide_abono": bool(fila.get("pago_50_50", True)),
         # El link al kanban de cobro de Odoo — regenerable, no es la
         # conexión (ver el docstring del módulo).
         "issue_url": fila.get("linear_issue_url") or "",
@@ -351,7 +356,11 @@ def plata_de_la_real(lead):
     return {
         "ok": True, "error": None, "hay_real": True,
         "orden_id": real["orden_id"], "orden": real["nombre"],
-        "total": total, "abono_50": round(total / 2, 2),
+        "total": total,
+        # Sin la casilla del 50/50 la tarjeta no pide abono: la fila
+        # dice «pago completo al confirmar» (dueño, 28/09/2026).
+        "pide_abono": real["pide_abono"],
+        "abono_50": round(total / 2, 2) if real["pide_abono"] else None,
         "pagado": real["pagado"], "saldo": real["saldo"],
         "etapa_cobro": real["etapa_cobro"],
     }
