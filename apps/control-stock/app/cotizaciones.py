@@ -43,7 +43,14 @@ ESTADOS_VIVOS = ("draft", "sent", "sale")
 # párrafo hereda el nombre del producto.
 TIPOS = {
     "renta": {
-        "etiqueta": "Alquiler",
+        # Alquiler, Evento y Boda eran lo mismo con tres botones (dueño,
+        # 28/09/2026): quedó ESTE, que era el más completo — es el único
+        # con el selector de cobro (total del evento o planta por planta)
+        # y con la sección informativa de plantas que se llevan y
+        # regresan. Su producto SV (producto_sv_alquiler_evento) ya
+        # hablaba de las dos cosas. El nombre del botón es el nuevo;
+        # producto, plantilla y etiquetas de Odoo quedan como estaban.
+        "etiqueta": "Alquiler / Eventos",
         # El alquiler se cobra por el total del evento (lo de siempre) o
         # con el precio de alquiler de cada planta (23/09/2026): el
         # formulario muestra el selector solo en los tipos con esto.
@@ -64,6 +71,12 @@ TIPOS = {
         ],
     },
     "boda": {
+        # RETIRADO (28/09/2026): absorbido por «Alquiler / Eventos». Se
+        # queda en TIPOS para que las cotizaciones viejas de Boda sigan
+        # abriendo, editando y descargando igual; solo desaparece el
+        # botón y la ruta de crear una nueva. El producto SV-BODA queda
+        # sin uso para cotizaciones nuevas (no se borra de Odoo).
+        "retirado": True,
         "etiqueta": "Boda",
         "etiqueta_cliente": "Boda",
         "etiqueta_orden": "BODA",
@@ -79,6 +92,9 @@ TIPOS = {
         ],
     },
     "evento": {
+        # RETIRADO (28/09/2026): igual que "boda" — absorbido por
+        # «Alquiler / Eventos». SV-EVENTO queda sin uso para nuevas.
+        "retirado": True,
         "etiqueta": "Evento",
         "etiqueta_cliente": "Evento",
         "etiqueta_orden": "EVENTO",
@@ -165,8 +181,9 @@ TIPOS = {
 }
 
 # El orden en que aparecen los botones en /venta.
-ORDEN_TIPOS = ("renta", "boda", "evento", "mantenimiento", "paisajismo",
-              "proyecto", "instalacion")
+# Boda y evento ya no tienen botón: los cubre «Alquiler / Eventos».
+ORDEN_TIPOS = ("renta", "mantenimiento", "paisajismo",
+               "proyecto", "instalacion")
 
 DIAS_VALIDEZ_DEFECTO = 15
 
