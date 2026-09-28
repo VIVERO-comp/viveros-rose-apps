@@ -1125,3 +1125,25 @@ def test_el_enlace_de_la_propuesta_baja_con_target_blank_y_download(cliente, odo
             assert 'rel="noopener"' in enlace
             assert "download" in enlace
     assert encontrado, "no se encontró el enlace de la propuesta"
+
+
+def test_la_propuesta_tiene_boton_compartir_oculto_con_su_nombre(cliente, odoo):
+    """Junto a «Descargar propuesta (PDF)» va «Compartir» (28/09/2026):
+    mismo archivo, mismo nombre calculado en Python, oculto por defecto
+    (el `hidden` va en el envoltorio que también trae el "·")."""
+    cliente.post("/venta/servicio/renta",
+                 data={"cliente": "José Núñez", "celular": "",
+                       "servicio_texto": "Alquiler de 20 plantas",
+                       "servicio_monto": "850"})
+    registro = cotizaciones.cotizaciones_todas()[0]
+    esperado = ventas.nombre_de_pdf(registro["orden"].replace("/", "-"),
+                                    registro["cliente"])
+    pagina = cliente.get("/venta").text
+    marca = f'data-compartir="/venta/servicio/{registro["n"]}/propuesta.pdf"'
+    assert marca in pagina
+    pos = pagina.index(marca)
+    inicio = pagina.rindex("<", 0, pos)
+    fin = pagina.index(">", pos)
+    tag = pagina[inicio:fin + 1]
+    assert "hidden" in tag
+    assert f'data-nombre="{esperado}"' in tag

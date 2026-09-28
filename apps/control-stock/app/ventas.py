@@ -1411,11 +1411,15 @@ def _mensaje_de_error(error):
     return str(error)[:300]
 
 
-def _slug(texto):
-    """El nombre del cliente, listo para ir en un nombre de archivo: sin
-    acentos, en minúscula y con cualquier tramo de símbolos (espacios,
-    puntuación, emoji) convertido en UN solo guion, sin guiones colgando en
-    las puntas. Si no queda ni una letra o número, el resultado es ""."""
+def slug(texto):
+    """Cualquier texto, listo para ir en un nombre de archivo: sin acentos,
+    en minúscula y con cualquier tramo de símbolos (espacios, puntuación,
+    emoji) convertido en UN solo guion, sin guiones colgando en las puntas.
+    Si no queda ni una letra o número, el resultado es "".
+
+    Pública a propósito: la usa `nombre_de_pdf()` de aquí abajo, y también
+    main.py para el nombre de la foto que se comparte desde el modal de
+    producto — un solo lugar para "cómo se ve un nombre de archivo sano"."""
     sin_acentos = unicodedata.normalize("NFKD", texto or "").encode(
         "ascii", "ignore").decode()
     return re.sub(r"\W+", "-", sin_acentos.lower()).strip("-")
@@ -1428,8 +1432,8 @@ def nombre_de_pdf(orden, cliente):
 
     Pensado para que quien recibe el archivo en su teléfono sepa qué es sin
     tener que abrirlo (pedido de Abraham, 28/09/2026)."""
-    slug = _slug(cliente)
-    return f"{orden}-{slug}.pdf" if slug else f"{orden}.pdf"
+    slug_cliente = slug(cliente)
+    return f"{orden}-{slug_cliente}.pdf" if slug_cliente else f"{orden}.pdf"
 
 
 # ---------------------------------------------------------------------------

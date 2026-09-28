@@ -354,6 +354,21 @@ function pintarFotoGrande(p) {
   const descargar = document.getElementById("btn-descargar");
   descargar.hidden = !p.imgD;
   if (p.imgD) descargar.href = p.imgD;
+
+  // Compartir (28/09/2026): mismo candado que Descargar (nace oculto sin
+  // foto), y además solo se destapa si el navegador sabe compartir
+  // ARCHIVOS — eso lo decide compartir.js, no acá. El nombre lo calculó
+  // Python (p.nombreCompartir); este script solo lo pasa.
+  const compartir = document.getElementById("btn-compartir-foto");
+  compartir.hidden = true;
+  if (p.imgD) {
+    compartir.dataset.compartir = p.imgD;
+    compartir.dataset.nombre = p.nombreCompartir;
+    if (window.activarBotonesCompartir) window.activarBotonesCompartir();
+  } else {
+    delete compartir.dataset.compartir;
+    delete compartir.dataset.nombre;
+  }
 }
 
 function abrirFoto(sku) {

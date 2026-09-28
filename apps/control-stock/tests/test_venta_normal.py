@@ -264,6 +264,44 @@ def test_venta_confirmada_y_cotizacion_salen_en_la_lista_de_vender(cliente_venta
     assert "Descargar orden (PDF)" in r.text
 
 
+def test_la_orden_vendida_baja_con_target_blank_y_download(cliente_venta, con_comodin):
+    """A esta le faltaba la regla del 28/09/2026 (la fusión de "venta
+    normal" nació después del hotfix de los PDF): mismo problema, mismo
+    arreglo — descarga Y pestaña nueva a la vez."""
+    cliente_venta.post("/venta/carrito/agregar",
+                       data={"producto_id": 501, "cantidad": 1})
+    cliente_venta.post("/venta/vender", data={"cliente": "Ana", "celular": ""})
+    pagina = cliente_venta.get("/venta").text
+    encontrado = False
+    for trozo in pagina.split("<a ")[1:]:
+        enlace = trozo.split(">")[0]
+        if "/cotizacion.pdf" in enlace:
+            encontrado = True
+            assert 'target="_blank"' in enlace
+            assert 'rel="noopener"' in enlace
+            assert "download" in enlace
+    assert encontrado, "no se encontró el enlace de la orden vendida"
+
+
+def test_la_orden_vendida_tiene_boton_compartir_oculto_con_su_nombre(
+        cliente_venta, con_comodin):
+    cliente_venta.post("/venta/carrito/agregar",
+                       data={"producto_id": 501, "cantidad": 1})
+    cliente_venta.post("/venta/vender", data={"cliente": "Ana", "celular": ""})
+    registro = ventas.ventas_todas()[0]
+    esperado = ventas.nombre_de_pdf(registro["orden"].replace("/", "-"),
+                                    registro["cliente"])
+    pagina = cliente_venta.get("/venta").text
+    marca = f'data-compartir="/venta/{registro["n"]}/cotizacion.pdf"'
+    assert marca in pagina
+    pos = pagina.index(marca)
+    inicio = pagina.rindex("<", 0, pos)
+    fin = pagina.index(">", pos)
+    tag = pagina[inicio:fin + 1]
+    assert "hidden" in tag
+    assert f'data-nombre="{esperado}"' in tag
+
+
 # ---------------------------------------------------------------------------
 # lead_ref: solo si hay lead pendiente
 # ---------------------------------------------------------------------------

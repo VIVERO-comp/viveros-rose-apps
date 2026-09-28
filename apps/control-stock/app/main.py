@@ -380,11 +380,20 @@ def inicio(request: Request, refrescar: int = 0):
         # 404 dispara el onerror y la tarjeta cae al emoji). imgG/imgD son
         # la versión grande y la de descarga del modal de foto: para el
         # respaldo de Odoo son la misma URL (es la única imagen que hay).
+        # nombreCompartir es el nombre con el que "Compartir" (28/09/2026)
+        # arma el archivo: el slug de la planta con ".jpg" — Cloudinary
+        # entrega la foto en su formato original sin decir cuál es en la
+        # URL, así que ".jpg" es el valor sano por defecto (casi todo lo
+        # que se sube es jpg); el share sheet del teléfono de todos modos
+        # decide por el `type` real del archivo, no por esta extensión.
         info = fotos.info_foto(p["sku"], subidas.get(p["sku"]))
+        nombre_compartir = f"{ventas.slug(p['nombre']) or p['sku'].lower()}.jpg"
         if info:
-            return {"img": info["img"], "imgG": info["grande"], "imgD": info["descarga"]}
+            return {"img": info["img"], "imgG": info["grande"], "imgD": info["descarga"],
+                    "nombreCompartir": nombre_compartir}
         respaldo = f"/stock/foto/{quote(p['sku'])}" if ventas.configurado() else None
-        return {"img": respaldo, "imgG": respaldo, "imgD": respaldo}
+        return {"img": respaldo, "imgG": respaldo, "imgD": respaldo,
+                "nombreCompartir": nombre_compartir}
 
     plantas = [
         {
@@ -1026,7 +1035,11 @@ def venta(request: Request, error: str = "", lead: str = "",
                           for t in cotizaciones.ORDEN_TIPOS],
         "ventas": [{**v, "fecha_texto": _fecha_venta(v["creado_en"]),
                     "etiqueta_estado": ventas.ETIQUETAS_ESTADO[v["estado"]],
-                    "whatsapp": _enlace_whatsapp(request, v)}
+                    "whatsapp": _enlace_whatsapp(request, v),
+                    "nombre_cotizacion_pdf": ventas.nombre_de_pdf(
+                        v["orden"].replace("/", "-"), v["cliente"]),
+                    "nombre_factura_pdf": ventas.nombre_de_pdf(
+                        (v["factura"] or str(v["n"])).replace("/", "-"), v["cliente"])}
                    for v in ventas.ventas_todas()],
         "cotizaciones_servicio": _cotizaciones_con_estado(),
     })
@@ -1052,6 +1065,7 @@ def _cotizaciones_con_estado():
             "facturada": bool(estado and estado["facturada"]),
             "cancelada": bool(estado and estado["cancelada"]),
             "editable": bool(estado and estado["editable"]),
+            "nombre_pdf": ventas.nombre_de_pdf(c["orden"].replace("/", "-"), c["cliente"]),
         })
     return resultado
 
@@ -1448,6 +1462,8 @@ async def venta_cotizar(request: Request):
                   ("Estado", "Cotización (borrador en Odoo)", "dorado")],
         "pdf_href": f"/venta/{registro['n']}/cotizacion.pdf",
         "pdf_texto": "Descargar cotización (PDF)",
+        "pdf_nombre": ventas.nombre_de_pdf(registro["orden"].replace("/", "-"),
+                                           registro["cliente"]),
     })
 
 
@@ -1476,6 +1492,8 @@ async def venta_vender(request: Request):
                   ("Estado", "Confirmada · el cobro se registra en Odoo", "dorado")],
         "pdf_href": f"/venta/{registro['n']}/cotizacion.pdf",
         "pdf_texto": "Descargar orden (PDF)",
+        "pdf_nombre": ventas.nombre_de_pdf(registro["orden"].replace("/", "-"),
+                                           registro["cliente"]),
     })
 
 
@@ -1578,6 +1596,8 @@ async def venta_servicio_crear(request: Request, tipo: str):
         "filas": filas,
         "pdf_href": f"/venta/servicio/{registro['n']}/propuesta.pdf",
         "pdf_texto": "Descargar propuesta (PDF)",
+        "pdf_nombre": ventas.nombre_de_pdf(registro["orden"].replace("/", "-"),
+                                           registro["cliente"]),
     })
 
 
@@ -1660,6 +1680,8 @@ async def venta_personalizada_crear(request: Request):
                   ("Estado", "Cotización (borrador en Odoo)", "dorado")],
         "pdf_href": f"/venta/servicio/{registro['n']}/propuesta.pdf",
         "pdf_texto": "Descargar propuesta (PDF)",
+        "pdf_nombre": ventas.nombre_de_pdf(registro["orden"].replace("/", "-"),
+                                           registro["cliente"]),
     })
 
 
@@ -1821,6 +1843,8 @@ async def venta_cobrar_confirmar(request: Request, n: int):
                   ("Método", metodo_texto, None)],
         "pdf_href": f"/venta/{n}/factura.pdf",
         "pdf_texto": "Descargar factura (PDF)",
+        "pdf_nombre": ventas.nombre_de_pdf(
+            (registro["factura"] or str(n)).replace("/", "-"), registro["cliente"]),
     })
 
 
