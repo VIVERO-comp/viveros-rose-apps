@@ -398,7 +398,7 @@ def test_quitar_real_desde_la_pantalla(cliente, de_dueno, odoo):
 
 
 def test_quitar_real_no_lo_puede_un_empleado_de_otro(cliente, odoo):
-    # Sesión sin AJUSTES_ADMINS: "solo_resp" vacío, no matchea a nadie.
+    # Sesión sin AJUSTES_ADMINS: "resp_propio" vacío, no matchea a nadie.
     lead, partner = _lead_y_partner(odoo, "LEAD-89")  # Resp: Mary
     orden = odoo.agregar_orden(partner, "S00508", amount_total=10.0,
                                lead_ref=lead["pp"], lead_real=True)

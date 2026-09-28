@@ -1034,6 +1034,16 @@ def _del_dia(actividades, dia_iso):
                   key=lambda a: _minutos(a["hora"]))
 
 
+def contar_vivas(actividades):
+    """El número que ve el usuario en un contador de día.
+
+    Las canceladas se siguen PINTANDO (tachadas y atenuadas), pero no son
+    trabajo: un día cuya única actividad está cancelada no muestra un «1».
+    Es la misma regla que ya usan las fichas de Equipo (carga_equipo).
+    """
+    return len([a for a in actividades if a["estado"] != "cancel"])
+
+
 def _repartir(actividades):
     """Reparte en columnas las actividades que chocan a la misma hora."""
     orden = sorted(actividades, key=lambda a: _minutos(a["hora"]))
@@ -1088,20 +1098,36 @@ def _bloque(actividad, columna, columnas, indice, total_columnas, dia_hoy, filas
     color = (color_de_tipo or color_de)(actividad["tipo"])
     parte = 1 / columnas
     corrido = parte * columna
+    # Partido = comparte la columna del día con otra actividad a la misma
+    # hora. La tira queda angosta, así que al pasar el mouse el CSS la
+    # expande al ancho COMPLETO de la columna (dueño, 28/09/2026: con 7
+    # columnas de semana las tiras no se leían). Los límites de esa
+    # expansión se calculan AQUÍ y viajan como variables CSS (--exp-*);
+    # el CSS solo las consume en .bloque.partido:hover.
+    partido = columnas > 1
+    estilo = (f"top:calc({arriba:.4f}% + 2px);height:calc({alto:.4f}% - 6px);"
+              f"left:calc({izquierda} + {ancho} * {corrido:.4f} + 2px);"
+              f"width:calc({ancho} * {parte:.4f} - 5px);"
+              f"z-index:{2 + columna};"
+              f"background:{_tinta(color, 0.07)};border-color:{_tinta(color, 0.3)};"
+              f"border-left-color:{color}")
+    if partido:
+        estilo += (f";--exp-izq:calc({izquierda} + 2px);"
+                   f"--exp-ancho:calc({ancho} - 5px)")
     return {
         "a": actividad,
         "color": color,
         "fondo": _tinta(color, 0.07),
         "borde": _tinta(color, 0.3),
-        "estilo": (f"top:calc({arriba:.4f}% + 2px);height:calc({alto:.4f}% - 6px);"
-                   f"left:calc({izquierda} + {ancho} * {corrido:.4f} + 2px);"
-                   f"width:calc({ancho} * {parte:.4f} - 5px);"
-                   f"z-index:{2 + columna};"
-                   f"background:{_tinta(color, 0.07)};border-color:{_tinta(color, 0.3)};"
-                   f"border-left-color:{color}"),
+        "estilo": estilo,
+        "partido": partido,
         # Con la columna partida (o poco alto) el bloque solo dice el tipo:
         # más vale una línea legible que tres cortadas.
         "ver_cliente": actividad["dur"] >= 45 and columnas < 2,
+        # En un bloque partido el cliente SÍ viaja en el DOM (escondido en
+        # reposo): la expansión del hover lo deja leer completo sin ir a
+        # la ficha. La decisión es de Python; el CSS solo esconde/muestra.
+        "ver_cliente_expandido": partido,
         "ver_pie": actividad["dur"] >= 90 and columnas < 2,
         "atrasada": esta_atrasada(actividad, dia_hoy),
     }
@@ -1186,7 +1212,8 @@ def carril_semana(actividades, dias, dia_hoy):
         fecha = _dia(dia_iso)
         columnas.append({
             "iso": dia_iso, "dow": DOW[i], "num": fecha.day,
-            "hoy": dia_iso == dia_hoy, "finde": i > 4, "cant": len(del_dia),
+            "hoy": dia_iso == dia_hoy, "finde": i > 4,
+            "cant": contar_vivas(del_dia),
             "estilo": (f"left:calc(46px + (100% - 46px) * {i / 7});"
                        f"width:calc((100% - 46px) / 7)"),
         })
@@ -1208,7 +1235,8 @@ def carril_dia(actividades, dia_iso, gente, dia_hoy):
         suyas = [a for a in del_dia if a["resp_id"] == persona["id"]]
         columnas.append({
             "iso": dia_iso, "dow": persona["nombre"], "num": "",
-            "persona": persona, "hoy": False, "finde": False, "cant": len(suyas),
+            "persona": persona, "hoy": False, "finde": False,
+            "cant": contar_vivas(suyas),
             "estilo": (f"left:calc(46px + (100% - 46px) * {i / total});"
                        f"width:calc((100% - 46px) / {total})"),
         })
@@ -1292,7 +1320,7 @@ def vista_movil(actividades, dia_iso, dia_hoy):
         "titulo": f"{MESES[fecha.month - 1].capitalize()} {fecha.year}",
         "subtitulo": ("Hoy" if dia_iso == dia_hoy else DOW_LARGO[fecha.weekday()])
                      + " " + dmy(dia_iso),
-        "tira": tira, "actividades": lista, "total": len(del_dia),
+        "tira": tira, "actividades": lista, "total": contar_vivas(del_dia),
         "semana_ant": (inicio_semana - timedelta(days=7)).isoformat(),
         "semana_sig": (inicio_semana + timedelta(days=7)).isoformat(),
     }

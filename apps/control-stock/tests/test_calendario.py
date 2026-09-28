@@ -138,6 +138,51 @@ def test_la_semana_reparte_las_actividades_que_chocan():
     assert carril["bloques"][0]["estilo"] != carril["bloques"][1]["estilo"]
 
 
+# El helper _actividad(dia, **cambios) vive más abajo (lo trajo la tanda
+# del conteo); estas pruebas lo comparten.
+def test_un_bloque_partido_lleva_los_limites_de_su_expansion():
+    """Los solapes (28/09/2026): la tira partida lleva la clase `partido` y
+    las variables --exp-* con la columna COMPLETA del día, que el CSS usa
+    para expandirla al pasar el mouse. El cálculo vive en Python."""
+    dia = calendario.hoy().isoformat()
+    choque = [_actividad(dia, id="a", ref="VIV-1", cliente="A", hora="09:00"),
+              _actividad(dia, id="b", ref="VIV-2", tipo="visita", cliente="B",
+                         hora="09:30", resp="Pedro", resp_id="pedro")]
+    carril = calendario.carril_semana(choque, [dia], dia)
+    for bloque in carril["bloques"]:
+        assert bloque["partido"] is True
+        # La expansión es al ancho completo de la columna del día (7 en
+        # la semana), con el mismo aire (+2 / -5) que la posición normal.
+        assert "--exp-izq:calc((46px + (100% - 46px) * 0.0) + 2px)" in bloque["estilo"]
+        assert "--exp-ancho:calc(((100% - 46px) / 7) - 5px)" in bloque["estilo"]
+
+
+def test_un_bloque_solo_no_lleva_expansion():
+    dia = calendario.hoy().isoformat()
+    carril = calendario.carril_semana([_actividad(dia, hora="09:00")], [dia], dia)
+    bloque = carril["bloques"][0]
+    assert bloque["partido"] is False
+    assert "--exp-" not in bloque["estilo"]
+    assert bloque["ver_cliente_expandido"] is False
+
+
+def test_el_cliente_escondido_viaja_solo_en_los_bloques_partidos():
+    """En un bloque partido el cliente SÍ va en el DOM (small.exp) aunque
+    en reposo no se vea: el hover que expande la tira lo muestra. En un
+    bloque solo manda la regla de siempre (ver_cliente por duración)."""
+    dia = calendario.hoy().isoformat()
+    choque = [_actividad(dia, id="a", ref="VIV-1", cliente="A", hora="09:00"),
+              _actividad(dia, id="b", ref="VIV-2", tipo="visita", cliente="B",
+                         hora="09:30", resp="Pedro", resp_id="pedro")]
+    carril = calendario.carril_semana(choque, [dia], dia)
+    for bloque in carril["bloques"]:
+        assert bloque["ver_cliente_expandido"] is True
+        assert bloque["ver_cliente"] is False  # en reposo, solo el tipo
+    solo = calendario.carril_semana([_actividad(dia, hora="09:00")], [dia], dia)["bloques"][0]
+    assert solo["ver_cliente"] is True  # 60 min y sin choque: como siempre
+    assert solo["ver_cliente_expandido"] is False
+
+
 def test_las_horas_vacias_miden_menos_y_los_bloques_siguen_en_su_lugar():
     """Regla del dueño: la fila de una hora sin trabajo se encoge."""
     dia = calendario.hoy().isoformat()
@@ -167,6 +212,55 @@ def test_el_color_del_bloque_es_opaco():
            "resp": "Juan", "resp_id": "juan", "url": "", "titulo": ""}
     bloque = calendario.carril_semana([una], [dia], dia)["bloques"][0]
     assert "rgba(" not in bloque["estilo"]
+
+
+def _actividad(dia, **cambios):
+    base = {"id": "c1", "ref": "VIV-90", "tipo": "entrega", "cliente": "C",
+            "lugar": "", "nota": "", "hora": "10:00", "dur": 60, "fecha": dia,
+            "estado": "pend", "prioridad": 3, "resp": "Juan", "resp_id": "juan",
+            "url": "", "titulo": ""}
+    base.update(cambios)
+    return base
+
+
+def test_el_contador_del_dia_no_cuenta_canceladas():
+    """El dueño vio un día con «1» cuya única actividad estaba cancelada.
+    La cancelada se sigue pintando (tachada), pero el número no la cuenta."""
+    dia = calendario.hoy().isoformat()
+    cancelada = _actividad(dia, id="c1", estado="cancel")
+    carril = calendario.carril_semana([cancelada], [dia], dia)
+    assert carril["columnas"][0]["cant"] == 0  # sin contador en la cabecera
+    assert len(carril["bloques"]) == 1  # el bloque se pinta igual
+    # Con una viva al lado, el contador dice 1, no 2.
+    viva = _actividad(dia, id="c2", hora="12:00")
+    carril = calendario.carril_semana([cancelada, viva], [dia], dia)
+    assert carril["columnas"][0]["cant"] == 1
+    assert len(carril["bloques"]) == 2
+
+
+def test_el_contador_por_persona_tampoco_cuenta_canceladas():
+    dia = calendario.hoy().isoformat()
+    gente = [{"id": "juan", "nombre": "Juan"}]
+    actividades = [_actividad(dia, id="c1", estado="cancel"),
+                   _actividad(dia, id="c2", hora="12:00")]
+    carril = calendario.carril_dia(actividades, dia, gente, dia)
+    assert carril["columnas"][0]["cant"] == 1
+    assert len(carril["bloques"]) == 2
+
+
+def test_el_total_del_telefono_no_cuenta_canceladas():
+    dia = calendario.hoy().isoformat()
+    movil = calendario.vista_movil([_actividad(dia, estado="cancel")], dia, dia)
+    assert movil["total"] == 0  # el subtítulo no dice «1 actividad»
+    assert len(movil["actividades"]) == 1  # pero la lista la pinta tachada
+
+
+def test_el_carril_del_crm_tampoco_cuenta_canceladas():
+    from app import crm_twenty
+    dia = calendario.hoy().isoformat()
+    carril = crm_twenty.carril_dias([_actividad(dia, estado="cancel")], [dia], dia)
+    assert carril["columnas"][0]["cant"] == 0
+    assert len(carril["bloques"]) == 1
 
 
 def test_el_inicio_muestra_el_calendario(cliente):

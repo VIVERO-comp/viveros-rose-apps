@@ -212,7 +212,7 @@
                   {% else %}
                     <span class="dnum" style="font-size:13px">{{ col.dow }}</span>
                   {% endif %}
-                  {% if col.cant %}<span class="tenue">{{ col.cant }}</span>{% endif %}
+                  {% if col.cant %}<span class="cant-dia">{{ col.cant }}</span>{% endif %}
                   {% if puede_escribir %}<a class="mas" href="{{ col.liga_nueva }}" title="Nueva actividad este día">+</a>{% endif %}
                 </div>
                 {% endfor %}
@@ -236,12 +236,15 @@
                   <div class="linea-ahora" style="top:{{ carril.ahora }}%;left:46px"></div>
                   {% endif %}
                   {% for b in carril.bloques %}
-                  <a class="bloque {{ 'hecha' if b.a.estado == 'hecha' }} {{ 'cancel' if b.a.estado == 'cancel' }}"
+                  <a class="bloque {{ 'partido' if b.partido }} {{ 'hecha' if b.a.estado == 'hecha' }} {{ 'cancel' if b.a.estado == 'cancel' }}"
                      style="{{ b.estilo }}" href="{{ ligas.cerrar }}&abrir={{ b.a.id }}"
                      title="{{ cal.nombre_de_tipo(b.a.tipo) }} — {{ b.a.cliente }} · {{ cal.hora_bonita(b.a.hora) }} · {{ b.a.resp }}"
                      data-busca="{{ (b.a.cliente ~ ' ' ~ b.a.lugar ~ ' ' ~ b.a.resp ~ ' ' ~ cal.nombre_de_tipo(b.a.tipo))|lower }}">
                     <span class="tt" style="color:{{ b.color }}">{{ cal.nombre_de_tipo(b.a.tipo) }}</span>
                     {% if b.ver_cliente %}<small>{{ b.a.cliente }}</small>{% endif %}
+                    {# En un bloque partido el cliente viaja escondido (CSS
+                       .exp): el hover que expande la tira lo deja leer. #}
+                    {% if b.ver_cliente_expandido %}<small class="exp">{{ b.a.cliente }}</small>{% endif %}
                     {% if b.ver_pie %}<small>{{ b.a.hora }} · {{ b.a.resp }}</small>{% endif %}
                     {% if b.atrasada %}<span class="marca-at"></span>{% endif %}
                   </a>
