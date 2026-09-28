@@ -39,6 +39,8 @@ Reglas y decisiones que este módulo cumple:
 - **Reprogramar mueve la fecha sin tocar el estado.**
 """
 
+import hmac
+import os
 import re
 import time
 import unicodedata
@@ -295,6 +297,9 @@ def agendar(ref_lead, tipo, fecha, hora=None, resp="", dur=None, lugar="",
     _escribir_fecha_en_odoo(lead, fecha)
     linear_leads.refrescar()
     refrescar()
+    # Si se agendó para hoy (o una fecha ya pasada), «Entrega pendiente» se
+    # pone de una: no espera la pasada de mañana.
+    _revisar_entregas_pendientes_sin_reventar()
 
     quien = f" · {resp}" if resp else ""
     return (f"{POR_CLAVE[tipo]['nombre']} de {lead['nombre']} el "
@@ -329,6 +334,10 @@ def reprogramar(id_actividad, fecha, hora=None):
         lead = linear_leads.uno(actividad["lead"])
         if lead:
             _escribir_fecha_en_odoo(lead, fecha)
+    # Reprogramar puede sacar a un lead de "hoy" (se movió al futuro) o
+    # meterlo (se movió a hoy o para atrás): «Entrega pendiente» se
+    # recalcula igual que al agendar.
+    _revisar_entregas_pendientes_sin_reventar()
     return f"Movida al {calendario.dmy(fecha)}. El lead se queda donde está."
 
 
@@ -370,6 +379,14 @@ def al_marcar_hecha(actividad, autor=""):
                 pass
 
     movido = linear_leads.mover_estado(lead["id"], "ENTREGADO")
+    # El lead ya salió de Agendado: `marcar_entregas_pendientes()` no vuelve
+    # a mirarlo (solo recorre los que SIGUEN en Agendado), así que la señal
+    # se quita aquí mismo, directo, en vez de esperar una pasada que ya no
+    # lo va a encontrar.
+    try:
+        linear_leads.poner_etiqueta_suelta(lead["id"], ENTREGA_PENDIENTE, False)
+    except linear_leads.ErrorLeads:
+        pass
     aviso = f"{lead['nombre']} pasó a Entregado." if movido else ""
     aviso += " " + _cerrar_o_cobrar(lead, autor)
     linear_leads.refrescar()
@@ -457,6 +474,105 @@ def cerrar_los_que_ya_pagaron():
 def cerrar_en_fondo():
     """La pasada de arriba, sin que la pantalla la espere."""
     calendario._en_fondo("agenda-cerrar", cerrar_los_que_ya_pagaron)
+
+
+# ---------------------------------------------------------------------------
+# «Entrega pendiente»: la señal automática (pedido de Abraham, 28/09/2026)
+#
+# Regla literal del dueño: «entrega pendiente se activa cuando llega el día
+# agendado hasta que ponga entregado». La etiqueta suelta YA existe en
+# Linear (equipo LEAD) y en WhatsApp -el sincronizador la baja sola, ver
+# SENALES_QUE_BAJAN en waha/sincronizador.py-; este módulo NUNCA la crea
+# (regla 3): solo la busca, y si no existe todavía se queda sin ella.
+#
+# PONERLA: un lead en Agendado con una actividad tocando ya (hoy o
+# atrasada) y sin marcar Hecha. QUITARLA: la actividad se marca Hecha (el
+# lead deja Agendado) o su fecha se movió al futuro. No es botón de
+# Control -no vive en LABELS_SENAL/senales_disponibles()- y no manda nada
+# al cliente: es puro espejo del calendario hacia Linear/WhatsApp.
+# ---------------------------------------------------------------------------
+
+ENTREGA_PENDIENTE = "Entrega pendiente"
+
+
+def marcar_entregas_pendientes():
+    """Recorre TODOS los Agendado y deja «Entrega pendiente» puesta en los
+    que tienen una actividad vencida (hoy o atrasada, sin marcar Hecha) y
+    quitada en los que no. Idempotente: solo escribe en los leads donde lo
+    puesto hoy no coincide con lo que debería quedar.
+
+    La corre (a) esta misma función al final de `agendar()`, `reprogramar()`
+    y `al_marcar_hecha()` -así "agendar para hoy" la pone de una, sin
+    esperar la pasada de mañana- y (b) el endpoint `/entregas-pendientes/
+    revisar` que dispara el cron de las 7 a.m. de Panamá, para los leads
+    que nadie tocó hoy (una actividad que amaneció vencida sola).
+
+    Mismo candado que `cerrar_los_que_ya_pagaron()`: con Linear configurado
+    pero SIN escritura activa (la instancia de solo lectura), no toca nada
+    -ni siquiera lee-, para no gastar una consulta que no va a usar. Sin
+    ningún token (modo muestra) sí corre, contra el tablero de ejemplo:
+    es como se prueba esto sin un Linear real.
+    """
+    if linear_leads.configurado() and not linear_leads.escritura_activa():
+        return {"puestas": [], "quitadas": [], "errores": []}
+
+    hoy = calendario.hoy().isoformat()
+    actividades = calendario.listar(hoy, hoy)  # trae hoy + las atrasadas
+    # Solo las que "entregan" (Entrega, Instalación, Mantenimiento): son las
+    # únicas que ponen a un lead en Agendado y las únicas que, al marcarse
+    # Hecha, lo sacan de ahí. Una Visita o una Recogida atrasada del mismo
+    # lead no cuentan -no son la entrega-.
+    con_lead_vencido = {
+        a["lead"] for a in actividades
+        if a.get("lead") and cierra_la_entrega(a.get("tipo"))
+        and a["estado"] not in ("hecha", "cancel")}
+
+    puestas, quitadas, errores = [], [], []
+    for lead in linear_leads.en_estado("AGENDADO"):
+        toca = lead["ref"] in con_lead_vencido
+        tiene = ENTREGA_PENDIENTE in lead.get("etiquetas", [])
+        if toca == tiene:
+            continue
+        try:
+            linear_leads.poner_etiqueta_suelta(
+                lead["id"], ENTREGA_PENDIENTE, toca)
+        except linear_leads.ErrorLeads as fallo:
+            errores.append((lead["ref"], str(fallo)))
+            continue
+        (puestas if toca else quitadas).append(lead["ref"])
+    if puestas or quitadas:
+        linear_leads.refrescar()
+    return {"puestas": puestas, "quitadas": quitadas, "errores": errores}
+
+
+def _revisar_entregas_pendientes_sin_reventar():
+    """La misma pasada, pero que un fallo de red no tumbe quien la llama
+    (agendar, reprogramar, marcar Hecha ya quedaron bien; esto es un extra).
+    """
+    try:
+        marcar_entregas_pendientes()
+    except Exception:
+        pass
+
+
+def _secreto_entregas_pendientes():
+    return (os.environ.get("ENTREGAS_PENDIENTES_SECRETO") or "").strip()
+
+
+def entregas_pendientes_armado():
+    """Sin `ENTREGAS_PENDIENTES_SECRETO` el endpoint de la pasada diaria no
+    corre — mismo trato que `resumen.armado()` con `RESUMEN_SECRETO`."""
+    return bool(_secreto_entregas_pendientes())
+
+
+def entregas_pendientes_credencial_valida(cabecera):
+    """Compara el secreto sin filtrar por el tiempo que tarda (mismo patrón
+    que `resumen.credencial_valida()`)."""
+    esperado = _secreto_entregas_pendientes()
+    if not esperado:
+        return False
+    dado = (cabecera or "").removeprefix("Bearer ").strip()
+    return hmac.compare_digest(dado, esperado)
 
 
 # ---------------------------------------------------------------------------

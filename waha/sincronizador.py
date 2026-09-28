@@ -133,16 +133,26 @@ def _nombre_en_catalogo(nombre_deseado, disponibles):
 # solas (regla 3): si el nombre no existe todavia en el catalogo de
 # WhatsApp, el chat se queda sin ella y el log lo avisa.
 #
-# Hoy solo «Importante» esta habilitada. «Seguimiento» y «Cliente
-# potencial» son las otras dos que Abraham va a crear a mano; sumarlas
-# aqui es la unica linea que hace falta cuando llegue el momento -no
-# antes, para no encenderlas sin que existan sus botones.
+# Las cuatro (28/09/2026): «Importante», «Seguimiento» y «Cliente
+# potencial» las pone o las quita Abraham a mano en Linear (los botones de
+# la ficha); «Entrega pendiente» la pone y la quita el codigo de
+# control-stock solo, segun si a un lead Agendado ya le llego el dia de su
+# entrega -pero para EL SINCRONIZADOR las cuatro son lo mismo: una
+# etiqueta suelta que Linear manda y WhatsApp solo refleja.
+#
+# «Seguimiento» y «Cliente potencial» son dos de las tres SUGERIDAS de
+# fabrica de WhatsApp Business (la tercera es "Pedido completado", ya en
+# uso en Ganado) y por eso llegan del catalogo con la marca invisible
+# U+200E al inicio del nombre -el mecanismo de mas abajo
+# (`_nombre_en_catalogo` / `_sin_marca`) ya la tolera-. «Entrega pendiente»
+# es una etiqueta creada a mano, sin esa marca.
 #
 # Nunca entran a un lead cerrado (Ganado/Perdido): Perdido ya vuelve []
 # sin mirar nada mas, y Ganado arma su lista aparte sin pedirlas -las dos
 # reglas de `quiere_para()` de mas abajo, sin que haga falta ningun codigo
 # extra aqui para excluirlas.
-SENALES_QUE_BAJAN = ("Importante",)
+SENALES_QUE_BAJAN = ("Importante", "Seguimiento", "Cliente potencial",
+                     "Entrega pendiente")
 
 # Las etiquetas de representante de WhatsApp, cada una con su color
 # (25/09/2026). El color dice de que familia es; el nombre, cual.

@@ -277,6 +277,162 @@ def test_reprogramar_mueve_la_fecha_y_deja_el_estado():
 
 
 # ---------------------------------------------------------------------------
+# «Entrega pendiente»: la señal automática (pedido de Abraham, 28/09/2026)
+#
+# Regla literal: "entrega pendiente se activa cuando llega el día agendado
+# hasta que ponga entregado". La etiqueta ya existe en Linear y en
+# WhatsApp; este módulo solo la busca (regla 3), nunca la crea.
+# ---------------------------------------------------------------------------
+
+def _tiene_entrega_pendiente(ref):
+    return agenda.ENTREGA_PENDIENTE in linear_leads.uno(ref)["etiquetas"]
+
+
+def test_entrega_pendiente_se_pone_cuando_llega_el_dia():
+    # `_actividad_de()` agenda para HOY: se pone de una, sin esperar la
+    # pasada de mañana.
+    _actividad_de("LEAD-91")
+    assert _tiene_entrega_pendiente("LEAD-91")
+
+
+def test_entrega_pendiente_no_se_pone_para_una_fecha_futura():
+    from datetime import timedelta
+    en_una_semana = (calendario.hoy() + timedelta(days=7)).isoformat()
+    agenda.agendar("LEAD-91", "entrega", en_una_semana)
+    assert linear_leads.uno("LEAD-91")["estado"] == "AGENDADO"
+    assert not _tiene_entrega_pendiente("LEAD-91")
+
+
+def test_entrega_pendiente_cuenta_lo_atrasado_tambien():
+    from datetime import timedelta
+    ayer = (calendario.hoy() - timedelta(days=1)).isoformat()
+    agenda.agendar("LEAD-91", "entrega", ayer)
+    assert _tiene_entrega_pendiente("LEAD-91")
+
+
+def test_entrega_pendiente_se_quita_al_marcar_hecha():
+    actividad = _actividad_de("LEAD-91")
+    assert _tiene_entrega_pendiente("LEAD-91")
+    agenda.al_marcar_hecha(actividad, autor="Ruben")
+    assert linear_leads.uno("LEAD-91")["estado"] == "ENTREGADO"
+    assert not _tiene_entrega_pendiente("LEAD-91")
+
+
+def test_entrega_pendiente_se_quita_si_se_reprograma_al_futuro():
+    from datetime import timedelta
+    actividad = _actividad_de("LEAD-91")
+    assert _tiene_entrega_pendiente("LEAD-91")
+    en_una_semana = (calendario.hoy() + timedelta(days=7)).isoformat()
+    agenda.reprogramar(actividad["id"], en_una_semana)
+    assert not _tiene_entrega_pendiente("LEAD-91")
+
+
+def test_entrega_pendiente_se_pone_si_se_reprograma_a_hoy():
+    from datetime import timedelta
+    dia = calendario.hoy().isoformat()
+    en_una_semana = (calendario.hoy() + timedelta(days=7)).isoformat()
+    agenda.agendar("LEAD-91", "entrega", en_una_semana)
+    assert not _tiene_entrega_pendiente("LEAD-91")
+    actividad = next(a for a in calendario.listar(en_una_semana, en_una_semana)
+                     if a["cliente"] == "Tamara")
+    agenda.reprogramar(actividad["id"], dia)
+    assert _tiene_entrega_pendiente("LEAD-91")
+
+
+def test_un_lead_que_no_esta_en_agendado_no_recibe_la_senal():
+    # LEAD-91 sigue en "Por agendar": una actividad tocada hoy, tied a él
+    # PERO creada por fuera de `agendar()` (que sí lo movería), no cuenta.
+    dia = calendario.hoy().isoformat()
+    assert linear_leads.uno("LEAD-91")["estado"] == "POR_AGENDAR"
+    calendario.crear(tipo="entrega", cliente="Tamara", fecha=dia,
+                     lead="LEAD-91", resp_lead="Ruben")
+    agenda.marcar_entregas_pendientes()
+    assert linear_leads.uno("LEAD-91")["estado"] == "POR_AGENDAR"
+    assert not _tiene_entrega_pendiente("LEAD-91")
+
+
+def test_una_visita_atrasada_no_cuenta_para_entrega_pendiente():
+    # Una Visita SÍ mueve el lead a Agendado (como cualquier tipo agendado
+    # desde un lead), pero no es "la entrega": solo Entrega, Instalación y
+    # Mantenimiento cuentan (mismo criterio que `cierra_la_entrega()`).
+    from datetime import timedelta
+    ayer = (calendario.hoy() - timedelta(days=1)).isoformat()
+    agenda.agendar("LEAD-90", "visita", ayer)
+    assert linear_leads.uno("LEAD-90")["estado"] == "AGENDADO"
+    assert not _tiene_entrega_pendiente("LEAD-90")
+
+
+def test_marcar_entregas_pendientes_es_idempotente():
+    _actividad_de("LEAD-91")
+    # Ya se puso de una al agendar (el hook de `agendar()`); una segunda
+    # pasada manual no debe repetir ni un solo cambio.
+    resultado = agenda.marcar_entregas_pendientes()
+    assert resultado == {"puestas": [], "quitadas": [], "errores": []}
+
+
+def test_sin_escritura_activa_no_escribe_nada(monkeypatch):
+    # Linear CONFIGURADO (hay clave) pero sin CALENDARIO_ESCRITURA=1: el
+    # mismo candado que usa `cerrar_los_que_ya_pagaron()`. No debe ni
+    # intentar leer -si lo intentara, con una clave de mentira reventaría
+    # contra la red real, y el hecho de que la prueba pase sin red ya es
+    # la prueba de que no se intentó nada.
+    monkeypatch.setenv("LINEAR_API_KEY", "clave-de-mentira")
+    resultado = agenda.marcar_entregas_pendientes()
+    assert resultado == {"puestas": [], "quitadas": [], "errores": []}
+
+
+def test_entregas_pendientes_armado_y_credencial(monkeypatch):
+    monkeypatch.delenv("ENTREGAS_PENDIENTES_SECRETO", raising=False)
+    assert agenda.entregas_pendientes_armado() is False
+    assert agenda.entregas_pendientes_credencial_valida("Bearer lo-que-sea") is False
+    monkeypatch.setenv("ENTREGAS_PENDIENTES_SECRETO", "el-bueno")
+    assert agenda.entregas_pendientes_armado() is True
+    assert agenda.entregas_pendientes_credencial_valida("Bearer el-bueno") is True
+    assert agenda.entregas_pendientes_credencial_valida("Bearer el-malo") is False
+
+
+# ---------------------------------------------------------------------------
+# El endpoint del cron de las 7 a.m. (mismo patrón que /avisos/resumen)
+# ---------------------------------------------------------------------------
+
+def test_sin_secreto_el_endpoint_de_entregas_no_corre(cliente):
+    respuesta = cliente.post("/entregas-pendientes/revisar")
+    assert respuesta.status_code == 503
+    assert "ENTREGAS_PENDIENTES_SECRETO" in respuesta.json()["motivo"]
+
+
+def test_con_secreto_equivocado_el_endpoint_rebota(cliente, monkeypatch):
+    monkeypatch.setenv("ENTREGAS_PENDIENTES_SECRETO", "el-bueno")
+    assert cliente.post("/entregas-pendientes/revisar").status_code == 401
+    assert cliente.post("/entregas-pendientes/revisar", headers={
+        "Authorization": "Bearer el-malo"}).status_code == 401
+
+
+def test_con_el_secreto_bueno_el_endpoint_corre(cliente, monkeypatch):
+    monkeypatch.setenv("ENTREGAS_PENDIENTES_SECRETO", "el-bueno")
+    _actividad_de("LEAD-91")
+    respuesta = cliente.post("/entregas-pendientes/revisar",
+                             headers={"Authorization": "Bearer el-bueno"})
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["ok"] is True
+    # Ya se había puesto al agendar: la pasada del endpoint no repite nada.
+    assert cuerpo["puestas"] == [] and cuerpo["quitadas"] == []
+
+
+def test_el_endpoint_de_entregas_no_pide_sesion(monkeypatch):
+    """Lo llama una máquina: su candado es el secreto, no la cookie."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    monkeypatch.setenv("ENTREGAS_PENDIENTES_SECRETO", "el-bueno")
+    sin_sesion = TestClient(app)
+    respuesta = sin_sesion.post("/entregas-pendientes/revisar", headers={
+        "Authorization": "Bearer el-bueno"})
+    assert respuesta.status_code == 200
+
+
+# ---------------------------------------------------------------------------
 # La pantalla
 # ---------------------------------------------------------------------------
 

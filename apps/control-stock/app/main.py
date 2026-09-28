@@ -164,8 +164,11 @@ async def exigir_sesion(request: Request, call_next):
     # candado es RESUMEN_SECRETO (lo verifica la ruta), no la cookie.
     # /wa/autor lo llama WAHA desde el droplet del CRM: su candado es la
     # firma HMAC del cuerpo crudo (la verifica la ruta), no la cookie.
+    # /entregas-pendientes/revisar lo llama el cron de las 7 a.m., mismo
+    # trato que /avisos/resumen: el candado es ENTREGAS_PENDIENTES_SECRETO.
     if (ruta == "/login" or ruta == "/calendario.ics" or ruta == "/crm/login"
             or ruta == "/avisos/resumen" or ruta == "/wa/autor"
+            or ruta == "/entregas-pendientes/revisar"
             or ruta == "/sw-avisos.js" or ruta == "/manifest.webmanifest"
             or ruta.startswith("/static") or ruta.startswith("/f/")
             or ruta.startswith("/auth/google") or ruta.startswith("/invitacion/")
@@ -2742,6 +2745,28 @@ async def avisos_resumen(request: Request):
     hecho = resumen.mandar()
     return JSONResponse({"ok": True, "mandado": hecho["mandado"],
                          "motivo": hecho["motivo"], "titular": hecho["titular"]})
+
+
+@app.post("/entregas-pendientes/revisar")
+async def entregas_pendientes_revisar(request: Request):
+    """La pasada diaria de las 7 a.m. de Panamá: pone o quita «Entrega
+    pendiente» en cada lead Agendado según si su actividad ya venció.
+
+    El chequeo también corre al agendar/reprogramar/marcar Hecha (Fase 4),
+    así que esto es la red de seguridad para los leads que nadie tocó
+    hoy —una actividad que amaneció vencida sola, sin que nadie abriera el
+    calendario—. Mismo patrón que `/avisos/resumen`: sin sesión a
+    propósito (lo llama una máquina), el candado es el secreto.
+    """
+    if not agenda.entregas_pendientes_armado():
+        return JSONResponse(
+            {"ok": False, "motivo": "falta ENTREGAS_PENDIENTES_SECRETO"},
+            status_code=503)
+    if not agenda.entregas_pendientes_credencial_valida(
+            request.headers.get("authorization")):
+        return JSONResponse({"ok": False}, status_code=401)
+    resultado = agenda.marcar_entregas_pendientes()
+    return JSONResponse({"ok": True, **resultado})
 
 
 @app.get("/resumen")

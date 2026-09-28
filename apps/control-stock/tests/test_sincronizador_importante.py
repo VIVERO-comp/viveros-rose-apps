@@ -51,13 +51,14 @@ def lead(**cambios):
 
 
 # ---------------------------------------------------------------------------
-# La estructura: solo «Importante» está habilitada, y es una lista de una
-# sola señal a propósito -sumar «Seguimiento»/«Cliente potencial» es una
-# línea, no un rediseño-.
+# La estructura: «Importante» está entre las señales habilitadas (28/09,
+# la primera de la tanda). Las otras tres (Seguimiento, Cliente potencial,
+# Entrega pendiente) se sumaron después con una línea cada una -ver
+# test_sincronizador_senales.py- sin tocar el mecanismo.
 # ---------------------------------------------------------------------------
 
-def test_solo_importante_esta_habilitada(sinc):
-    assert sinc.SENALES_QUE_BAJAN == ("Importante",)
+def test_importante_esta_habilitada(sinc):
+    assert "Importante" in sinc.SENALES_QUE_BAJAN
 
 
 # ---------------------------------------------------------------------------
@@ -216,8 +217,9 @@ def test_importante_no_es_representante_ni_interes(sinc):
 
 def test_leads_del_crm_solo_marca_senales_habilitadas(sinc, monkeypatch):
     # `leads_del_crm()` construye "senales" a partir de SENALES_QUE_BAJAN;
-    # una etiqueta suelta que no este en esa lista (p.ej. "Seguimiento",
-    # todavia apagada) no se cuela aunque el issue la tenga puesta.
+    # una etiqueta suelta que NO este en esa lista (una que Abraham todavia
+    # no creo, o que este codigo todavia no habilito) no se cuela aunque el
+    # issue la tenga puesta.
     nodo = {
         "identifier": "LEAD-9", "title": "Cliente (PP-TEST09)",
         "description": "",
@@ -225,7 +227,7 @@ def test_leads_del_crm_solo_marca_senales_habilitadas(sinc, monkeypatch):
         "labels": {"nodes": [
             {"name": "Hablando", "parent": None},
             {"name": "Importante", "parent": None},
-            {"name": "Seguimiento", "parent": None},
+            {"name": "Una senal que no existe todavia", "parent": None},
         ]},
     }
     monkeypatch.setattr(sinc, "linear",
