@@ -1006,6 +1006,31 @@ def marcar_real_cotizacion(ref, orden_id, autor=""):
     return (aviso_avance or "Marcada como la real.", error)
 
 
+def quitar_real_cotizacion(ref, orden_id, autor=""):
+    """Le quita a esta orden la marca de «la real» — el lead se queda SIN
+    ninguna (no pasa a otra sola; para eso está «Marcar la real» en la que
+    corresponda). No toca el estado del embudo: quitar una marca no es una
+    noticia del negocio que avance o retroceda nada, igual que
+    desconectar. Deja un comentario firmado en el issue."""
+    lead = linear_leads.uno(ref)
+    if lead is None:
+        return "", "Ese lead ya no está en Linear."
+    orden_id = _orden_id(orden_id)
+    if orden_id is None:
+        return "", "Esa orden no es válida."
+    nombre_orden = _nombre_de_orden(lead, orden_id)
+    try:
+        cot_lead.quitar_real(orden_id)
+    except Exception as fallo:
+        return "", ventas._mensaje_de_error(fallo)
+    try:
+        linear_leads.comentar(
+            lead["id"], f"{nombre_orden} dejó de ser la real.", autor=autor)
+    except linear_leads.ErrorLeads as fallo:
+        return "Ya no es la real.", str(fallo)
+    return f"{nombre_orden} ya no es la real.", ""
+
+
 # ---------------------------------------------------------------------------
 # El mantenimiento mensual (28/09/2026): el botón «Parar mantenimiento» de
 # la ficha. Todo lo demás (arrancar la serie, crear la cita siguiente)

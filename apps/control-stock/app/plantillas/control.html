@@ -282,6 +282,13 @@
             <input type="hidden" name="orden_id" value="{{ o.orden_id }}">
             <button type="submit" class="enlace-sub">Marcar la real</button>
           </form>
+          {% else %}
+          <span class="sep">·</span>
+          <form method="post" action="/control/cotizacion/quitar-real?vista={{ vista }}">
+            <input type="hidden" name="ref" value="{{ abierta.ref }}">
+            <input type="hidden" name="orden_id" value="{{ o.orden_id }}">
+            <button type="submit" class="enlace-sub">Quitar real</button>
+          </form>
           {% endif %}
           <span class="sep">·</span>
           <form method="post" action="/control/cotizacion/desconectar?vista={{ vista }}">

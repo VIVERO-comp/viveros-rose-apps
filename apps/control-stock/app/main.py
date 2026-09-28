@@ -2540,6 +2540,21 @@ async def control_cotizacion_marcar_real(request: Request):
     return _control_vuelve(vista, aviso=aviso, error=error, abrir=ref)
 
 
+@app.post("/control/cotizacion/quitar-real")
+async def control_cotizacion_quitar_real(request: Request):
+    """Le quita a una orden la marca de «la real»: el lead se queda sin
+    ninguna (la tarjeta de plata desaparece) hasta que se marque otra."""
+    form = await request.form()
+    ref = form.get("ref", "")
+    _alc, vista, error = _control_permiso(request, ref)
+    if error:
+        return _control_vuelve(vista, error=error, abrir=ref)
+    autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
+    aviso, error = control.quitar_real_cotizacion(
+        ref, form.get("orden_id", ""), autor=autor)
+    return _control_vuelve(vista, aviso=aviso, error=error, abrir=ref)
+
+
 @app.post("/control/mantenimiento/parar")
 async def control_mantenimiento_parar(request: Request):
     """El botón «Parar mantenimiento» de la ficha (28/09/2026): apaga la

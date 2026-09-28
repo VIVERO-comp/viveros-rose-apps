@@ -189,6 +189,61 @@ def test_marcar_real_exige_estar_conectada(odoo):
 
 
 # ---------------------------------------------------------------------------
+# Quitar real: el lead se queda SIN ninguna (el pendiente de la tanda
+# anterior, 28/09/2026)
+# ---------------------------------------------------------------------------
+
+def test_quitar_real_deja_cero_reales_y_la_plata_deja_de_pintarse(odoo):
+    lead, partner = _lead_y_partner(odoo, "LEAD-85")
+    orden = odoo.agregar_orden(partner, "S00900", amount_total=100.0,
+                               lead_ref=lead["pp"], lead_real=True)
+
+    antes = control.ficha("LEAD-85")["cot"]["plata"]
+    assert antes["orden"] == "S00900"
+
+    aviso, error = control.quitar_real_cotizacion("LEAD-85", orden, autor="Abraham")
+    assert error == ""
+    assert "S00900" in aviso
+
+    ficha = control.ficha("LEAD-85")
+    assert ficha["cot"]["plata"] is None
+    ordenes = {o["orden_id"]: o for o in ficha["cot"]["ordenes"]}
+    assert ordenes[orden]["es_real"] is False
+    # Sigue conectada: quitar la marca no es desconectar.
+    assert orden in ordenes
+
+
+def test_quitar_real_no_toca_el_estado_del_lead(odoo):
+    lead, partner = _lead_y_partner(odoo, "LEAD-86")  # Hablando
+    orden = odoo.agregar_orden(partner, "S00901", amount_total=50.0,
+                               lead_ref=lead["pp"], lead_real=True)
+    aviso, error = control.quitar_real_cotizacion("LEAD-86", orden, autor="Abraham")
+    assert error == ""
+    assert linear_leads.uno("LEAD-86")["estado"] == "HABLANDO"
+
+
+def test_quitar_real_deja_el_comentario_firmado(odoo):
+    lead, partner = _lead_y_partner(odoo, "LEAD-85")
+    orden = odoo.agregar_orden(partner, "S00902", amount_total=50.0,
+                               lead_ref=lead["pp"], lead_real=True)
+    control.quitar_real_cotizacion("LEAD-85", orden, autor="Mary")
+    nota = linear_leads.comentarios(lead["id"])[-1]["texto"]
+    assert "S00902 dejó de ser la real." in nota
+    assert "Mary" in nota
+
+
+def test_quitar_real_de_una_que_no_es_la_real_no_hace_nada_raro(odoo):
+    # cot_lead.quitar_real es idempotente (solo limpia lead_real=False):
+    # pedirlo sobre una que ya no es real no debería inventar un error.
+    lead, partner = _lead_y_partner(odoo, "LEAD-85")
+    orden = odoo.agregar_orden(partner, "S00903", amount_total=50.0,
+                               lead_ref=lead["pp"])  # nunca fue la real
+    aviso, error = control.quitar_real_cotizacion("LEAD-85", orden, autor="Abraham")
+    assert error == ""
+    assert control.ficha("LEAD-85")["cot"]["plata"] is None
+
+
+# ---------------------------------------------------------------------------
 # Desconectar no toca el estado del embudo
 # ---------------------------------------------------------------------------
 
@@ -308,6 +363,52 @@ def test_marcar_real_desde_la_pantalla(cliente, de_dueno, odoo):
         follow_redirects=False)
     assert respuesta.status_code == 303
     assert control.ficha("LEAD-91")["cot"]["plata"]["orden"] == "S00504"
+
+
+def test_el_enlace_quitar_real_solo_aparece_en_la_que_es_real(cliente, de_dueno, odoo):
+    lead, partner = _lead_y_partner(odoo, "LEAD-91")
+    odoo.agregar_orden(partner, "S00505", amount_total=10.0,
+                       lead_ref=lead["pp"], lead_real=True)
+    odoo.agregar_orden(partner, "S00506", amount_total=20.0, lead_ref=lead["pp"])
+    cuerpo = cliente.get("/control", params={"abrir": "LEAD-91"}).text
+    # "S00505" también sale en el título de la tarjeta de plata ("La real
+    # · S00505"), ANTES de la lista de conectadas: hay que buscar desde
+    # ahí, no desde el panel entero.
+    conectadas = cuerpo[cuerpo.index(">Conectadas<"):]
+    # Una tarjeta entera (fila1 + monto + acciones) mide bien menos de
+    # 700 caracteres — el mismo margen que ya usan las otras pruebas de
+    # esta pantalla.
+    real = conectadas[conectadas.index("S00505"):][:900]
+    otra = conectadas[conectadas.index("S00506"):][:900]
+    assert "Quitar real" in real and "Marcar la real" not in real
+    assert "Marcar la real" in otra and "Quitar real" not in otra
+
+
+def test_quitar_real_desde_la_pantalla(cliente, de_dueno, odoo):
+    lead, partner = _lead_y_partner(odoo, "LEAD-91")
+    orden = odoo.agregar_orden(partner, "S00507", amount_total=10.0,
+                               lead_ref=lead["pp"], lead_real=True)
+    respuesta = cliente.post(
+        "/control/cotizacion/quitar-real", params={"vista": "estado"},
+        data={"ref": "LEAD-91", "orden_id": str(orden)},
+        follow_redirects=False)
+    assert respuesta.status_code == 303
+    assert "aviso=" in respuesta.headers["location"]
+    assert control.ficha("LEAD-91")["cot"]["plata"] is None
+
+
+def test_quitar_real_no_lo_puede_un_empleado_de_otro(cliente, odoo):
+    # Sesión sin AJUSTES_ADMINS: "solo_resp" vacío, no matchea a nadie.
+    lead, partner = _lead_y_partner(odoo, "LEAD-89")  # Resp: Mary
+    orden = odoo.agregar_orden(partner, "S00508", amount_total=10.0,
+                               lead_ref=lead["pp"], lead_real=True)
+    respuesta = cliente.post(
+        "/control/cotizacion/quitar-real",
+        data={"ref": "LEAD-89", "orden_id": str(orden)},
+        follow_redirects=False)
+    assert respuesta.status_code == 303
+    assert "error=" in respuesta.headers["location"]
+    assert control.ficha("LEAD-89")["cot"]["plata"]["orden"] == "S00508"
 
 
 def test_buscar_por_numero_llega_a_la_ficha(cliente, de_dueno, odoo):
