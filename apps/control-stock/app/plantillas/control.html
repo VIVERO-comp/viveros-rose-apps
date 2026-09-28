@@ -118,7 +118,11 @@
                 {% if l.te_toca %}<span class="ctl-alerta" title="Te toca: hay un cliente esperando"></span>{% endif %}
               </span>
               <span class="t-sub ctl-chips">
-                <span class="chip-est" style="{{ l.estado_chip }}">{{ l.estado_titulo }}</span>
+                {# El chip de estado sobra en "Por estado": toda la columna ya
+                   dice el estado en su encabezado (28/09/2026, Abraham lo vio
+                   repetido en producción). En "Por empleado" sí aporta —
+                   ahí una columna mezcla leads de varios estados. #}
+                {% if vista != 'estado' %}<span class="chip-est" style="{{ l.estado_chip }}">{{ l.estado_titulo }}</span>{% endif %}
                 {% if l.interes %}<span class="chip-est">{{ l.interes }}</span>{% endif %}
                 {% if l.pago %}<span class="etq-pago">{{ l.pago }}</span>{% endif %}
                 {% if l.motivo %}<span class="chip-est" style="{{ l.motivo_chip }}">{{ l.motivo }}</span>{% endif %}
@@ -126,7 +130,11 @@
             </a>
             <span class="t-sub ctl-pie-tarjeta">
               <span class="mono">{{ l.ref }} · {{ l.hace }}</span>
-              {% if vista == 'estado' and alc.admin %}
+              {# Ganado y Perdido no se reparten (regla ya escrita): el chip
+                 de responsable ahí es ruido, incluso "Sin asignar". En las
+                 columnas vivas se queda — le dice al dueño a quién falta
+                 repartir (28/09/2026). #}
+              {% if vista == 'estado' and alc.admin and not l.cerrado %}
               <span class="chip-est {{ 'chip-nadie' if not l.resp }}">{{ l.resp_titulo }}</span>
               {% endif %}
               {% if l.wa %}<a class="ctl-wa" href="{{ l.wa }}" target="_blank" rel="noopener">chat ↗</a>{% endif %}

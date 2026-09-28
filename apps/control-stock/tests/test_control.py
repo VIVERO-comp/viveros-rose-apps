@@ -831,3 +831,38 @@ def test_el_reparto_por_detras_sigue_andando_aunque_la_vista_este_apagada(
     aviso, error = control.mover_a_empleado("LEAD-90", "Mary")
     assert error == ""
     assert linear_leads.uno("LEAD-90")["resp"] == "Mary"
+
+
+# ---------------------------------------------------------------------------
+# Limpieza visual de "Por estado" (28/09/2026, Abraham lo vio en producción):
+# el chip de estado repetido en cada tarjeta y el chip de responsable en las
+# columnas cerradas eran ruido.
+# ---------------------------------------------------------------------------
+
+def test_por_estado_no_repite_el_chip_de_su_propio_estado(cliente, de_dueno):
+    cuerpo = cliente.get("/control", params={"vista": "estado"}).text
+    # LEAD-91 y LEAD-90 están en "Por agendar": antes, cada tarjeta repetía
+    # el nombre del estado en su propio chip — con dos leads más el
+    # encabezado de la columna, el texto aparecía 3 veces. Ahora solo el
+    # encabezado lo dice.
+    assert cuerpo.count("Por agendar") == 1
+
+
+def test_ganado_y_perdido_no_traen_el_chip_de_responsable(cliente, de_dueno):
+    cuerpo = cliente.get("/control", params={"vista": "estado"}).text
+    # LEAD-84 es Ganado y de Abraham: esas columnas no se reparten, así
+    # que su chip de responsable no debería aparecer en ningún lado.
+    tarjeta = cuerpo[cuerpo.index('data-ref="LEAD-84"'):][:700]
+    assert "Abraham" not in tarjeta
+    assert "chip-nadie" not in tarjeta
+    # Y sigue trayendo lo que sí aporta: el interés y la etiqueta de pago.
+    assert "Plantas" in tarjeta and "Pagado 100%" in tarjeta
+
+
+def test_por_empleado_si_muestra_el_chip_de_estado(cliente, de_dueno, monkeypatch):
+    # En "Por empleado" el chip de estado sí aporta: una columna mezcla
+    # leads de varios estados del embudo.
+    monkeypatch.setattr(control, "vista_empleado_apagada", lambda: False)
+    cuerpo = cliente.get("/control", params={"vista": "empleado"}).text
+    tarjeta = cuerpo[cuerpo.index('data-ref="LEAD-91"'):][:700]
+    assert "Por agendar" in tarjeta
