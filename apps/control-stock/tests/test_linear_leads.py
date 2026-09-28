@@ -234,6 +234,29 @@ def test_poner_etiqueta_suelta_es_el_mismo_mecanismo_que_te_toca():
     assert linear_leads.uno("LEAD-90")["te_toca"] is False
 
 
+# ---------------------------------------------------------------------------
+# Las señales sueltas del panel (25/09/2026): el mismo interruptor que
+# «Te toca», sobre `poner_etiqueta_suelta`, y el candado de qué botón
+# aparece.
+# ---------------------------------------------------------------------------
+
+def test_una_senal_se_prende_y_se_apaga_con_el_mismo_interruptor():
+    lead = linear_leads.uno("LEAD-90")
+    linear_leads.poner_etiqueta_suelta(lead["id"], "Seguimiento", True)
+    assert "Seguimiento" in linear_leads.uno("LEAD-90")["etiquetas"]
+    linear_leads.poner_etiqueta_suelta(lead["id"], "Seguimiento", False)
+    assert "Seguimiento" not in linear_leads.uno("LEAD-90")["etiquetas"]
+
+
+def test_senales_disponibles_solo_trae_las_que_existen_en_linear():
+    # En modo muestra, dos de las tres "existen" a propósito (ver
+    # `_MUESTRA_SENALES_EXISTENTES`): Cliente potencial no, para poder
+    # probar el candado sin tocar Linear real.
+    disponibles = linear_leads.senales_disponibles()
+    assert disponibles == {"Seguimiento", "Importante"}
+    assert "Cliente potencial" not in disponibles
+
+
 def test_las_etiquetas_nunca_se_crean(monkeypatch):
     """Con Linear de verdad, una etiqueta que no existe deja el aviso en el
     log y el issue se va sin ella — no se crea NUNCA (ya pasó una vez).

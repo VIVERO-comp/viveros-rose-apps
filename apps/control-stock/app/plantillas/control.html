@@ -169,10 +169,10 @@
     {% if abierta.motivo %}<span class="etq at">{{ abierta.motivo }}</span>{% endif %}
   </div>
 
-  {# --- Qué hago. Responder ya vive aquí (25/09/2026); Cotizar y Adjuntar
-         venta siguen reservados y apagados, para cuando la cotización
-         conectada llegue. Lo negro sigue siendo solo abrir el chat: el
-         resto son interruptores grises. --- #}
+  {# --- Qué hago. Responder y las señales ya viven aquí (25/09/2026);
+         Cotizar y Adjuntar venta siguen reservados y apagados, para
+         cuando la cotización conectada llegue. Lo negro sigue siendo
+         solo abrir el chat: el resto son interruptores grises. --- #}
   <div class="acciones">
     {% if abierta.wa %}
     <a class="btn oro" href="{{ abierta.wa }}" target="_blank" rel="noopener">💬 WhatsApp</a>
@@ -185,10 +185,22 @@
         {% if abierta.te_toca %}🔴 Responder · apagalo{% else %}Prender 🔴 Responder{% endif %}
       </button>
     </form>
+    {% for s in abierta.senales %}
+    <form method="post" action="/control/senal?vista={{ vista }}">
+      <input type="hidden" name="ref" value="{{ abierta.ref }}">
+      <input type="hidden" name="nombre" value="{{ s.nombre }}">
+      <button class="btn{{ ' peligro' if s.prendida }}" type="submit"
+              data-guardando="…">{{ s.nombre }}{{ ' ✓' if s.prendida }}</button>
+    </form>
+    {% endfor %}
     {% else %}
     <button class="btn{{ ' peligro' if abierta.te_toca }}" type="button" disabled>
       {{ '🔴 Responder · prendido' if abierta.te_toca else 'Responder · apagado' }}
     </button>
+    {% for s in abierta.senales %}
+    <button class="btn{{ ' peligro' if s.prendida }}" type="button" disabled>
+      {{ s.nombre }}{{ ' ✓' if s.prendida }}</button>
+    {% endfor %}
     {% endif %}
     {% if abierta.estado in ('NUEVO', 'HABLANDO') %}
     <button class="btn" type="button" disabled>Cotizar</button>

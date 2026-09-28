@@ -2330,6 +2330,21 @@ async def control_responder(request: Request):
     return _control_vuelve(vista, aviso=aviso, error=error, abrir=ref)
 
 
+@app.post("/control/senal")
+async def control_senal(request: Request):
+    """Una señal suelta del panel (Seguimiento, Importante, Cliente
+    potencial): el mismo interruptor que Responder, pero interna — sin
+    comentario en el issue y sin tocar WhatsApp."""
+    form = await request.form()
+    ref, nombre = form.get("ref", ""), form.get("nombre", "")
+    _alc, vista, error = _control_permiso(request, ref)
+    if error:
+        return _control_vuelve(vista, error=error, abrir=ref)
+    autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
+    aviso, error = control.alternar_senal(ref, nombre, autor=autor)
+    return _control_vuelve(vista, aviso=aviso, error=error, abrir=ref)
+
+
 # ---------------------------------------------------------------------------
 
 @app.get("/sw-avisos.js")

@@ -556,3 +556,74 @@ def test_responder_no_lo_puede_un_empleado_de_otro(cliente):
     assert respuesta.status_code == 303
     assert "error=" in respuesta.headers["location"]
     assert linear_leads.uno("LEAD-89")["te_toca"] is False
+
+
+# ---------------------------------------------------------------------------
+# Las señales sueltas: el mismo interruptor, sin comentario y sin WhatsApp
+# ---------------------------------------------------------------------------
+
+def test_senal_disponible_se_prende_y_se_apaga():
+    aviso, error = control.alternar_senal("LEAD-90", "Seguimiento", autor="Mary")
+    assert error == ""
+    assert "puesta" in aviso
+    assert "Seguimiento" in linear_leads.uno("LEAD-90")["etiquetas"]
+    aviso, error = control.alternar_senal("LEAD-90", "Seguimiento", autor="Mary")
+    assert error == ""
+    assert "quitada" in aviso
+    assert "Seguimiento" not in linear_leads.uno("LEAD-90")["etiquetas"]
+
+
+def test_una_senal_sin_etiqueta_en_linear_no_hace_nada():
+    # "Cliente potencial" no existe en el catálogo de muestra a propósito:
+    # el botón no debería haber aparecido, y si el POST llega igual, acá
+    # no se crea nada ni se avisa un error.
+    aviso, error = control.alternar_senal("LEAD-90", "Cliente potencial", autor="Mary")
+    assert aviso == "" and error == ""
+    assert "Cliente potencial" not in linear_leads.uno("LEAD-90")["etiquetas"]
+
+
+def test_las_senales_no_piden_sincronizacion_de_whatsapp(monkeypatch):
+    monkeypatch.setattr(control, "waha_activo", lambda: True)
+    pedidos = []
+    monkeypatch.setattr(control, "etiquetar_en_whatsapp",
+                        lambda ref: pedidos.append(ref) or True)
+    control.alternar_senal("LEAD-90", "Seguimiento", autor="Mary")
+    control.alternar_senal("LEAD-90", "Importante", autor="Mary")
+    assert pedidos == []
+
+
+def test_las_senales_no_dejan_comentario_en_el_issue():
+    lead = linear_leads.uno("LEAD-90")
+    antes = len(linear_leads.comentarios(lead["id"]))
+    control.alternar_senal("LEAD-90", "Seguimiento", autor="Mary")
+    despues = len(linear_leads.comentarios(lead["id"]))
+    assert despues == antes
+
+
+def test_la_ficha_trae_solo_las_senales_disponibles_con_su_estado():
+    linear_leads.poner_etiqueta_suelta(
+        linear_leads.uno("LEAD-90")["id"], "Importante", True)
+    ficha = control.ficha("LEAD-90")
+    nombres = [s["nombre"] for s in ficha["senales"]]
+    # "Cliente potencial" no existe en la muestra: no aparece, y no revienta.
+    assert nombres == ["Seguimiento", "Importante"]
+    por_nombre = {s["nombre"]: s["prendida"] for s in ficha["senales"]}
+    assert por_nombre == {"Seguimiento": False, "Importante": True}
+
+
+def test_senal_desde_la_pantalla(cliente, de_dueno):
+    respuesta = cliente.post("/control/senal", params={"vista": "estado"},
+                             data={"ref": "LEAD-90", "nombre": "Seguimiento"},
+                             follow_redirects=False)
+    assert respuesta.status_code == 303
+    assert "Seguimiento" in linear_leads.uno("LEAD-90")["etiquetas"]
+
+
+def test_una_senal_a_mano_por_una_etiqueta_inexistente_no_crea_nada(cliente, de_dueno):
+    # El candado no es solo del navegador: un POST a mano con un nombre que
+    # no está en el catálogo tampoco toca el issue.
+    respuesta = cliente.post("/control/senal", params={"vista": "estado"},
+                             data={"ref": "LEAD-90", "nombre": "Cliente potencial"},
+                             follow_redirects=False)
+    assert respuesta.status_code == 303
+    assert "Cliente potencial" not in linear_leads.uno("LEAD-90")["etiquetas"]

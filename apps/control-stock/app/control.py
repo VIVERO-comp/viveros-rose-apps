@@ -356,9 +356,11 @@ def escribir_nota(ref, texto, autor=""):
 
 
 # ---------------------------------------------------------------------------
-# El interruptor «🔴 Responder» (25/09/2026, pedido de Abraham): prender o
-# apagar la etiqueta «Te toca» a mano, con su comentario firmado y su
-# sincronización inmediata a WhatsApp.
+# El interruptor «🔴 Responder» y las señales sueltas (25/09/2026, pedido
+# de Abraham): el mismo mecanismo genérico —prender o apagar UNA etiqueta
+# suelta del issue—, con Responder como primer caso y su propio botón
+# destacado. Solo Responder (la etiqueta «Te toca») sale al chat de
+# WhatsApp; las tres señales son internas y ninguna manda nada al cliente.
 # ---------------------------------------------------------------------------
 
 def alternar_responder(ref, autor=""):
@@ -391,6 +393,34 @@ def alternar_responder(ref, autor=""):
         etiquetar_en_whatsapp(lead["ref"])
     return (f"{lead['nombre']}: Responder "
             + ("prendido." if prender else "apagado."), "")
+
+
+def alternar_senal(ref, nombre, autor=""):
+    """Prende o apaga una señal suelta (Seguimiento, Importante, Cliente
+    potencial): el mismo interruptor que Responder, pero sin comentario en
+    el issue y sin tocar WhatsApp — son internas, y `etiquetar_en_whatsapp`
+    nunca se llama para ellas.
+
+    El candado no es solo del navegador: si el botón no debería haber
+    aparecido (la etiqueta todavía no existe en Linear) y el POST llegó
+    igual, acá no se toca nada.
+    """
+    lead = linear_leads.uno(ref)
+    if lead is None:
+        return "", "Ese lead ya no está en Linear."
+    if nombre not in linear_leads.senales_disponibles():
+        registro_aviso(
+            f"Se pidió la señal «{nombre}» para {ref}, pero esa etiqueta no "
+            f"existe en Linear: no se tocó nada.")
+        return "", ""
+    prender = nombre not in lead["etiquetas"]
+    try:
+        linear_leads.poner_etiqueta_suelta(lead["id"], nombre, prender)
+    except linear_leads.ErrorLeads as fallo:
+        return "", str(fallo)
+    linear_leads.refrescar()
+    return (f"{lead['nombre']}: {nombre} "
+            + ("puesta." if prender else "quitada."), "")
 
 
 
@@ -558,6 +588,13 @@ def ficha(ref):
     if lead is None:
         return None
     abierta = _tarjeta(lead)
+    # Las señales sueltas del panel: solo las que Abraham ya creó en
+    # Linear, en el orden fijo de `LABELS_SENAL`, cada una con su estado
+    # actual en ESTE lead.
+    disponibles = linear_leads.senales_disponibles()
+    abierta["senales"] = [
+        {"nombre": n, "prendida": n in lead["etiquetas"]}
+        for n in linear_leads.LABELS_SENAL if n in disponibles]
     sucesos, internas = separar_notas(linear_leads.comentarios(lead["id"]))
     abierta["notas"] = internas
 
