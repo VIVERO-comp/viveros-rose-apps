@@ -76,9 +76,12 @@
       {% endif %}
       <span class="crece"></span>
       <span class="tenue" style="font-size:12px">
+        {# Desde el 28/09/2026 el empleado ve el tablero COMPLETO («que
+           todos lo puedan ver», Abraham), así que el título ya no puede
+           decir «Lo tuyo»: mentiría. Mover sigue siendo solo lo suyo. #}
         {% if vista == 'empleado' %}Arrastra para repartir · cambia la etiqueta Resp: en Linear
-        {% elif alc.solo_resp %}Lo tuyo, {{ alc.solo_resp }}
-        {% elif not alc.admin %}Todavía no te toca ningún lead
+        {% elif not alc.admin and alc.resp_propio %}Todo el tablero · movés solo lo tuyo, {{ alc.resp_propio }}
+        {% elif not alc.admin %}Todo el tablero · todavía no te toca ningún lead
         {% else %}Arrastrar entre estados es una corrección: pide el motivo{% endif %}
       </span>
     </div>
@@ -89,10 +92,10 @@
     <div class="solo-lectura"><b>Solo lectura.</b> Esta instancia mira el
       tablero real pero no escribe en Linear.</div>
     {% endif %}
-    {% if not alc.admin and not alc.solo_resp %}
+    {% if not alc.admin and not alc.resp_propio %}
     <div class="solo-lectura"><b>Sin etiqueta.</b> Tu cuenta todavía no tiene
-      su etiqueta <b>Resp:</b> en Linear, así que no hay leads que mostrarte.
-      El dueño la crea allá y aparecen solos.</div>
+      su etiqueta <b>Resp:</b> en Linear: ves el tablero completo, pero ningún
+      lead es tuyo para mover. El dueño la crea allá y quedan a tu nombre.</div>
     {% endif %}
 
     <div class="ret-tablero">
@@ -109,8 +112,12 @@
              data-vista="{{ vista }}">
           {% for l in col.leads %}
           {# Tarjeta: div arrastrable con el enlace de la ficha adentro y el
-             enlace del chat aparte (un <a> no puede llevar otro adentro). #}
-          <div class="ret-tarjeta ctl-tarjeta" draggable="{{ 'true' if puede_mover else 'false' }}"
+             enlace del chat aparte (un <a> no puede llevar otro adentro).
+             Arrastrable solo si esta sesión PUEDE mover este lead: desde
+             que el empleado ve el tablero completo (28/09/2026), dejarle
+             arrastrar lo ajeno sería invitarlo a un error del servidor —
+             el candado real sigue en puede_tocar(), esto es cortesía. #}
+          <div class="ret-tarjeta ctl-tarjeta" draggable="{{ 'true' if puede_mover and (alc.admin or (alc.resp_propio and l.resp == alc.resp_propio)) else 'false' }}"
                data-ref="{{ l.ref }}">
             <a class="ctl-zona" href="/control?vista={{ vista }}&abrir={{ l.ref | urlencode }}">
               <span class="t-cab">
@@ -133,8 +140,9 @@
               {# Ganado y Perdido no se reparten (regla ya escrita): el chip
                  de responsable ahí es ruido, incluso "Sin asignar". En las
                  columnas vivas se queda — le dice al dueño a quién falta
-                 repartir (28/09/2026). #}
-              {% if vista == 'estado' and alc.admin and not l.cerrado %}
+                 repartir, y desde que todos ven todo (28/09/2026) también
+                 le dice al empleado cuáles leads son suyos para mover. #}
+              {% if vista == 'estado' and not l.cerrado %}
               <span class="chip-est {{ 'chip-nadie' if not l.resp }}">{{ l.resp_titulo }}</span>
               {% endif %}
               {% if l.wa %}<a class="ctl-wa" href="{{ l.wa }}" target="_blank" rel="noopener">chat ↗</a>{% endif %}

@@ -336,17 +336,16 @@ def tablero_por_empleado(leads=None):
     return columnas
 
 
-def tablero_por_estado(solo_resp="", leads=None):
+def tablero_por_estado(leads=None):
     """[{clave, titulo, pie, leads}] — las 8 columnas del embudo.
 
-    `solo_resp` filtra a un responsable: es lo que ve un empleado, y se
-    aplica en el SERVIDOR. Un empleado sin etiqueta `Resp:` no ve nada,
-    que es lo correcto: todavía no le toca ningún lead.
+    Sin filtro por responsable: desde el 28/09/2026 («en crm solo admin lo
+    puede ver, que todos lo puedan ver», Abraham) TODOS ven el tablero
+    completo, empleados incluidos. Lo que cada quien puede MOVER sigue
+    siendo otra cosa: eso lo decide `puede_tocar()` con su `Resp:` propio.
     """
     todos = [_tarjeta(l) for l in (leads if leads is not None
                                    else linear_leads.listar())]
-    if solo_resp:
-        todos = [l for l in todos if (l["resp"] or "") == solo_resp]
     columnas = []
     for estado in linear_leads.ESTADOS:
         columnas.append({
@@ -360,20 +359,28 @@ def tablero_por_estado(solo_resp="", leads=None):
 
 
 def alcance(empleada, es_admin):
-    """Qué vistas puede ver quien está en la sesión, y con qué filtro.
+    """Qué vistas puede ver quien está en la sesión, y qué puede mover.
 
-    El dueño ve las dos vistas y todo el equipo — salvo que «Por empleado»
-    esté apagada (`vista_empleado_apagada()`), en cuyo caso ni el dueño la
-    ve: es el candado del servidor, no solo el botón que no se pinta. Un
-    empleado ve solo «Por estado», y solo lo suyo: la vista «Por empleado»
-    es de reparto, y repartir es cosa del dueño.
+    El dueño ve las dos vistas — salvo que «Por empleado» esté apagada
+    (`vista_empleado_apagada()`), en cuyo caso ni el dueño la ve: es el
+    candado del servidor, no solo el botón que no se pinta. Un empleado ve
+    solo «Por estado»: la vista «Por empleado» es de reparto, y repartir
+    es cosa del dueño.
+
+    Desde el 28/09/2026 el tablero se VE completo para todos («en crm solo
+    admin lo puede ver, que todos lo puedan ver», Abraham): ya no hay
+    filtro de vista por responsable. Lo que sí sigue es el permiso de
+    TOCAR: `resp_propio` es la etiqueta `Resp:` del empleado, y
+    `puede_tocar()` la usa para que cada quien mueva solo lo suyo. Ver y
+    mover son dos cosas distintas a propósito — vaciar el filtro sin
+    separar esto dejaría al empleado sin poder mover ni sus propios leads.
     """
     vistas_admin = [v for v in VISTAS
                     if v != "empleado" or not vista_empleado_apagada()]
     if es_admin:
-        return {"vistas": vistas_admin, "solo_resp": "", "admin": True}
+        return {"vistas": vistas_admin, "resp_propio": "", "admin": True}
     return {"vistas": ["estado"],
-            "solo_resp": agenda.responsable_de_empleada(empleada),
+            "resp_propio": agenda.responsable_de_empleada(empleada),
             "admin": False}
 
 
@@ -388,14 +395,16 @@ def vista_pedida(pedida, alcance_actual):
 def puede_tocar(lead, alcance_actual):
     """¿Quien está en la sesión puede mover ESTE lead?
 
-    El dueño, todo. Un empleado, solo los suyos — y eso se verifica aquí,
-    en el servidor, no confiando en que el navegador no mande lo que no
-    debe.
+    El dueño, todo. Un empleado, solo los suyos (los de su `Resp:`, que
+    viaja en `resp_propio`) — y eso se verifica aquí, en el servidor, no
+    confiando en que el navegador no mande lo que no debe. Que desde el
+    28/09/2026 el empleado VEA todos los leads no cambia esto: repartir y
+    mover lo ajeno siguen siendo cosa del dueño.
     """
     if alcance_actual["admin"]:
         return True
-    return bool(alcance_actual["solo_resp"]) and (
-        (lead or {}).get("resp") or "") == alcance_actual["solo_resp"]
+    return bool(alcance_actual["resp_propio"]) and (
+        (lead or {}).get("resp") or "") == alcance_actual["resp_propio"]
 
 
 # ---------------------------------------------------------------------------

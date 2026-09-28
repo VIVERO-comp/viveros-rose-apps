@@ -242,7 +242,7 @@ def test_parar_desde_la_pantalla(cliente, de_dueno):
 
 
 def test_parar_no_lo_puede_un_empleado_de_otro(cliente):
-    # Sesión sin AJUSTES_ADMINS: no es dueño, y "solo_resp" le sale vacío
+    # Sesión sin AJUSTES_ADMINS: no es dueño, y "resp_propio" le sale vacío
     # (no matchea a nadie) — ningún lead es "suyo", ni el de Ruben.
     mantenimiento.al_ganar(linear_leads.uno("LEAD-88"), autor="Ruben")
     respuesta = cliente.post(
