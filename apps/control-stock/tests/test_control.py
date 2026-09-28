@@ -3,8 +3,9 @@
 Corren en modo muestra (sin LINEAR_API_KEY), así que el tablero del equipo
 LEAD vive en memoria. Lo que se cuida aquí es lo que duele si se rompe:
 que Control no guarde nada propio, que repartir cambie la etiqueta `Resp:`
-y nunca el assignee, que un empleado vea y mueva SOLO lo suyo (verificado
-en el servidor), y que una corrección de estado a mano no pase sin motivo.
+y nunca el assignee, que un empleado VEA el tablero completo pero mueva
+SOLO lo suyo (las dos cosas verificadas en el servidor; ver todo es pedido
+del 28/09/2026), y que una corrección de estado a mano no pase sin motivo.
 
 Los leads de muestra (app/linear_leads.py):
 
@@ -49,8 +50,8 @@ def de_dueno(monkeypatch):
     monkeypatch.setenv("AJUSTES_ADMINS", "genesis")
 
 
-ADMIN = {"vistas": ["empleado", "estado"], "solo_resp": "", "admin": True}
-EMPLEADO = {"vistas": ["estado"], "solo_resp": "Ruben", "admin": False}
+ADMIN = {"vistas": ["empleado", "estado"], "resp_propio": "", "admin": True}
+EMPLEADO = {"vistas": ["estado"], "resp_propio": "Ruben", "admin": False}
 
 # La función real, capturada ANTES de que el autouse de arriba la tape con
 # un lambda: la necesitan las pruebas que congelan el reloj para probar la
@@ -108,15 +109,24 @@ def test_la_vista_por_estado_trae_las_8_columnas_del_embudo():
         "Agendado", "Entregado", "Ganado", "Perdido"]
 
 
-def test_un_empleado_solo_ve_lo_suyo():
-    columnas = control.tablero_por_estado(solo_resp="Ruben")
+def test_el_tablero_por_estado_es_el_mismo_para_todos():
+    # Pedido de Abraham (28/09/2026): «en crm solo admin lo puede ver, que
+    # todos lo puedan ver». Ya no hay filtro por responsable: el tablero
+    # trae los leads de Ruben, los de Mary y los sin asignar, juntos.
+    columnas = control.tablero_por_estado()
     refs = {l["ref"] for c in columnas for l in c["leads"]}
-    assert refs == {"LEAD-91", "LEAD-88"}
+    assert {"LEAD-91", "LEAD-88"} <= refs   # Resp: Ruben
+    assert "LEAD-89" in refs                # Resp: Mary
+    assert "LEAD-90" in refs                # sin Resp:
 
 
-def test_un_empleado_sin_etiqueta_resp_no_ve_nada():
-    # Correcto: todavía no le toca ningún lead.
-    assert control.alcance({"id": "nadie"}, es_admin=False)["solo_resp"] == ""
+def test_un_empleado_sin_etiqueta_resp_ve_todo_pero_no_toca_nada():
+    # Antes no veía nada; desde el 28/09/2026 ve el tablero completo. Lo
+    # que sigue igual: sin etiqueta `Resp:` ningún lead es suyo para mover.
+    alc = control.alcance({"id": "nadie"}, es_admin=False)
+    assert alc["resp_propio"] == ""
+    assert control.puede_tocar(linear_leads.uno("LEAD-91"), alc) is False
+    assert control.puede_tocar(linear_leads.uno("LEAD-90"), alc) is False
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +143,7 @@ def test_el_empleado_solo_tiene_la_vista_por_estado():
         {"id": "ruben", "nombre": "Rubén", "email": "ruben@viverorose.com",
          "email_verificado": True}, es_admin=False)
     assert alc["vistas"] == ["estado"]
-    assert alc["solo_resp"] == "Ruben"
+    assert alc["resp_propio"] == "Ruben"
     assert alc["admin"] is False
 
 
@@ -153,6 +163,20 @@ def test_un_empleado_no_puede_tocar_un_lead_de_otro():
     # El dueño, todo.
     for lead in (mio, de_otro, de_nadie):
         assert control.puede_tocar(lead, ADMIN) is True
+
+
+def test_ver_todo_no_regala_permiso_ni_se_lo_lleva():
+    # La trampa del cambio del 28/09/2026: si para que el empleado viera
+    # todo se hubiera vaciado su responsable en `alcance()` (el viejo
+    # `solo_resp` hacía de filtro Y de permiso), `puede_tocar()` le negaría
+    # hasta SUS leads. Ver y tocar van en claves separadas, y esto lo amarra
+    # con el alcance REAL que arma `alcance()`, no con un dict a mano.
+    alc = control.alcance(
+        {"id": "ruben", "nombre": "Rubén", "email": "ruben@viverorose.com",
+         "email_verificado": True}, es_admin=False)
+    assert alc["resp_propio"] == "Ruben"
+    assert control.puede_tocar(linear_leads.uno("LEAD-91"), alc) is True   # suyo
+    assert control.puede_tocar(linear_leads.uno("LEAD-89"), alc) is False  # de Mary
 
 
 # ---------------------------------------------------------------------------
@@ -354,6 +378,29 @@ def test_el_empleado_no_ve_el_segmento_de_vistas(cliente):
     # Sin AJUSTES_ADMINS la sesión de prueba no es admin.
     cuerpo = cliente.get("/control").text
     assert "Por empleado" not in cuerpo
+
+
+def test_un_empleado_ve_los_leads_de_todos_en_la_pantalla(cliente):
+    # Sin AJUSTES_ADMINS la sesión no es admin (y "genesis" no tiene
+    # etiqueta Resp:). Aun así ve el tablero completo — pedido de Abraham
+    # del 28/09/2026 — con el chip de responsable en cada tarjeta viva,
+    # para distinguir de quién es cada lead. Y el título ya no dice
+    # «Lo tuyo», porque lo que se ve ya no es solo lo suyo.
+    cuerpo = cliente.get("/control").text
+    assert "Tamara" in cuerpo             # LEAD-91, Resp: Ruben
+    assert "Boda Las Nubes" in cuerpo     # LEAD-89, Resp: Mary
+    assert "Juan Carlos Lopez" in cuerpo  # LEAD-90, sin Resp:
+    assert "Lo tuyo" not in cuerpo
+    assert "Sin asignar" in cuerpo        # el chip de los sin repartir
+
+
+def test_un_empleado_abre_la_ficha_de_un_lead_ajeno_sin_botones(cliente):
+    # Ver todo incluye ABRIR la ficha de un lead que no es suyo; lo que no
+    # gana es el permiso de tocarlo: los botones de acción van apagados
+    # (no hay formulario de Responder, solo el botón deshabilitado).
+    cuerpo = cliente.get("/control", params={"abrir": "LEAD-89"}).text
+    assert "Boda Las Nubes" in cuerpo
+    assert 'action="/control/responder' not in cuerpo
 
 
 def test_la_ficha_ensena_el_lead_y_sus_notas(cliente, de_dueno):

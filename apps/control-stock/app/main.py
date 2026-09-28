@@ -2354,9 +2354,10 @@ def control_pantalla(request: Request):
     """La pestaña Control (Fase 5, 24/09/2026): reparte el trabajo.
 
     Dos vistas sobre el MISMO tablero de Linear — «Por empleado» (reparto,
-    solo el dueño) y «Por estado» (las 8 columnas del embudo, filtrado a lo
-    suyo si es un empleado). Control no guarda nada propio: todo se lee y
-    se escribe en el issue.
+    solo el dueño) y «Por estado» (las 8 columnas del embudo, COMPLETO para
+    todos desde el 28/09/2026: «que todos lo puedan ver», Abraham; mover
+    sigue limitado a lo suyo por `puede_tocar()`). Control no guarda nada
+    propio: todo se lee y se escribe en el issue.
     """
     empleada = request.state.empleada
     alc = control.alcance(empleada, _es_admin(empleada))
@@ -2367,7 +2368,7 @@ def control_pantalla(request: Request):
     if vista == "empleado":
         columnas = control.tablero_por_empleado(leads)
     else:
-        columnas = control.tablero_por_estado(alc["solo_resp"], leads)
+        columnas = control.tablero_por_estado(leads)
 
     # El celular del encargado suena cuando un lead gana «Te toca»; una
     # sola vez por lead, y por detrás para que la pantalla no espere.
