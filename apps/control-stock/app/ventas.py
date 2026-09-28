@@ -342,12 +342,16 @@ def lineas_de_cargos(cargos):
 # "Planta personalizada": un renglón LIBRE para una planta o producto que
 # no está en el inventario de Odoo (dueño, 28/09/2026). A diferencia de los
 # CARGOS y de SV-PERSONALIZADO (cotizaciones.py), el comodín CUSTOM-PLANTA
-# NO se crea solo: es un producto real que Abraham ya dejó armado a mano
-# (tipo consu, sin impuesto, precio 0 — id 216 en odoo-pruebas, otro en el
-# Odoo real) y crearlo aquí por sorpresa duplicaría su configuración con
-# datos inventados. Se busca SIEMPRE por su código; si no aparece en el
-# Odoo al que apunta este servidor, el renglón libre se apaga con un aviso
-# en vez de reventar (o de inventar un producto).
+# NO se crea solo: se crea UNA vez, a mano y por fuera de esta app (tipo
+# consu, sin impuesto, precio 0), y esta app JAMÁS lo crea.
+#
+# Estado real al escribir esto: en odoo-pruebas ya existe (id 216, creado
+# por la coordinadora el 28/09/2026). En el Odoo real TODAVÍA NO existe —
+# se crea recién al desplegar esta función a producción. Se busca SIEMPRE
+# por su código, nunca por id fijo (los ids difieren entre los dos Odoo).
+# Mientras no exista en el Odoo al que apunta este servidor, el renglón
+# libre se apaga con un aviso en vez de reventar (o de inventar el
+# producto).
 # ---------------------------------------------------------------------------
 
 CODIGO_PERSONALIZADA_PLANTA = "CUSTOM-PLANTA"
