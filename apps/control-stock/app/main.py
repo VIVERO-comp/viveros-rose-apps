@@ -2194,6 +2194,10 @@ def control_pantalla(request: Request):
     # OpenWA guardara su mensaje. También por detrás: esta pantalla no
     # espera a Twenty.
     wa_autor.aplicar_en_fondo()
+    # El orden de las columnas (quién lleva más esperando) lee una caché
+    # local que se refresca acá mismo, por detrás: la pintada de HOY usa lo
+    # que ya estaba guardado.
+    control.refrescar_espera_en_fondo(leads)
 
     abierta = control.ficha(request.query_params.get("abrir", ""))
     # El modal de la corrección manual: a un estado nuevo no se llega sin

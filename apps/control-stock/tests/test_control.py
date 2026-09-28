@@ -19,6 +19,8 @@ Los leads de muestra (app/linear_leads.py):
     LEAD-83  Monica Gama         Perdido      sin Resp:
 """
 
+import time
+
 import pytest
 
 from app import control, linear_leads
@@ -627,3 +629,55 @@ def test_una_senal_a_mano_por_una_etiqueta_inexistente_no_crea_nada(cliente, de_
                              follow_redirects=False)
     assert respuesta.status_code == 303
     assert "Cliente potencial" not in linear_leads.uno("LEAD-90")["etiquetas"]
+
+
+# ---------------------------------------------------------------------------
+# El orden dentro de cada columna: Te toca primero, y el que más espera
+# arriba (25/09/2026)
+# ---------------------------------------------------------------------------
+
+def _columna(clave):
+    columnas = control.tablero_por_estado()
+    return next(c for c in columnas if c["clave"] == clave)
+
+
+def test_te_toca_va_primero_aunque_el_resto_sea_mas_viejo():
+    # LEAD-90 (2 días) y LEAD-91 (1 día) caen los dos en Por agendar; sin
+    # tocar nada, LEAD-90 iría primero (es el más viejo). Con Te toca en
+    # LEAD-91, este pasa adelante igual.
+    linear_leads.poner_te_toca(linear_leads.uno("LEAD-91")["id"], True)
+    refs = [l["ref"] for l in _columna("POR_AGENDAR")["leads"]]
+    assert refs == ["LEAD-91", "LEAD-90"]
+
+
+def test_entre_dos_te_toca_el_que_mas_espera_manda():
+    for ref in ("LEAD-91", "LEAD-90"):
+        linear_leads.poner_te_toca(linear_leads.uno(ref)["id"], True)
+    ahora = time.time()
+    control._guardar_espera("LEAD-91", ahora - 60)     # hace 1 minuto
+    control._guardar_espera("LEAD-90", ahora - 3600)   # hace 1 hora: manda
+    refs = [l["ref"] for l in _columna("POR_AGENDAR")["leads"]]
+    assert refs == ["LEAD-90", "LEAD-91"]
+
+
+def test_sin_cache_el_desempate_es_createdat_no_updatedat():
+    # Con la caché fría (sin filas en control_espera), el desempate cae en
+    # el mismo `dias` que ya usa el resto de la pantalla — nunca un orden
+    # que baile de una recarga a otra.
+    for ref in ("LEAD-91", "LEAD-90"):
+        linear_leads.poner_te_toca(linear_leads.uno(ref)["id"], True)
+    refs = [l["ref"] for l in _columna("POR_AGENDAR")["leads"]]
+    assert refs == ["LEAD-90", "LEAD-91"]  # LEAD-90 (2 días) es el más viejo
+
+
+def test_los_sin_te_toca_mantienen_su_orden_de_siempre():
+    # Ninguno de los dos tiene Te toca: el orden no cambia por esta feature.
+    refs = [l["ref"] for l in _columna("POR_AGENDAR")["leads"]]
+    assert refs == ["LEAD-91", "LEAD-90"]
+
+
+def test_la_pantalla_se_pinta_igual_con_la_cache_vacia(cliente, de_dueno):
+    # No se sembró ninguna fila en control_espera: el fallback por createdAt
+    # tiene que alcanzar solo, sin que la pantalla reviente.
+    cuerpo = cliente.get("/control", params={"vista": "estado"}).text
+    assert "Tamara" in cuerpo and "Juan Carlos Lopez" in cuerpo
