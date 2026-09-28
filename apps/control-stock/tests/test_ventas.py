@@ -300,6 +300,19 @@ def test_sin_configurar_muestra_aviso(cliente, monkeypatch):
     assert "PAGADO Y CONFIRMAR" not in r.text
 
 
+def test_boton_venta_visible_en_computadora(cliente_venta):
+    """El 28/09/2026 se encontró que el botón "+ Venta" llevaba la clase
+    .solo-pc creyendo que era "solo computadora", cuando en realidad esa
+    clase queda display:none en TODOS los anchos —solo la reactivan las
+    tarjetas de Stock, dentro de su propio media query— así que el botón
+    no se veía nunca, en ningún ancho. Ahora usa su propia clase
+    (.venta-boton-pc), escondida solo en el media query móvil."""
+    r = cliente_venta.get("/venta")
+    assert 'class="btn btn-dorado btn-grande venta-boton-pc"' in r.text
+    assert "+ VENTA" in r.text
+    assert "solo-pc" not in r.text
+
+
 def test_buscar_muestra_precio_y_foto(cliente_venta):
     r = cliente_venta.get("/venta/nueva?q=romero")
     assert "ROMERO" in r.text and "$3.50" in r.text
