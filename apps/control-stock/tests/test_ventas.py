@@ -123,6 +123,9 @@ class OdooFalso:
             "name": f"S{nuevo}", "partner_id": vals["partner_id"],
             "tag_ids": vals.get("tag_ids"), "lineas": lineas,
             "client_order_ref": vals.get("client_order_ref"),
+            # lead_ref (28/09/2026): el PP-XXXXX del lead pendiente, cuando
+            # lo hay. Campo nuevo de sale.order (addon 19.0.1.55.0).
+            "lead_ref": vals.get("lead_ref"),
             "amount_total": round(total, 2), "state": "draft", "invoice_ids": [],
         }
         return nuevo
