@@ -25,7 +25,7 @@ from . import (acceso_google, agenda, avisos, calculos, calendario,
                calendario_google, colores,
                calendario_ics, conteos, control, cot_lead, cotizaciones,
                coworkers, crm_twenty, datos, fichas, fotos,
-               linear_leads, resumen, seguridad, ventas, wa_autor)
+               linear_leads, mantenimiento, resumen, seguridad, ventas, wa_autor)
 
 app = FastAPI(title="Control Viverorose")
 
@@ -106,6 +106,7 @@ datos.iniciar_db()
 ventas.iniciar_tablas()
 cotizaciones.iniciar_tablas()
 control.iniciar_tablas()
+mantenimiento.iniciar_tablas()
 avisos.iniciar_tablas()
 calendario_ics.iniciar_tablas()
 calendario_google.iniciar_tablas()
@@ -2536,6 +2537,36 @@ async def control_cotizacion_marcar_real(request: Request):
     autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
     aviso, error = control.marcar_real_cotizacion(
         ref, form.get("orden_id", ""), autor=autor)
+    return _control_vuelve(vista, aviso=aviso, error=error, abrir=ref)
+
+
+@app.post("/control/cotizacion/quitar-real")
+async def control_cotizacion_quitar_real(request: Request):
+    """Le quita a una orden la marca de «la real»: el lead se queda sin
+    ninguna (la tarjeta de plata desaparece) hasta que se marque otra."""
+    form = await request.form()
+    ref = form.get("ref", "")
+    _alc, vista, error = _control_permiso(request, ref)
+    if error:
+        return _control_vuelve(vista, error=error, abrir=ref)
+    autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
+    aviso, error = control.quitar_real_cotizacion(
+        ref, form.get("orden_id", ""), autor=autor)
+    return _control_vuelve(vista, aviso=aviso, error=error, abrir=ref)
+
+
+@app.post("/control/mantenimiento/parar")
+async def control_mantenimiento_parar(request: Request):
+    """El botón «Parar mantenimiento» de la ficha (28/09/2026): apaga la
+    serie mensual, cancela la cita futura pendiente y deja un comentario
+    firmado en el issue."""
+    form = await request.form()
+    ref = form.get("ref", "")
+    _alc, vista, error = _control_permiso(request, ref)
+    if error:
+        return _control_vuelve(vista, error=error, abrir=ref)
+    autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
+    aviso, error = control.parar_mantenimiento(ref, autor=autor)
     return _control_vuelve(vista, aviso=aviso, error=error, abrir=ref)
 
 

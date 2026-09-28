@@ -43,7 +43,7 @@ import re
 import time
 import unicodedata
 
-from . import calendario, linear_leads, ventas
+from . import calendario, linear_leads, mantenimiento, ventas
 
 TTL_SALDOS = 60
 
@@ -341,10 +341,19 @@ def al_marcar_hecha(actividad, autor=""):
 
     Devuelve el texto que la pantalla le suma al aviso, o "" si esta
     actividad no mueve nada (una Recogida, o una actividad sin lead).
+
+    Una cita RECURRENTE de mantenimiento (28/09/2026, ver `mantenimiento.
+    py`) es la excepción: entrega en el camino normal por tipo, pero esta
+    en concreto no toca el estado — sigue en Ganado. Se distingue por un
+    campo explícito (`mantenimiento.es_recurrente`), nunca por el título,
+    así que un Mantenimiento agendado a mano sigue entregando como
+    siempre.
     """
     ref = (actividad or {}).get("lead") or ""
     if not ref or not cierra_la_entrega(actividad.get("tipo")):
         return ""
+    if mantenimiento.es_recurrente(actividad):
+        return mantenimiento.al_marcar_hecha(actividad, autor=autor)
     lead = linear_leads.uno(ref)
     if lead is None:
         return ""
@@ -365,6 +374,20 @@ def al_marcar_hecha(actividad, autor=""):
     aviso += " " + _cerrar_o_cobrar(lead, autor)
     linear_leads.refrescar()
     return aviso.strip()
+
+
+def _mover_a_ganado(lead, autor=""):
+    """El ÚNICO lugar por el que un lead pasa a Ganado — lo llaman
+    `_cerrar_o_cobrar` (saldo 0 al marcar Hecha) y `cerrar_los_que_ya_
+    pagaron` (el pago que salda entra después). Además de mover el
+    estado, dispara el mantenimiento mensual si corresponde (28/09/2026):
+    un solo enganche, no dos, para que un camino nuevo hacia Ganado no
+    se olvide de repetirlo.
+    """
+    movido = linear_leads.mover_estado(lead["id"], "GANADO")
+    if movido:
+        mantenimiento.al_ganar(lead, autor=autor)
+    return movido
 
 
 def _cerrar_o_cobrar(lead, autor=""):
@@ -392,7 +415,7 @@ def _cerrar_o_cobrar(lead, autor=""):
         linear_leads.poner_pago(lead["id"], "Pagado 100%")
     except linear_leads.ErrorLeads:
         pass
-    if linear_leads.mover_estado(lead["id"], "GANADO"):
+    if _mover_a_ganado(lead, autor):
         return "Sin saldo: pasó a Ganado."
     return "Sin saldo pendiente."
 
@@ -422,7 +445,7 @@ def cerrar_los_que_ya_pagaron():
             continue
         try:
             linear_leads.poner_pago(lead["id"], "Pagado 100%")
-            if linear_leads.mover_estado(lead["id"], "GANADO"):
+            if _mover_a_ganado(lead):
                 cerrados.append(lead["nombre"])
         except linear_leads.ErrorLeads:
             continue

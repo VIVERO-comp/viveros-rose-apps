@@ -221,6 +221,15 @@
        puesto. El camino ya existía para Retail (GET /venta?lead=...):
        deja el lead pendiente y redirige a /venta/nueva. #}
     <a class="btn" href="/venta?lead={{ abierta.ref | urlencode }}&cliente={{ abierta.nombre | urlencode }}&cel={{ abierta.celular | urlencode }}">Cotizar</a>
+    {# El mantenimiento mensual (28/09/2026): el botón solo aparece si el
+       lead tiene una serie activa — arrancarla no es cosa de un botón,
+       nace sola al ganar un lead con interés Mantenimiento. #}
+    {% if puede_tocar_abierta and abierta.mantenimiento_activo %}
+    <form method="post" action="/control/mantenimiento/parar?vista={{ vista }}">
+      <input type="hidden" name="ref" value="{{ abierta.ref }}">
+      <button class="btn" type="submit" data-guardando="…">Parar mantenimiento</button>
+    </form>
+    {% endif %}
   </div>
 
   {# --- Cuánto es: la cotización conectada (28/09/2026). Todo el dato sale
@@ -272,6 +281,13 @@
             <input type="hidden" name="ref" value="{{ abierta.ref }}">
             <input type="hidden" name="orden_id" value="{{ o.orden_id }}">
             <button type="submit" class="enlace-sub">Marcar la real</button>
+          </form>
+          {% else %}
+          <span class="sep">·</span>
+          <form method="post" action="/control/cotizacion/quitar-real?vista={{ vista }}">
+            <input type="hidden" name="ref" value="{{ abierta.ref }}">
+            <input type="hidden" name="orden_id" value="{{ o.orden_id }}">
+            <button type="submit" class="enlace-sub">Quitar real</button>
           </form>
           {% endif %}
           <span class="sep">·</span>
