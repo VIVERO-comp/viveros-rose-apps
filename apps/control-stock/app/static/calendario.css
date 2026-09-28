@@ -733,6 +733,46 @@ a{color:inherit}
    lean juntas.
    ======================================================================== */
 
+/* La cotización conectada, compacta como los renglones de "Ventas y
+   cotizaciones locales" de Vender (venta.html: venta-item/fila1/badge),
+   pero más chica — con sus propias clases acá porque control.html no
+   carga styles.css (28/09/2026, pedido de Abraham). */
+.ficha-cot-item{
+  background:var(--crema-2);border-radius:12px;padding:9px 11px;
+  margin-bottom:7px;border-left:3px solid var(--borde);
+}
+.ficha-cot-item.b-bajo{border-left-color:var(--bajo)}
+.ficha-cot-item.b-critico{border-left-color:var(--critico)}
+.ficha-cot-item.b-ok{border-left-color:var(--ok)}
+.ficha-cot-item .fila1{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.ficha-cot-item .titulo{font-size:12.5px;font-weight:700}
+.ficha-cot-item small{display:block;font-size:10.3px;color:var(--muy-suave);margin-top:1px}
+.ficha-cot-item .badge{margin-top:0;flex-shrink:0}
+.ficha-cot-monto{font-size:11.3px;color:var(--suave);margin-top:4px}
+.ficha-cot-acciones{margin-top:6px;font-size:11px;line-height:1.6}
+.ficha-cot-acciones form{display:inline;margin:0}
+.ficha-cot-acciones .sep{color:var(--borde);margin:0 2px}
+.ficha-cot-acciones a,
+.ficha-cot-acciones .enlace-sub{
+  color:var(--dorado);font-weight:700;text-decoration:underline;
+  text-underline-offset:2px;background:none;border:none;padding:0;
+  cursor:pointer;font-family:inherit;font-size:11px;
+}
+
+/* Los badges de estado, mismos nombres y colores que styles.css (Vender):
+   rojo lo que todavía debe plata (abono), ámbar lo que es solo cotización,
+   verde lo saldado, gris lo cerrado. "La real" es una marca aparte, no un
+   estado de cobro — sólida para que se note de un vistazo. */
+.badge{
+  display:inline-block;font-size:9.5px;font-weight:700;
+  border-radius:8px;padding:2px 7px;margin-top:2px;white-space:nowrap;
+}
+.b-critico{background:#fef2f2;color:#dc2626}
+.b-bajo{background:#fef3c7;color:#a16207}
+.b-ok{background:#d9ecdc;color:#2e6c40}
+.b-neutro{background:#dfe2ea;color:#4c5265}
+.b-real{background:var(--texto);color:#fff}
+
 .ficha-cot-vacia{
   font-size:12.8px;color:var(--muy-suave);border:1px dashed var(--borde);
   border-radius:13px;padding:11px 14px;

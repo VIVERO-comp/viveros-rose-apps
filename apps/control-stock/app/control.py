@@ -36,7 +36,7 @@ import time
 import httpx
 from datetime import date, datetime, timedelta
 
-from . import agenda, avisos, calendario, cot_lead, crm_twenty, linear_leads, resumen, ventas
+from . import agenda, avisos, calendario, cot_lead, cotizaciones, crm_twenty, linear_leads, resumen, ventas
 from .datos import ZONA_PANAMA, _db
 
 VISTAS = ("empleado", "estado")
@@ -796,6 +796,21 @@ def ficha(ref, buscar_cotizacion=""):
 # pantalla y se cablea el avance del embudo.
 # ---------------------------------------------------------------------------
 
+# El badge del estado de cobro de cada orden conectada (28/09/2026, pedido
+# de Abraham: "que se vea como en Ventas"): los mismos cuatro colores que
+# usa venta.html para sus estados (b-ok/b-bajo/b-critico/b-neutro), sobre
+# el `etapa_cobro` que ya trae `cot_lead._orden_legible`. "Abono" en rojo
+# a propósito: es plata que todavía falta cobrar, el mismo criterio que
+# usa venta.html con sus estados intermedios (confirmada/entregada/
+# facturada, todas b-critico mientras algo siga pendiente).
+_BADGES_ETAPA_COBRO = {
+    "cotizado": {"texto": "Cotización", "clase": "b-bajo"},
+    "abono": {"texto": "Abono 50%", "clase": "b-critico"},
+    "pagado": {"texto": "Pagado", "clase": "b-ok"},
+}
+_BADGE_SIN_COBRO = {"texto": "Cancelada", "clase": "b-neutro"}
+
+
 def _cotizacion_de(lead, buscar_cotizacion=""):
     """{"ok", "error", "ordenes", "plata", "candidatas", "buscar"} — todo
     lo que el panel necesita sobre Odoo, en una sola composición.
@@ -812,11 +827,45 @@ def _cotizacion_de(lead, buscar_cotizacion=""):
     return {
         "ok": not fallos,
         "error": fallos[0] if fallos else "",
-        "ordenes": ordenes.get("ordenes") or [],
+        "ordenes": _con_edicion(ordenes.get("ordenes") or []),
         "plata": plata if plata.get("hay_real") else None,
         "candidatas": candidatas.get("candidatas") or [],
         "buscar": buscar_cotizacion,
     }
+
+
+def _con_edicion(ordenes):
+    """Cada orden conectada, con su badge de cobro y, si nació como
+    cotización de SERVICIO en Vender y todavía es editable ahí (ni
+    facturada ni cancelada), el `n` de su registro local para el enlace
+    «Editar» (`/venta/servicio/{n}/editar`) — nunca se inventa edición
+    para una orden que no nació en Vender.
+
+    Cruza por `orden_id` contra `cotizaciones.cotizaciones_todas()` (el
+    registro local, solo lectura — esta app nunca escribe ahí desde
+    acá) y, solo para las que matchean, UNA consulta a Odoo para saber si
+    siguen editables (`cotizaciones.estados_en_odoo`, la misma que ya usa
+    la pestaña Vender) — no una por orden.
+    """
+    if not ordenes:
+        return []
+    locales = {fila["orden_id"]: fila["n"]
+              for fila in cotizaciones.cotizaciones_todas() if fila.get("orden_id")}
+    candidatos = [o["orden_id"] for o in ordenes if o["orden_id"] in locales]
+    editables = set()
+    if candidatos:
+        try:
+            estados = cotizaciones.estados_en_odoo(candidatos)
+            editables = {oid for oid, e in estados.items() if e.get("editable")}
+        except Exception:
+            pass  # sin Odoo, ningún enlace de Editar: mejor sin botón que uno roto
+    resultado = []
+    for o in ordenes:
+        badge = _BADGES_ETAPA_COBRO.get(o.get("etapa_cobro"), _BADGE_SIN_COBRO)
+        n_local = locales.get(o["orden_id"])
+        editar_n = n_local if (n_local is not None and o["orden_id"] in editables) else None
+        resultado.append({**o, "badge": badge, "editar_n": editar_n})
+    return resultado
 
 
 def _nombre_de_orden(lead, orden_id):
