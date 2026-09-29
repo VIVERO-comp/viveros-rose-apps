@@ -134,16 +134,6 @@
                 <b>{{ l.nombre }}</b>
                 {% if l.te_toca %}<span class="ctl-alerta" title="Te toca: hay un cliente esperando"></span>{% endif %}
               </span>
-              <span class="t-sub ctl-chips">
-                {# El chip de estado sobra en "Por estado": toda la columna ya
-                   dice el estado en su encabezado (28/09/2026, Abraham lo vio
-                   repetido en producción). En "Por empleado" sí aporta —
-                   ahí una columna mezcla leads de varios estados. #}
-                {% if vista != 'estado' %}<span class="chip-est" style="{{ l.estado_chip }}">{{ l.estado_titulo }}</span>{% endif %}
-                {% if l.interes %}<span class="chip-est">{{ l.interes }}</span>{% endif %}
-                {% if l.pago %}<span class="etq-pago">{{ l.pago }}</span>{% endif %}
-                {% if l.motivo %}<span class="chip-est" style="{{ l.motivo_chip }}">{{ l.motivo }}</span>{% endif %}
-              </span>
               {# Solo en la columna Recordatorio (29/09/2026): el teléfono
                  como TEXTO (para llamarlo o buscarlo, no solo el enlace
                  del chat) y qué espera. Las demás tarjetas no cambian.
@@ -155,8 +145,20 @@
               </span>
               {% endif %}
             </a>
+            {# T2 (29/09/2026, maqueta «Control más simple»): la tarjeta en
+               DOS líneas — nombre arriba y UNA línea de meta abajo. El
+               interés dejó de ser chip: va como texto tenue al inicio,
+               seguido del «hace N días» (resaltado desde los 5 días —
+               umbral que decide Python, `hace_alerta`, no la plantilla).
+               El ref salió de la tarjeta: vive en la ficha. El chat es
+               «💬» solo. El chip de estado se queda únicamente en «Por
+               empleado», donde una columna mezcla estados; el de pago y
+               el de motivo siguen — son información, no decoración. #}
             <span class="t-sub ctl-pie-tarjeta">
-              <span class="mono">{{ l.ref }} · {{ l.hace }}</span>
+              {% if vista != 'estado' %}<span class="chip-est" style="{{ l.estado_chip }}">{{ l.estado_titulo }}</span>{% endif %}
+              <span>{% if l.interes %}{{ l.interes }} · {% endif %}<span class="{{ 'hace-alerta' if l.hace_alerta }}">{{ l.hace }}</span></span>
+              {% if l.pago %}<span class="etq-pago">{{ l.pago }}</span>{% endif %}
+              {% if l.motivo %}<span class="chip-est" style="{{ l.motivo_chip }}">{{ l.motivo }}</span>{% endif %}
               {# Ganado y Perdido no se reparten (regla ya escrita): el chip
                  de responsable ahí es ruido, incluso "Sin asignar". En las
                  columnas vivas se queda — le dice al dueño a quién falta
@@ -165,7 +167,7 @@
               {% if vista == 'estado' and not l.cerrado %}
               <span class="chip-est {{ 'chip-nadie' if not l.resp }}">{{ l.resp_titulo }}</span>
               {% endif %}
-              {% if l.wa %}<a class="ctl-wa" draggable="false" href="{{ l.wa }}" target="_blank" rel="noopener">chat ↗</a>{% endif %}
+              {% if l.wa %}<a class="ctl-wa" draggable="false" href="{{ l.wa }}" target="_blank" rel="noopener" aria-label="Abrir chat">💬</a>{% endif %}
             </span>
             {# «Ya llegó» (29/09/2026): el producto llegó — a Hablando con
                «Te toca» puesto, sin abrir la ficha. Solo quien puede
@@ -214,10 +216,14 @@
     {% if abierta.motivo %}<span class="etq at">{{ abierta.motivo }}</span>{% endif %}
   </div>
 
-  {# --- Qué hago. Responder, las señales, Cotizar y (más abajo, junto a
-         "Cuánto es") Conectar cotización ya viven aquí (28/09/2026). Lo
-         negro sigue siendo solo abrir el chat: el resto son interruptores
-         grises, incluido Cotizar (es un enlace, no toca el lead). --- #}
+  {# --- Qué hago, en DOS grupos con titulito (F3, 29/09/2026, maqueta
+         «Control más simple» elegida por Abraham): los MISMOS botones,
+         cero lógica nueva — solo se separa lo que HACE algo (Acciones) de
+         las banderas internas (Señales), que ahora van chicas y fantasma
+         cuando están apagadas. Lo negro sigue siendo solo abrir el chat:
+         el resto son interruptores grises, incluido Cotizar (es un
+         enlace, no toca el lead). --- #}
+  <div class="grupo-tit">Acciones</div>
   <div class="acciones">
     {% if abierta.wa %}
     <a class="btn oro" href="{{ abierta.wa }}" target="_blank" rel="noopener">💬 WhatsApp</a>
@@ -235,23 +241,10 @@
         {% if abierta.te_toca %}🔴 Responder · apagalo{% else %}Prender 🔴 Responder{% endif %}
       </button>
     </form>
-    {% for s in abierta.senales %}
-    <form method="post" action="/control/senal?vista={{ vista }}">
-      <input type="hidden" name="ref" value="{{ abierta.ref }}">
-      <input type="hidden" name="nombre" value="{{ s.nombre }}">
-      <input type="hidden" name="prender" value="{{ '0' if s.prendida else '1' }}">
-      <button class="btn{{ ' peligro' if s.prendida }}" type="submit"
-              data-guardando="…">{{ s.nombre }}{{ ' ✓' if s.prendida }}</button>
-    </form>
-    {% endfor %}
     {% else %}
     <button class="btn{{ ' peligro' if abierta.te_toca }}" type="button" disabled>
       {{ '🔴 Responder · prendido' if abierta.te_toca else 'Responder · apagado' }}
     </button>
-    {% for s in abierta.senales %}
-    <button class="btn{{ ' peligro' if s.prendida }}" type="button" disabled>
-      {{ s.nombre }}{{ ' ✓' if s.prendida }}</button>
-    {% endfor %}
     {% endif %}
     {# Disponible siempre (pedido de Abraham, 28/09/2026): un enlace, no
        un formulario — no toca el lead, solo abre Vender con el cliente
@@ -283,6 +276,31 @@
     </form>
     {% endif %}
   </div>
+
+  {# Las señales, en su propio grupo. Los botones solo existen si Abraham
+     ya creó su etiqueta en Linear (mecanismo de `senales_disponibles`,
+     intacto): sin señales no hay grupo ni titulito. #}
+  {% if abierta.senales %}
+  <div class="grupo-tit">Señales</div>
+  <div class="acciones">
+    {% if puede_tocar_abierta %}
+    {% for s in abierta.senales %}
+    <form method="post" action="/control/senal?vista={{ vista }}">
+      <input type="hidden" name="ref" value="{{ abierta.ref }}">
+      <input type="hidden" name="nombre" value="{{ s.nombre }}">
+      <input type="hidden" name="prender" value="{{ '0' if s.prendida else '1' }}">
+      <button class="btn chico{{ ' peligro' if s.prendida else ' fantasma' }}" type="submit"
+              data-guardando="…">{{ s.nombre }}{{ ' ✓' if s.prendida }}</button>
+    </form>
+    {% endfor %}
+    {% else %}
+    {% for s in abierta.senales %}
+    <button class="btn chico{{ ' peligro' if s.prendida else ' fantasma' }}" type="button" disabled>
+      {{ s.nombre }}{{ ' ✓' if s.prendida }}</button>
+    {% endfor %}
+    {% endif %}
+  </div>
+  {% endif %}
 
   {# --- Cuánto es: la cotización conectada (28/09/2026). Todo el dato sale
          de cot_lead.py; acá solo se pinta lo que control.ficha() compuso

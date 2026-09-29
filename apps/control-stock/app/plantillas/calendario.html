@@ -168,21 +168,40 @@
       {# El segmento "Mi calendario / Todo el equipo" se quitó (dueño,
          22/09/2026): el alcance sigue decidiéndose en el servidor — el
          empleado entra viendo lo suyo y el dueño, el equipo. #}
-      <form class="buscador" method="get" action="/calendario">
-        <input type="hidden" name="dia" value="{{ estado.dia }}">
-        <input type="hidden" name="vista" value="{{ estado.vista }}">
-        <input type="hidden" name="mio" value="{{ '1' if estado.solo_mio else '0' }}">
-        <input type="hidden" name="apagados" value="{{ estado.apagados|sort|join(',') }}">
-        <input type="hidden" name="quien" value="{{ estado.quien }}">
-        <input type="hidden" name="hechas" value="{{ '1' if estado.hechas else '0' }}">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
-        <input id="buscar" type="search" name="q" value="{{ estado.q }}"
-               placeholder="Buscar…" aria-label="Buscar actividad">
-      </form>
-      <a class="btn chico tenue" href="{{ ligas.sin_hechas }}">
-        {{ 'Ocultar terminadas' if estado.hechas else 'Ver terminadas' }}
-      </a>
-      <a class="btn icono tenue" href="{{ ligas.refrescar }}" title="Volver a preguntarle a Linear">⟳</a>
+      {# C1 (29/09/2026, maqueta «Control más simple»): la barra respira.
+         El buscador vive detrás de una LUPA y los dos controles de menos
+         uso (terminadas y ⟳) detrás de un «⋯». Son <details> NATIVOS
+         estilizados de popover — cero JS —, y adentro van el MISMO form
+         GET y los MISMOS enlaces de siempre, tal cual. La lupa arranca
+         abierta cuando hay una búsqueda activa: un filtro puesto nunca
+         se esconde. Sin autofocus: enfocar al abrir necesitaría JS. #}
+      <details class="desple" {{ 'open' if estado.q }}>
+        <summary class="btn icono" aria-label="Buscar" title="Buscar">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+        </summary>
+        <div class="desple-caja">
+          <form class="buscador" method="get" action="/calendario">
+            <input type="hidden" name="dia" value="{{ estado.dia }}">
+            <input type="hidden" name="vista" value="{{ estado.vista }}">
+            <input type="hidden" name="mio" value="{{ '1' if estado.solo_mio else '0' }}">
+            <input type="hidden" name="apagados" value="{{ estado.apagados|sort|join(',') }}">
+            <input type="hidden" name="quien" value="{{ estado.quien }}">
+            <input type="hidden" name="hechas" value="{{ '1' if estado.hechas else '0' }}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+            <input id="buscar" type="search" name="q" value="{{ estado.q }}"
+                   placeholder="Buscar…" aria-label="Buscar actividad">
+          </form>
+        </div>
+      </details>
+      <details class="desple">
+        <summary class="btn icono tenue" aria-label="Más opciones" title="Más opciones">⋯</summary>
+        <div class="desple-caja desple-menu">
+          <a class="btn chico tenue" href="{{ ligas.sin_hechas }}">
+            {{ 'Ocultar terminadas' if estado.hechas else 'Ver terminadas' }}
+          </a>
+          <a class="btn chico tenue" href="{{ ligas.refrescar }}">⟳ Volver a preguntarle a Linear</a>
+        </div>
+      </details>
       {% if puede_escribir %}
       <a class="btn oro" href="{{ ligas.nueva }}">+ Nueva actividad</a>
       {% endif %}

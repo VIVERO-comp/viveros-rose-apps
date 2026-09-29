@@ -307,7 +307,9 @@ def test_sin_chips_ni_alcance_en_la_pantalla(cliente):
     cuerpo = _abrir(cliente).text
     assert 'class="chips"' not in cuerpo
     assert "Todo el equipo" not in cuerpo
-    assert "Ocultar terminadas" in cuerpo  # sobrevive, ahora en la barra
+    # Sobrevive, ahora DENTRO del menú «⋯» de la barra (C1, 29/09/2026):
+    # el enlace es el mismo de siempre, solo vive en un <details> nativo.
+    assert "Ocultar terminadas" in cuerpo
 
 
 def test_atrasadas_es_un_renglon_que_lleva_a_la_lista(cliente):
@@ -586,3 +588,31 @@ def test_los_filtros_no_viajan_a_la_copia_de_abajo(cliente):
     assert cuerpo.count('class="cal-filtros"') == 1
     _, abajo = cuerpo.split('class="leads-abajo"')
     assert 'class="cal-filtros"' not in abajo
+
+
+# ---------------------------------------------------------------------------
+# C1 (29/09/2026, maqueta «Control más simple» elegida por Abraham): la
+# barra respira — el buscador vive detrás de una LUPA y los dos controles
+# de menos uso detrás de un «⋯». Son <details> nativos (cero JS): adentro
+# van el MISMO form GET y los MISMOS enlaces de siempre.
+# ---------------------------------------------------------------------------
+
+def test_la_barra_guarda_buscador_y_extras_en_desplegables(cliente):
+    cuerpo = _abrir(cliente).text
+    assert cuerpo.count('<details class="desple"') == 2
+    assert 'aria-label="Buscar"' in cuerpo
+    assert 'aria-label="Más opciones"' in cuerpo
+    # Los dos controles mudados viven DENTRO del menú «⋯», tal cual eran.
+    menu = cuerpo[cuerpo.index("desple-menu"):]
+    assert "Ocultar terminadas" in menu or "Ver terminadas" in menu
+    assert "⟳ Volver a preguntarle a Linear" in menu
+    # Y el buscador sigue siendo el mismo form GET con sus campos.
+    assert 'name="q"' in cuerpo and 'action="/calendario"' in cuerpo
+
+
+def test_con_busqueda_activa_la_lupa_arranca_abierta(cliente):
+    # Un filtro puesto nunca se esconde: con q, el <details> nace abierto.
+    cuerpo = _abrir(cliente, q="tamara").text
+    assert '<details class="desple" open>' in cuerpo
+    sin_busqueda = _abrir(cliente).text
+    assert '<details class="desple" open>' not in sin_busqueda

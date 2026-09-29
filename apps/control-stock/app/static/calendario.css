@@ -120,6 +120,24 @@ body>nav .marca{display:none}
 .btn input[type=checkbox]{accent-color:var(--dorado);margin:0}
 .buscador{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--borde);border-radius:8px;padding:0 11px;width:180px;flex:0 1 180px}
 .buscador input{border:0;background:transparent;font-family:inherit;font-size:12.5px;color:var(--texto);padding:9px 0;width:100%;outline:none}
+/* C1 (29/09/2026): la lupa y el «⋯» de la barra son <details> nativos
+   estilizados de popover — cero JS. El summary se ve como un botón; la
+   caja flota debajo, pegada a la derecha para no salirse en pantallas
+   angostas, y con el ancho topado al viewport. La barra no crece de
+   alto: el popover es absolute y no ocupa fila. */
+.desple{position:relative}
+.desple>summary{list-style:none;cursor:pointer;user-select:none}
+.desple>summary::-webkit-details-marker,.desple>summary::marker{display:none;content:''}
+.desple[open]>summary{background:var(--crema-2)}
+.desple-caja{
+  position:absolute;top:calc(100% + 6px);right:0;z-index:40;
+  background:#fff;border:1px solid var(--borde);border-radius:11px;
+  box-shadow:0 10px 28px rgba(40,30,15,.14);padding:8px;
+  min-width:200px;max-width:min(320px,calc(100vw - 24px));
+}
+.desple-caja .buscador{width:230px;max-width:100%;flex:none}
+.desple-menu{display:flex;flex-direction:column;gap:6px;align-items:stretch}
+.desple-menu .btn{justify-content:flex-start;white-space:nowrap}
 select.sel,input.campo,textarea.campo{
   font-family:inherit;font-size:12.5px;color:var(--texto);background:#fff;
   border:1px solid var(--borde);border-radius:11px;padding:9px 10px;outline:none;width:100%;
@@ -819,12 +837,27 @@ a{color:inherit}
    nuevo son los chips (estado, interes, motivo) con el color de la paleta
    unica, y el chip del responsable en la vista por estado. */
 
-.ctl-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+/* T2 (29/09/2026, maqueta «Control más simple»): la tarjeta quedó en dos
+   líneas — la fila de chips (.ctl-chips) murió; el interés es texto tenue
+   en la meta y el «hace N días» se resalta desde los 5 días (la clase la
+   decide Python, `control.hace_alerta`). */
+.hace-alerta{color:#b45309;font-weight:600}
 /* La columna Recordatorio (29/09/2026): el teléfono y qué espera, como
    texto de la tarjeta; y el botón «Ya llegó» a lo ancho, abajo. */
 .ret-tarjeta .ctl-recordatorio{display:block;margin-top:4px}
 .ctl-ya-llego{margin-top:6px}
 .ctl-ya-llego .btn{width:100%}
+/* F3 (29/09/2026): los titulitos de grupo de la ficha (ACCIONES /
+   SEÑALES) y las señales apagadas como botones fantasma. El gap de 13px
+   del panel se recorta con el margen negativo para que el título quede
+   pegado a su grupo. */
+.grupo-tit{
+  font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--muy-suave);
+}
+.panel-der .grupo-tit{margin-bottom:-7px}
+.btn.fantasma{border-style:dashed;background:transparent;color:var(--muy-suave)}
+.btn.fantasma:hover{background:var(--crema-2)}
 .chip-est{
   display:inline-block;font-size:9.5px;font-weight:700;line-height:1.5;
   padding:1px 6px;border-radius:999px;border:1px solid var(--borde);

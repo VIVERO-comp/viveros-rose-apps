@@ -1103,3 +1103,70 @@ def test_en_recordatorio_la_ficha_ofrece_ya_llego_y_no_recordar(cliente, de_duen
     assert ">Recordar</a>" not in cuerpo     # ya está parqueado
     assert "Ya llegó" in cuerpo
     assert "espera Monstera" in cuerpo       # el dato «Espera» de la ficha
+
+
+# ---------------------------------------------------------------------------
+# F3 y T2 (29/09/2026, maqueta «Control más simple» elegida por Abraham):
+# la ficha en dos grupos con titulito, y la tarjeta del tablero en dos
+# líneas — mismos botones, misma lógica; solo se quita ruido visual.
+# ---------------------------------------------------------------------------
+
+def test_la_ficha_agrupa_acciones_y_senales(cliente, de_dueno):
+    cuerpo = cliente.get("/control", params={"abrir": "LEAD-86",
+                                             "vista": "estado"}).text
+    assert cuerpo.count('class="grupo-tit"') == 2
+    assert ">Acciones</div>" in cuerpo and ">Señales</div>" in cuerpo
+    assert cuerpo.index(">Acciones</div>") < cuerpo.index(">Señales</div>")
+    # Los mismos botones de siempre, cada uno en su grupo.
+    assert "💬 WhatsApp" in cuerpo and "Responder" in cuerpo
+    assert ">Cotizar</a>" in cuerpo
+    # LEAD-86 no tiene señales prendidas: las dos que existen en la
+    # muestra van fantasma (chicas, borde dashed, texto tenue).
+    assert cuerpo.count("btn chico fantasma") == 2
+
+
+def test_sin_senales_en_linear_no_hay_grupo_senales(cliente, de_dueno,
+                                                    monkeypatch):
+    # El mecanismo «el botón solo existe si Abraham creó la etiqueta» está
+    # intacto — y sin señales tampoco hay titulito huérfano.
+    monkeypatch.setattr(linear_leads, "senales_disponibles", lambda: set())
+    cuerpo = cliente.get("/control", params={"abrir": "LEAD-86",
+                                             "vista": "estado"}).text
+    assert ">Señales</div>" not in cuerpo
+    assert cuerpo.count('class="grupo-tit"') == 1
+
+
+def test_una_senal_prendida_no_va_fantasma(cliente, de_dueno):
+    lead = linear_leads.uno("LEAD-86")
+    linear_leads.poner_etiqueta_suelta(lead["id"], "Importante", True)
+    cuerpo = cliente.get("/control", params={"abrir": "LEAD-86",
+                                             "vista": "estado"}).text
+    assert "Importante ✓" in cuerpo
+    assert cuerpo.count("btn chico fantasma") == 1   # solo Seguimiento
+
+
+def test_el_umbral_del_hace_lo_decide_python():
+    # Las dos ramas del umbral (5 días), en Python y no en la plantilla.
+    assert control.DIAS_HACE_ALERTA == 5
+    assert control.hace_alerta(4) is False
+    assert control.hace_alerta(5) is True
+    assert control.hace_alerta(None) is False
+    columnas = control.tablero_por_estado()
+    por_ref = {l["ref"]: l for c in columnas for l in c["leads"]}
+    assert por_ref["LEAD-91"]["hace_alerta"] is False   # 1 día
+    assert por_ref["LEAD-88"]["hace_alerta"] is True    # 5 días
+
+
+def test_la_tarjeta_es_de_dos_lineas_sin_chip_de_interes(cliente, de_dueno):
+    cuerpo = cliente.get("/control", params={"vista": "estado"}).text
+    # El interés dejó de ser chip: va como texto al inicio de la meta.
+    assert '"chip-est">Plantas</span>' not in cuerpo
+    t91 = cuerpo[cuerpo.index('data-ref="LEAD-91"'):][:1400]
+    assert "Plantas · " in t91
+    # El ref salió de la tarjeta (vive en la ficha) y el chat es 💬 solo.
+    assert "LEAD-91 ·" not in t91
+    assert 'aria-label="Abrir chat"' in t91 and "💬" in t91
+    # El resaltado del «hace»: LEAD-88 (5 días) lo lleva; LEAD-91 (1), no.
+    t88 = cuerpo[cuerpo.index('data-ref="LEAD-88"'):][:1400]
+    assert 'class="hace-alerta"' in t88
+    assert 'class="hace-alerta"' not in t91

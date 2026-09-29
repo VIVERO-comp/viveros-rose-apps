@@ -369,6 +369,18 @@ def _orden_columna(leads):
 # Las dos vistas
 # ---------------------------------------------------------------------------
 
+# El «hace N días» de la tarjeta se resalta a partir de aquí (T2,
+# 29/09/2026, maqueta «Control más simple»): un lead que lleva 5 días o
+# más en el tablero merece que el ojo lo agarre. El umbral vive en
+# Python — la plantilla solo pinta la clase que esto decide.
+DIAS_HACE_ALERTA = 5
+
+
+def hace_alerta(dias):
+    """¿El «hace N días» de la tarjeta va resaltado?"""
+    return (dias or 0) >= DIAS_HACE_ALERTA
+
+
 def _tarjeta(lead):
     """El lead listo para la tarjeta: lo que se ve y nada más."""
     estado = lead.get("estado_ficha") or {}
@@ -378,6 +390,7 @@ def _tarjeta(lead):
         "motivo_chip": (linear_leads.chip_de_motivo(lead["motivo_clave"])
                         if lead.get("motivo_clave") else ""),
         "resp_titulo": lead.get("resp") or SIN_ASIGNAR,
+        "hace_alerta": hace_alerta(lead.get("dias")),
     })
 
 
