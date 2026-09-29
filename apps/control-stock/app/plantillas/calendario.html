@@ -50,6 +50,57 @@
 </a>
 {% endmacro %}
 
+{% macro pinta_leads_lado() %}
+{# Los dos bloques de leads del calendario, en UN solo macro porque se
+   pintan dos veces (29/09/2026, reporte del dueño: al achicar la ventana
+   desaparecían): en la columna derecha .cal-lado de la computadora ancha
+   y en .leads-abajo, debajo del calendario, para tablet y celular. Los
+   filtros NO viajan aquí: en pantalla chica ceden el espacio, los leads no. #}
+{# Log de leads de servicio por agendar: solo alquiler/mantenimiento/
+   eventos — nada de venta retail. Un toque abre "Nueva actividad"
+   con el tipo y el cliente ya puestos; el lead sale solo del log
+   cuando su issue se factura o se pierde. #}
+<div class="leads-lado">
+  <div class="leads-tit">Leads de servicio<span>por agendar</span></div>
+  {% for l in leads_servicio %}
+  <a class="lead-it" href="{{ l.liga }}" title="Agendar a {{ l.nombre }} ({{ l.etiqueta }})">
+    <span class="pt" style="background:{{ cal.color_de(l.tipo) }}"></span>
+    <span class="ln"><b>{{ l.nombre }}</b><small>{{ l.etiqueta }} · {{ l.hace }}</small></span>
+  </a>
+  {% else %}
+  <div class="lead-vacio">Ninguno por agendar.</div>
+  {% endfor %}
+</div>
+
+{# El bloque "Por agendar" (Fase 4, 24/09/2026): los leads que ya
+   pagaron, con su etiqueta de pago y el SALDO que trae Odoo. El
+   saldo no se inventa: si Odoo no contesta, aquí se dice — un $0
+   falso hace que alguien entregue sin cobrar. Un toque abre el
+   formulario de fecha · tipo · responsable. #}
+<div class="leads-lado">
+  <div class="leads-tit">Por agendar<span>ya pagaron{% if por_agendar %} · {{ por_agendar|length }}{% endif %}</span></div>
+  {% if saldo_error %}
+  <div class="saldo-roto">No se pudo leer el saldo en Odoo. Los montos no se muestran para no mentir.</div>
+  {% endif %}
+  {% for l in por_agendar %}
+  <a class="lead-it" href="{{ l.liga }}" title="Agendar a {{ l.nombre }}">
+    <span class="pt" style="background:{{ l.estado_ficha.color }}"></span>
+    <span class="ln"><b>{{ l.nombre }}</b>
+      <small>
+        {% if l.pago %}<span class="etq-pago">{{ l.pago }}</span>{% endif %}
+        {% if l.saldo_conocido %}
+          {% if l.saldo > 0 %}saldo {{ l.saldo_texto }}{% else %}sin saldo{% endif %}
+        {% else %}
+          <span class="sin-saldo">saldo: no se pudo leer</span>
+        {% endif %}
+      </small></span>
+  </a>
+  {% else %}
+  <div class="lead-vacio">Ninguno esperando fecha.</div>
+  {% endfor %}
+</div>
+{% endmacro %}
+
 <div class="app">
   <aside class="lado">
     <div class="marca">
@@ -314,50 +365,19 @@
           {% endfor %}
         </div>
 
-        {# Log de leads de servicio por agendar: solo alquiler/mantenimiento/
-           eventos — nada de venta retail. Un toque abre "Nueva actividad"
-           con el tipo y el cliente ya puestos; el lead sale solo del log
-           cuando su issue se factura o se pierde. #}
-        <div class="leads-lado">
-          <div class="leads-tit">Leads de servicio<span>por agendar</span></div>
-          {% for l in leads_servicio %}
-          <a class="lead-it" href="{{ l.liga }}" title="Agendar a {{ l.nombre }} ({{ l.etiqueta }})">
-            <span class="pt" style="background:{{ cal.color_de(l.tipo) }}"></span>
-            <span class="ln"><b>{{ l.nombre }}</b><small>{{ l.etiqueta }} · {{ l.hace }}</small></span>
-          </a>
-          {% else %}
-          <div class="lead-vacio">Ninguno por agendar.</div>
-          {% endfor %}
-        </div>
-
-        {# El bloque "Por agendar" (Fase 4, 24/09/2026): los leads que ya
-           pagaron, con su etiqueta de pago y el SALDO que trae Odoo. El
-           saldo no se inventa: si Odoo no contesta, aquí se dice — un $0
-           falso hace que alguien entregue sin cobrar. Un toque abre el
-           formulario de fecha · tipo · responsable. #}
-        <div class="leads-lado">
-          <div class="leads-tit">Por agendar<span>ya pagaron{% if por_agendar %} · {{ por_agendar|length }}{% endif %}</span></div>
-          {% if saldo_error %}
-          <div class="saldo-roto">No se pudo leer el saldo en Odoo. Los montos no se muestran para no mentir.</div>
-          {% endif %}
-          {% for l in por_agendar %}
-          <a class="lead-it" href="{{ l.liga }}" title="Agendar a {{ l.nombre }}">
-            <span class="pt" style="background:{{ l.estado_ficha.color }}"></span>
-            <span class="ln"><b>{{ l.nombre }}</b>
-              <small>
-                {% if l.pago %}<span class="etq-pago">{{ l.pago }}</span>{% endif %}
-                {% if l.saldo_conocido %}
-                  {% if l.saldo > 0 %}saldo {{ l.saldo_texto }}{% else %}sin saldo{% endif %}
-                {% else %}
-                  <span class="sin-saldo">saldo: no se pudo leer</span>
-                {% endif %}
-              </small></span>
-          </a>
-          {% else %}
-          <div class="lead-vacio">Ninguno esperando fecha.</div>
-          {% endfor %}
-        </div>
+        {{ pinta_leads_lado() }}
       </aside>
+    </div>
+
+    {# ----- Los mismos dos bloques, DEBAJO del calendario (29/09/2026) -----
+       En pantalla chica (tablet y celular) la columna .cal-lado se esconde
+       para cederle el espacio al calendario, pero los leads por agendar no
+       pueden desaparecer con ella: aquí se pintan otra vez con el MISMO
+       macro (mismo markup, cero duplicación) y el CSS decide cuál de las
+       dos copias se ve. Va fuera de .zona a propósito: en el celular .zona
+       entera se esconde y esta sección queda debajo de la agenda del día. #}
+    <div class="leads-abajo">
+      {{ pinta_leads_lado() }}
     </div>
   </div>
 </div>
