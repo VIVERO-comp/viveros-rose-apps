@@ -8,9 +8,11 @@ son POSTs de vuelta a este mismo servidor; la app nunca toca Odoo directo.
 """
 
 import json
+import logging
 import os
 import re
 import secrets
+import time
 from datetime import datetime, timedelta
 from urllib.parse import quote
 
@@ -100,6 +102,85 @@ plantillas.env.globals["colores"] = colores  # la paleta unica en las plantillas
 plantillas.env.globals["cal_tipo"] = calendario.nombre_de_tipo
 plantillas.env.filters["fecha_dmy"] = calendario.dmy
 
+# ---------------------------------------------------------------------------
+# Calentamiento de arranque (29/09/2026): la PRIMERA petición tras levantar
+# el proceso pagaba TODAS las consultas en línea con las cachés vacías —
+# hasta 21 segundos medidos en producción — y eso pasa en cada deploy y
+# cada mañana. Al arrancar, un hilo de fondo adelanta esas consultas: si
+# una petición llega antes de que el calentamiento termine, paga la suya
+# como siempre — esto solo ADELANTA trabajo, no cambia ningún camino.
+# ---------------------------------------------------------------------------
+
+def _calentar_publicados():
+    """`obtener_publicados` no lanza (devuelve el motivo): acá se convierte
+    en excepción para que el log del calentamiento diga la verdad."""
+    _skus, error = datos.obtener_publicados()
+    if error:
+        raise RuntimeError(error)
+
+
+def _piezas_de_arranque():
+    """[(nombre, tarea)] a calentar, SOLO de los servicios configurados.
+
+    Sin token no hay nada que calentar: en la suite y en desarrollo local
+    la lista queda vacía y no se dispara ni un hilo ni una consulta. El
+    calendario no está aquí porque ya se calienta solo desde el 22/09
+    (`calendario.calentar_en_fondo`, su propio hilo).
+    """
+    piezas = []
+    if linear_leads.configurado():
+        # El catálogo primero: es chico y las vistas de Control lo piden
+        # junto con la lista (columnas, responsables, etiquetas).
+        piezas.append(("catálogo del equipo LEAD",
+                       lambda: linear_leads.catalogo()))
+        piezas.append(("leads de Linear",
+                       lambda: linear_leads.listar(refrescar=True)))
+        if crm_twenty.twenty_configurado():
+            # La espera (el último mensaje del cliente, para el orden de
+            # las columnas) vive en SQLite y nunca bloquea una pintada;
+            # se pide su refresco con el mecanismo propio de Control, que
+            # corre en SU hilo — por eso el log no mide cuánto tardó.
+            piezas.append(("espera de Control (sigue por su cuenta)",
+                           lambda: control.refrescar_espera_en_fondo(
+                               linear_leads.listar())))
+    if datos.proxy_configurado():
+        piezas.append(("inventario del stock-proxy",
+                       lambda: datos.obtener_inventario()))
+        # El catálogo publicado del sitio (pestaña Stock online) va con la
+        # misma llave del proxy: donde hay stock real hay sitio real, y
+        # así la suite —que no configura el proxy— no sale nunca a la red.
+        piezas.append(("catálogo publicado del sitio", _calentar_publicados))
+    return piezas
+
+
+def _calentar_piezas(piezas):
+    """Corre las piezas UNA tras otra, con una línea de log por pieza
+    (cuánto tardó, sin secretos). Un fallo no frena a las siguientes ni
+    tumba el proceso: el calentamiento era un adelanto, y la petición que
+    llegue pagará su consulta como siempre."""
+    registro = logging.getLogger("control_stock")
+    for nombre, tarea in piezas:
+        arranco = time.time()
+        try:
+            tarea()
+            registro.info("Calentamiento de arranque: %s en %.1f s",
+                          nombre, time.time() - arranco)
+        except Exception as fallo:
+            registro.warning("Calentamiento de arranque: %s falló a los "
+                             "%.1f s (%s)", nombre, time.time() - arranco, fallo)
+
+
+def calentar_arranque_en_fondo():
+    """Dispara el calentamiento en un hilo aparte, sin bloquear nada.
+
+    UNA corrida por arranque: se llama una vez al importar el módulo, y la
+    clave de `calendario._en_fondo` no admite dos corridas a la vez."""
+    piezas = _piezas_de_arranque()
+    if not piezas:
+        return
+    calendario._en_fondo("arranque", lambda: _calentar_piezas(piezas))
+
+
 # Las tablas se crean al importar: es idempotente y así el proceso (o los
 # tests) nunca corren contra una base sin esquema.
 datos.iniciar_db()
@@ -114,6 +195,9 @@ calendario_google.arrancar_hilo()
 # El calendario arranca calentándose en fondo (catálogo + mes en curso):
 # ni la primera visita del día espera a Linear (velocidad, 22/09/2026).
 calendario.calentar_en_fondo()
+# Y el resto de las cachés (29/09/2026): los leads de Linear para Control,
+# la espera de Twenty y el inventario del stock-proxy para Stock y Vender.
+calentar_arranque_en_fondo()
 
 
 # ---------------------------------------------------------------------------
