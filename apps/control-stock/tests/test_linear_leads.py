@@ -23,10 +23,20 @@ def muestra_limpia(monkeypatch):
 # El vocabulario
 # ---------------------------------------------------------------------------
 
-def test_el_embudo_tiene_los_8_estados_en_orden():
+def test_el_embudo_tiene_los_9_estados_en_orden():
+    # "Recordatorio" (29/09/2026) va entre Ganado y Perdido, igual que en
+    # el /admin y en Linear: el cliente espera que llegue un producto.
     assert linear_leads.ORDEN == [
         "NUEVO", "HABLANDO", "COTIZADO", "POR_AGENDAR",
-        "AGENDADO", "ENTREGADO", "GANADO", "PERDIDO"]
+        "AGENDADO", "ENTREGADO", "GANADO", "RECORDATORIO", "PERDIDO"]
+
+
+def test_recordatorio_es_vivo_y_fuera_de_la_escalera():
+    # NO es cerrado (se le puede seguir trabajando) y NO está en la
+    # escalera: nada lo mueve solo hacia ahí — se llega a mano, con motivo.
+    assert "RECORDATORIO" not in linear_leads.CERRADOS
+    assert "RECORDATORIO" not in linear_leads.ESCALERA
+    assert linear_leads.POR_CLAVE["RECORDATORIO"]["nombre"] == "Recordatorio"
 
 
 def test_cada_estado_trae_su_color_de_la_paleta_unica():
@@ -40,7 +50,7 @@ def test_los_nombres_son_los_de_las_columnas_de_linear():
     # nombre: la prueba deja constancia de cuáles son.
     assert [e["nombre"] for e in linear_leads.ESTADOS] == [
         "Nuevo", "Hablando", "Cotizado", "Por agendar",
-        "Agendado", "Entregado", "Ganado", "Perdido"]
+        "Agendado", "Entregado", "Ganado", "Recordatorio", "Perdido"]
 
 
 def test_los_seis_motivos_de_perdida():

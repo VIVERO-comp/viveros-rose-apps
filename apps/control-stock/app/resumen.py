@@ -128,7 +128,11 @@ def _leads(dia):
 
     esperando = {}
     for lead in vivos:
-        if lead.get("te_toca"):
+        # Un Recordatorio NO es un cliente esperando respuesta (29/09/2026,
+        # misma decisión que el frontend): está parqueado esperando que
+        # LLEGUE un producto — meterlo aquí haría sonar el aviso de las 7
+        # por leads que no tienen nada que contestar.
+        if lead.get("te_toca") and lead["estado"] != "RECORDATORIO":
             esperando.setdefault(lead.get("resp") or "", []).append(lead)
 
     return {

@@ -85,6 +85,24 @@ def iniciar_tablas():
                 epoch INTEGER NOT NULL
             )
         """)
+        # El motivo del Recordatorio (29/09/2026): qué espera el cliente
+        # («espera Monstera grande, llega en octubre»). Texto de APOYO de
+        # pantalla, como `control_espera` — la historia durable es el
+        # comentario firmado en el issue, que el camino manual ya deja. Una
+        # fila por lead; `cerrado` (epoch) se llena cuando el producto
+        # llegó o el lead salió de Recordatorio: la fila queda de historia
+        # y la tarjeta deja de mostrarla. Un lead movido a Recordatorio
+        # directo en Linear no pasa por aquí: su tarjeta dice «sin motivo
+        # anotado», nunca un motivo viejo de otra vuelta.
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS recordatorio_motivo (
+                ref TEXT PRIMARY KEY,
+                motivo TEXT NOT NULL,
+                autor TEXT NOT NULL DEFAULT '',
+                epoch INTEGER NOT NULL,
+                cerrado INTEGER
+            )
+        """)
 
 
 def _ya_avisado(clave):
@@ -109,6 +127,59 @@ def _olvidar_acuse(prefijo):
     iniciar_tablas()
     with _db() as con:
         con.execute("DELETE FROM control_acuse WHERE clave LIKE ?", (prefijo + "%",))
+
+
+# ---------------------------------------------------------------------------
+# El motivo del Recordatorio (29/09/2026): qué espera el cliente. La tabla
+# es apoyo de pantalla; la historia durable vive en el comentario del issue.
+# ---------------------------------------------------------------------------
+
+def _guardar_motivo_recordatorio(ref, motivo, autor=""):
+    """El motivo vigente del lead: una fila por ref, la nueva pisa la
+    vieja (volver a Recordatorio es una vuelta nueva, no la de antes)."""
+    iniciar_tablas()
+    with _db() as con:
+        con.execute(
+            "INSERT INTO recordatorio_motivo (ref, motivo, autor, epoch, cerrado) "
+            "VALUES (?, ?, ?, ?, NULL) "
+            "ON CONFLICT(ref) DO UPDATE SET motivo = excluded.motivo, "
+            "autor = excluded.autor, epoch = excluded.epoch, cerrado = NULL",
+            (ref, (motivo or "").strip(), autor or "", int(time.time())))
+
+
+def _cerrar_motivo_recordatorio(ref):
+    """El lead salió de Recordatorio: la fila queda de historia (con su
+    epoch) y deja de mostrarse. Sin esto, una vuelta futura a Recordatorio
+    hecha directo en Linear mostraría el motivo viejo como si fuera de
+    ahora."""
+    iniciar_tablas()
+    with _db() as con:
+        con.execute(
+            "UPDATE recordatorio_motivo SET cerrado = ? "
+            "WHERE ref = ? AND cerrado IS NULL",
+            (int(time.time()), ref))
+
+
+def motivo_recordatorio(ref):
+    """El motivo VIGENTE del lead, o "" — la tarjeta pinta entonces
+    «sin motivo anotado» (el caso del lead movido directo en Linear)."""
+    iniciar_tablas()
+    with _db() as con:
+        fila = con.execute(
+            "SELECT motivo FROM recordatorio_motivo "
+            "WHERE ref = ? AND cerrado IS NULL", (ref,)).fetchone()
+    return fila["motivo"] if fila else ""
+
+
+def _motivos_recordatorio_vigentes():
+    """{ref: motivo} de todos los vigentes, en UNA consulta — para la
+    columna del tablero, que trae varios leads."""
+    iniciar_tablas()
+    with _db() as con:
+        filas = con.execute(
+            "SELECT ref, motivo FROM recordatorio_motivo "
+            "WHERE cerrado IS NULL").fetchall()
+    return {f["ref"]: f["motivo"] for f in filas}
 
 
 # ---------------------------------------------------------------------------
@@ -355,6 +426,14 @@ def tablero_por_estado(leads=None):
             "leads": _orden_columna(
                 [l for l in todos if l["estado"] == estado["clave"]]),
         })
+        # Solo la columna Recordatorio pinta el motivo (29/09/2026): las
+        # demás tarjetas no cambian. Una consulta para toda la columna, y
+        # "" cuando el lead llegó movido directo en Linear — la plantilla
+        # lo pinta como «sin motivo anotado».
+        if estado["clave"] == "RECORDATORIO" and columnas[-1]["leads"]:
+            vigentes = _motivos_recordatorio_vigentes()
+            for l in columnas[-1]["leads"]:
+                l["recordatorio_motivo"] = vigentes.get(l["ref"], "")
     return columnas
 
 
@@ -487,6 +566,15 @@ def mover_a_estado(ref, clave, nota="", motivo="", autor=""):
                                       nota=nota, autor=autor)
     except linear_leads.ErrorLeads as fallo:
         return "", str(fallo)
+    # El motivo del Recordatorio (29/09/2026): la nota del modal ES qué
+    # espera el cliente — se guarda para la tarjeta (el comentario del
+    # issue ya la lleva, esa es la historia durable). Y al salir de
+    # Recordatorio por CUALQUIER camino manual, el motivo deja de estar
+    # vigente: queda de historia con su epoch.
+    if clave == "RECORDATORIO":
+        _guardar_motivo_recordatorio(lead["ref"], nota, autor=autor)
+    elif lead["estado"] == "RECORDATORIO":
+        _cerrar_motivo_recordatorio(lead["ref"])
     linear_leads.refrescar()
     # El estado tambien es una etiqueta del chat: que no espere los 2
     # minutos del sincronizador.
@@ -495,6 +583,46 @@ def mover_a_estado(ref, clave, nota="", motivo="", autor=""):
     desde = (linear_leads.POR_CLAVE.get(lead["estado"]) or {}).get("nombre") or "—"
     hasta = linear_leads.POR_CLAVE[clave]["nombre"]
     return f"{lead['nombre']}: {desde} → {hasta}. Quedó anotado en el issue.", ""
+
+
+def ya_llego(ref, autor=""):
+    """El producto que el cliente esperaba LLEGÓ: el botón «Ya llegó» de
+    la columna Recordatorio (29/09/2026).
+
+    Va por el camino manual de siempre (`mover_a_estado`, comentario
+    firmado con el motivo adentro: «Ya llegó el producto: …») a
+    **Hablando**, y le pone «Te toca» para que alguien le escriba al
+    cliente HOY — es el único sentido de haberlo parqueado. El motivo
+    guardado se cierra (queda de historia con su epoch) y la tarjeta deja
+    de mostrarlo. Nada se le manda al cliente: esto solo mueve el tablero.
+    """
+    lead = linear_leads.uno(ref)
+    if lead is None:
+        return "", linear_leads.mensaje_lead_ausente(ref)
+    if lead["estado"] != "RECORDATORIO":
+        return "", "Ese lead no está en Recordatorio."
+    motivo = motivo_recordatorio(lead["ref"])
+    nota = (f"Ya llegó el producto: {motivo}" if motivo
+            else "Ya llegó el producto.")
+    # mover_a_estado cierra el motivo (sale de Recordatorio) y sincroniza
+    # el chat; por eso el motivo se leyó ANTES.
+    aviso, error = mover_a_estado(ref, "HABLANDO", nota=nota, autor=autor)
+    if error:
+        return "", error
+    try:
+        # Idempotente: si «Te toca» ya estaba (el cliente escribió justo
+        # antes), no pasa nada — el arreglo del 29/09 en poner_label.
+        linear_leads.poner_te_toca(lead["id"], True)
+    except linear_leads.ErrorLeads as fallo:
+        return aviso, (f"El lead volvió a Hablando, pero «Te toca» no se "
+                       f"pudo poner: {fallo}")
+    linear_leads.refrescar()
+    if waha_activo():
+        # Segunda pasada a WhatsApp: la de mover_a_estado salió ANTES de
+        # poner «Te toca», así que el 🔴 del chat sale de esta.
+        etiquetar_en_whatsapp(lead["ref"])
+    return (f"{lead['nombre']}: ya llegó — de vuelta en Hablando, con "
+            "🔴 Responder para escribirle hoy."), ""
 
 
 def escribir_nota(ref, texto, autor=""):
@@ -790,6 +918,11 @@ def ficha(ref, buscar_cotizacion=""):
     # El botón «Parar mantenimiento» (28/09/2026) solo aparece si el lead
     # tiene una serie activa — mantenimiento.py es quien lo sabe.
     abierta["mantenimiento_activo"] = mantenimiento.activo(lead["ref"])
+    # Qué espera el cliente (29/09/2026): solo tiene sentido mientras el
+    # lead está parqueado en Recordatorio.
+    abierta["recordatorio_motivo"] = (
+        motivo_recordatorio(lead["ref"])
+        if lead["estado"] == "RECORDATORIO" else "")
 
     ficha_twenty = crm_twenty.ficha_de_lead(lead) or {}
     mensajes = ficha_twenty.get("mensajes") or []

@@ -820,6 +820,11 @@ a{color:inherit}
    unica, y el chip del responsable en la vista por estado. */
 
 .ctl-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+/* La columna Recordatorio (29/09/2026): el teléfono y qué espera, como
+   texto de la tarjeta; y el botón «Ya llegó» a lo ancho, abajo. */
+.ret-tarjeta .ctl-recordatorio{display:block;margin-top:4px}
+.ctl-ya-llego{margin-top:6px}
+.ctl-ya-llego .btn{width:100%}
 .chip-est{
   display:inline-block;font-size:9.5px;font-weight:700;line-height:1.5;
   padding:1px 6px;border-radius:999px;border:1px solid var(--borde);

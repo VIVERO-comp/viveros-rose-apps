@@ -104,11 +104,12 @@ def test_los_cerrados_no_se_reparten():
 # Vista por estado
 # ---------------------------------------------------------------------------
 
-def test_la_vista_por_estado_trae_las_8_columnas_del_embudo():
+def test_la_vista_por_estado_trae_las_9_columnas_del_embudo():
+    # Recordatorio (29/09/2026) entre Ganado y Perdido, igual que el /admin.
     columnas = control.tablero_por_estado()
     assert [c["titulo"] for c in columnas] == [
         "Nuevo", "Hablando", "Cotizado", "Por agendar",
-        "Agendado", "Entregado", "Ganado", "Perdido"]
+        "Agendado", "Entregado", "Ganado", "Recordatorio", "Perdido"]
 
 
 def test_el_tablero_por_estado_es_el_mismo_para_todos():
@@ -988,3 +989,117 @@ def test_el_banner_de_aviso_tambien_se_cierra(cliente, de_dueno):
         "vista": "estado", "aviso": "todo quedó guardado"}).text
     assert "todo quedó guardado" in cuerpo
     assert cuerpo.count('class="cierra-banner"') == 1
+
+
+# ---------------------------------------------------------------------------
+# El estado «Recordatorio» (29/09/2026): el cliente espera que LLEGUE un
+# producto. El lead se parquea a mano CON MOTIVO (el mismo modal del
+# arrastre), la tarjeta de esa columna muestra el teléfono y qué espera, y
+# «Ya llegó» lo devuelve a Hablando con «Te toca» puesto para escribirle
+# ese día. El estado y la opción de Twenty los creó Abraham; el código
+# solo los usa.
+# ---------------------------------------------------------------------------
+
+def test_recordar_guarda_el_motivo_mueve_y_comenta(cliente, de_dueno):
+    respuesta = cliente.post(
+        "/control/estado", params={"vista": "estado"},
+        data={"ref": "LEAD-86", "estado": "RECORDATORIO",
+              "nota": "espera Monstera grande, llega en octubre"},
+        follow_redirects=False)
+    assert respuesta.status_code == 303
+    assert "aviso=" in respuesta.headers["location"]
+    lead = linear_leads.uno("LEAD-86")
+    assert lead["estado"] == "RECORDATORIO"
+    assert lead["cerrado"] is False          # parqueado, no cerrado
+    # El motivo quedó para la tarjeta…
+    assert control.motivo_recordatorio("LEAD-86") == (
+        "espera Monstera grande, llega en octubre")
+    # …y como comentario firmado en el issue (la historia durable).
+    nota = linear_leads.comentarios(lead["id"])[-1]["texto"]
+    assert "espera Monstera grande" in nota and "Recordatorio" in nota
+
+
+def test_la_tarjeta_de_recordatorio_dice_telefono_y_motivo(cliente, de_dueno):
+    control.mover_a_estado("LEAD-86", "RECORDATORIO",
+                           nota="espera Monstera grande", autor="Génesis")
+    cuerpo = cliente.get("/control", params={"vista": "estado"}).text
+    tarjeta = cuerpo[cuerpo.index('data-ref="LEAD-86"'):][:1600]
+    assert "6114-9077" in tarjeta            # el teléfono, como texto
+    assert "espera Monstera grande" in tarjeta
+    # Y las demás tarjetas no cambian: ninguna otra lleva ese renglón.
+    assert cuerpo.count("ctl-recordatorio") == 1
+
+
+def test_llegado_directo_de_linear_dice_sin_motivo_anotado(cliente, de_dueno):
+    # Movido en Linear sin pasar por el botón: no hay motivo guardado.
+    linear_leads.mover_estado(linear_leads.uno("LEAD-85")["id"],
+                              "RECORDATORIO", manual=True, nota="desde Linear")
+    cuerpo = cliente.get("/control", params={"vista": "estado"}).text
+    tarjeta = cuerpo[cuerpo.index('data-ref="LEAD-85"'):][:1600]
+    assert "sin motivo anotado" in tarjeta
+
+
+def test_el_modal_de_recordar_pregunta_que_espera(cliente, de_dueno):
+    cuerpo = cliente.get("/control", params={
+        "vista": "estado", "mover": "LEAD-86", "a": "RECORDATORIO"}).text
+    assert "¿Qué espera el cliente?" in cuerpo
+    assert "¿Por qué la movés?" not in cuerpo
+
+
+def test_ya_llego_vuelve_a_hablando_con_te_toca(cliente, de_dueno):
+    control.mover_a_estado("LEAD-90", "RECORDATORIO",
+                           nota="espera Palma Areca XL", autor="Génesis")
+    linear_leads.poner_te_toca(linear_leads.uno("LEAD-90")["id"], False)
+    respuesta = cliente.post("/control/ya-llego", params={"vista": "estado"},
+                             data={"ref": "LEAD-90"}, follow_redirects=False)
+    assert respuesta.status_code == 303
+    assert "aviso=" in respuesta.headers["location"]
+    lead = linear_leads.uno("LEAD-90")
+    assert lead["estado"] == "HABLANDO"
+    assert lead["te_toca"] is True           # para escribirle hoy
+    # El comentario firmado lleva el motivo adentro.
+    nota = linear_leads.comentarios(lead["id"])[-1]["texto"]
+    assert "Ya llegó el producto: espera Palma Areca XL" in nota
+    # El motivo dejó de estar vigente: la fila queda de historia.
+    assert control.motivo_recordatorio("LEAD-90") == ""
+
+
+def test_ya_llego_solo_aplica_a_recordatorio():
+    aviso, error = control.ya_llego("LEAD-91")   # está en Por agendar
+    assert aviso == ""
+    assert "no está en Recordatorio" in error
+    assert linear_leads.uno("LEAD-91")["estado"] == "POR_AGENDAR"
+
+
+def test_salir_de_recordatorio_por_otro_camino_cierra_el_motivo():
+    control.mover_a_estado("LEAD-86", "RECORDATORIO",
+                           nota="espera Monstera", autor="Génesis")
+    assert control.motivo_recordatorio("LEAD-86") == "espera Monstera"
+    # Una corrección manual cualquiera (no «Ya llegó») también lo cierra:
+    # si mañana vuelve a Recordatorio directo en Linear, la tarjeta dice
+    # «sin motivo anotado», nunca el motivo viejo de otra vuelta.
+    control.mover_a_estado("LEAD-86", "COTIZADO",
+                           nota="se cotizó otra cosa", autor="Génesis")
+    assert control.motivo_recordatorio("LEAD-86") == ""
+
+
+def test_recordar_aparece_solo_en_leads_vivos(cliente, de_dueno):
+    # En un lead vivo, el botón está (es un enlace al modal del arrastre).
+    cuerpo = cliente.get("/control", params={"abrir": "LEAD-86",
+                                             "vista": "estado"}).text
+    assert "&a=RECORDATORIO\">Recordar</a>" in cuerpo
+    # En Ganado y Perdido, no: un lead cerrado no se parquea.
+    for cerrado in ("LEAD-84", "LEAD-83"):
+        cuerpo = cliente.get("/control", params={"abrir": cerrado,
+                                                 "vista": "estado"}).text
+        assert ">Recordar</a>" not in cuerpo
+
+
+def test_en_recordatorio_la_ficha_ofrece_ya_llego_y_no_recordar(cliente, de_dueno):
+    control.mover_a_estado("LEAD-86", "RECORDATORIO",
+                           nota="espera Monstera", autor="Génesis")
+    cuerpo = cliente.get("/control", params={"abrir": "LEAD-86",
+                                             "vista": "estado"}).text
+    assert ">Recordar</a>" not in cuerpo     # ya está parqueado
+    assert "Ya llegó" in cuerpo
+    assert "espera Monstera" in cuerpo       # el dato «Espera» de la ficha

@@ -121,6 +121,7 @@
       "AGENDADO": "yellow",
       "ENTREGADO": "turquoise",
       "GANADO": "green",
+      "RECORDATORIO": "yellow",
       "PERDIDO": "red"
     },
     "etapa_opportunity": {

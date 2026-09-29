@@ -142,6 +142,21 @@ def test_quien_tiene_clientes_esperando_va_agrupado():
     assert datos["esperando"]["por_resp"][0]["resp"] == ""
 
 
+def test_un_recordatorio_no_cuenta_como_cliente_esperando():
+    # LEAD-86 (Te toca) se parquea en Recordatorio (29/09/2026): espera que
+    # LLEGUE un producto, no una respuesta — el aviso de las 7 no lo cuenta,
+    # misma decisión que tomó el frontend. LEAD-87 sigue contando.
+    linear_leads.mover_estado(linear_leads.uno("LEAD-86")["id"],
+                              "RECORDATORIO", manual=True,
+                              nota="espera Monstera grande")
+    datos = resumen.del_dia()
+    assert datos["esperando"]["total"] == 1
+    refs = {l["ref"] for g in datos["esperando"]["por_resp"] for l in g["leads"]}
+    assert refs == {"LEAD-87"}
+    # Pero sigue VIVO: los conteos de sin-responsable no lo pierden.
+    assert datos["sin_resp"]["de"] == 7
+
+
 def test_sin_twenty_el_hace_cuanto_queda_vacio_y_no_inventa():
     datos = resumen.del_dia()
     for grupo in datos["esperando"]["por_resp"]:

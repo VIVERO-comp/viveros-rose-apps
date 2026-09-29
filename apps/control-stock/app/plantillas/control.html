@@ -144,6 +144,16 @@
                 {% if l.pago %}<span class="etq-pago">{{ l.pago }}</span>{% endif %}
                 {% if l.motivo %}<span class="chip-est" style="{{ l.motivo_chip }}">{{ l.motivo }}</span>{% endif %}
               </span>
+              {# Solo en la columna Recordatorio (29/09/2026): el teléfono
+                 como TEXTO (para llamarlo o buscarlo, no solo el enlace
+                 del chat) y qué espera. Las demás tarjetas no cambian.
+                 «sin motivo anotado» = llegó movido directo en Linear. #}
+              {% if col.clave == 'RECORDATORIO' %}
+              <span class="t-sub ctl-recordatorio">
+                {% if l.celular %}<span class="mono">{{ l.celular }}</span> · {% endif %}
+                <span>{{ l.recordatorio_motivo or 'sin motivo anotado' }}</span>
+              </span>
+              {% endif %}
             </a>
             <span class="t-sub ctl-pie-tarjeta">
               <span class="mono">{{ l.ref }} · {{ l.hace }}</span>
@@ -157,6 +167,15 @@
               {% endif %}
               {% if l.wa %}<a class="ctl-wa" draggable="false" href="{{ l.wa }}" target="_blank" rel="noopener">chat ↗</a>{% endif %}
             </span>
+            {# «Ya llegó» (29/09/2026): el producto llegó — a Hablando con
+               «Te toca» puesto, sin abrir la ficha. Solo quien puede
+               mover ESTE lead lo ve (mismo criterio que el arrastre). #}
+            {% if col.clave == 'RECORDATORIO' and puede_mover and (alc.admin or (alc.resp_propio and l.resp == alc.resp_propio)) %}
+            <form method="post" action="/control/ya-llego?vista={{ vista }}" class="ctl-ya-llego">
+              <input type="hidden" name="ref" value="{{ l.ref }}">
+              <button class="btn chico" type="submit" data-guardando="…">Ya llegó</button>
+            </form>
+            {% endif %}
           </div>
           {% endfor %}
         </div>
@@ -239,6 +258,21 @@
        puesto. El camino ya existía para Retail (GET /venta?lead=...):
        deja el lead pendiente y redirige a /venta/nueva. #}
     <a class="btn" href="/venta?lead={{ abierta.ref | urlencode }}&cliente={{ abierta.nombre | urlencode }}&cel={{ abierta.celular | urlencode }}">Cotizar</a>
+    {# Recordar (29/09/2026): parquear el lead porque el cliente espera
+       que LLEGUE un producto. Es un enlace al MISMO modal del arrastre a
+       mano (mover=…&a=RECORDATORIO), que pide qué espera. Solo en un lead
+       vivo NO cerrado — un Ganado/Perdido no se parquea, y en Recordatorio
+       ya está. #}
+    {% if puede_tocar_abierta and not abierta.cerrado and abierta.estado != 'RECORDATORIO' %}
+    <a class="btn" href="/control?vista={{ vista }}&mover={{ abierta.ref | urlencode }}&a=RECORDATORIO">Recordar</a>
+    {% endif %}
+    {# Ya llegó (29/09/2026): a Hablando con «Te toca», para escribirle hoy. #}
+    {% if puede_tocar_abierta and abierta.estado == 'RECORDATORIO' %}
+    <form method="post" action="/control/ya-llego?vista={{ vista }}">
+      <input type="hidden" name="ref" value="{{ abierta.ref }}">
+      <button class="btn" type="submit" data-guardando="…">Ya llegó</button>
+    </form>
+    {% endif %}
     {# El mantenimiento mensual (28/09/2026): el botón solo aparece si el
        lead tiene una serie activa — arrancarla no es cosa de un botón,
        nace sola al ganar un lead con interés Mantenimiento. #}
@@ -419,6 +453,9 @@
 
   {# --- Los datos, al final: se consultan, no se leen cada vez. --- #}
   <div>
+    {% if abierta.estado == 'RECORDATORIO' %}
+    <div class="dato"><b>Espera</b><span>{{ abierta.recordatorio_motivo or 'sin motivo anotado' }}</span></div>
+    {% endif %}
     <div class="dato"><b>Responsable</b><span>{{ abierta.resp_titulo }}</span></div>
     <div class="dato"><b>Origen</b><span>{{ abierta.origen or '—' }}</span></div>
     <div class="dato"><b>Llegó</b><span>{{ abierta.hace }}</span></div>
@@ -505,9 +542,18 @@
   {% endif %}
 
   <div class="campo-caja">
+    {# A Recordatorio la nota ES el motivo del parqueo (29/09/2026): qué
+       espera el cliente. Mismo campo, misma ruta — solo la pregunta
+       cambia; el motivo queda en el comentario del issue Y en la tarjeta. #}
+    {% if moviendo.destino.clave == 'RECORDATORIO' %}
+    <label for="mv-nota">¿Qué espera el cliente?</label>
+    <input class="campo" id="mv-nota" name="nota" required maxlength="300"
+           autocomplete="off" placeholder="Ej: espera Monstera grande, llega en octubre">
+    {% else %}
     <label for="mv-nota">¿Por qué la movés?</label>
     <input class="campo" id="mv-nota" name="nota" required maxlength="300"
            autocomplete="off" placeholder="Ej: le pasé el precio por teléfono">
+    {% endif %}
   </div>
   <div class="acciones">
     <button class="btn oro" type="submit" data-guardando="Moviendo…">Mover y anotar</button>

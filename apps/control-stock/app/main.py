@@ -2500,6 +2500,22 @@ async def control_estado(request: Request):
     return _control_vuelve(vista, aviso=aviso, error=error)
 
 
+@app.post("/control/ya-llego")
+async def control_ya_llego(request: Request):
+    """El botón «Ya llegó» de Recordatorio (29/09/2026): el producto que
+    el cliente esperaba llegó — a Hablando por el camino manual, con
+    «Te toca» puesto para escribirle hoy. La regla vive en
+    `control.ya_llego`; aquí solo el candado de siempre."""
+    form = await request.form()
+    ref = form.get("ref", "")
+    _alc, vista, error = _control_permiso(request, ref)
+    if error:
+        return _control_vuelve(vista, error=error)
+    autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
+    aviso, error = control.ya_llego(ref, autor=autor)
+    return _control_vuelve(vista, aviso=aviso, error=error)
+
+
 @app.post("/control/nota")
 async def control_nota(request: Request):
     """Una nota sobre el lead: un comentario en su issue de Linear."""

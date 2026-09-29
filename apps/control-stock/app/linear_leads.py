@@ -87,6 +87,15 @@ ESTADOS = [
      "auto": "un toque: «Hecha» en el calendario"},
     {"clave": "GANADO", "nombre": "Ganado",
      "auto": "solo, entregado + saldo 0"},
+    # «Recordatorio» (29/09/2026): el cliente espera que LLEGUE un producto
+    # y el lead se parquea aquí, a mano y con motivo, hasta que llegue. NO
+    # es cerrado (no va en CERRADOS) y no está en la escalera: nada lo
+    # mueve solo hacia acá. Va entre Ganado y Perdido, igual que en el
+    # /admin y en Linear. El estado en Linear y la opción RECORDATORIO de
+    # Twenty ya existen (los creó Abraham): este código los USA, nunca los
+    # crea.
+    {"clave": "RECORDATORIO", "nombre": "Recordatorio",
+     "auto": "esperan que llegue un producto"},
     {"clave": "PERDIDO", "nombre": "Perdido",
      "auto": "barrido de 14 días, o a mano con motivo"},
 ]

@@ -79,8 +79,16 @@ DE_WHATSAPP = {"No leídos", "No leidos", "Favoritos", "Grupos"}
 # Los estados del embudo que merecen etiqueta. Ganado y Perdido NO: un lead
 # cerrado no necesita que el telefono lo anuncie, y las etiquetas de
 # WhatsApp tienen tope (ver SINCRONIZADOR.md).
+#
+# "Recordatorio" (29/09/2026): el cliente espera que LLEGUE un producto; el
+# lead se parquea en ese estado (vivo, no cerrado) y su chat lleva la
+# etiqueta como cualquier otro estado. La etiqueta del telefono la crea
+# Abraham (regla 3: aqui nunca se crea nada); mientras no exista, sale en
+# los "faltan" del reporte y la pasada sigue. Y si al crearla trajera el
+# U+200E invisible al inicio (la trampa de las sugeridas de WhatsApp),
+# `_nombre_en_catalogo` ya tolera la marca a los dos lados: calza igual.
 ESTADOS_CON_ETIQUETA = ("Nuevo", "Hablando", "Cotizado", "Por agendar",
-                        "Agendado", "Entregado")
+                        "Agendado", "Entregado", "Recordatorio")
 INTERESES = ("Plantas", "Eventos", "Paisajismo", "Mantenimiento", "Mayorista")
 RESPONDER = "🔴 Responder"
 
