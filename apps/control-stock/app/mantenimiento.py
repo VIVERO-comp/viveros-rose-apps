@@ -257,7 +257,7 @@ def parar(ref, autor=""):
         return "", "Este lead no tiene mantenimiento activo."
     lead = linear_leads.uno(ref)
     if lead is None:
-        return "", "Ese lead ya no está en Linear."
+        return "", linear_leads.mensaje_lead_ausente(ref)
 
     aviso_extra = ""
     if fila["actividad_pendiente_id"]:

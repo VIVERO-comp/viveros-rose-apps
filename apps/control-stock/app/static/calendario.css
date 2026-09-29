@@ -150,6 +150,15 @@ input.campo:focus,textarea.campo:focus,select.sel:focus{border-color:var(--dorad
 .franja:hover{background:#fbebe7}
 .franja b{color:var(--critico)}
 .franja .ver{color:var(--critico);font-weight:700;font-size:11.5px}
+/* La X que cierra el banner de error/aviso de Control (29/09/2026): un
+   enlace a la vista sin el query, sin JS. margin-left:auto la empuja al
+   borde en la .franja (flex); float:right hace lo mismo en .aviso-ok,
+   que es un bloque normal. */
+.cierra-banner{
+  margin-left:auto;float:right;color:inherit;text-decoration:none;
+  font-weight:700;font-size:15px;line-height:1;padding:0 3px;opacity:.55;
+}
+.cierra-banner:hover{opacity:1}
 
 /* ---------- el lienzo del calendario + su columna derecha ----------
    La columna derecha (dueño, 22/09/2026) lleva los 4 filtros, los Leads

@@ -421,7 +421,7 @@ def mover_a_empleado(ref, nombre, autor=""):
     """
     lead = linear_leads.uno(ref)
     if lead is None:
-        return "", "Ese lead ya no está en Linear."
+        return "", linear_leads.mensaje_lead_ausente(ref)
     nombre = (nombre or "").strip()
     if nombre and nombre not in linear_leads.responsables():
         # Las etiquetas no se crean solas: si el nombre no existe en
@@ -468,7 +468,7 @@ def mover_a_estado(ref, clave, nota="", motivo="", autor=""):
     """
     lead = linear_leads.uno(ref)
     if lead is None:
-        return "", "Ese lead ya no está en Linear."
+        return "", linear_leads.mensaje_lead_ausente(ref)
     if clave not in linear_leads.POR_CLAVE:
         return "", "Ese estado no existe en el embudo."
     if lead["estado"] == clave:
@@ -501,7 +501,7 @@ def escribir_nota(ref, texto, autor=""):
     """Una nota sobre el lead: un comentario en su issue de Linear."""
     lead = linear_leads.uno(ref)
     if lead is None:
-        return "", "Ese lead ya no está en Linear."
+        return "", linear_leads.mensaje_lead_ausente(ref)
     try:
         linear_leads.comentar(lead["id"], texto, autor=autor)
     except linear_leads.ErrorLeads as fallo:
@@ -551,7 +551,7 @@ def alternar_responder(ref, prender, autor=""):
     """
     lead = linear_leads.uno(ref)
     if lead is None:
-        return "", "Ese lead ya no está en Linear."
+        return "", linear_leads.mensaje_lead_ausente(ref)
     hay_responder_a_mano = linear_leads.responder_a_mano_disponible()
     try:
         if prender:
@@ -594,7 +594,7 @@ def alternar_senal(ref, nombre, prender, autor=""):
     """
     lead = linear_leads.uno(ref)
     if lead is None:
-        return "", "Ese lead ya no está en Linear."
+        return "", linear_leads.mensaje_lead_ausente(ref)
     if nombre not in linear_leads.senales_disponibles():
         registro_aviso(
             f"Se pidió la señal «{nombre}» para {ref}, pero esa etiqueta no "
@@ -947,7 +947,7 @@ def conectar_cotizacion(ref, orden_id, autor=""):
     """
     lead = linear_leads.uno(ref)
     if lead is None:
-        return "", "Ese lead ya no está en Linear."
+        return "", linear_leads.mensaje_lead_ausente(ref)
     orden_id = _orden_id(orden_id)
     if orden_id is None:
         return "", "Esa orden no es válida."
@@ -988,7 +988,7 @@ def desconectar_cotizacion(ref, orden_id, autor=""):
     negocio que avance o retroceda nada."""
     lead = linear_leads.uno(ref)
     if lead is None:
-        return "", "Ese lead ya no está en Linear."
+        return "", linear_leads.mensaje_lead_ausente(ref)
     orden_id = _orden_id(orden_id)
     if orden_id is None:
         return "", "Esa orden no es válida."
@@ -1006,7 +1006,7 @@ def marcar_real_cotizacion(ref, orden_id, autor=""):
     conectar."""
     lead = linear_leads.uno(ref)
     if lead is None:
-        return "", "Ese lead ya no está en Linear."
+        return "", linear_leads.mensaje_lead_ausente(ref)
     orden_id = _orden_id(orden_id)
     if orden_id is None:
         return "", "Esa orden no es válida."
@@ -1028,7 +1028,7 @@ def quitar_real_cotizacion(ref, orden_id, autor=""):
     desconectar. Deja un comentario firmado en el issue."""
     lead = linear_leads.uno(ref)
     if lead is None:
-        return "", "Ese lead ya no está en Linear."
+        return "", linear_leads.mensaje_lead_ausente(ref)
     orden_id = _orden_id(orden_id)
     if orden_id is None:
         return "", "Esa orden no es válida."

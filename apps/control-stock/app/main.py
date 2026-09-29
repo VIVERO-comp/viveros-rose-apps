@@ -2442,9 +2442,15 @@ def _control_permiso(request, ref):
     if not (linear_leads.escritura_activa() or not linear_leads.configurado()):
         return alc, vista, ("Esta instancia mira el tablero real pero no "
                             "escribe en Linear.")
+    ref = (ref or "").strip()
+    if not ref:
+        # Un POST sin ref no es un lead borrado (29/09/2026: el navegador
+        # arrastró el enlace de adentro de la tarjeta): se corta acá, sin
+        # preguntarle nada a Linear.
+        return alc, vista, linear_leads.mensaje_lead_ausente("")
     lead = linear_leads.uno(ref)
     if lead is None:
-        return alc, vista, "Ese lead ya no está en Linear."
+        return alc, vista, linear_leads.mensaje_lead_ausente(ref)
     if not control.puede_tocar(lead, alc):
         return alc, vista, f"Ese lead es de {lead.get('resp') or 'nadie'}: no lo movés vos."
     return alc, vista, ""

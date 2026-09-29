@@ -480,3 +480,91 @@ def test_la_primera_pintada_ya_muestra_prendido_sin_esperar_el_ttl(
     # `listar()`/`uno()` no esperan ningún refresco: lo que devuelven YA
     # trae el cambio, porque `poner_te_toca` lo parcheó en el momento.
     assert linear_leads.uno("LEAD-1")["te_toca"] is True
+
+
+# ---------------------------------------------------------------------------
+# El 400 que no es una falla (29/09/2026, LEAD-62): la caché local decía
+# que «Te toca» estaba puesta, Linear ya no la tenía, y el quitar
+# reventaba con «Label not on issue» — dos veces en el log de producción.
+# El estado deseado YA está: eso es un éxito, no un error para el
+# empleado. Solo ESE mensaje puntual (y su gemelo «already» al poner) se
+# trata como éxito; cualquier otro error de Linear sigue reventando.
+# ---------------------------------------------------------------------------
+
+def test_quitar_lo_que_linear_ya_no_tiene_no_es_error(
+        con_linear_real, monkeypatch):
+    lead = con_linear_real
+    lead["etiquetas"].append("Te toca")   # la caché vieja: cree que está
+    lead["te_toca"] = True
+
+    def falso_pedir(consulta, variables=None):
+        # La forma real del error, como la arma calendario._pedir con la
+        # lista `errors` del GraphQL (vista en el log de producción).
+        raise linear_leads.ErrorLeads(
+            "Linear rechazó la consulta: [{'message': 'Label not on issue', "
+            "'path': ['issueRemoveLabel']}]")
+
+    monkeypatch.setattr(linear_leads, "_pedir", falso_pedir)
+    assert linear_leads.poner_te_toca("i1", False) is True
+    # Y la caché quedó parcheada igual que en el camino normal.
+    parcheado = linear_leads.uno("LEAD-1")
+    assert parcheado["te_toca"] is False
+    assert "Te toca" not in parcheado["etiquetas"]
+
+
+def test_poner_lo_que_linear_ya_tenia_no_es_error(con_linear_real, monkeypatch):
+    def falso_pedir(consulta, variables=None):
+        raise linear_leads.ErrorLeads(
+            "Linear rechazó la consulta: [{'message': "
+            "'Label already on issue', 'path': ['issueAddLabel']}]")
+
+    monkeypatch.setattr(linear_leads, "_pedir", falso_pedir)
+    assert linear_leads.poner_te_toca("i1", True) is True
+    assert linear_leads.uno("LEAD-1")["te_toca"] is True
+
+
+def test_cualquier_otro_error_de_linear_sigue_reventando(
+        con_linear_real, monkeypatch):
+    lead = con_linear_real
+    lead["etiquetas"].append("Te toca")
+    lead["te_toca"] = True
+
+    def falso_pedir(consulta, variables=None):
+        raise linear_leads.ErrorLeads(
+            "Linear rechazó la consulta: [{'message': 'Rate limit exceeded'}]")
+
+    monkeypatch.setattr(linear_leads, "_pedir", falso_pedir)
+    with pytest.raises(linear_leads.ErrorLeads):
+        linear_leads.poner_te_toca("i1", False)
+    # La caché no se toca: nada confirmó ningún cambio.
+    assert linear_leads.uno("LEAD-1")["te_toca"] is True
+
+
+def test_apagar_responder_cuando_linear_ya_lo_apago_no_asusta(
+        con_linear_real, monkeypatch):
+    """El caso completo de LEAD-62: el botón 🔴 Responder apaga una
+    etiqueta que Linear ya no tiene. Antes el empleado veía «Linear
+    rechazó la consulta: [{'message': 'Label not on issue'…» — ilegible
+    y falso, porque el estado que pidió ya estaba."""
+    from app import control
+
+    lead = con_linear_real
+    lead["nombre"] = "Ilayda"
+    lead["etiquetas"].append("Te toca")
+    lead["te_toca"] = True
+
+    def falso_pedir(consulta, variables=None):
+        if "issueRemoveLabel" in consulta:
+            raise linear_leads.ErrorLeads(
+                "Linear rechazó la consulta: [{'message': "
+                "'Label not on issue', 'path': ['issueRemoveLabel']}]")
+        if "commentCreate" in consulta:
+            return {"commentCreate": {"success": True}}
+        return {}
+
+    monkeypatch.setattr(linear_leads, "_pedir", falso_pedir)
+    monkeypatch.setattr(control, "waha_activo", lambda: False)
+    aviso, error = control.alternar_responder("LEAD-1", False, autor="Mary")
+    assert error == ""
+    assert "apagado" in aviso
+    assert linear_leads.uno("LEAD-1")["te_toca"] is False

@@ -608,6 +608,24 @@ def uno(id_o_ref, leads=None):
     return None
 
 
+def mensaje_lead_ausente(ref):
+    """El error de «no encontré ese lead», con el ref adentro.
+
+    Son DOS casos, no uno (29/09/2026, visto en producción): un ref VACÍO
+    no es un lead borrado — es un POST que llegó sin decir cuál (el
+    navegador arrastró el enlace de adentro de la tarjeta, no la tarjeta,
+    porque todo <a> es arrastrable por naturaleza). Decirle al empleado
+    «ya no está en Linear» lo mandaba a buscar un lead borrado que no
+    existe. Y cuando el ref sí llegó y no está, el mensaje lo NOMBRA:
+    sin el ref no hay forma de averiguar qué pasó.
+    """
+    ref = (ref or "").strip()
+    if not ref:
+        return ("No llegó qué lead tocar. Probá arrastrando la tarjeta "
+                "entera, no el enlace de adentro.")
+    return f"El lead {ref} ya no está en Linear."
+
+
 # ---------------------------------------------------------------------------
 # Escritura: estado, etiquetas, comentarios
 # ---------------------------------------------------------------------------
@@ -664,6 +682,30 @@ def registro_aviso(texto):
     logging.getLogger("control_stock").warning(texto)
 
 
+def _linear_dice_que_ya_estaba_asi(fallo, puesta):
+    """¿Este error de Linear dice que la etiqueta YA está como se pidió?
+
+    El bug de LEAD-62 (28/09/2026, dos veces): la caché local decía que
+    «Te toca» estaba puesta, Linear ya no la tenía, y el quitar reventaba
+    con «Label not on issue» — un 400 que NO es una falla, porque el
+    estado deseado ya está. Se compara por el MENSAJE puntual que viene
+    en la lista `errors` del GraphQL (que `_pedir` mete en el texto de la
+    excepción), nunca por «cualquier 400»: cualquier otro error sigue
+    reventando como siempre.
+
+    - Al QUITAR: «Label not on issue», textual — es el que salió dos
+      veces en el log de producción.
+    - Al PONER: el gemelo «ya la tiene» no se pudo provocar en vivo, así
+      que se reconoce por familia (un error de esta mutación que diga
+      «already» sobre un label). Si Linear usa otra frase, el error
+      revienta como hoy — el lado seguro.
+    """
+    texto = str(fallo)
+    if not puesta:
+        return "Label not on issue" in texto
+    return "already" in texto.lower() and "label" in texto.lower()
+
+
 def poner_label(id_issue, nombre):
     """Le pone la etiqueta al issue. Idempotente y fail-soft: si la
     etiqueta no existe, el issue se queda sin ella y la acción sigue."""
@@ -676,8 +718,15 @@ def poner_label(id_issue, nombre):
     label = _label_id(nombre)
     if not label:
         return False
-    datos = _pedir(MUTACION_PONER_LABEL, {"id": id_issue, "label": label})
-    exito = bool((datos.get("issueAddLabel") or {}).get("success"))
+    try:
+        datos = _pedir(MUTACION_PONER_LABEL, {"id": id_issue, "label": label})
+        exito = bool((datos.get("issueAddLabel") or {}).get("success"))
+    except ErrorLeads as fallo:
+        if not _linear_dice_que_ya_estaba_asi(fallo, puesta=True):
+            raise
+        # La caché local iba atrás: Linear ya la tenía. El estado deseado
+        # está — se parchea la caché y se sigue, no es un error.
+        exito = True
     if exito:
         _parchear_etiqueta(id_issue, nombre, puesta=True)
     refrescar()
@@ -692,8 +741,15 @@ def quitar_label(id_issue, nombre):
     label = catalogo()["etiquetas"].get(nombre)
     if not label:
         return False
-    datos = _pedir(MUTACION_QUITAR_LABEL, {"id": id_issue, "label": label})
-    exito = bool((datos.get("issueRemoveLabel") or {}).get("success"))
+    try:
+        datos = _pedir(MUTACION_QUITAR_LABEL, {"id": id_issue, "label": label})
+        exito = bool((datos.get("issueRemoveLabel") or {}).get("success"))
+    except ErrorLeads as fallo:
+        if not _linear_dice_que_ya_estaba_asi(fallo, puesta=False):
+            raise
+        # «Label not on issue»: la caché local iba atrás y Linear ya no
+        # la tenía. El estado deseado está — se parchea y se sigue.
+        exito = True
     if exito:
         _parchear_etiqueta(id_issue, nombre, puesta=False)
     refrescar()

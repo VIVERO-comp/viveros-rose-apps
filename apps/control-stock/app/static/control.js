@@ -10,13 +10,23 @@
 (function () {
   'use strict';
 
+  // El ref de la tarjeta que se está arrastrando AHORA, o '' si lo que se
+  // arrastra no es una tarjeta. El drop lee esto y no el dataTransfer
+  // (29/09/2026): todo <a> es arrastrable por naturaleza, y al arrastrar
+  // el enlace de adentro de una tarjeta no movible el dataTransfer trae
+  // la URL del enlace — el drop mandaba ESO como ref y el servidor
+  // contestaba «ya no está en Linear» sin que hubiera ningún lead borrado.
+  var refEnArrastre = '';
+
   document.querySelectorAll('.ctl-tarjeta[draggable="true"]').forEach(function (tarjeta) {
     tarjeta.addEventListener('dragstart', function (ev) {
-      ev.dataTransfer.setData('text/plain', tarjeta.getAttribute('data-ref'));
+      refEnArrastre = tarjeta.getAttribute('data-ref') || '';
+      ev.dataTransfer.setData('text/plain', refEnArrastre);
       ev.dataTransfer.effectAllowed = 'move';
       tarjeta.classList.add('arrastrando');
     });
     tarjeta.addEventListener('dragend', function () {
+      refEnArrastre = '';
       tarjeta.classList.remove('arrastrando');
     });
   });
@@ -32,7 +42,9 @@
     lista.addEventListener('drop', function (ev) {
       ev.preventDefault();
       lista.classList.remove('dropok');
-      var ref = ev.dataTransfer.getData('text/plain');
+      // Sin tarjeta en arrastre no hay POST: soltar cualquier otra cosa
+      // (un enlace, un texto, algo de otra ventana) se ignora en silencio.
+      var ref = refEnArrastre;
       var destino = lista.getAttribute('data-destino');
       var campo = lista.getAttribute('data-campo');
       if (!ref || !destino || !campo) return;

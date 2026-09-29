@@ -275,7 +275,10 @@ def agendar(ref_lead, tipo, fecha, hora=None, resp="", dur=None, lugar="",
         raise calendario.ErrorCalendario("Falta la fecha.")
     lead = linear_leads.uno(ref_lead)
     if lead is None:
-        raise calendario.ErrorCalendario("Ese lead ya no está en Linear.")
+        # Con el ref adentro, y distinguiendo el ref vacío (29/09/2026):
+        # mismo criterio que Control, ver `mensaje_lead_ausente`.
+        raise calendario.ErrorCalendario(
+            linear_leads.mensaje_lead_ausente(ref_lead))
 
     resp = (resp or "").strip() or lead.get("resp") or ""
     creada = calendario.crear(

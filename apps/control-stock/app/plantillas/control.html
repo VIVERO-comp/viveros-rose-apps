@@ -86,8 +86,13 @@
       </span>
     </div>
 
-    {% if error %}<div class="franja"><b>Ups.</b> <span>{{ error }}</span></div>{% endif %}
-    {% if aviso %}<div class="aviso-ok">{{ aviso }}</div>{% endif %}
+    {# La X del banner (29/09/2026): un error o un aviso se quedaban en la
+       pantalla hasta la próxima navegación, porque viven en el query. La X
+       es solo un enlace a la misma vista SIN el query — cero JS. #}
+    {% if error %}<div class="franja"><b>Ups.</b> <span>{{ error }}</span>
+      <a class="cierra-banner" href="/control?vista={{ vista }}" aria-label="Cerrar el aviso">×</a></div>{% endif %}
+    {% if aviso %}<div class="aviso-ok">{{ aviso }}
+      <a class="cierra-banner" href="/control?vista={{ vista }}" aria-label="Cerrar el aviso">×</a></div>{% endif %}
     {% if modo == 'lectura' %}
     <div class="solo-lectura"><b>Solo lectura.</b> Esta instancia mira el
       tablero real pero no escribe en Linear.</div>
@@ -117,9 +122,14 @@
              que el empleado ve el tablero completo (28/09/2026), dejarle
              arrastrar lo ajeno sería invitarlo a un error del servidor —
              el candado real sigue en puede_tocar(), esto es cortesía. #}
+          {# Los <a> de adentro llevan draggable="false" (29/09/2026): todo
+             enlace es arrastrable por naturaleza, así que en una tarjeta NO
+             movible el navegador arrastraba el ENLACE y el drop mandaba un
+             POST sin ref («Ese lead ya no está en Linear», sin ningún lead
+             borrado). Arrastrar una tarjeta que no se mueve no arrastra nada. #}
           <div class="ret-tarjeta ctl-tarjeta" draggable="{{ 'true' if puede_mover and (alc.admin or (alc.resp_propio and l.resp == alc.resp_propio)) else 'false' }}"
                data-ref="{{ l.ref }}">
-            <a class="ctl-zona" href="/control?vista={{ vista }}&abrir={{ l.ref | urlencode }}">
+            <a class="ctl-zona" draggable="false" href="/control?vista={{ vista }}&abrir={{ l.ref | urlencode }}">
               <span class="t-cab">
                 <b>{{ l.nombre }}</b>
                 {% if l.te_toca %}<span class="ctl-alerta" title="Te toca: hay un cliente esperando"></span>{% endif %}
@@ -145,7 +155,7 @@
               {% if vista == 'estado' and not l.cerrado %}
               <span class="chip-est {{ 'chip-nadie' if not l.resp }}">{{ l.resp_titulo }}</span>
               {% endif %}
-              {% if l.wa %}<a class="ctl-wa" href="{{ l.wa }}" target="_blank" rel="noopener">chat ↗</a>{% endif %}
+              {% if l.wa %}<a class="ctl-wa" draggable="false" href="{{ l.wa }}" target="_blank" rel="noopener">chat ↗</a>{% endif %}
             </span>
           </div>
           {% endfor %}

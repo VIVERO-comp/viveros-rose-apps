@@ -915,3 +915,76 @@ def test_por_empleado_si_muestra_el_chip_de_estado(cliente, de_dueno, monkeypatc
     cuerpo = cliente.get("/control", params={"vista": "empleado"}).text
     tarjeta = cuerpo[cuerpo.index('data-ref="LEAD-91"'):][:700]
     assert "Por agendar" in tarjeta
+
+
+# ---------------------------------------------------------------------------
+# El arrastre sin ref (29/09/2026): arrastrar el ENLACE de adentro de una
+# tarjeta no movible mandaba el POST sin ref, y el servidor contestaba
+# «Ese lead ya no está en Linear» sin que hubiera ningún lead borrado. El
+# ref vacío es su propio caso — se corta sin preguntarle nada a Linear —
+# y cuando el ref sí llegó y no está, el mensaje lo nombra.
+# ---------------------------------------------------------------------------
+
+def test_un_post_sin_ref_no_busca_nada_y_lo_dice_claro(cliente, de_dueno,
+                                                       monkeypatch):
+    from urllib.parse import unquote
+
+    buscados = []
+    monkeypatch.setattr(linear_leads, "uno",
+                        lambda ref, leads=None: buscados.append(ref) or None)
+    respuesta = cliente.post("/control/estado", params={"vista": "estado"},
+                             data={"ref": "", "estado": "COTIZADO"},
+                             follow_redirects=False)
+    assert respuesta.status_code == 303
+    destino = unquote(respuesta.headers["location"])
+    assert "No llegó qué lead tocar" in destino
+    assert "ya no está en Linear" not in destino
+    assert buscados == []  # ni un solo viaje a Linear
+
+
+def test_un_ref_desconocido_se_nombra_en_el_error(cliente, de_dueno):
+    from urllib.parse import unquote
+
+    respuesta = cliente.post("/control/estado", params={"vista": "estado"},
+                             data={"ref": "LEAD-999", "estado": "COTIZADO"},
+                             follow_redirects=False)
+    assert respuesta.status_code == 303
+    destino = unquote(respuesta.headers["location"])
+    assert "El lead LEAD-999 ya no está en Linear" in destino
+
+
+def test_los_mensajes_del_lead_ausente_distinguen_los_dos_casos():
+    # El helper que usan Control, la agenda y el mantenimiento: sin ref no
+    # se inventa un lead borrado, y con ref el mensaje lo nombra.
+    vacio = linear_leads.mensaje_lead_ausente("")
+    assert "ya no está en Linear" not in vacio
+    assert "arrastrando la tarjeta" in vacio
+    con_ref = linear_leads.mensaje_lead_ausente("LEAD-62")
+    assert "LEAD-62" in con_ref and "ya no está en Linear" in con_ref
+    aviso, error = control.mover_a_empleado("LEAD-999", "Mary")
+    assert "LEAD-999" in error
+
+
+def test_los_enlaces_de_adentro_de_la_tarjeta_no_se_arrastran(cliente, de_dueno):
+    cuerpo = cliente.get("/control", params={"vista": "estado"}).text
+    # Todo <a> es arrastrable por naturaleza: en una tarjeta con
+    # draggable="false" el navegador arrastraba el enlace igual. Los dos
+    # enlaces de la tarjeta (la zona de la ficha y el chat) lo apagan.
+    assert '<a class="ctl-zona" draggable="false"' in cuerpo
+    assert '<a class="ctl-wa" draggable="false"' in cuerpo
+
+
+def test_el_banner_de_error_se_puede_cerrar(cliente, de_dueno):
+    cuerpo = cliente.get("/control", params={
+        "vista": "estado", "error": "algo salió mal"}).text
+    assert "algo salió mal" in cuerpo
+    # La X es un enlace a la misma vista SIN el query del error — sin JS.
+    assert ('<a class="cierra-banner" href="/control?vista=estado"'
+            in cuerpo)
+
+
+def test_el_banner_de_aviso_tambien_se_cierra(cliente, de_dueno):
+    cuerpo = cliente.get("/control", params={
+        "vista": "estado", "aviso": "todo quedó guardado"}).text
+    assert "todo quedó guardado" in cuerpo
+    assert cuerpo.count('class="cierra-banner"') == 1
