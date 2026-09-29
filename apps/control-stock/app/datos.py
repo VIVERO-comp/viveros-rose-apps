@@ -89,12 +89,20 @@ def reiniciar_cache_proxy():
     _cache_proxy.clear()
 
 
+def proxy_configurado():
+    """¿Hay un stock-proxy real al que preguntarle? Sin URL y clave la
+    lectura devuelve los datos de prueba, así que no hay nada que
+    calentar ni que refrescar de verdad."""
+    return bool(os.environ.get("STOCK_PROXY_URL")
+                and os.environ.get("STOCK_API_KEY"))
+
+
 def _pedir_al_proxy(recurso):
     """None si el proxy no está configurado (modo datos de prueba)."""
+    if not proxy_configurado():
+        return None
     url = os.environ.get("STOCK_PROXY_URL")
     clave = os.environ.get("STOCK_API_KEY")
-    if not url or not clave:
-        return None
     respuesta = httpx.get(f"{url.rstrip('/')}/{recurso}",
                           headers={"X-API-Key": clave}, timeout=4)
     respuesta.raise_for_status()
