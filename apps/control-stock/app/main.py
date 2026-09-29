@@ -2135,6 +2135,10 @@ async def guardar_ficha(request: Request, sku: str):
     mensaje = fichas.validar_altura(altura)
     if mensaje:
         return error(400, "altura_invalida", mensaje)
+    # Entrega en línea (29/09/2026): None si el form vino sin la sección
+    # (sin el marcador tiene_vehiculo, o producto sin publicar) — entonces
+    # no se toca nada en Odoo; el porqué vive en vehiculos.decidir_guardado.
+    veh_valores = vehiculos.decidir_guardado(sku, crudo)
     # Primero Odoo (lo que puede fallar por red o por permisos); recién
     # después la prosa, para no dejar la ficha guardada a medias.
     try:
@@ -2145,6 +2149,17 @@ async def guardar_ficha(request: Request, sku: str):
         print(f"fichas: error guardando la altura de {sku}: {excepcion!r}", flush=True)
         return error(502, "sin_guardar",
                      "No se pudo guardar la altura en Odoo. Intenta de nuevo.")
+    if veh_valores is not None:
+        try:
+            vehiculos.fijar_en_odoo(sku, veh_valores)
+        except datos.SinConexion as fallo:
+            return error(502, "sin_guardar", str(fallo))
+        except Exception as excepcion:
+            print(f"fichas: error guardando los vehículos de {sku}: {excepcion!r}",
+                  flush=True)
+            return error(502, "sin_guardar",
+                         "No se pudieron guardar los vehículos en Odoo. "
+                         "Intenta de nuevo.")
     try:
         fichas.guardar(sku, campos, request.state.empleada["id"])
     except Exception as excepcion:
@@ -2153,7 +2168,12 @@ async def guardar_ficha(request: Request, sku: str):
         return error(502, "sin_guardar",
                       "No se pudo guardar en la base. Intenta de nuevo.")
     return {"resultado": "guardada", "ficha": fichas.todas().get(sku),
-            "altura_min": altura["altura_min"], "altura_max": altura["altura_max"]}
+            "altura_min": altura["altura_min"], "altura_max": altura["altura_max"],
+            # Lo que quedó en Odoo, en la forma de la planta ({moto, carro,
+            # pickup}), para que la pantalla no muestre el valor viejo; null
+            # si este POST no tocó los vehículos.
+            "vehiculos": (vehiculos.a_planta(veh_valores)
+                          if veh_valores is not None else None)}
 
 
 @app.get("/venta/foto/{producto_id}")

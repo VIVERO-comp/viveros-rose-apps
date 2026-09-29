@@ -255,3 +255,75 @@ def test_datos_json_sin_odoo_van_con_veh_null(cliente, editora, con_inventario,
     pagina = cliente.get("/?tab=stock").text
     assert '"veh": null' in pagina
     assert '"veh": {' not in pagina
+
+
+# ---------------------------------------------------------------------------
+# El POST de «Guardar ficha»: los tres Boolean viajan (o no) a Odoo
+# ---------------------------------------------------------------------------
+
+FICHA_BUENA = {
+    "descripcion": "Romero (Salvia rosmarinus), aromática de sol pleno.",
+    "luz": "Sol pleno", "riego": "Cada 4–5 días", "dificultad": "Facil",
+    "nota": "",
+}
+
+
+@pytest.fixture
+def vehiculos_capturados(monkeypatch):
+    """Captura lo que la ruta manda a Odoo, con el producto publicado."""
+    llamadas = []
+
+    def fijar(sku, valores):
+        llamadas.append((sku, valores))
+        return {"ok": True, "sku": sku, "resultado": "aplicado"}
+
+    monkeypatch.setattr(vehiculos, "fijar_en_odoo", fijar)
+    monkeypatch.setattr(vehiculos, "publicado_de", lambda sku: True)
+    return llamadas
+
+
+def test_ruta_guarda_los_vehiculos(cliente, editora, vehiculos_capturados):
+    respuesta = cliente.post("/fichas/PL-ROMERO", json=dict(
+        FICHA_BUENA, tiene_vehiculo=1, viaja_moto=True, viaja_pickup=True))
+    assert respuesta.status_code == 200
+    assert respuesta.json()["vehiculos"] == {
+        "moto": True, "carro": False, "pickup": True}
+    assert vehiculos_capturados == [("PL-ROMERO", {
+        "viaja_moto": True, "viaja_carro": False, "viaja_pickup": True})]
+
+
+def test_ruta_sin_marcador_no_toca_los_vehiculos(cliente, editora,
+                                                 vehiculos_capturados):
+    # Un form de antes del cambio (o con la sección tapada) no trae el
+    # marcador: la ficha se guarda igual y Odoo no se toca.
+    respuesta = cliente.post("/fichas/PL-ROMERO", json=dict(FICHA_BUENA))
+    assert respuesta.status_code == 200
+    assert respuesta.json()["vehiculos"] is None
+    assert vehiculos_capturados == []
+
+
+def test_ruta_sin_publicar_no_toca_los_vehiculos(cliente, editora, monkeypatch):
+    llamadas = []
+    monkeypatch.setattr(vehiculos, "fijar_en_odoo",
+                        lambda sku, valores: llamadas.append(sku))
+    monkeypatch.setattr(vehiculos, "publicado_de", lambda sku: False)
+    respuesta = cliente.post("/fichas/PL-ROMERO", json=dict(
+        FICHA_BUENA, tiene_vehiculo=1, viaja_moto=True))
+    assert respuesta.status_code == 200
+    assert respuesta.json()["vehiculos"] is None
+    assert llamadas == []
+
+
+def test_si_odoo_falla_con_los_vehiculos_no_se_guarda_la_prosa(cliente, editora,
+                                                               monkeypatch):
+    from app import fichas
+
+    def fallar(sku, valores):
+        raise datos.SinConexion("Odoo no responde")
+
+    monkeypatch.setattr(vehiculos, "fijar_en_odoo", fallar)
+    monkeypatch.setattr(vehiculos, "publicado_de", lambda sku: True)
+    respuesta = cliente.post("/fichas/PL-ROMERO", json=dict(
+        FICHA_BUENA, tiene_vehiculo=1, viaja_moto=True))
+    assert respuesta.status_code == 502
+    assert fichas.todas() == {}

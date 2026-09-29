@@ -708,18 +708,29 @@ async function guardarFicha() {
   boton.textContent = "Guardando…";
   mostrarErrorFicha("");
   try {
+    const cuerpoFicha = {
+      descripcion: document.getElementById("ficha-descripcion").value,
+      luz: document.getElementById("ficha-luz").value,
+      riego: document.getElementById("ficha-riego").value,
+      dificultad: document.getElementById("ficha-dificultad").value,
+      nota: document.getElementById("ficha-nota").value,
+      altura_min: document.getElementById("ficha-altura-min").value,
+      altura_max: document.getElementById("ficha-altura-max").value,
+    };
+    // Entrega en línea: el marcador tiene_vehiculo distingue en el servidor
+    // «vino sin la sección» de «desmarcó todo». Solo viaja si la sección
+    // está destapada (producto publicado y dato leído de Odoo).
+    const cajaVeh = document.getElementById("ficha-veh");
+    if (cajaVeh && !cajaVeh.hidden) {
+      cuerpoFicha.tiene_vehiculo = 1;
+      cuerpoFicha.viaja_moto = document.getElementById("ficha-veh-moto").checked;
+      cuerpoFicha.viaja_carro = document.getElementById("ficha-veh-carro").checked;
+      cuerpoFicha.viaja_pickup = document.getElementById("ficha-veh-pickup").checked;
+    }
     const respuesta = await fetch("/fichas/" + encodeURIComponent(detalleSku), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        descripcion: document.getElementById("ficha-descripcion").value,
-        luz: document.getElementById("ficha-luz").value,
-        riego: document.getElementById("ficha-riego").value,
-        dificultad: document.getElementById("ficha-dificultad").value,
-        nota: document.getElementById("ficha-nota").value,
-        altura_min: document.getElementById("ficha-altura-min").value,
-        altura_max: document.getElementById("ficha-altura-max").value,
-      }),
+      body: JSON.stringify(cuerpoFicha),
     });
     const cuerpo = await respuesta.json();
     if (!respuesta.ok) {
@@ -733,6 +744,9 @@ async function guardarFicha() {
     if (planta) {
       planta.hmin = cuerpo.altura_min;
       planta.hmax = cuerpo.altura_max;
+      // Los vehículos también viven en Odoo: si este guardado los tocó,
+      // la planta en memoria se pone al día (null = no se tocaron).
+      if (cuerpo.vehiculos) planta.veh = cuerpo.vehiculos;
     }
     toast("Ficha guardada 🌿");
     pintarEstadoFicha(detalleSku);
