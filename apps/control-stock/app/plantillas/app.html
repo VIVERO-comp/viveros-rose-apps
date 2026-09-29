@@ -312,6 +312,20 @@
             </div>
             <small class="ayuda">Se guarda en Odoo. Una sola medida: llena la primera y deja la otra vacía. Sin altura, la tienda no muestra la línea.</small>
           </div>
+          {# Entrega en línea (29/09/2026): en qué vehículos puede viajar la
+             planta. Son tres Boolean de product.template en Odoo y, como
+             allá, la sección solo aparece si el producto está publicado —
+             lo decide el servidor (p.veh es null si no aplica o si el Odoo
+             consultado no tiene los campos) y el JS solo destapa y marca. #}
+          <div class="campo campo-veh" id="ficha-veh" hidden>
+            <span>Entrega en línea</span>
+            <div class="veh-fila">
+              <label><input type="checkbox" id="ficha-veh-moto"> Moto</label>
+              <label><input type="checkbox" id="ficha-veh-carro"> Carro</label>
+              <label><input type="checkbox" id="ficha-veh-pickup"> Pickup</label>
+            </div>
+            <small class="ayuda">En qué vehículos puede viajar. Se guarda en Odoo.</small>
+          </div>
           <div class="campo campo-area">
             <span>Descripción <small id="ficha-desc-largo"></small></span>
             <textarea id="ficha-descripcion" rows="5" maxlength="600"></textarea>

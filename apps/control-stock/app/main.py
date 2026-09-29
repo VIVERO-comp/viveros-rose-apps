@@ -27,7 +27,8 @@ from . import (acceso_google, agenda, avisos, calculos, calendario,
                calendario_google, colores,
                calendario_ics, conteos, control, cot_lead, cotizaciones,
                coworkers, crm_twenty, datos, fichas, fotos,
-               linear_leads, mantenimiento, resumen, seguridad, ventas, wa_autor)
+               linear_leads, mantenimiento, resumen, seguridad, vehiculos,
+               ventas, wa_autor)
 
 app = FastAPI(title="Control Viverorose")
 
@@ -453,6 +454,10 @@ def inicio(request: Request, refrescar: int = 0):
     # es un espejo del sitio (ver datos.obtener_publicados). Sin el dato no
     # se adivina: la pestaña lo avisa y muestra el global.
     publicados, sin_publicados = datos.obtener_publicados()
+    # En qué vehículos puede viajar cada planta (Odoo, 29/09/2026): la ficha
+    # pinta la sección "Entrega en línea" solo para lo publicado y solo si
+    # el Odoo consultado ya tiene los campos (None = no prometer nada).
+    mapa_vehiculos = vehiculos.leer()
 
     cuentas = calculos.clasificar(inventario, umbral)
     ultimo = datos.ultimo_conteo_confirmado()
@@ -502,6 +507,10 @@ def inicio(request: Request, refrescar: int = 0):
             # está marcada para publicar pero todavía le falta entrar al
             # catálogo del sitio (foto incluida), y la ficha lo dice.
             "pub": p.get("publicado", True),
+            # veh: {moto, carro, pickup} desde Odoo, o null. Null = la ficha
+            # no pinta la sección (sin publicar, o el dato no se pudo leer).
+            "veh": vehiculos.para_planta(p["sku"], p.get("publicado", True),
+                                         mapa_vehiculos),
             **_fotos_de(p),
         }
         for p in inventario

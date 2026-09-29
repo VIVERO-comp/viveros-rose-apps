@@ -629,6 +629,18 @@ function abrirDetalle(sku, empujarHistoria = true) {
     // La altura viene de Odoo (no de la ficha curada); 0 se muestra vacío.
     document.getElementById("ficha-altura-min").value = p.hmin || "";
     document.getElementById("ficha-altura-max").value = p.hmax || "";
+    // Entrega en línea: el servidor ya decidió si aplica (p.veh es null si
+    // la planta no está publicada o el dato no se pudo leer de Odoo); aquí
+    // solo se destapa la sección y se marcan las casillas.
+    const cajaVeh = document.getElementById("ficha-veh");
+    if (cajaVeh) {
+      cajaVeh.hidden = !p.veh;
+      if (p.veh) {
+        document.getElementById("ficha-veh-moto").checked = !!p.veh.moto;
+        document.getElementById("ficha-veh-carro").checked = !!p.veh.carro;
+        document.getElementById("ficha-veh-pickup").checked = !!p.veh.pickup;
+      }
+    }
     contarDescripcion();
     mostrarErrorFicha("");
     pintarEstadoFicha(sku);

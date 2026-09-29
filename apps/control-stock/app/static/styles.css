@@ -817,6 +817,16 @@ button.enlace-sub{
   -webkit-appearance:none;margin:0;
 }
 .ficha-form .campo-altura input{-moz-appearance:textfield;appearance:textfield}
+/* Entrega en linea: tres casillas en una fila. El ancho chico les gana al
+   width:100% generico de los inputs del formulario de la ficha. */
+.ficha-form .campo-veh .veh-fila{display:flex;align-items:center;gap:18px;margin-top:2px}
+.ficha-form .campo-veh .veh-fila label{
+  display:flex;align-items:center;gap:7px;font-size:13.5px;color:var(--texto);
+  cursor:pointer;font-weight:600;
+}
+.ficha-form .campo-veh .veh-fila input{
+  width:16px;height:16px;padding:0;accent-color:var(--dorado);cursor:pointer;
+}
 
 /* ---------- login con Google y pestaña Ajustes ---------- */
 .login .aviso-error{width:100%;max-width:300px;margin-bottom:0}

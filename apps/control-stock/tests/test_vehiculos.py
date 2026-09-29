@@ -204,7 +204,7 @@ def test_fijar_con_odoo_caido_sube_sin_conexion(monkeypatch, odoo_configurado):
         vehiculos.fijar_en_odoo("PL-ROMERO", {"viaja_moto": True})
 
 
-def test_fijar_reinicia_la_cache(monkeypatch, odoo_configurado):
+def test_fijar_reinicia_la_cache_al_escribir(monkeypatch, odoo_configurado):
     # Tras escribir, la próxima pintada relee de Odoo (no sirve el mapa viejo).
     monkeypatch.setattr(
         ventas, "_ejecutar",
@@ -212,3 +212,46 @@ def test_fijar_reinicia_la_cache(monkeypatch, odoo_configurado):
     vehiculos._cache["mapa"] = {"valor": {"PL-X": {}}, "en": 9e12}
     vehiculos.fijar_en_odoo("PL-ROMERO", {})
     assert vehiculos._cache == {}
+
+
+# ---------------------------------------------------------------------------
+# La pantalla: la sección "Entrega en línea" y el veh de cada planta
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def editora(monkeypatch):
+    monkeypatch.setenv("FICHAS_EDITORES", "genesis")
+
+
+def test_pantalla_trae_la_seccion_de_vehiculos(cliente, editora):
+    pagina = cliente.get("/?tab=stock").text
+    assert 'id="ficha-veh"' in pagina
+    assert "Entrega en línea" in pagina
+    assert "En qué vehículos puede viajar. Se guarda en Odoo." in pagina
+    # Nace tapada: la destapa el JS solo cuando p.veh viene del servidor.
+    assert "ficha-veh" in pagina and "hidden" in pagina
+
+
+def test_datos_json_llevan_los_vehiculos(cliente, editora, con_inventario,
+                                         monkeypatch):
+    # La Ixora queda sin publicar: aunque Odoo tenga sus vehículos, su veh
+    # viaja null y la sección no se le pinta (misma regla que en Odoo).
+    for producto in con_inventario:
+        if producto["sku"] == "PL-IXORA":
+            producto["publicado"] = False
+    monkeypatch.setattr(vehiculos, "leer", lambda: {
+        "PL-ROMERO": {"moto": True, "carro": True, "pickup": False},
+        "PL-IXORA": {"moto": True, "carro": True, "pickup": True},
+    })
+    pagina = cliente.get("/?tab=stock").text
+    assert '"veh": {"moto": true, "carro": true, "pickup": false}' in pagina
+    assert '"pub": false, "veh": null' in pagina  # la Ixora, sin publicar
+
+
+def test_datos_json_sin_odoo_van_con_veh_null(cliente, editora, con_inventario,
+                                              monkeypatch):
+    # Odoo viejo o caído: leer() da None y ninguna planta promete la sección.
+    monkeypatch.setattr(vehiculos, "leer", lambda: None)
+    pagina = cliente.get("/?tab=stock").text
+    assert '"veh": null' in pagina
+    assert '"veh": {' not in pagina
