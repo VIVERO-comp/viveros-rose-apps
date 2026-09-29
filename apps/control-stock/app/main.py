@@ -2330,10 +2330,13 @@ def calendario_pantalla(request: Request):
         filtro["liga"] = _liga(estado, apagados=",".join(sorted(filtro["apagados"])))
 
     # El log de leads de servicio (columna derecha del calendario): un toque
-    # abre "Nueva actividad" prellenada con el tipo y el nombre del lead.
+    # abre "Nueva actividad" prellenada con el tipo, el nombre — y desde el
+    # 29/09/2026 el LEAD, para que el selector salga puesto y la actividad
+    # nazca amarrada en vez de suelta.
     leads_servicio = calendario.leads_de_servicio()
     for lead in leads_servicio:
-        lead["liga"] = _liga(estado, nueva="1", tipo=lead["tipo"], cliente=lead["nombre"])
+        lead["liga"] = _liga(estado, nueva="1", tipo=lead["tipo"],
+                             cliente=lead["nombre"], lead=lead["ref"])
 
     # Y debajo, el bloque "Por agendar" (Fase 4, 24/09/2026): los leads que
     # ya pagaron, con su etiqueta de pago y el saldo que trae Odoo. Antes
@@ -2400,10 +2403,29 @@ def calendario_pantalla(request: Request):
         "notas": calendario.comentarios(id_abierta) if abierta else [],
         "puede_tocar_abierta": (_puede_tocar(abierta, yo) is None) if abierta else False,
         "nueva": request.query_params.get("nueva") == "1",
+        # Las sugerencias del campo Cliente y el selector «Lead»
+        # (29/09/2026): armados EN PYTHON y renderizados — nada consulta
+        # al vuelo. Solo cuando el formulario está abierto: una pintada
+        # normal del calendario no va a preguntarle los leads a Linear.
+        "clientes_sugeridos": (
+            agenda.clientes_para_sugerir(todas)
+            if request.query_params.get("nueva") == "1" else []),
+        "leads_para_conectar": (
+            agenda.leads_para_conectar()
+            if request.query_params.get("nueva") == "1" else []),
         "pre": {
             "fecha": request.query_params.get("fecha") or estado["dia"],
             "hora": request.query_params.get("hora") or calendario.HORA_POR_DEFECTO,
             "resp": request.query_params.get("resp") or yo["id"],
+            # El responsable del select (29/09/2026): por defecto, quien
+            # está en la sesión SI su nombre es una etiqueta Resp: real
+            # (misma sugerencia que al agendar un lead); si no, queda "" =
+            # Sin asignar. En el rebote vuelve lo elegido.
+            "resp_nombre": (request.query_params.get("resp_nombre")
+                            or agenda.responsable_de_empleada(empleada)),
+            # El lead a conectar (29/09/2026): lo trae el enlace del log de
+            # «Leads de servicio», o el rebote de un error.
+            "lead": request.query_params.get("lead", ""),
             # Si el crear falló, el formulario vuelve CON lo escrito: estos
             # llegan en la dirección del rebote (ver calendario_crear).
             "tipo": request.query_params.get("tipo", ""),
@@ -2970,26 +2992,64 @@ async def calendario_crear(request: Request):
         if not (calendario.escritura_activa() or not calendario.configurado()):
             raise calendario.ErrorCalendario(
                 "Esta instancia mira el calendario real pero no escribe en Linear.")
-        # Sin el campo Responsable (quitado hasta previo aviso, 22/09/2026)
-        # todo nace a nombre de quien lo crea; sin correo enlazado a
-        # Linear, queda sin asignar.
+        # El assignee de Linear sigue siendo quien lo crea (si su correo
+        # está enlazado); el RESPONSABLE del trabajo va aparte, por nombre
+        # en la marca de la actividad (`resp_lead`, 29/09/2026: volvió el
+        # select al formulario) — el mismo camino que usa Agendar. Nunca
+        # se crea ninguna etiqueta.
         resp = form.get("resp_id") or yo["id"]
+        resp_nombre = (form.get("resp_nombre") or "").strip()
+
+        # Conectar lead (29/09/2026, punto 5 de Abraham): con un lead
+        # elegido la actividad NO nace suelta. Si el tipo es de los cinco
+        # agendables, va por el MISMO camino de la Fase 4
+        # (`agenda.agendar`): actividad amarrada, lead a Agendado, fecha
+        # en Odoo, responsable al lead — idéntico a agendar desde «Por
+        # agendar». Un tipo fuera de esos cinco (un Alquiler del log, una
+        # reunión) nace AMARRADO por la misma marca `lead=` pero sin
+        # tocar el estado: solo los tipos agendables mueven el embudo,
+        # regla ya escrita. Sin lead, todo sigue como hoy.
+        ref_lead = (form.get("lead") or "").strip()
+        lead_vivo = None
+        if ref_lead:
+            lead_vivo = linear_leads.uno(ref_lead)
+            if lead_vivo is None:
+                raise calendario.ErrorCalendario(
+                    linear_leads.mensaje_lead_ausente(ref_lead))
+            if form.get("tipo") in agenda.POR_CLAVE:
+                return agenda.agendar(
+                    ref_lead, form.get("tipo"), form.get("fecha", ""),
+                    hora=form.get("hora") or None, resp=resp_nombre,
+                    dur=form.get("dur") or None, lugar=form.get("lugar", ""),
+                    nota=form.get("nota", ""), autor=yo["nombre"])
+
+        # Con lead y sin cliente escrito, el cliente es el del lead — lo
+        # mismo que hace `agenda.agendar` (el relleno de calendario.js es
+        # cortesía de pantalla, no el dato).
+        cliente = (form.get("cliente") or "").strip() or (
+            (lead_vivo or {}).get("nombre") or "")
         creada = calendario.crear(
-            tipo=form.get("tipo", "otro"), cliente=form.get("cliente", ""),
+            tipo=form.get("tipo", "otro"), cliente=cliente,
             fecha=form.get("fecha", ""), hora=form.get("hora") or calendario.HORA_POR_DEFECTO,
             dur=form.get("dur") or calendario.DURACION_POR_DEFECTO,
             lugar=form.get("lugar", ""), resp_id=resp,
-            prioridad=form.get("prioridad") or 3, nota=form.get("nota", ""))
+            prioridad=form.get("prioridad") or 3, nota=form.get("nota", ""),
+            lead=(lead_vivo or {}).get("ref", ""), resp_lead=resp_nombre)
         texto = f"Creada {creada['ref']}: {calendario.nombre_de_tipo(form.get('tipo', 'otro'))}"
+        if lead_vivo:
+            texto += f", amarrada a {lead_vivo['ref']}"
         # Un alquiler nace con su recogida: nunca se queda una planta
-        # alquilada sin fecha de vuelta.
+        # alquilada sin fecha de vuelta. Con cualquier OTRO tipo la
+        # recogida se descarta AQUÍ, en Python — el campo escondido del
+        # formulario es presentación; esta es la regla.
         recogida = form.get("recogida", "")
         if form.get("tipo") == "alquiler" and re.fullmatch(r"\d{4}-\d{2}-\d{2}", recogida):
             otra = calendario.crear(
-                tipo="recogida", cliente=form.get("cliente", ""), fecha=recogida,
+                tipo="recogida", cliente=cliente, fecha=recogida,
                 hora="09:00", dur=60, lugar=form.get("lugar", ""), resp_id=resp,
                 prioridad=form.get("prioridad") or 3,
-                nota=f"Recogida del alquiler {creada['ref']}.")
+                nota=f"Recogida del alquiler {creada['ref']}.",
+                lead=(lead_vivo or {}).get("ref", ""), resp_lead=resp_nombre)
             texto += f" + la recogida {otra['ref']} el {calendario.dmy(recogida)}"
         return texto + "."
 
@@ -3004,7 +3064,8 @@ async def calendario_crear(request: Request):
             destino = "/calendario"
         campos = {"nueva": "1", "error": str(fallo)}
         for llave in ("tipo", "cliente", "lugar", "fecha", "hora", "dur",
-                      "prioridad", "recogida", "nota", "resp_id"):
+                      "prioridad", "recogida", "nota", "resp_id", "resp_nombre",
+                      "lead"):
             if form.get(llave):
                 campos["resp" if llave == "resp_id" else llave] = form.get(llave)
         destino += ("&" if "?" in destino else "?") + "&".join(

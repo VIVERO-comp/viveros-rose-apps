@@ -495,8 +495,10 @@ def test_la_raiz_abre_el_calendario(cliente):
 
 def test_todos_pueden_cambiar_hasta_previo_aviso(cliente, monkeypatch):
     """Regla suspendida (22/09/2026): sin candado de "cada quien lo suyo",
-    cualquier empleada cambia cualquier actividad, y el campo Responsable
-    no aparece ni en la ficha ni en el formulario de crear."""
+    cualquier empleada cambia cualquier actividad. El campo `resp_id` (el
+    ASSIGNEE de Linear) sigue fuera de la ficha y del formulario; lo que
+    volvió el 29/09/2026 es el select de responsable POR NOMBRE
+    (`resp_nombre`, la marca `resp=` de la actividad), que es otra cosa."""
     from app import main as m
     yo_comun = {"id": "otra-persona", "nombre": "Alguien", "admin": False}
     actividad = {"resp_id": "juan", "resp": "Juan"}
@@ -616,3 +618,205 @@ def test_con_busqueda_activa_la_lupa_arranca_abierta(cliente):
     assert '<details class="desple" open>' in cuerpo
     sin_busqueda = _abrir(cliente).text
     assert '<details class="desple" open>' not in sin_busqueda
+
+
+# ---------------------------------------------------------------------------
+# El form de «Actividad nueva», las 4 mejoras que marcó Abraham (29/09/2026):
+# recogida solo con Alquiler (la regla en Python), Cliente con <datalist>
+# armado en el servidor, el select de Responsable de vuelta (etiquetas Resp:
+# reales, nunca inventadas), y el form corto con «Más detalles».
+# ---------------------------------------------------------------------------
+
+def test_clientes_para_sugerir_saca_los_del_calendario_dedupe_y_orden():
+    from app import agenda
+    nombres = agenda.clientes_para_sugerir([
+        {"cliente": "Casa Verde"}, {"cliente": "   "},
+        {"cliente": "hotel bristol"}, {"cliente": "Hotel Bristol"},
+    ])
+    # Deduplicado sin distinguir mayúsculas, y en orden alfabético. Los
+    # leads del embudo NO van aquí: viven en el selector «Lead» de al lado.
+    assert nombres == ["Casa Verde", "hotel bristol"]
+
+
+def test_el_form_trae_datalist_y_select_de_responsable(cliente):
+    from app import linear_leads
+    linear_leads.reiniciar_muestra()
+    cuerpo = _abrir(cliente, nueva="1").text
+    assert '<datalist id="clientes-conocidos">' in cuerpo
+    assert 'list="clientes-conocidos"' in cuerpo
+    # El select: Sin asignar + las etiquetas Resp: que EXISTEN en Linear.
+    sel = cuerpo[cuerpo.index('name="resp_nombre"'):][:700]
+    assert ">Sin asignar<" in sel
+    for nombre in ("Abraham", "Mary", "Ruben"):
+        assert f'value="{nombre}"' in sel
+    assert "Salomón" not in sel          # salió del equipo: no se inventa
+    # Génesis no calza con ninguna etiqueta Resp: → nada preseleccionado
+    # (el navegador muestra la primera opción, Sin asignar).
+    assert "selected" not in sel
+
+
+def test_el_selector_de_lead_trae_los_vivos_y_no_los_cerrados(cliente):
+    from app import linear_leads
+    linear_leads.reiniciar_muestra()
+    cuerpo = _abrir(cliente, nueva="1").text
+    sel = cuerpo[cuerpo.index('name="lead"'):][:1600]
+    assert ">Sin lead<" in sel
+    assert "LEAD-91 · Tamara" in sel
+    assert "Soledad" not in sel          # LEAD-84, Ganado
+    assert "Monica Gama" not in sel      # LEAD-83, Perdido
+    # Sin lead pedido, nada preseleccionado.
+    assert "selected" not in sel
+
+
+def test_crear_con_lead_va_por_el_camino_de_la_fase_4(cliente):
+    # El MISMO efecto que agendar desde «Por agendar»: la actividad nace
+    # amarrada al lead y el lead pasa a Agendado.
+    from app import linear_leads
+    linear_leads.reiniciar_muestra()
+    dia = calendario.hoy().isoformat()
+    r = cliente.post("/calendario/actividad",
+                     data={"tipo": "entrega", "cliente": "", "fecha": dia,
+                           "lead": "LEAD-91", "resp_nombre": "Mary"},
+                     follow_redirects=False)
+    assert r.status_code == 303
+    assert "aviso=" in r.headers["location"]
+    assert linear_leads.uno("LEAD-91")["estado"] == "AGENDADO"
+    creada = next(a for a in calendario.listar(dia, dia)
+                  if a.get("lead") == "LEAD-91")
+    assert creada["cliente"] == "Tamara"       # el nombre lo pone el lead
+    assert creada["resp_lead"] == "Mary"
+    # Y el responsable quedó también en el lead, como al agendar.
+    assert linear_leads.uno("LEAD-91")["resp"] == "Mary"
+
+
+def test_crear_sin_lead_no_toca_ningun_issue(cliente):
+    from app import linear_leads
+    linear_leads.reiniciar_muestra()
+    antes = {l["ref"]: l["estado"] for l in linear_leads.listar()}
+    dia = calendario.hoy().isoformat()
+    cliente.post("/calendario/actividad",
+                 data={"tipo": "entrega", "cliente": "Casa Suelta",
+                       "fecha": dia},
+                 follow_redirects=False)
+    assert {l["ref"]: l["estado"] for l in linear_leads.listar()} == antes
+    creada = next(a for a in calendario.listar(dia, dia)
+                  if a["cliente"] == "Casa Suelta")
+    assert creada["lead"] == ""                # suelta, como siempre
+
+
+def test_con_lead_y_tipo_no_agendable_amarra_sin_mover_el_embudo(cliente):
+    # Un Alquiler (o una reunión) no está entre los cinco tipos que se
+    # agendan desde un lead: la actividad nace AMARRADA (la misma marca
+    # `lead=` de la Fase 4) pero el estado no se toca — solo los tipos
+    # agendables mueven el embudo, regla ya escrita.
+    from app import linear_leads
+    linear_leads.reiniciar_muestra()
+    dia = calendario.hoy().isoformat()
+    cliente.post("/calendario/actividad",
+                 data={"tipo": "alquiler", "cliente": "", "fecha": dia,
+                       "lead": "LEAD-86"},
+                 follow_redirects=False)
+    assert linear_leads.uno("LEAD-86")["estado"] == "HABLANDO"  # intacto
+    creada = next(a for a in calendario.listar(dia, dia)
+                  if a.get("lead") == "LEAD-86")
+    assert creada["tipo"] == "alquiler"
+    assert creada["cliente"] == "Nedjaira"     # sin cliente escrito: el del lead
+
+
+def test_un_lead_desconocido_rebota_con_su_ref(cliente):
+    from app import linear_leads
+    linear_leads.reiniciar_muestra()
+    dia = calendario.hoy().isoformat()
+    r = cliente.post("/calendario/actividad",
+                     data={"tipo": "entrega", "cliente": "X", "fecha": dia,
+                           "lead": "LEAD-999"},
+                     follow_redirects=False)
+    assert r.status_code == 303
+    assert "error=" in r.headers["location"]
+    from urllib.parse import unquote
+    assert "LEAD-999" in unquote(r.headers["location"])
+
+
+def test_el_enlace_del_log_deja_el_selector_de_lead_puesto(cliente):
+    # El log de «Leads de servicio» ahora manda también lead=<ref>: el
+    # form abre con el selector elegido y coherente con el cliente.
+    from app import linear_leads
+    linear_leads.reiniciar_muestra()
+    cuerpo = _abrir(cliente).text
+    assert "lead=LEAD-90" in cuerpo            # la liga del log lo lleva
+    form = _abrir(cliente, nueva="1", lead="LEAD-91").text
+    assert 'value="LEAD-91" selected' in form
+
+
+def test_el_responsable_por_defecto_es_quien_esta_en_la_sesion(cliente, monkeypatch):
+    from app import agenda
+    monkeypatch.setattr(agenda, "responsable_de_empleada", lambda e: "Mary")
+    cuerpo = _abrir(cliente, nueva="1").text
+    assert 'value="Mary" selected' in cuerpo
+
+
+def test_el_responsable_elegido_viaja_a_la_actividad(cliente):
+    dia = calendario.hoy().isoformat()
+    cliente.post("/calendario/actividad",
+                 data={"tipo": "visita", "cliente": "Finca Lila", "fecha": dia,
+                       "resp_nombre": "Mary"},
+                 follow_redirects=False)
+    creada = next(a for a in calendario.listar(dia, dia)
+                  if a["cliente"] == "Finca Lila")
+    assert creada["resp_lead"] == "Mary"
+
+
+def test_una_recogida_con_tipo_que_no_es_alquiler_se_descarta(cliente):
+    # La regla vive en Python: aunque el campo llegue lleno (quedó escrito
+    # antes de cambiar el tipo), sin Alquiler no nace ninguna recogida.
+    dia = calendario.hoy().isoformat()
+    vuelta = (calendario.hoy() + calendario.timedelta(days=7)).isoformat()
+    cliente.post("/calendario/actividad",
+                 data={"tipo": "entrega", "cliente": "Casa Mika", "fecha": dia,
+                       "recogida": vuelta},
+                 follow_redirects=False)
+    actividades = calendario.listar(dia, vuelta)
+    assert not any(a["tipo"] == "recogida" and a["cliente"] == "Casa Mika"
+                   for a in actividades)
+    assert any(a["tipo"] == "entrega" and a["cliente"] == "Casa Mika"
+               for a in actividades)
+
+
+def test_la_caja_de_recogida_se_ve_solo_con_alquiler(cliente):
+    # El estado inicial lo decide el SERVIDOR (calendario.js solo lo
+    # actualiza al cambiar el select). El tipo por defecto es el primero
+    # de TIPOS — Alquiler — así que el form recién abierto la muestra.
+    assert calendario.TIPOS[0]["clave"] == "alquiler"
+    fresco = _abrir(cliente, nueva="1").text
+    assert 'id="caja-recogida" hidden>' not in fresco
+    entrega = _abrir(cliente, nueva="1", tipo="entrega").text
+    assert 'id="caja-recogida" hidden>' in entrega
+    # El rebote de un alquiler escrito: visible y CON su valor.
+    editar = _abrir(cliente, nueva="1", tipo="alquiler",
+                    recogida="2026-10-28").text
+    assert 'id="caja-recogida" hidden>' not in editar
+    assert 'value="2026-10-28"' in editar
+
+
+def test_mas_detalles_cerrado_de_fabrica_y_abierto_si_trae_algo(cliente):
+    fresco = _abrir(cliente, nueva="1").text
+    assert '<details class="mas-detalles"' in fresco
+    assert '<details class="mas-detalles" open>' not in fresco
+    for campo in ("lugar", "nota", "recogida"):
+        con_valor = _abrir(cliente, nueva="1", **{campo: "algo"}).text
+        assert '<details class="mas-detalles" open>' in con_valor
+
+
+def test_el_form_es_el_mismo_por_el_camino_movil(cliente):
+    # En <768px manda _barra_movil.html, pero el form es el MISMO HTML de
+    # la misma página (el CSS decide qué barra se ve): el enlace móvil es
+    # nueva=1 + fecha, y ese GET trae el form completo con la fecha puesta.
+    import re as _re
+    cuerpo = _abrir(cliente).text
+    assert _re.search(r'href="[^"]*nueva=1[^"]*fecha=', cuerpo) or \
+        _re.search(r'href="[^"]*fecha=[^"]*nueva=1', cuerpo)
+    hoy_iso = calendario.hoy().isoformat()
+    form = _abrir(cliente, nueva="1", fecha=hoy_iso).text
+    assert f'name="fecha" value="{hoy_iso}"' in form
+    assert '<datalist id="clientes-conocidos">' in form
+    assert 'name="resp_nombre"' in form

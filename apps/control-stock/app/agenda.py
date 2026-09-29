@@ -259,6 +259,41 @@ def responsable_de_empleada(empleada):
     return ""
 
 
+def clientes_para_sugerir(actividades):
+    """Los nombres para el `<datalist>` del campo Cliente de «Actividad
+    nueva» (29/09/2026): los clientes de las actividades que la pantalla
+    ya trae, deduplicados sin distinguir mayúsculas y en orden
+    alfabético.
+
+    Los leads del embudo NO van aquí a propósito: viven en el selector
+    «Lead» de al lado (`leads_para_conectar`), que además AMARRA la
+    actividad — esto sugiere los clientes que no son leads (los que ya
+    aparecen en el calendario). La lista viaja RENDERIZADA: cero
+    consultas al vuelo mientras se escribe, y el campo sigue siendo texto
+    libre (un cliente nuevo se escribe igual).
+    """
+    nombres = {}
+    for actividad in actividades or []:
+        nombre = (actividad.get("cliente") or "").strip()
+        if nombre:
+            nombres.setdefault(nombre.lower(), nombre)
+    return sorted(nombres.values(), key=str.lower)
+
+
+def leads_para_conectar():
+    """[{ref, nombre}] de los leads VIVOS del embudo, para el selector
+    «Lead» de «Actividad nueva» (29/09/2026): elegir uno crea la
+    actividad AMARRADA por el mismo camino que la Fase 4. Un cerrado no
+    recibe trabajo nuevo, así que queda fuera. Vacío si Linear no
+    contesta — el form sale sin opciones y sigue sirviendo."""
+    try:
+        leads = linear_leads.listar()
+    except linear_leads.ErrorLeads:
+        return []
+    return [{"ref": l["ref"], "nombre": l["nombre"]}
+            for l in leads if not l.get("cerrado")]
+
+
 def agendar(ref_lead, tipo, fecha, hora=None, resp="", dur=None, lugar="",
             nota="", autor=""):
     """Crea la actividad del lead y lo pasa a «Agendado».

@@ -138,6 +138,18 @@ body>nav .marca{display:none}
 .desple-caja .buscador{width:230px;max-width:100%;flex:none}
 .desple-menu{display:flex;flex-direction:column;gap:6px;align-items:stretch}
 .desple-menu .btn{justify-content:flex-start;white-space:nowrap}
+/* «Más detalles» del form de Actividad nueva (29/09/2026): un <details>
+   EN LÍNEA (no popover) que guarda lugar, recogida y nota para que el
+   modal quede corto. Nace abierto cuando alguno trae valor. */
+.mas-detalles>summary{
+  list-style:none;cursor:pointer;user-select:none;
+  font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--muy-suave);
+}
+.mas-detalles>summary::-webkit-details-marker{display:none}
+.mas-detalles>summary::after{content:' ▾'}
+.mas-detalles[open]>summary::after{content:' ▴'}
+.mas-detalles>.form-red{margin-top:10px}
 select.sel,input.campo,textarea.campo{
   font-family:inherit;font-size:12.5px;color:var(--texto);background:#fff;
   border:1px solid var(--borde);border-radius:11px;padding:9px 10px;outline:none;width:100%;
@@ -362,6 +374,10 @@ input.campo:focus,textarea.campo:focus,select.sel:focus{border-color:var(--dorad
 .acciones{display:flex;flex-wrap:wrap;gap:7px}
 .form-red{display:grid;grid-template-columns:1fr 1fr;gap:11px}
 .campo-caja{display:flex;flex-direction:column;gap:5px}
+/* El atributo hidden tiene que ganarle a cualquier display: propio
+   (29/09/2026): sin esto, .campo-caja[hidden] seguía display:flex y la
+   caja de la recogida no se escondía nunca. */
+[hidden]{display:none!important}
 .campo-caja label{font-size:11px;font-weight:700;color:var(--muy-suave);text-transform:uppercase;letter-spacing:.05em}
 .campo-caja .err{font-size:11.5px;color:var(--critico);font-weight:600}
 .ancho{grid-column:1/-1}

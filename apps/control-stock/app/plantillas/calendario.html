@@ -659,6 +659,11 @@ No se borra nada: el issue {{ abierta.ref }} queda en Linear marcado como Cancel
   {# Si crear falló, el error se lee AQUÍ (en el celular el formulario tapa
      la pantalla) y los campos vuelven con lo que se había escrito. #}
   {% if error %}<div class="franja"><b>Ups.</b> <span>{{ error }}</span></div>{% endif %}
+  {# El form corto (29/09/2026, las 4 mejoras que marcó Abraham): arriba lo
+     que SIEMPRE se llena (tipo · cliente · fecha · hora · responsable);
+     lugar, recogida y nota viven en «Más detalles» — abierto si alguno
+     trae valor (el rebote de un error, o un enlace prellenado). #}
+  {% set tipo_actual = pre.tipo or cal.TIPOS[0].clave %}
   <div class="form-red">
     <div class="campo-caja">
       <label for="tipo">Tipo de actividad</label>
@@ -666,17 +671,33 @@ No se borra nada: el issue {{ abierta.ref }} queda en Linear marcado como Cancel
         {% for t in cal.TIPOS %}<option value="{{ t.clave }}" {{ 'selected' if t.clave == pre.tipo }}>{{ t.nombre }}</option>{% endfor %}
       </select>
     </div>
-    {# El campo Responsable se quitó hasta previo aviso (22/09/2026):
-       lo que se crea nace a nombre de quien lo crea. #}
-    <div class="campo-caja ancho">
-      <label for="cliente">Cliente</label>
-      <input class="campo" id="cliente" name="cliente" required placeholder="Hotel Bristol"
-             autocomplete="off" value="{{ pre.cliente }}">
+    {# Conectar lead (29/09/2026, punto 5): con un lead elegido la
+       actividad nace AMARRADA — con tipo agendable va por el camino de la
+       Fase 4 (el lead pasa a Agendado, el saldo sale en su ficha); con
+       otro tipo, amarrada sin mover el estado. «Sin lead» = suelta, como
+       siempre. El enlace del log de Leads de servicio llega con esto ya
+       elegido. #}
+    <div class="campo-caja">
+      <label for="lead">Lead</label>
+      <select class="sel ancho" id="lead" name="lead">
+        <option value="">Sin lead</option>
+        {% for l in leads_para_conectar %}
+        <option value="{{ l.ref }}" {{ 'selected' if l.ref == pre.lead }}
+                data-nombre="{{ l.nombre }}">{{ l.ref }} · {{ l.nombre }}</option>
+        {% endfor %}
+      </select>
     </div>
-    <div class="campo-caja ancho">
-      <label for="lugar">Lugar</label>
-      <input class="campo" id="lugar" name="lugar" placeholder="Obarrio, Costa del Este, oficina…"
-             value="{{ pre.lugar }}">
+    <div class="campo-caja">
+      <label for="cliente">Cliente</label>
+      {# Las sugerencias son un <datalist> nativo armado en Python
+         (`agenda.clientes_para_sugerir`): leads vivos + clientes del
+         calendario, sin ninguna consulta al vuelo. Sigue siendo texto
+         libre: un cliente nuevo se escribe igual. #}
+      <input class="campo" id="cliente" name="cliente" required placeholder="Hotel Bristol"
+             autocomplete="off" value="{{ pre.cliente }}" list="clientes-conocidos">
+      <datalist id="clientes-conocidos">
+        {% for n in clientes_sugeridos %}<option value="{{ n }}">{% endfor %}
+      </datalist>
     </div>
     <div class="campo-caja">
       <label for="fecha">Fecha</label>
@@ -693,25 +714,52 @@ No se borra nada: el issue {{ abierta.ref }} queda en Linear marcado como Cancel
         </select>
       </span>
     </div>
+    {# El Responsable volvió (29/09/2026, lo marcó Abraham): las etiquetas
+       Resp: reales de Linear (`linear_leads.responsables()`, nunca se
+       crea ninguna) + Sin asignar. Por defecto, quien está en la sesión
+       si su nombre está en la lista — la misma sugerencia que Agendar. #}
+    <div class="campo-caja">
+      <label for="resp-nombre">Responsable</label>
+      <select class="sel ancho" id="resp-nombre" name="resp_nombre">
+        <option value="">Sin asignar</option>
+        {% for r in responsables_lead %}
+        <option value="{{ r }}" {{ 'selected' if r == pre.resp_nombre }}>{{ r }}</option>
+        {% endfor %}
+      </select>
+    </div>
     {# Prioridad se fue del formulario (artefacto aprobado, 23/09/2026):
        casi siempre quedaba en Normal; el servidor la pone en 3 y se puede
        cambiar después en la ficha o en Linear. #}
-    <div class="campo-caja">
-      <label for="recogida">Fecha de recogida (alquiler)</label>
-      <input class="campo" type="date" id="recogida" name="recogida" value="{{ pre.recogida }}">
-      <span class="pie-nota">Si el tipo es Alquiler, se crean dos actividades: el alquiler y su recogida.</span>
-    </div>
-    <div class="campo-caja ancho">
-      <label for="nota">Nota</label>
-      <textarea class="campo" id="nota" name="nota" rows="2"
-                placeholder="Qué plantas, con quién coordinar, cuánto se cobra…">{{ pre.nota }}</textarea>
-    </div>
   </div>
+  <details class="mas-detalles" {{ 'open' if pre.lugar or pre.recogida or pre.nota }}>
+    <summary>Más detalles</summary>
+    <div class="form-red">
+      <div class="campo-caja ancho">
+        <label for="lugar">Lugar</label>
+        <input class="campo" id="lugar" name="lugar" placeholder="Obarrio, Costa del Este, oficina…"
+               value="{{ pre.lugar }}">
+      </div>
+      {# La recogida SOLO aplica a Alquiler: el estado inicial lo decide el
+         servidor y calendario.js la muestra/esconde al cambiar el tipo —
+         presentación pura; la regla vive en el POST (con otro tipo, la
+         recogida se descarta en Python). #}
+      <div class="campo-caja" id="caja-recogida" {{ 'hidden' if tipo_actual != 'alquiler' }}>
+        <label for="recogida">Fecha de recogida (Alquiler)</label>
+        <input class="campo" type="date" id="recogida" name="recogida" value="{{ pre.recogida }}">
+        <span class="pie-nota">Un alquiler crea dos actividades: el alquiler y su recogida.</span>
+      </div>
+      <div class="campo-caja ancho">
+        <label for="nota">Nota</label>
+        <textarea class="campo" id="nota" name="nota" rows="2"
+                  placeholder="Qué plantas, con quién coordinar, cuánto se cobra…">{{ pre.nota }}</textarea>
+      </div>
+    </div>
+  </details>
   <div class="acciones pie-form" style="justify-content:flex-end">
     <a class="btn" href="{{ ligas.cerrar }}">Cancelar</a>
     <button class="btn oro" type="submit" data-guardando="Guardando…">Crear en Linear</button>
   </div>
-  <p class="pie-nota">El issue nace como “Tipo — Cliente”, con su etiqueta de tipo, su responsable y su fecha límite.</p>
+  <p class="pie-nota">El issue nace como “Tipo — Cliente” en el CALENDARIO ROSE, con su etiqueta, su responsable y su fecha.</p>
 </form>
 {% endif %}
 

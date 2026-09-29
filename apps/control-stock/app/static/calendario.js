@@ -25,6 +25,34 @@
     });
   }
 
+  // La recogida solo aplica a Alquiler (29/09/2026): el select de tipo la
+  // muestra o la esconde. Presentación pura — el estado inicial ya viene
+  // decidido del servidor y la REGLA vive en Python (con otro tipo, la
+  // recogida se descarta en el POST aunque llegue escrita).
+  var tipo = document.getElementById('tipo');
+  var cajaRecogida = document.getElementById('caja-recogida');
+  if (tipo && cajaRecogida) {
+    var pintaRecogida = function () {
+      cajaRecogida.hidden = tipo.value !== 'alquiler';
+    };
+    tipo.addEventListener('change', pintaRecogida);
+    pintaRecogida();
+  }
+
+  // Elegir un lead rellena Cliente si estaba vacío (29/09/2026):
+  // presentación pura — el dato que manda es el select, y lo resuelve el
+  // servidor (con lead elegido, el cliente de la actividad es el del lead).
+  var leadSel = document.getElementById('lead');
+  var clienteCampo = document.getElementById('cliente');
+  if (leadSel && clienteCampo) {
+    leadSel.addEventListener('change', function () {
+      var opcion = leadSel.options[leadSel.selectedIndex];
+      if (!clienteCampo.value.trim() && opcion) {
+        clienteCampo.value = opcion.getAttribute('data-nombre') || '';
+      }
+    });
+  }
+
   // Cancelar una actividad no tiene marcha atrás cómoda: se pregunta con el
   // riesgo escrito en el propio formulario (lo redacta la plantilla).
   document.querySelectorAll('form[data-confirmar]').forEach(function (form) {
