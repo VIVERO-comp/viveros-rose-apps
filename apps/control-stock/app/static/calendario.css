@@ -173,10 +173,24 @@ input.campo:focus,textarea.campo:focus,select.sel:focus{border-color:var(--dorad
 }
 .filtro.off .cbx{background:transparent;box-shadow:inset 0 0 0 2px var(--c)}
 .filtro.off{color:var(--muy-suave)}
-/* En pantallas medianas la columna derecha cede el espacio al calendario. */
+/* La copia de abajo de los leads (29/09/2026): en computadora ancha manda
+   la columna .cal-lado y esta sección ni existe; solo aparece cuando la
+   columna se esconde, para que "Leads de servicio" y "Por agendar" se vean
+   SIEMPRE. Los filtros no viajan aquí: esos sí ceden el espacio (decisión
+   del dueño del 22/09/2026, intacta). */
+.leads-abajo{display:none}
+/* En pantallas medianas la columna derecha cede el espacio al calendario;
+   los leads reaparecen DEBAJO (lado a lado si caben, una columna si no) y
+   la página scrollea para verlos — mejor un scroll que leads invisibles. */
 @media (max-width:1023.98px){
-  .zona{grid-template-columns:1fr}
+  .zona{grid-template-columns:1fr;min-height:60vh}
   .cal-lado{display:none}
+  .tablero{overflow-y:auto}
+  .leads-abajo{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+    gap:12px;align-items:start;flex:0 0 auto;
+  }
+  .leads-abajo .leads-lado{flex:0 0 auto;overflow:visible;min-height:auto;margin-top:0}
 }
 #vista{min-width:0;min-height:0;height:100%;display:flex;flex-direction:column}
 #vista > *{max-height:100%}
@@ -596,6 +610,20 @@ a{color:inherit}
   }
   .modal .pie-form .btn{flex:1;justify-content:center;min-height:48px;font-size:14px}
   @media (prefers-reduced-motion: reduce){.modal{animation:none}}
+
+  /* Los leads por agendar, debajo de la agenda del día (29/09/2026): la
+     copia .leads-abajo es lo único de la .zona escondida que sobrevive en
+     el celular. Tamaños táctiles: los renglones del sidebar de computadora
+     eran de 11px con padding apretado. */
+  .leads-abajo{grid-template-columns:1fr;gap:10px;margin-top:4px}
+  .leads-abajo .leads-lado{gap:6px}
+  .leads-abajo .leads-tit{font-size:11px}
+  .leads-abajo .leads-tit span{font-size:11px}
+  .leads-abajo .lead-it{padding:10px 12px;border-radius:11px;min-height:44px;align-items:center}
+  .leads-abajo .lead-it .pt{margin-top:0}
+  .leads-abajo .lead-it b{font-size:13px}
+  .leads-abajo .lead-it small{font-size:11.5px}
+  .leads-abajo .lead-vacio{font-size:12px;padding:2px 2px}
 }
 
 /* ---------- pestaña Retail (kanban de leads de venta, 22/09/2026) ---------- */

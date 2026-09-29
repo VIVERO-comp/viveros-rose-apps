@@ -547,3 +547,42 @@ def test_el_log_de_leads_sale_en_el_menu_y_agenda_con_un_toque(cliente):
     assert "nueva=1" in cuerpo
     assert "tipo=mantenimiento" in cuerpo
     assert "cliente=Hotel%20Bristol" in cuerpo
+
+
+# ---------------------------------------------------------------------------
+# Los bloques de leads se pintan DOS veces (29/09/2026): la copia del
+# sidebar .cal-lado y la copia .leads-abajo, debajo del calendario. En
+# pantalla chica el CSS esconde la columna derecha entera; sin la segunda
+# copia, "Leads de servicio" y "Por agendar" desaparecían (reporte del
+# dueño). Las dos las pinta el MISMO macro pinta_leads_lado().
+# ---------------------------------------------------------------------------
+
+def test_los_bloques_de_leads_salen_dos_veces(cliente):
+    cuerpo = _abrir(cliente).text
+    # Una sola sección .leads-abajo, y cada título de bloque dos veces
+    # (el "<span>" del subtítulo distingue el título del bloque de
+    # cualquier otra mención de "Por agendar" en la página).
+    assert cuerpo.count('class="leads-abajo"') == 1
+    assert cuerpo.count("Leads de servicio<span>") == 2
+    assert cuerpo.count("Por agendar<span>") == 2
+
+
+def test_las_dos_copias_pintan_los_mismos_leads(cliente):
+    cuerpo = _abrir(cliente).text
+    antes, abajo = cuerpo.split('class="leads-abajo"')
+    # El lead de muestra sale con su liga completa en las DOS copias:
+    # misma cuenta total y presente a cada lado del corte.
+    assert cuerpo.count("cliente=Hotel%20Bristol") == 2
+    for pedazo in (antes, abajo):
+        assert "cliente=Hotel%20Bristol" in pedazo
+        assert "Leads de servicio<span>" in pedazo
+        assert "Por agendar<span>" in pedazo
+
+
+def test_los_filtros_no_viajan_a_la_copia_de_abajo(cliente):
+    # Los filtros ceden el espacio en pantalla chica (decisión del dueño,
+    # 22/09/2026): viven SOLO en .cal-lado, una vez.
+    cuerpo = _abrir(cliente).text
+    assert cuerpo.count('class="cal-filtros"') == 1
+    _, abajo = cuerpo.split('class="leads-abajo"')
+    assert 'class="cal-filtros"' not in abajo
