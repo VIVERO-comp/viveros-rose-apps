@@ -1131,16 +1131,67 @@ def venta(request: Request, error: str = "", lead: str = "",
         "en_curso": en_curso,
         "tipos_servicio": [(t, cotizaciones.etiqueta_para_cotizar(t))
                           for t in cotizaciones.ORDEN_TIPOS],
-        "ventas": [{**v, "fecha_texto": _fecha_venta(v["creado_en"]),
-                    "etiqueta_estado": ventas.ETIQUETAS_ESTADO[v["estado"]],
-                    "whatsapp": _enlace_whatsapp(request, v),
-                    "nombre_cotizacion_pdf": ventas.nombre_de_pdf(
-                        v["orden"].replace("/", "-"), v["cliente"]),
-                    "nombre_factura_pdf": ventas.nombre_de_pdf(
-                        (v["factura"] or str(v["n"])).replace("/", "-"), v["cliente"])}
-                   for v in ventas.ventas_todas()],
-        "cotizaciones_servicio": _cotizaciones_con_estado(),
+        "vender_lista": _lista_vender(request),
     })
+
+
+# ---------------------------------------------------------------------------
+# La lista única de "Vender": ventas de plantas y cotizaciones de
+# servicio mezcladas (dueño, 30/09/2026: "ponlo en orden de número, y no,
+# si es de servicio o planta no importa, pon todo en una fila"). La
+# decisión de QUÉ se pinta y en qué ORDEN vive aquí, en Python — la
+# plantilla solo recorre esta lista ya armada (regla del proyecto).
+# ---------------------------------------------------------------------------
+
+_RE_NUMERO_ORDEN = re.compile(r"(\d+)\s*$")
+
+
+def _numero_de_orden(orden):
+    """El número dentro de "S00099" -> 99, para ordenar de mayor a menor.
+    None si la orden no tiene ni un dígito al final (un renglón que
+    todavía no llegó a Odoo, ej. un borrador local sin confirmar) — el
+    llamador lo manda al fondo, nunca intercalado entre los que sí tienen
+    número."""
+    coincidencia = _RE_NUMERO_ORDEN.search(orden or "")
+    return int(coincidencia.group(1)) if coincidencia else None
+
+
+def _fila_venta(request, v):
+    """Una venta de plantas, con "tipo" para que la plantilla sepa qué
+    tarjeta pintar en la lista única."""
+    return {
+        **v, "tipo": "venta", "fecha_texto": _fecha_venta(v["creado_en"]),
+        "etiqueta_estado": ventas.ETIQUETAS_ESTADO[v["estado"]],
+        "whatsapp": _enlace_whatsapp(request, v),
+        # (v["orden"] or ""): un renglón que todavía no llegó a Odoo (sin
+        # número, ver _lista_vender) no puede tronar aquí con un
+        # AttributeError sobre None.
+        "nombre_cotizacion_pdf": ventas.nombre_de_pdf(
+            (v["orden"] or "").replace("/", "-"), v["cliente"]),
+        "nombre_factura_pdf": ventas.nombre_de_pdf(
+            (v["factura"] or str(v["n"])).replace("/", "-"), v["cliente"]),
+    }
+
+
+def _lista_vender(request):
+    """Ventas locales + cotizaciones de servicio, en UNA sola lista,
+    ordenada por número de orden de mayor a menor (la más nueva arriba).
+
+    Una CANCELADA no se pinta (dueño, 30/09/2026): el dato se queda
+    intacto en Odoo (y en la tabla local, para una venta), solo deja de
+    aparecer aquí. Un renglón sin número (todavía no llegó a Odoo) cae al
+    fondo por construcción: `_numero_de_orden` devuelve None y la clave de
+    orden lo trata como el más chico de todos, nunca intercalado."""
+    filas = (
+        [_fila_venta(request, v) for v in ventas.ventas_todas()
+         if v["estado"] != "cancelada"]
+        + [{**c, "tipo": "servicio"} for c in _cotizaciones_con_estado()
+           if not c["cancelada"]]
+    )
+    filas.sort(key=lambda f: (_numero_de_orden(f["orden"]) is not None,
+                              _numero_de_orden(f["orden"]) or 0),
+              reverse=True)
+    return filas
 
 
 def _cotizaciones_con_estado():
@@ -1185,6 +1236,20 @@ def venta_cancelar(request: Request, n: int):
     except Exception as error:
         return RedirectResponse(
             "/venta?error=" + quote(f"No se pudo cancelar: {error}"),
+            status_code=303)
+    return RedirectResponse("/venta", status_code=303)
+
+
+@app.post("/venta/servicio/{n}/cancelar")
+def venta_servicio_cancelar(request: Request, n: int):
+    # "Quitar" en una cotización de servicio (dueño, 30/09/2026): mismo
+    # efecto que Cancelar en una venta de planta, reusando el mismo
+    # camino a Odoo (cotizaciones.cancelar -> ventas._cancelar_en_odoo).
+    try:
+        cotizaciones.cancelar(n)
+    except Exception as error:
+        return RedirectResponse(
+            "/venta?error=" + quote(f"No se pudo quitar: {error}"),
             status_code=303)
     return RedirectResponse("/venta", status_code=303)
 

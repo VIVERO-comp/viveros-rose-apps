@@ -607,10 +607,14 @@ def test_cancelar_cotizacion(cliente_venta, odoo):
     registro = ventas.ventas_todas()[0]
     r = cliente_venta.post(f"/venta/cancelar/{registro['n']}", follow_redirects=False)
     assert r.status_code == 303 and "error=" not in r.headers["location"]
+    # El dato se queda cancelado (tabla local y Odoo) — eso no cambia. Lo
+    # que cambió el 30/09/2026 es que la lista de /venta ya no lo PINTA:
+    # una cancelada desaparece de la pantalla sin borrarse de nada.
     assert ventas.obtener_venta(registro["n"])["estado"] == "cancelada"
     assert odoo.ordenes[registro["orden_id"]]["state"] == "cancel"
     pagina = cliente_venta.get("/venta")
-    assert "Cancelada" in pagina.text and "Cobrar" not in pagina.text
+    assert registro["orden"] not in pagina.text
+    assert "Cancelada" not in pagina.text and "Cobrar" not in pagina.text
 
 
 def test_cancelar_solo_cotizaciones(cliente_venta, odoo):

@@ -601,7 +601,9 @@ def test_crear_cotizacion_de_renta_por_http(cliente, odoo):
     assert "Cotización de servicio creada" in r.text
     assert "S" in r.text
     pagina = cliente.get("/venta")
-    assert "Cotizaciones de servicios" in pagina.text
+    # Lista unificada (30/09/2026): ya no hay un título "Cotizaciones de
+    # servicios" aparte, todo vive bajo "Ventas y cotizaciones locales".
+    assert "Ventas y cotizaciones locales" in pagina.text
     assert "María" in pagina.text
 
 
