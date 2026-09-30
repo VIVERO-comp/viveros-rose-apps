@@ -1278,7 +1278,12 @@ def venta_buscar(request: Request, q: str = ""):
         resultados = _resultados_con_stock(ventas.buscar_productos(q))
     except Exception:
         return {"error": "Sin conexión con Odoo en este momento."}
-    return {"resultados": [{**p, "precio": dinero_venta(p["precio"])} for p in resultados]}
+    # "precio_num" (30/09/2026): el buscador de la pantalla de editar arma
+    # la fila de la planta en el navegador (no hay a dónde hacer un POST
+    # con carrito, esa pantalla edita una orden ya existente) y necesita el
+    # número crudo, no el "$3.50" ya formateado para mostrar.
+    return {"resultados": [{**p, "precio": dinero_venta(p["precio"]),
+                            "precio_num": p["precio"]} for p in resultados]}
 
 
 def _datos_cliente_del_form(form):
@@ -1828,25 +1833,100 @@ def venta_servicio_editar(request: Request, n: int):
                                        _contexto_editar(request, datos_edicion))
 
 
+def _flot(valor):
+    """Un campo del formulario o de cargar_para_editar (string, puede venir
+    vacío) a float; nunca revienta, nunca None — para sumar subtotales."""
+    try:
+        texto = str(valor or "").strip().replace(",", ".")
+        return float(texto) if texto else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _contexto_editar(request, datos_edicion, error=None):
+    """El contexto de la pantalla de editar (30/09/2026, rediseño de dos
+    columnas): además de los datos ya recuperados de Odoo, calcula en
+    Python —nunca en la plantilla ni en JS— los subtotales y el total con
+    los que arranca pintada la cuenta de la derecha, y si cada plegable
+    (Envío, Instalación y mantenimiento, El PDF) nace abierto porque ya
+    trae algo distinto del silencio/default. El total EN VIVO, mientras la
+    empleada edita, lo recalcula venta.js con estos mismos números como
+    punto de partida."""
     registro = datos_edicion["registro"]
+    servicios = datos_edicion["servicios"]
+    renglones = datos_edicion["renglones"]
+    cargos = datos_edicion.get("cargos") or {}
+    es_personalizada = registro["tipo"] not in cotizaciones.TIPOS
+    casillas = (datos_edicion.get("banderas")
+                or {"pago_50_50": True, "con_garantia": True})
+    precio_editable = datos_edicion.get("precio_editable", True)
+
+    # El subtotal de cada planta se calcula acá, no en la plantilla (nada
+    # de aritmética en Jinja): sin precio editable (cobro por total) Odoo
+    # la deja en $0 igual, así que el subtotal también es $0.
+    plantas = [{**p, "subtotal": (_flot(p.get("cantidad")) * _flot(p.get("precio"))
+                                  if precio_editable else 0.0)}
+              for p in datos_edicion["plantas"]]
+
+    subtotal_plantas = sum(p["subtotal"] for p in plantas)
+    subtotal_servicios = sum(_flot(s.get("monto")) for s in servicios)
+    subtotal_renglones = (sum(_flot(r.get("cantidad")) * _flot(r.get("precio"))
+                              for r in renglones) if es_personalizada else 0.0)
+    monto_envio = _flot(cargos.get("envio"))
+    monto_instalacion = _flot(cargos.get("instalacion"))
+    monto_mantenimiento = _flot(cargos.get("mantenimiento"))
+    total_inicial = (subtotal_plantas + subtotal_servicios + subtotal_renglones
+                     + monto_envio + monto_instalacion + monto_mantenimiento)
+
+    opcion = ventas.opcion_envio(cargos.get("envio_opcion") or "")
+    if opcion:
+        resumen_envio = f"{opcion['vehiculo_pantalla']} · {opcion['zona']}"
+    elif (cargos.get("envio_opcion") or "") == "personalizado":
+        resumen_envio = "Personalizado"
+    else:
+        resumen_envio = "Sin envío"
+
+    partes_cargos = []
+    if monto_instalacion > 0:
+        partes_cargos.append("instalación")
+    if monto_mantenimiento > 0:
+        partes_cargos.append("mantenimiento")
+    resumen_cargos = (" y ".join(partes_cargos).capitalize()
+                      if partes_cargos else "sin cobrar")
+
+    resumen_pdf = (("con garantía" if casillas["con_garantia"] else "sin garantía")
+                   + " · " + ("50% abono" if casillas["pago_50_50"] else "pago completo"))
+
     return {
         "puede_fichas": fichas.es_editora(request.state.empleada["id"]),
         "registro": registro,
-        "es_personalizada": registro["tipo"] not in cotizaciones.TIPOS,
+        "es_personalizada": es_personalizada,
         "etiqueta_tipo": cotizaciones.etiqueta_de(registro["tipo"]),
-        "servicios": datos_edicion["servicios"],
-        "plantas": datos_edicion["plantas"],
+        "servicios": servicios,
+        "plantas": plantas,
         # Sin este dato la plantilla trata "precio_editable" como
         # indefinida (falsa en Jinja2) y la casilla del precio nunca se
         # dibuja: lo escrito a mano se pierde al guardar (30/09/2026).
         "precio_editable": datos_edicion.get("precio_editable", True),
-        "renglones": datos_edicion["renglones"],
-        "cargos": datos_edicion.get("cargos") or {},
+        "plantas_permitidas": datos_edicion.get("plantas_permitidas", True),
+        "renglones": renglones,
+        "cargos": cargos,
         # Al editar, las casillas quedan como se guardaron en la orden.
-        "casillas": datos_edicion.get("banderas")
-                    or {"pago_50_50": True, "con_garantia": True},
+        "casillas": casillas,
         "error_venta": error or None,
+        # La cuenta de la derecha, calculada en Python para la carga
+        # inicial (30/09/2026): venta.js la recalcula en vivo desde aquí.
+        "subtotal_plantas": subtotal_plantas,
+        "subtotal_servicios": subtotal_servicios,
+        "subtotal_renglones": subtotal_renglones,
+        "subtotal_cargos": monto_envio + monto_instalacion + monto_mantenimiento,
+        "total_inicial": total_inicial,
+        "resumen_envio": resumen_envio,
+        "resumen_cargos": resumen_cargos,
+        "resumen_pdf": resumen_pdf,
+        "abrir_envio": bool((cargos.get("envio_opcion") or "").strip()) or monto_envio > 0,
+        "abrir_cargos": monto_instalacion > 0 or monto_mantenimiento > 0,
+        "abrir_pdf": not casillas["pago_50_50"] or not casillas["con_garantia"],
     }
 
 
@@ -1884,6 +1964,14 @@ async def venta_servicio_editar_guardar(request: Request, n: int):
             return _redirigir_venta(str(error))
         datos_edicion["servicios"] = servicios or datos_edicion["servicios"]
         nombres = {p["producto_id"]: p["nombre"] for p in datos_edicion["plantas"]}
+        # El buscador (30/09/2026) puede haber sumado una planta que la
+        # cotización todavía no tenía en Odoo: su nombre no está en
+        # `nombres`. El formulario ya lo sabe (lo puso el buscador en un
+        # campo oculto junto al id) y gana sobre el diccionario viejo.
+        nombres.update({
+            _entero_o_none(pid): nombre
+            for pid, nombre in zip(form.getlist("planta_id"),
+                                   form.getlist("planta_nombre")) if nombre})
         datos_edicion["plantas"] = [
             {**p, "nombre": nombres.get(_entero_o_none(p["producto_id"]), "")}
             for p in plantas] or datos_edicion["plantas"]

@@ -1708,3 +1708,45 @@ nav .marca{display:none}
   .fila-planta .qty-mini{grid-column:2;grid-row:2;justify-self:end}
   .fila-planta .quitar-venta{margin-top:1px}
 }
+
+/* ---------- Editar una cotización, en dos columnas (30/09/2026) ----------
+   El formulario ocupaba media pantalla en computadora (865px de 1372px) y
+   nunca decía el total. Mismo patrón de .venta-dos (el trabajo a la
+   izquierda, la cuenta a la derecha), pero MÁS SIMPLE: aquí no hay "de
+   dónde viene" -no aplica a una orden que ya existe-, así que basta una
+   sola fila de dos columnas en vez del grid de dos filas de .venta-dos.
+   Reusa el mismo punto de quiebre (1080px) y las clases .col-trabajo/
+   .col-cuenta ya existentes -la sticky de .col-cuenta ya está puesta ahí
+   arriba y aplica igual acá, sin repetirla.
+
+   LA TRAMPA: .col-trabajo/.col-cuenta ya llevan `grid-area:trabajo`/
+   `grid-area:cuenta` puestos arriba para encajar en las DOS filas de
+   .venta-dos ("trabajo lead" / "trabajo cuenta"). .editar-dos no define
+   grid-template-areas, pero el navegador igual busca las líneas con
+   nombre trabajo-start/cuenta-start —que SÍ existen, las crea
+   .venta-dos en otra parte del documento— y las dos columnas terminaban
+   pegadas una sobre la otra en vez de una al lado de la otra. Hay que
+   devolver el grid-area a auto, con más especificidad para ganarle a la
+   regla de arriba. */
+.editar-dos{display:flex;flex-direction:column;gap:18px}
+@media (min-width:1080px){
+  .editar-dos{
+    display:grid;grid-template-columns:minmax(0,1fr) 320px;
+    gap:18px 24px;align-items:start;
+  }
+  .editar-dos > .col-trabajo,.editar-dos > .col-cuenta{grid-area:auto}
+}
+/* La fila de una planta (nombre + Cant + Precio + Subtotal + Quitar) es la
+   más cargada de .servicio-pie: en celular angosto (medido en un iPhone
+   de 390px) "Subtotal $X.XX" y "Quitar" se salían de la pantalla aunque
+   .servicio-pie ya envuelve (flex-wrap acomoda Cant+Precio en una línea,
+   pero Subtotal y Quitar seguían peleando el mismo renglón angosto).
+   Apilado vertical, sin pelear por el ancho: cada dato en su propio
+   renglón y Quitar a la derecha del último. */
+@media (max-width:480px){
+  .fila-planta-editar .servicio-pie{
+    flex-direction:column; align-items:stretch; gap:6px;
+  }
+  .fila-planta-editar .servicio-monto{justify-content:space-between}
+  .fila-planta-editar .quitar-servicio{margin-left:0; align-self:flex-end}
+}

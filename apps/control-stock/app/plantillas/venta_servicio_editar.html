@@ -13,27 +13,131 @@
     </div>
   </div>
   {# El botón va al lado del título (Abraham, 22/09/2026), no en una fila
-     propia que empuja el contenido. #}
+     propia que empuja el contenido. header ya queda siempre a la vista
+     -vive fuera de main, que es el único que scrollea-, así que "Volver"
+     nunca se pierde aunque el formulario sea largo. #}
   <a class="volver" style="margin:0" href="/venta#cot-{{ registro.n }}">← Volver a Vender</a>
 </header>
 
-<main class="angosto">
+{# forma-venta ensancha main a 1180px en computadora (≥900px), igual que
+   Nueva venta/Personalizada: con dos columnas esta pantalla necesita el
+   mismo aire, no los 940px genéricos de .angosto solo. #}
+<main class="angosto forma-venta">
   {% if error_venta %}
   <div class="aviso-error">{{ error_venta }}</div>
   {% endif %}
 
+  {# Dos columnas (rediseño 30/09/2026, artefacto aprobado): el trabajo a
+     la izquierda —lo que se toca— y a la derecha la cuenta con el botón,
+     pegada arriba mientras el formulario scrollea. Antes esta pantalla
+     era una sola columna angosta con medio ancho de pantalla vacío y sin
+     decir nunca el total. #}
+  <div class="editar-dos">
+  <div class="col-trabajo">
+
   {# El cliente NO se edita aquí (alcance que eligió Abraham, 22/09/2026):
      solo se muestra de quién es la cotización. #}
-  <div class="seccion-titulo" style="margin-top:16px">Cliente</div>
+  <div class="seccion-titulo" style="margin-top:4px">Cliente</div>
   <p class="nada-venta">{{ registro.cliente }}{% if registro.celular %} · {{ registro.celular }}{% endif %}</p>
-
-  {% with form_cargos="form-servicio", cargos=cargos %}{% include "_cargos.html" %}{% endwith %}
-  {% if es_personalizada %}{% with form_casillas="form-servicio" %}{% include "_casillas.html" %}{% endwith %}{% endif %}
 
   <form id="form-servicio" method="post"
         action="/venta/servicio/{{ registro.n }}/editar" style="display:none"></form>
 
-  <div class="seccion-titulo" style="margin-top:16px">Servicios</div>
+  {# ---- Plantas: primero, es lo que más se toca (antes vivía tres
+     scrolls más abajo). La sección se pinta SIEMPRE, con su buscador,
+     aunque la cotización no tenga ninguna planta todavía (30/09/2026):
+     antes, sin plantas, la sección entera desaparecía y no había forma de
+     meter una. ---- #}
+  <div class="seccion-titulo" style="margin-top:16px">Plantas</div>
+  <p class="nada-venta">Cambia la cantidad{% if precio_editable %} o el
+    precio{% endif %}; la ✕ la quita de la cotización.</p>
+
+  <div id="listaPlantas">
+    {% for p in plantas %}
+    <div class="servicio fila-planta-editar">
+      <div class="servicio-pie" style="border-top:none;margin-top:0;padding-top:0">
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;
+                     white-space:nowrap;font-weight:600">{{ p.nombre }}</span>
+        <input type="hidden" name="planta_id" form="form-servicio" value="{{ p.producto_id }}">
+        {# El nombre viaja también en un campo oculto (30/09/2026): si
+           guardar falla y la pantalla vuelve con lo escrito, una planta
+           recién añadida por el buscador -que Odoo todavía no conoce- no
+           tiene de dónde más sacar su nombre para redibujarse. #}
+        <input type="hidden" name="planta_nombre" form="form-servicio" value="{{ p.nombre }}">
+        <label class="servicio-monto">Cant
+          <input class="servicio-cantidad" name="planta_cantidad" form="form-servicio"
+                 type="number" step="1" min="0" inputmode="numeric" value="{{ p.cantidad }}"
+                 aria-label="Cantidad de {{ p.nombre }}" data-planta-cant>
+        </label>
+        {% if precio_editable %}
+        <label class="servicio-monto">Precio
+          <input name="planta_precio" form="form-servicio" type="number"
+                 step="0.01" min="0" inputmode="decimal" placeholder="0.00"
+                 value="{{ p.precio }}" aria-label="Precio de {{ p.nombre }}"
+                 data-planta-precio>
+        </label>
+        {% endif %}
+        <span class="servicio-monto">Subtotal <b data-planta-sub>{{ p.subtotal | dinero }}</b></span>
+        <button class="quitar-servicio" type="button" aria-label="Quitar {{ p.nombre }}">Quitar</button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% if not plantas %}
+  <p class="nada-venta" id="plantas-vacio">{{ 'Ninguna todavía: búscala abajo.'
+    if plantas_permitidas else 'Este tipo de cotización no lleva plantas.' }}</p>
+  {% endif %}
+
+  {% if plantas_permitidas %}
+  {# Buscador compacto (mismo patrón que Nueva venta/Personalizada,
+     22/09/2026), pero con ids propios: esta pantalla edita UNA orden ya
+     existente, de un tirón, sin el carrito compartido por empleada que
+     usan esas dos pantallas (agregar ahí recargaría la página entera y
+     perdería cualquier otro cambio a medio escribir — envío, servicios,
+     renglones — porque editar no guarda borrador a propósito). El
+     resultado se arma acá mismo con JS mínimo: reusa /venta/buscar, el
+     mismo JSON que ya alimenta el buscador en vivo de esas pantallas. #}
+  <div class="buscador buscador-compacto">
+    <input id="busca-planta-editar" placeholder="Añadir planta: nombre o SKU…"
+           autocomplete="off" enterkeyhint="search" aria-label="Buscar planta para añadir">
+  </div>
+  <div id="resultados-planta-editar"></div>
+  {% endif %}
+
+  <div class="total-venta">
+    <span>Subtotal plantas</span>
+    <b id="subtotal-plantas">{{ subtotal_plantas | dinero }}</b>
+  </div>
+
+  {# La plantilla de una fila en blanco, para que el buscador la clone al
+     añadir (template.content nunca se pinta solo). #}
+  <template id="plantilla-planta">
+    <div class="servicio fila-planta-editar">
+      <div class="servicio-pie" style="border-top:none;margin-top:0;padding-top:0">
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;
+                     white-space:nowrap;font-weight:600" data-planta-nombre></span>
+        <input type="hidden" name="planta_id" form="form-servicio" value="">
+        <input type="hidden" name="planta_nombre" form="form-servicio" value="">
+        <label class="servicio-monto">Cant
+          <input class="servicio-cantidad" name="planta_cantidad" form="form-servicio"
+                 type="number" step="1" min="0" inputmode="numeric" value="1"
+                 data-planta-cant>
+        </label>
+        {% if precio_editable %}
+        <label class="servicio-monto">Precio
+          <input name="planta_precio" form="form-servicio" type="number"
+                 step="0.01" min="0" inputmode="decimal" placeholder="0.00"
+                 value="" data-planta-precio>
+        </label>
+        {% endif %}
+        <span class="servicio-monto">Subtotal <b data-planta-sub>$0.00</b></span>
+        <button class="quitar-servicio" type="button">Quitar</button>
+      </div>
+    </div>
+  </template>
+
+  {# ---- Servicios ---- #}
+  <div class="seccion-titulo" style="margin-top:22px">Servicios</div>
   {# data-sin-borrador: esta pantalla NO guarda borrador (el borrador es el
      de una cotización NUEVA y editarlo aquí lo pisaría). #}
   <div id="servicios" data-sin-borrador="1">
@@ -98,38 +202,66 @@
   </div>
   {% endif %}
 
-  {% if plantas %}
-  <div class="seccion-titulo" style="margin-top:16px">Plantas</div>
-  <p class="nada-venta">Cambia la cantidad{% if precio_editable %} o el
-    precio{% endif %}; en cantidad 0 la planta se quita de la cotización.</p>
-  {% for p in plantas %}
-  <div class="servicio">
-    <div class="servicio-pie" style="border-top:none;margin-top:0;padding-top:0">
-      <span style="flex:1">{{ p.nombre }}</span>
-      <label class="servicio-monto">Cant
-        <input type="hidden" name="planta_id" form="form-servicio" value="{{ p.producto_id }}">
-        <input class="servicio-cantidad" name="planta_cantidad" form="form-servicio"
-               type="number" step="1" min="0" inputmode="numeric"
-               value="{{ p.cantidad }}">
-      </label>
-      {# El precio también se edita (23/09/2026): una planta puede haberse
-         vendido más cara que el precio de la lista de Odoo. En una
-         cotización que se cobra por el total (alquiler por evento,
-         mantenimiento) no aparece: ahí Odoo deja las plantas en $0 igual. #}
-      {% if precio_editable %}
-      <label class="servicio-monto">Precio
-        <input name="planta_precio" form="form-servicio" type="number"
-               step="0.01" min="0" inputmode="decimal" placeholder="0.00"
-               value="{{ p.precio }}">
-      </label>
-      {% endif %}
+  {# ---- Lo opcional, plegado y abierto solo si ya trae algo (mismo
+     criterio que "Más detalles" del formulario de Actividad nueva):
+     Envío, Instalación y mantenimiento, El PDF. Antes esto abría la
+     pantalla entera, casi todo en $0.00, empujando a las plantas tres
+     scrolls abajo. ---- #}
+  <details class="ajuste-d"{{ ' open' if abrir_envio }}>
+    <summary><span class="que"><b>Envío</b><span>{{ resumen_envio }}</span></span>
+      <span class="flecha">›</span></summary>
+    <div class="ajuste-cuerpo">
+      {% with form_cargos="form-servicio", cargos=cargos %}{% include "_cargos_envio.html" %}{% endwith %}
     </div>
-  </div>
-  {% endfor %}
+  </details>
+
+  <details class="ajuste-d"{{ ' open' if abrir_cargos }}>
+    <summary><span class="que"><b>Instalación y mantenimiento</b><span>{{ resumen_cargos }}</span></span>
+      <span class="flecha">›</span></summary>
+    <div class="ajuste-cuerpo">
+      {% with form_cargos="form-servicio", cargos=cargos %}{% include "_cargos_instalacion.html" %}{% endwith %}
+    </div>
+  </details>
+
+  {% if es_personalizada %}
+  <details class="ajuste-d"{{ ' open' if abrir_pdf }}>
+    <summary><span class="que"><b>El PDF</b><span>{{ resumen_pdf }}</span></span>
+      <span class="flecha">›</span></summary>
+    <div class="ajuste-cuerpo">
+      {% with form_casillas="form-servicio" %}{% include "_casillas.html" %}{% endwith %}
+    </div>
+  </details>
   {% endif %}
 
-  <button class="btn btn-dorado btn-grande" style="margin-top:16px"
-          form="form-servicio" type="submit">GUARDAR CAMBIOS</button>
+  </div>{# col-trabajo #}
+
+  {# ---- La cuenta: a la derecha en computadora, pegada arriba; debajo
+     del formulario en el teléfono. Dice el total -que antes no aparecía
+     nunca- y qué cambió respecto a lo que hay guardado en Odoo ahora
+     mismo. Los números de acá son los mismos con los que arranca pintada
+     la pantalla (calculados en Python); venta.js los recalcula en vivo
+     mientras se escribe. ---- #}
+  <aside class="col-cuenta">
+    <div class="tarjeta-lado">
+      <div class="rotulo-lado">La cuenta</div>
+      <div class="total-venta desglose" id="cuenta-editar"
+           data-original="{{ '%.2f' | format(total_inicial) }}">
+        <div class="linea-total"><span>Plantas</span><b id="cuenta-plantas">{{ subtotal_plantas | dinero }}</b></div>
+        <div class="linea-total"><span>Servicios</span><b id="cuenta-servicios">{{ subtotal_servicios | dinero }}</b></div>
+        {% if es_personalizada %}
+        <div class="linea-total"><span>Otros renglones</span><b id="cuenta-renglones">{{ subtotal_renglones | dinero }}</b></div>
+        {% endif %}
+        <div class="linea-total"><span>Envío y cargos</span><b id="cuenta-cargos">{{ subtotal_cargos | dinero }}</b></div>
+        <div class="total-final"><span>Total</span><b id="cuenta-total">{{ total_inicial | dinero }}</b></div>
+      </div>
+      <p class="nota-cliente" id="cuenta-cambio">Sin cambios todavía. Así está guardada en Odoo.</p>
+      <button class="btn btn-dorado btn-grande" style="width:100%"
+              form="form-servicio" type="submit">GUARDAR CAMBIOS</button>
+      <p class="nota-cliente">Se escribe en la orden {{ registro.orden }} de Odoo.</p>
+    </div>
+  </aside>
+
+  </div>{# editar-dos #}
 </main>
 
 <script src="/static/venta.js?v={{ v_estaticos }}"></script>

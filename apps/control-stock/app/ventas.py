@@ -73,6 +73,19 @@ def reiniciar_conexion():
     _conexion["modelos"] = None
 
 
+def reiniciar_cache():
+    """Solo para pruebas: limpia los ids de producto resueltos por código
+    (los cargos y la planta personalizada). Sin esto (bug cazado el
+    30/09/2026 al escribir una prueba que sí miraba el texto exacto de un
+    cargo) el id queda pegado entre pruebas — cada una arma su propio Odoo
+    falso con sus propios ids — y un cargo que una prueba anterior ya
+    resolvió deja de encontrarse en la siguiente: `cargar_para_editar` no
+    reconoce la línea como cargo, la trata como un servicio suelto, y su
+    descripción a mano se pierde detrás del texto de fábrica."""
+    _cache_cargos.clear()
+    _id_personalizada_planta["id"] = None
+
+
 def _autenticar():
     url = os.environ["ODOO_URL"].rstrip("/")
     comun = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/common", allow_none=True)

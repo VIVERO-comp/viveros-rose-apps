@@ -1075,8 +1075,16 @@ def cargar_para_editar(n):
             seccion = linea.get("name") or ""
         elif tipo_linea in ("line_subsection", "line_note"):
             # La descripción: el párrafo pegado debajo del último renglón
-            # (servicio o renglón libre, lo que se haya agregado último).
-            if ultimo is not None and not ultimo.get("descripcion"):
+            # (servicio, renglón libre o cargo -lo que se haya agregado
+            # último-). `ultimo` es un texto ("envio", "instalacion", …)
+            # cuando lo último fue un cargo (30/09/2026: antes se perdía
+            # la descripción escrita a mano de un cargo y, al guardar, caía
+            # siempre al texto de fábrica).
+            if isinstance(ultimo, str):
+                clave_desc = ultimo + "_desc"
+                if not cargos.get(clave_desc):
+                    cargos[clave_desc] = linea.get("name") or ""
+            elif ultimo is not None and not ultimo.get("descripcion"):
                 ultimo["descripcion"] = linea.get("name") or ""
         elif not tipo_linea:
             producto = productos.get(linea["product_id"][0]) if linea.get("product_id") else None
@@ -1093,7 +1101,9 @@ def cargar_para_editar(n):
                     (cargos["envio_opcion"],
                      cargos["envio_nota"]) = ventas.opcion_de_linea_envio(
                         linea.get("name"))
-                ultimo = None
+                # Espera su descripción en la próxima línea (si la hay):
+                # ver el `isinstance(ultimo, str)` de arriba.
+                ultimo = clave
                 continue
             if producto and producto.get("type") != "service":
                 plantas.append({
@@ -1137,6 +1147,14 @@ def cargar_para_editar(n):
         "cobro": ventas.COBRO_PLANTA if por_planta else ventas.COBRO_TOTAL,
         "facturada": estado["facturada"],
         "cancelada": estado["cancelada"],
+        # El buscador de "añadir planta" (30/09/2026) solo tiene sentido si
+        # el tipo tiene dónde poner una: la personalizada siempre, y los
+        # demás solo si alguna de sus secciones lleva catálogo (boda y
+        # evento, retirados, no llevan ninguna — editar_cotizacion rechaza
+        # sus plantas al guardar, y sin esto el buscador ofrecería algo
+        # que después revienta).
+        "plantas_permitidas": (registro["tipo"] not in TIPOS or any(
+            s.get("catalogo") for s in TIPOS[registro["tipo"]]["secciones"])),
         "servicios": servicios or [{"texto": "", "monto": "", "descripcion": ""}],
         "plantas": plantas,
         "renglones": renglones or [{"texto": "", "cantidad": "", "precio": "",
