@@ -1403,6 +1403,15 @@ def _avanzar_crm_pagada(venta):
         crm_leads.marcar_odoo(venta["lead_ref"], etapa="FACTURADO")
 
 
+def _cancelar_en_odoo(orden_id):
+    """El ÚNICO lugar que cancela una orden en Odoo (action_cancel). Lo
+    reusan cancelar() de aquí y cotizaciones.cancelar(): "Quitar" en una
+    cotización de servicio hace EXACTAMENTE lo mismo que "Cancelar" en una
+    venta de planta (dueño, 30/09/2026) — un solo camino a Odoo, nunca dos
+    llamadas iguales con nombres distintos."""
+    _ejecutar("sale.order", "action_cancel", [[orden_id]])
+
+
 def cancelar(n):
     """Cancela una cotización: la orden en Odoo pasa a cancelada y el
     registro local queda en estado 'cancelada'. Solo aplica a cotizaciones
@@ -1412,7 +1421,7 @@ def cancelar(n):
         return None
     if venta["estado"] != "cotizacion":
         raise ValueError("Solo se puede cancelar una cotización.")
-    _ejecutar("sale.order", "action_cancel", [[venta["orden_id"]]])
+    _cancelar_en_odoo(venta["orden_id"])
     _actualizar_venta(n, estado="cancelada", ultimo_error=None)
     return obtener_venta(n)
 

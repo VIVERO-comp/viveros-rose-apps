@@ -1007,6 +1007,25 @@ def estados_en_odoo(orden_ids):
     return estados
 
 
+def cancelar(n):
+    """"Quitar" una cotización de servicio (dueño, 30/09/2026): cancela la
+    orden en Odoo por el MISMO camino que ventas.cancelar() en una venta
+    de planta — reusa ventas._cancelar_en_odoo(), nunca una segunda
+    llamada a action_cancel con otro nombre. No hay estado local que
+    actualizar aquí (a diferencia de ventas_locales, cotizaciones_servicio
+    no guarda un campo "estado": lo cancelado/facturado se lee siempre de
+    Odoo vía estados_en_odoo(), así que la fila desaparece sola de la
+    lista en la próxima carga, sin tocar nada más)."""
+    fila = obtener(n)
+    if fila is None:
+        return None
+    estado = estados_en_odoo([fila["orden_id"]]).get(fila["orden_id"])
+    if estado and estado["facturada"]:
+        raise ValueError("Esta cotización ya se facturó; no se puede quitar.")
+    ventas._cancelar_en_odoo(fila["orden_id"])
+    return fila
+
+
 def por_planta_en_odoo(orden_id):
     """Si esa orden quedó marcada como alquiler cobrado por planta. Se
     pregunta aparte y a prueba de fallos: un Odoo todavía sin la bandera
