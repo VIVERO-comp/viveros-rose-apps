@@ -11,13 +11,16 @@
    arriba del todo. #}
 {# La barra única del teléfono (artefacto aprobado, 23/09/2026). Esta
    página cambia de pestaña con JS, así que el título lo pone tab()
-   (app.js) y Crear planta —el único botón negro— solo se ve en Stock. #}
+   (app.js) y Crear producto —el único botón negro— solo se ve en Stock. #}
 <div class="barra-m" id="barra-m">
   <button class="hamb-movil" type="button" aria-label="Abrir el menú" aria-expanded="false">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
   </button>
   <b class="bm-titulo" id="bm-titulo">Inicio</b>
-  <button class="bm-negro" id="bm-crear" type="button" onclick="abrirAgregar()" style="display:none">+ Crear planta</button>
+  {# "Crear producto" (dueño, 30/09/2026): ya no abre el formulario de planta
+     de una, lleva a elegir el tipo —Planta · Maceta · Insumo— en su propia
+     pantalla. Es un enlace, no un botón: el paso de elegir no usa JS. #}
+  <a class="bm-negro" id="bm-crear" href="/productos/crear" style="display:none">+ Crear producto</a>
 </div>
 <main>
   {% if sin_proxy %}
@@ -795,14 +798,17 @@
    Reemplaza a la sugerencia por WhatsApp, que no creaba nada. La planta
    nace en Odoo, no en la tienda: para salir online necesita foto y una
    regeneración del catálogo. #}
-<div class="panel centrado" id="modal-agregar">
+{# Llega abierto desde "Crear producto" → Planta (/?tab=stock&crear=planta):
+   lo decide el servidor con la clase, sin JS. #}
+<div class="panel centrado{{ ' abierto' if abrir_crear_planta }}" id="modal-agregar">
   <div class="panel-hoja">
     <h3>Crear planta</h3>
     <p class="edit-sub">Se crea en Odoo al momento. No sale en la tienda hasta que se regenere el catálogo del sitio.</p>
     <div class="form-agregar">
       <div class="campo">
         <span>Nombre de la planta</span>
-        <input id="agregar-nombre" autocomplete="off" placeholder="Ej: Palma Areca" oninput="sugerirSku()">
+        <input id="agregar-nombre" autocomplete="off" placeholder="Ej: Palma Areca" oninput="sugerirSku()"
+               {{ 'autofocus' if abrir_crear_planta }}>
       </div>
       <div class="campo">
         <span>Referencia en Odoo</span>
@@ -811,8 +817,16 @@
       </div>
       <div class="campos-nuevo">
         <div class="campo">
+          {# Las categorías las pinta Jinja desde datos.CATEGORIAS_PLANTA (el
+             JS ya no las arma). Arranca SIN elegir a propósito (dueño,
+             30/09/2026): así nadie crea una planta en la categoría
+             equivocada por inercia. La categoría "Plantas" existe vacía en
+             Odoo y NO se ofrece. #}
           <span>Categoría</span>
-          <select id="agregar-categoria"></select>
+          <select id="agregar-categoria">
+            <option value="">— elige la categoría —</option>
+            {% for c in categorias_planta %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+          </select>
         </div>
         <div class="campo">
           <span>Cantidad física</span>
@@ -856,10 +870,10 @@
   </div>
 </div>
 
-<button class="fab" id="fab-agregar" onclick="abrirAgregar()">
+<a class="fab" id="fab-agregar" href="/productos/crear">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-  Crear planta
-</button>
+  Crear producto
+</a>
 
 <div class="toast" id="toast"></div>
 

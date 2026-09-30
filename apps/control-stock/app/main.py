@@ -7,6 +7,7 @@ prototipo. Las acciones (ajustar stock, atender alertas, conteos, fichas)
 son POSTs de vuelta a este mismo servidor; la app nunca toca Odoo directo.
 """
 
+import base64
 import json
 import logging
 import os
@@ -23,7 +24,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import (acceso_google, agenda, avisos, calculos, calendario,
+from . import (acceso_google, agenda, altas, avisos, calculos, calendario,
                calendario_google, colores, compras,
                calendario_ics, conteos, control, cot_lead, cotizaciones,
                coworkers, crm_twenty, datos, fichas, fotos,
@@ -437,7 +438,7 @@ def _resumen_categorias(inventario, umbral):
 
 
 @app.get("/")
-def inicio(request: Request, refrescar: int = 0):
+def inicio(request: Request, refrescar: int = 0, crear: str = ""):
     # Sin pestaña pedida, la app ABRE en el Calendario (dueño, 22/09/2026:
     # "quita inicio y pon calendario de primero" y, al ver que la raíz
     # seguía mostrando el tablero, "todavía inicio está"). El tablero del
@@ -587,6 +588,13 @@ def inicio(request: Request, refrescar: int = 0):
         "dias_conteo": dias_conteo,
         "conteo_vencido": conteo_vencido,
         "categorias": _resumen_categorias(inventario, umbral),
+        # Las categorías del alta de plantas las pinta Jinja (antes las
+        # armaba el JS): así la pantalla puede llegar con el formulario ya
+        # abierto desde "Crear producto" sin una línea de JavaScript.
+        "categorias_planta": datos.CATEGORIAS_PLANTA,
+        # /?tab=stock&crear=planta —el enlace "Planta" de Crear producto—
+        # abre el formulario de siempre ya desplegado.
+        "abrir_crear_planta": crear == "planta",
         "umbral": umbral,
         "alertas": alertas,
         "cal": panel_cal,
@@ -610,7 +618,6 @@ def inicio(request: Request, refrescar: int = 0):
             "fichas": fichas.todas(),
             "referencias": fichas.referencias(),
             "sinPublicados": sin_publicados,
-            "categoriasPlanta": datos.CATEGORIAS_PLANTA,
         }, ensure_ascii=False),
     })
 
@@ -3749,3 +3756,101 @@ def calendario_regenerar_enlace(request: Request):
     """Enlace nuevo para la empleada de la sesión; el viejo muere ya."""
     calendario_ics.regenerar(request.state.empleada["id"])
     return RedirectResponse("/?tab=ajustes&aviso=enlace-nuevo", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Crear producto: Planta · Maceta · Insumo (dueño, 30/09/2026)
+# ---------------------------------------------------------------------------
+# El botón negro de Stock dejó de ser "Crear planta". Primero se elige el
+# tipo —una pantalla con tres ENLACES, sin JS— y después se llena su
+# formulario. La planta sigue por su camino de siempre (el modal de Stock y
+# POST /productos/nuevo, que pasa por el order-api); maceta e insumo se
+# crean acá, directo en Odoo, con las reglas de app/altas.py: los dos
+# impuestos explícitamente vacíos, la categoría por NOMBRE y la maceta
+# naciendo sin publicar.
+
+# Lo más grande que acepta la foto de una maceta. Odoo la guarda en
+# image_1920 y la reescala; 12 MB cubre cualquier foto de teléfono.
+MAX_FOTO_PRODUCTO = 12 * 1024 * 1024
+
+
+def _pantalla_alta(request, tipo, previo=None, error=None, creado="",
+                   avisos=(), estado=200):
+    """La pantalla de Crear producto: el paso de elegir, o un formulario."""
+    etiquetas = {"maceta": "Maceta", "insumo": "Insumo"}
+    return plantillas.TemplateResponse(request, "crear_producto.html", {
+        "tipo": tipo,
+        "tipos": altas.tipos_para_pantalla(),
+        "materiales": altas.MATERIALES,
+        "unidades": altas.UNIDADES,
+        "prefijo": altas.PREFIJO_DE.get(tipo, ""),
+        "previo": previo or {},
+        "error": error,
+        "creado": creado,
+        # "Maceta creada" / "Insumo creado": el género lo decide Python, no
+        # la plantilla.
+        "frase_creado": ("Maceta creada" if tipo == "maceta"
+                         else "Insumo creado"),
+        "etiqueta_tipo": etiquetas.get(tipo, "Producto"),
+        "avisos": altas.texto_de_avisos(avisos),
+    }, status_code=estado)
+
+
+@app.get("/productos/crear")
+def alta_producto(request: Request, tipo: str = "", creado: str = ""):
+    """Elegir el tipo, o el formulario de maceta / insumo.
+
+    El tipo planta no tiene formulario propio acá: manda al de siempre, que
+    vive en la pantalla de Stock. Un tipo raro (o uno cuya categoría no está
+    en Odoo) cae en el paso de elegir, donde se explica qué falta.
+    """
+    if tipo == "planta":
+        return RedirectResponse("/?tab=stock&crear=planta", status_code=303)
+    if tipo not in altas.CATEGORIA_DE:
+        return _pantalla_alta(request, "")
+    if not any(t["clave"] == tipo and t["listo"]
+               for t in altas.tipos_para_pantalla()):
+        return _pantalla_alta(request, "")
+    return _pantalla_alta(request, tipo, creado=creado,
+                          avisos=request.query_params.getlist("aviso"))
+
+
+@app.post("/productos/crear")
+async def alta_producto_guardar(request: Request):
+    """Crea la maceta o el insumo en Odoo y vuelve con su referencia.
+
+    Un error de validación NO redirige: se repinta el formulario con lo que
+    el empleado escribió, para no hacerle escribir todo de nuevo. El éxito sí
+    redirige (303) con la referencia y los avisos como códigos en la URL, así
+    que recargar no crea un segundo producto.
+    """
+    form = await request.form()
+    tipo = (form.get("tipo") or "").strip()
+    crudo = {campo: form.get(campo) for campo in
+             ("nombre", "material", "diametro", "alto", "color", "precio",
+              "costo", "unidad", "itbms")}
+    limpio, error = altas.revisar(tipo, crudo)
+    if error:
+        return _pantalla_alta(request, tipo if tipo in altas.CATEGORIA_DE else "",
+                              previo=crudo, error=error, estado=400)
+
+    foto = None
+    subida = form.get("foto")
+    if hasattr(subida, "read"):
+        contenido = await subida.read()
+        if contenido:
+            if len(contenido) > MAX_FOTO_PRODUCTO:
+                return _pantalla_alta(request, tipo, previo=crudo, estado=400,
+                                      error="La foto pesa demasiado: manda "
+                                            "una de menos de 12 MB.")
+            foto = base64.b64encode(contenido).decode()
+
+    try:
+        hecho = altas.crear(limpio, foto=foto)
+    except datos.SinConexion as fallo:
+        return _pantalla_alta(request, tipo, previo=crudo, error=str(fallo),
+                              estado=502)
+    destino = f"/productos/crear?tipo={tipo}&creado={quote(hecho['sku'])}"
+    for aviso in hecho["avisos"]:
+        destino += f"&aviso={quote(aviso)}"
+    return RedirectResponse(destino, status_code=303)
