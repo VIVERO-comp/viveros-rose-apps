@@ -11,7 +11,7 @@ Odoo. Aquí se prueba que cotizaciones.py arma el pedido correcto.
 
 import pytest
 
-from app import cotizaciones, ventas
+from app import cotizaciones, linear_leads, ventas
 
 XML_IDS = {
     "vivero_rose_pedidos.plantilla_servicio_renta": 9001,
@@ -1141,6 +1141,98 @@ def test_editar_conserva_la_descripcion_del_renglon(odoo):
 def test_el_form_personalizada_trae_descripcion_de_renglon(cliente, odoo):
     pagina = cliente.get("/venta/servicio-personalizada")
     assert 'name="renglon_descripcion"' in pagina.text
+
+
+# ---------------------------------------------------------------------------
+# El renglón de la edición en el hilo del lead (30/09/2026). Caso real:
+# Rubén cotizó S00096 en $205, la editó tres veces hasta dejarla en $111, y
+# el hilo del lead seguía diciendo $205 — el dueño preguntó qué había
+# pasado porque el comentario del crear nunca se actualizaba. Ahora editar
+# deja su PROPIO renglón con el antes y el después, y solo cuando
+# corresponde: el total cambió de verdad y la cotización está conectada a
+# un lead.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def leads_de_muestra(monkeypatch):
+    """Linear en modo muestra: sin LINEAR_API_KEY no hay red, y
+    `linear_leads.comentar()` guarda en memoria (`_MUESTRA_COMENTARIOS`),
+    que es justo lo que estas pruebas necesitan leer de vuelta."""
+    monkeypatch.delenv("LINEAR_API_KEY", raising=False)
+    monkeypatch.delenv("CALENDARIO_ESCRITURA", raising=False)
+    linear_leads.reiniciar_muestra()
+
+
+def test_editar_comenta_el_antes_y_el_despues_si_esta_conectada(odoo, leads_de_muestra):
+    registro = _cotizacion_de_renta(odoo)
+    # $850 de servicio + 10 CROTO a $45 (el fake no fuerza $0 en renta,
+    # ver el comentario de _cotizacion_de_renta): nace en $1300.00.
+    assert registro["total"] == 1300.0
+    cotizaciones.vincular_lead(registro["n"], "LEAD-91")  # Tamara, de muestra
+    cotizaciones.editar_cotizacion(
+        registro["n"], [{"texto": "Alquiler", "monto": "111"}], [],
+        autor="Rubén")
+    lead = linear_leads.uno("LEAD-91")
+    comentarios = linear_leads.comentarios(lead["id"])
+    orden = registro["orden"]
+    assert comentarios[-1]["texto"] == (
+        f"🧾 {orden} · de $1300.00 a $111.00 — editada por Rubén")
+
+
+def test_editar_sin_cambiar_el_total_no_comenta(odoo, leads_de_muestra):
+    registro = _cotizacion_de_renta(odoo)
+    cotizaciones.vincular_lead(registro["n"], "LEAD-91")
+    antes = linear_leads.comentarios(linear_leads.uno("LEAD-91")["id"])
+    # Mismo monto, mismas plantas: guardar sin mover la plata.
+    cotizaciones.editar_cotizacion(
+        registro["n"], [{"texto": "Alquiler de 20 plantas", "monto": "850",
+                         "descripcion": "Incluye transporte y montaje"}],
+        [{"producto_id": "601", "cantidad": "10"}], autor="Rubén")
+    despues = linear_leads.comentarios(linear_leads.uno("LEAD-91")["id"])
+    assert despues == antes
+
+
+def test_editar_sin_lead_conectado_no_comenta(odoo, leads_de_muestra):
+    registro = _cotizacion_de_renta(odoo)
+    # Nunca se vinculó a ningún lead (lead_issue queda vacío).
+    assert not registro.get("lead_issue")
+    editado = cotizaciones.editar_cotizacion(
+        registro["n"], [{"texto": "Alquiler", "monto": "111"}], [],
+        autor="Rubén")
+    assert editado["total"] == 111.0
+    # Ningún lead de muestra recibió nada: nada que comparar, nada roto.
+    for ref in ("LEAD-91", "LEAD-90", "LEAD-89"):
+        assert linear_leads.comentarios(linear_leads.uno(ref)["id"]) == []
+
+
+def test_editar_guarda_igual_si_linear_falla(odoo, leads_de_muestra, monkeypatch):
+    registro = _cotizacion_de_renta(odoo)
+    cotizaciones.vincular_lead(registro["n"], "LEAD-91")
+
+    def revienta(*args, **kwargs):
+        raise linear_leads.ErrorLeads("Linear no contesta")
+
+    monkeypatch.setattr(linear_leads, "comentar", revienta)
+    # No debe reventar: la cotización se guarda igual (fail-open).
+    editado = cotizaciones.editar_cotizacion(
+        registro["n"], [{"texto": "Alquiler", "monto": "111"}], [],
+        autor="Rubén")
+    assert editado["total"] == 111.0
+    orden = odoo.ordenes[registro["orden_id"]]
+    assert orden["amount_total"] == 111.0
+
+
+def test_editar_sin_autor_no_rompe_el_texto(odoo, leads_de_muestra):
+    # Un llamador viejo (sin `autor`) sigue funcionando: el renglón sale
+    # sin "por <nadie>" en vez de inventar un nombre.
+    registro = _cotizacion_de_renta(odoo)
+    cotizaciones.vincular_lead(registro["n"], "LEAD-91")
+    cotizaciones.editar_cotizacion(
+        registro["n"], [{"texto": "Alquiler", "monto": "111"}], [])
+    lead = linear_leads.uno("LEAD-91")
+    texto = linear_leads.comentarios(lead["id"])[-1]["texto"]
+    assert texto.endswith("— editada")
+    assert "por" not in texto
 
 
 # ---------------------------------------------------------------------------

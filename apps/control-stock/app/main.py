@@ -1871,7 +1871,11 @@ async def venta_servicio_editar_guardar(request: Request, n: int):
             # Solo el formulario del personalizado pinta las casillas; los
             # demás tipos mandan None y la orden conserva lo que tenga.
             banderas=(ventas.banderas_de(form, True)
-                      if str(form.get("casillas") or "") == "1" else None))
+                      if str(form.get("casillas") or "") == "1" else None),
+            # Quién lo editó, para el renglón del antes/después en el hilo
+            # del lead — mismo patrón que conectar/desconectar cotización.
+            autor=(request.state.empleada.get("nombre")
+                  or request.state.empleada["id"]))
     except ValueError as error:
         # El formulario vuelve con lo escrito, como al crear: un redirect
         # perdería lo que la empleada ya corrigió.
