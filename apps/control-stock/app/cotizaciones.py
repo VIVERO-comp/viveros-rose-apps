@@ -20,7 +20,7 @@ import re
 from datetime import date, datetime, timedelta
 
 from .datos import ZONA_PANAMA, _db
-from . import crm_leads, ventas
+from . import crm_leads, linear_leads, ventas
 
 # Un presupuesto cancelado no suma al ingreso esperado de la oportunidad.
 # (Vivía en app/proyectos.py hasta que Proyectos se retiró, 24/09/2026.)
@@ -1199,11 +1199,21 @@ def _plantas_limpias(plantas):
 
 
 def editar_cotizacion(n, servicios, plantas, renglones=None, cargos=None,
-                      banderas=None):
+                      banderas=None, autor=""):
     """Reescribe los renglones de la cotización en Odoo (misma estructura
     que al crearla, descripciones incluidas) y actualiza el total local y
     el ingreso esperado de la oportunidad. Antes de escribir re-verifica
-    que siga editable: si alguien la facturó en el medio, no toca nada."""
+    que siga editable: si alguien la facturó en el medio, no toca nada.
+
+    Si el total cambió de verdad Y la cotización está conectada a un lead
+    (`registro["lead_issue"]`, la misma referencia LEAD-NN que deja el
+    espejo al crearla), deja en el hilo del lead un renglón con el antes y
+    el después: «🧾 S00096 · de $205.00 a $111.00 — editada por Rubén» —
+    mismo formato que el «🧾 … — hecha en inventario (Vender)» que deja el
+    puente al nacer, para que el chat cuente lo que de verdad pasó con la
+    plata en vez de quedarse con el precio original (el caso real, 30/09/
+    2026: Rubén bajó una cotización de $205 a $111 en tres ediciones y el
+    hilo del lead seguía diciendo $205)."""
     registro = obtener(n)
     if not registro:
         raise ValueError("No existe esa cotización.")
@@ -1240,6 +1250,7 @@ def editar_cotizacion(n, servicios, plantas, renglones=None, cargos=None,
         # None (los otros tipos) no toca lo que la orden ya tenga.
         cambios["pago_50_50"] = bool(banderas["pago_50_50"])
         cambios["con_garantia"] = bool(banderas["con_garantia"])
+    total_antes = registro.get("total")
     ventas._ejecutar("sale.order", "write", [[orden_id], cambios])
     leido = ventas._ejecutar(
         "sale.order", "read", [[orden_id]],
@@ -1248,7 +1259,34 @@ def editar_cotizacion(n, servicios, plantas, renglones=None, cargos=None,
         con.execute("UPDATE cotizaciones_servicio SET total=? WHERE n=?",
                     (leido["amount_total"], n))
     _actualizar_ingreso_esperado(leido.get("opportunity_id"))
+    _comentar_edicion(registro, leido, total_antes, autor)
     return obtener(n)
+
+
+def _comentar_edicion(registro, leido, total_antes, autor):
+    """El renglón del antes/después en el hilo del lead, si corresponde.
+    Nunca puede tumbar el guardado (fail-open, como todo el espejo del
+    CRM): un error acá queda en el log y la cotización ya quedó guardada
+    en Odoo de todos modos."""
+    lead_issue = (registro.get("lead_issue") or "").strip()
+    if not lead_issue:
+        return  # esta cotización no nació (ni se amarró) a ningún lead
+    total_despues = leido.get("amount_total") or 0.0
+    if total_antes is None or round(float(total_antes), 2) == round(float(total_despues), 2):
+        return  # guardó sin mover la plata: no hay nada que contar
+    quien = f" por {autor}" if (autor or "").strip() else ""
+    texto = (f"🧾 {leido.get('name') or lead_issue} · de ${float(total_antes):.2f} "
+             f"a ${float(total_despues):.2f} — editada{quien}")
+    try:
+        lead = linear_leads.uno(lead_issue)
+        if lead is None:
+            print(f"cotizaciones: {lead_issue} ya no está en Linear, no se "
+                  f"pudo dejar el renglón de la edición", flush=True)
+            return
+        linear_leads.comentar(lead["id"], texto)
+    except Exception as error:  # el espejo es un extra, nunca tumba el guardado
+        print(f"cotizaciones: no se pudo comentar la edición en "
+              f"{lead_issue}: {error!r}", flush=True)
 
 
 def _actualizar_ingreso_esperado(oportunidad):
