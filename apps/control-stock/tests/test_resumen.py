@@ -16,7 +16,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from app import almacen_waha, avisos, linear_leads, resumen
+from app import almacen_waha, avisos, linear_leads, mapas, resumen
 
 LUNES = date(2026, 9, 21)
 DOMINGO = date(2026, 9, 27)
@@ -26,6 +26,13 @@ ALMACEN_SANO = {"mb": 2, "antes_mb": 5, "mensajes": 132, "vencido": False,
                 "alerta": False, "corto": "",
                 "frase": "El limpiador lo bajó de 5 MB a 2 MB a las 6:17 pm."
                          " Quedan 132 mensajes guardados. Lo sano ronda 2 MB."}
+
+# El gasto de Google en un día normal, ya decidido por `mapas.armar`.
+MAPAS_SANO = {"consultas": 42, "respaldo": 3, "tope": 300, "alerta": False,
+              "corto": "",
+              "frase": "Mapas: 42 consultas a Google hoy, 3 veces se usó el "
+                       "tiempo de respaldo del corregimiento. El tope del día "
+                       "son 300."}
 
 
 @pytest.fixture(autouse=True)
@@ -45,6 +52,12 @@ def muestra_limpia(monkeypatch, db_limpia):
     monkeypatch.delenv("SINCRO_SECRET", raising=False)
     monkeypatch.setattr(almacen_waha, "configurado", lambda: True)
     monkeypatch.setattr(almacen_waha, "bloque", lambda **k: ALMACEN_SANO)
+    # Lo mismo con el gasto de Google, que vive en el order-api: fuera del
+    # entorno para que nada salga a la red, y reemplazado por un día normal.
+    monkeypatch.delenv("ORDER_API_URL", raising=False)
+    monkeypatch.delenv("ORDER_API_KEY", raising=False)
+    monkeypatch.setattr(mapas, "configurado", lambda: True)
+    monkeypatch.setattr(mapas, "bloque", lambda *a, **k: MAPAS_SANO)
     linear_leads.reiniciar_muestra()
     avisos.iniciar_tablas()
 
@@ -328,6 +341,102 @@ def test_el_dia_del_resumen_es_el_que_decide_si_la_fecha_se_nombra(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# El séptimo renglón: el gasto de Google del día, que lleva el order-api
+# ---------------------------------------------------------------------------
+
+def test_el_gasto_de_google_sale_en_el_resumen_y_no_en_el_titular(con_odoo):
+    """Un día normal, el número se ve en la pantalla; el titular no lo nombra,
+    igual que no nombra «0 pagos»."""
+    datos = resumen.del_dia()
+    assert datos["mapas"]["consultas"] == 42
+    assert datos["mapas"]["respaldo"] == 3
+    assert datos["errores"] == []
+    assert "Google" not in resumen.titular(datos)
+
+
+def test_el_dia_que_se_le_pide_al_order_api_es_el_del_resumen(monkeypatch):
+    """El corte del tope diario lo decide el order-api: si se le preguntara
+    por hoy mientras la pantalla muestra el lunes, el número sería de otro
+    día y nadie se daría cuenta."""
+    vistos = []
+    monkeypatch.setattr(mapas, "bloque",
+                        lambda dia, **k: vistos.append(dia) or MAPAS_SANO)
+    resumen.del_dia(LUNES)
+    assert vistos == ["2026-09-21"]
+
+
+def test_sin_el_puente_el_gasto_queda_en_blanco_y_lo_dice(monkeypatch):
+    monkeypatch.setattr(mapas, "configurado", lambda: False)
+    datos = resumen.del_dia()
+    assert datos["mapas"] is None, "en blanco, nunca en 0 consultas"
+    assert "ORDER_API_URL" in datos["mapas_motivo"]
+
+
+def test_si_el_order_api_no_contesta_no_se_inventa_un_cero(monkeypatch):
+    def revienta(dia, **_k):
+        raise RuntimeError("el order-api todavía no tiene la ruta")
+
+    monkeypatch.setattr(mapas, "bloque", revienta)
+    datos = resumen.del_dia()
+    # Un «0 consultas» falso parecería la mejor noticia del día —no se gastó
+    # nada— cuando en realidad es no saber.
+    assert datos["mapas"] is None
+    assert "todavía no tiene la ruta" in datos["mapas_motivo"]
+
+
+def test_el_hueco_del_gasto_NO_degrada_el_titular_con_huecos(con_odoo,
+                                                             monkeypatch):
+    """La excepción deliberada: el endpoint del order-api se despliega aparte,
+    y no vale degradar el titular del dueño todas las noches mientras tanto.
+    Los otros seis bloques sí son el resumen del negocio y sí lo degradan."""
+    monkeypatch.setattr(mapas, "configurado", lambda: False)
+    datos = resumen.del_dia()
+    assert datos["errores"] == []
+    assert "con huecos" not in resumen.titular(datos)
+
+
+def test_el_hueco_del_gasto_queda_en_el_log(monkeypatch):
+    dicho = []
+    monkeypatch.setattr(mapas, "_aviso", dicho.append)
+
+    def revienta(dia, **_k):
+        raise RuntimeError("no hay ruta al host")
+
+    monkeypatch.setattr(mapas, "bloque", revienta)
+    resumen.del_dia()
+    assert dicho == ["El gasto de Google no se pudo leer: no hay ruta al host"]
+
+
+def test_el_tope_de_google_entra_al_titular(monkeypatch):
+    monkeypatch.setattr(mapas, "bloque", lambda *a, **k: dict(
+        MAPAS_SANO, consultas=300, alerta=True, corto="tope de Google"))
+    datos = resumen.del_dia()
+    assert "tope de Google" in resumen.titular(datos)
+
+
+def test_el_tope_de_google_suena_aunque_sea_domingo(monkeypatch):
+    """Un domingo en blanco no suena; un domingo con el tope tocado sí: el
+    resto de ese día se cobró con un tiempo aproximado."""
+    monkeypatch.setattr(resumen, "_leads", lambda dia: {
+        "nuevos": {"total": 0, "por_origen": [], "filas": []},
+        "sin_resp": {"total": 0, "de": 0, "filas": []},
+        "esperando": {"total": 0, "por_resp": []}})
+    monkeypatch.setattr(mapas, "bloque", lambda *a, **k: dict(
+        MAPAS_SANO, consultas=300, alerta=True, corto="tope de Google"))
+    assert resumen.hay_algo(resumen.del_dia(DOMINGO)) is True
+
+
+def test_un_hueco_del_gasto_no_despierta_el_telefono_en_domingo(monkeypatch):
+    """No saber no es noticia: solo el tope tocado lo es."""
+    monkeypatch.setattr(resumen, "_leads", lambda dia: {
+        "nuevos": {"total": 0, "por_origen": [], "filas": []},
+        "sin_resp": {"total": 0, "de": 0, "filas": []},
+        "esperando": {"total": 0, "por_resp": []}})
+    monkeypatch.setattr(mapas, "configurado", lambda: False)
+    assert resumen.hay_algo(resumen.del_dia(DOMINGO)) is False
+
+
+# ---------------------------------------------------------------------------
 # El titular: lo único que cabe en la notificación
 # ---------------------------------------------------------------------------
 
@@ -511,3 +620,31 @@ def test_la_pantalla_resalta_el_almacen_disparado(cliente, monkeypatch):
     cuerpo = cliente.get("/resumen").text
     assert "Almacén de WhatsApp · 68 MB" in cuerpo
     assert "<b>OJO: pasa de 20 MB" in cuerpo
+
+
+def test_la_pantalla_pinta_el_renglon_de_mapas(cliente, con_odoo):
+    cuerpo = cliente.get("/resumen").text
+    assert "Mapas · 42" in cuerpo
+    assert "42 consultas a Google hoy, 3 veces se usó el tiempo de respaldo" \
+        in cuerpo
+
+
+def test_la_pantalla_no_pinta_mapas_en_cero_cuando_no_se_pudo(
+        cliente, con_odoo, monkeypatch):
+    monkeypatch.setattr(mapas, "configurado", lambda: False)
+    cuerpo = cliente.get("/resumen").text
+    assert "Mapas · —" in cuerpo
+    assert "<b>No es 0</b>" in cuerpo
+    assert "ORDER_API_URL" in cuerpo, "el motivo se dice en la pantalla"
+    # Y la pantalla NO se llena de huecos por esto: el resumen del negocio
+    # está entero.
+    assert "Hay huecos en este resumen" not in cuerpo
+
+
+def test_la_pantalla_resalta_el_tope_de_google(cliente, monkeypatch):
+    monkeypatch.setattr(mapas, "bloque", lambda *a, **k: dict(
+        MAPAS_SANO, consultas=300, alerta=True, corto="tope de Google",
+        frase="⚠️ Se alcanzó el tope diario de 300 consultas a Google."))
+    cuerpo = cliente.get("/resumen").text
+    assert "Mapas · 300" in cuerpo
+    assert "<b>⚠️ Se alcanzó el tope diario de 300 consultas" in cuerpo
