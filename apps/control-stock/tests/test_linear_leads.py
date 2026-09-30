@@ -290,12 +290,21 @@ def test_una_senal_se_prende_y_se_apaga_con_el_mismo_interruptor():
 
 
 def test_senales_disponibles_solo_trae_las_que_existen_en_linear():
-    # En modo muestra, dos de las tres "existen" a propósito (ver
-    # `_MUESTRA_SENALES_EXISTENTES`): Cliente potencial no, para poder
-    # probar el candado sin tocar Linear real.
+    # En modo muestra, dos "existen" a propósito (ver
+    # `_MUESTRA_SENALES_EXISTENTES`): Cliente potencial y Llamar no, para
+    # poder probar el candado sin tocar Linear real.
     disponibles = linear_leads.senales_disponibles()
     assert disponibles == {"Seguimiento", "Importante"}
     assert "Cliente potencial" not in disponibles
+    assert "Llamar" not in disponibles
+
+
+def test_llamar_es_la_cuarta_senal_de_la_lista():
+    # «Llamar» (30/09/2026): en la lista desde ya, pero su botón solo
+    # aparece cuando Abraham cree la etiqueta en Linear — exactamente el
+    # mecanismo de siempre, sin código nuevo.
+    assert linear_leads.LABELS_SENAL == (
+        "Seguimiento", "Importante", "Cliente potencial", "Llamar")
 
 
 def test_las_etiquetas_nunca_se_crean(monkeypatch):

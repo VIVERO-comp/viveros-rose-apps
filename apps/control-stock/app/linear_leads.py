@@ -139,13 +139,14 @@ GRUPOS = (GRUPO_ORIGEN, GRUPO_INTERES, GRUPO_MOTIVO, GRUPO_PAGO,
 # la quita nuestra respuesta.
 LABEL_TE_TOCA = "Te toca"
 
-# Las tres señales sueltas del panel de Control (25/09/2026, pedido de
-# Abraham): banderas binarias, independientes entre sí y de ningún grupo —
-# un lead puede llevar las tres a la vez. UN renglón por señal: sumar o
-# quitar una es tocar esta lista sola. El botón de cada una solo aparece en
-# la pantalla si Abraham ya creó su etiqueta en Linear (`senales_disponibles`
-# más abajo); el código nunca la crea.
-LABELS_SENAL = ("Seguimiento", "Importante", "Cliente potencial")
+# Las señales sueltas del panel de Control (25/09/2026, pedido de Abraham;
+# «Llamar» sumada el 30/09/2026): banderas binarias, independientes entre
+# sí y de ningún grupo — un lead puede llevarlas todas a la vez. UN renglón
+# por señal: sumar o quitar una es tocar esta lista sola. El botón de cada
+# una solo aparece en la pantalla si Abraham ya creó su etiqueta en Linear
+# (`senales_disponibles` más abajo); el código nunca la crea — «Llamar»
+# aún no existe en Linear y su botón aparecerá solo cuando él la cree.
+LABELS_SENAL = ("Seguimiento", "Importante", "Cliente potencial", "Llamar")
 
 # La segunda etiqueta que «Responder» prende junto a «Te toca» cuando se
 # enciende A MANO (28/09/2026, pedido de Abraham: "que no se vaya hasta

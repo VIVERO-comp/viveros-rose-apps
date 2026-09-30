@@ -1,10 +1,11 @@
-"""Las cuatro señales sueltas que SOLO BAJAN de Linear a WhatsApp
-(`waha/sincronizador.py`, 28/09/2026): «Importante», «Seguimiento»,
-«Cliente potencial» y «Entrega pendiente».
+"""Las cinco señales sueltas que SOLO BAJAN de Linear a WhatsApp
+(`waha/sincronizador.py`, 28/09/2026; «Llamar» sumada el 30/09/2026):
+«Importante», «Seguimiento», «Cliente potencial», «Entrega pendiente» y
+«Llamar».
 
 `test_sincronizador_importante.py` ya cubre a fondo el mecanismo con
 «Importante» como ejemplo (vivo/cerrado/ausente/marca). Este archivo cubre
-lo que agrega esta tanda: que las CUATRO están habilitadas, y que
+lo que agrega esta tanda: que las CINCO están habilitadas, y que
 «Seguimiento» y «Cliente potencial» -las dos sugeridas de fábrica, que
 llegan con el U+200E- y «Entrega pendiente» -creada a mano, sin marca-
 casan igual con el mismo mecanismo de `deseadas()`.
@@ -53,13 +54,15 @@ def lead(**cambios):
     return base
 
 
-def test_las_cuatro_estan_habilitadas(sinc):
+def test_las_cinco_estan_habilitadas(sinc):
     assert sinc.SENALES_QUE_BAJAN == (
-        "Importante", "Seguimiento", "Cliente potencial", "Entrega pendiente")
+        "Importante", "Seguimiento", "Cliente potencial", "Entrega pendiente",
+        "Llamar")
 
 
 @pytest.mark.parametrize("senal", [
-    "Importante", "Seguimiento", "Cliente potencial", "Entrega pendiente"])
+    "Importante", "Seguimiento", "Cliente potencial", "Entrega pendiente",
+    "Llamar"])
 def test_cada_senal_baja_sin_marca_cuando_el_catalogo_no_la_tiene_marcada(
         sinc, senal):
     disponibles = {"Agendado", "Plantas", "Mary", senal}
@@ -69,7 +72,8 @@ def test_cada_senal_baja_sin_marca_cuando_el_catalogo_no_la_tiene_marcada(
 
 
 @pytest.mark.parametrize("senal", [
-    "Importante", "Seguimiento", "Cliente potencial", "Entrega pendiente"])
+    "Importante", "Seguimiento", "Cliente potencial", "Entrega pendiente",
+    "Llamar"])
 def test_cada_senal_casa_igual_si_el_catalogo_la_trae_con_marca(sinc, senal):
     # No hace falta que la señal sea de verdad una sugerida de fábrica para
     # probar la tolerancia: el mecanismo es genérico y no le importa cuál
@@ -81,7 +85,8 @@ def test_cada_senal_casa_igual_si_el_catalogo_la_trae_con_marca(sinc, senal):
 
 
 @pytest.mark.parametrize("senal", [
-    "Importante", "Seguimiento", "Cliente potencial", "Entrega pendiente"])
+    "Importante", "Seguimiento", "Cliente potencial", "Entrega pendiente",
+    "Llamar"])
 def test_cada_senal_ausente_del_catalogo_avisa_sin_reventar(sinc, senal):
     disponibles = {"Agendado", "Plantas", "Mary"}
     quiere, faltan = sinc.deseadas(lead(senales={senal}), disponibles)
@@ -89,9 +94,9 @@ def test_cada_senal_ausente_del_catalogo_avisa_sin_reventar(sinc, senal):
     assert senal in faltan
 
 
-def test_las_cuatro_juntas_bajan_a_la_vez(sinc):
+def test_las_cinco_juntas_bajan_a_la_vez(sinc):
     todas = {"Importante", "Seguimiento", "Cliente potencial",
-             "Entrega pendiente"}
+             "Entrega pendiente", "Llamar"}
     disponibles = {"Agendado", "Plantas", "Mary"} | todas
     quiere, faltan = sinc.deseadas(lead(senales=todas), disponibles)
     assert todas <= set(quiere)
@@ -99,7 +104,8 @@ def test_las_cuatro_juntas_bajan_a_la_vez(sinc):
 
 
 @pytest.mark.parametrize("senal", [
-    "Importante", "Seguimiento", "Cliente potencial", "Entrega pendiente"])
+    "Importante", "Seguimiento", "Cliente potencial", "Entrega pendiente",
+    "Llamar"])
 def test_ninguna_senal_entra_a_un_perdido(sinc, senal):
     disponibles = {"Plantas", "Mary", senal}
     tiene = {"Plantas", "Mary", senal}
@@ -110,7 +116,8 @@ def test_ninguna_senal_entra_a_un_perdido(sinc, senal):
 
 
 @pytest.mark.parametrize("senal", [
-    "Importante", "Seguimiento", "Cliente potencial", "Entrega pendiente"])
+    "Importante", "Seguimiento", "Cliente potencial", "Entrega pendiente",
+    "Llamar"])
 def test_ninguna_senal_entra_a_un_ganado(sinc, senal):
     disponibles = {sinc.PEDIDO_COMPLETADO, "Plantas", "Mary", senal}
     tiene = {"Plantas", "Mary", senal}

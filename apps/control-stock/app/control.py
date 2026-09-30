@@ -725,7 +725,7 @@ def alternar_responder(ref, prender, autor=""):
 
 def alternar_senal(ref, nombre, prender, autor=""):
     """Prende o apaga una señal suelta (Seguimiento, Importante, Cliente
-    potencial) A LO QUE PIDE EL FORMULARIO — mismo criterio que
+    potencial, Llamar) A LO QUE PIDE EL FORMULARIO — mismo criterio que
     `alternar_responder`. Sin comentario en el issue y sin tocar WhatsApp:
     son internas, y `etiquetar_en_whatsapp` nunca se llama para ellas.
 
