@@ -328,9 +328,12 @@ def test_buscar_muestra_precio_y_foto(cliente_venta, con_inventario):
 def test_buscar_en_vivo_devuelve_json(cliente_venta, con_inventario):
     r = cliente_venta.get("/venta/buscar?q=romero")
     assert r.status_code == 200
+    # "precio_num" (30/09/2026): el buscador de la pantalla de editar arma
+    # la fila en el navegador y necesita el número crudo, no solo el
+    # "$3.50" ya formateado para mostrar.
     assert r.json()["resultados"] == [
         {"id": 501, "sku": "PL-ROMERO", "nombre": "ROMERO", "precio": "$3.50",
-         "disponible": 2}]
+         "precio_num": 3.5, "disponible": 2}]
 
 
 def test_agregar_limpia_la_busqueda_y_ancla_en_plantas(cliente_venta):

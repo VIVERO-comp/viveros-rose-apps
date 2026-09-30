@@ -1138,6 +1138,101 @@ def test_editar_conserva_la_descripcion_del_renglon(odoo):
     assert lineas[2]["name"] == "Tierra negra abonada"
 
 
+# ---------------------------------------------------------------------------
+# El rediseño de la pantalla de editar en dos columnas (30/09/2026): la
+# descripción de un cargo ya no se pierde, la sección Plantas se pinta
+# siempre con su buscador, el total lo calcula Python, y se puede añadir
+# una planta que la cotización no tenía.
+# ---------------------------------------------------------------------------
+
+def test_cargar_para_editar_recupera_la_descripcion_del_cargo(odoo):
+    # EL BUG: cargar_para_editar solo recuperaba el MONTO de un cargo
+    # (envío, instalación, mantenimiento) y descartaba el párrafo escrito a
+    # mano; _cargos.html caía siempre al texto de fábrica y, al guardar, ese
+    # texto de fábrica pisaba el que la empleada había escrito.
+    registro = cotizaciones.crear_cotizacion(
+        {"id": "g", "nombre": "Génesis"}, "renta", "María", "",
+        [{"texto": "Alquiler", "monto": "850"}], [],
+        cargos={"mantenimiento": 25,
+                "mantenimiento_desc": "Dos visitas al mes, no las de siempre."})
+    datos = cotizaciones.cargar_para_editar(registro["n"])
+    assert datos["cargos"]["mantenimiento"] == "25"
+    assert (datos["cargos"]["mantenimiento_desc"]
+           == "Dos visitas al mes, no las de siempre.")
+
+
+def test_editar_por_http_el_cargo_muestra_su_descripcion_a_mano(cliente, odoo):
+    registro = cotizaciones.crear_cotizacion(
+        {"id": "g", "nombre": "Génesis"}, "renta", "María", "",
+        [{"texto": "Alquiler", "monto": "850"}], [],
+        cargos={"mantenimiento": 25,
+                "mantenimiento_desc": "Dos visitas al mes, no las de siempre."})
+    pagina = cliente.get(f"/venta/servicio/{registro['n']}/editar").text
+    assert "Dos visitas al mes, no las de siempre." in pagina
+    # Y el de fábrica NO le ganó (el bug: siempre caía a este texto).
+    assert "Visita de cuidado: poda, limpieza" not in pagina
+
+
+def test_editar_sin_plantas_muestra_la_seccion_y_el_buscador(cliente, odoo):
+    # Antes, sin plantas, la sección entera desaparecía ({% if plantas %})
+    # y no había forma de meter una.
+    registro = _cotizacion_de_renta(odoo, plantas=False)
+    pagina = cliente.get(f"/venta/servicio/{registro['n']}/editar").text
+    assert ">Plantas<" in pagina
+    assert 'id="listaPlantas"' in pagina
+    assert 'id="busca-planta-editar"' in pagina
+
+
+def test_editar_un_tipo_sin_plantas_no_ofrece_el_buscador(odoo):
+    # Boda y evento (retirados) no tienen ninguna sección de catálogo: el
+    # buscador no debe ofrecer algo que editar_cotizacion rechazaría luego.
+    registro = cotizaciones.crear_cotizacion(
+        {"id": "g", "nombre": "Génesis"}, "boda", "María", "",
+        [{"texto": "Ambientación", "monto": "500"}])
+    datos = cotizaciones.cargar_para_editar(registro["n"])
+    assert datos["plantas_permitidas"] is False
+
+
+def test_editar_por_http_el_total_es_la_suma_calculada_en_python(cliente, odoo):
+    registro = cotizaciones.crear_cotizacion(
+        {"id": "g", "nombre": "Génesis"}, "renta", "María", "",
+        [{"texto": "Alquiler", "monto": "200"}],
+        [{"producto_id": 601, "cantidad": 10, "precio": 8.0}],
+        cargos={"envio": 15}, cobro="planta")
+    pagina = cliente.get(f"/venta/servicio/{registro['n']}/editar").text
+    # 10 CROTO a $8 = $80 · servicio $200 · envío $15 -> total $295.
+    assert 'id="cuenta-plantas">$80.00<' in pagina
+    assert 'id="cuenta-servicios">$200.00<' in pagina
+    assert 'id="cuenta-cargos">$15.00<' in pagina
+    assert 'id="cuenta-total">$295.00<' in pagina
+
+
+def test_editar_anadir_una_planta_nueva_la_escribe_en_la_orden(cliente, odoo):
+    # El buscador de la pantalla (30/09/2026) arma esta misma fila con JS
+    # sin recargar la página; acá se prueba que el servidor la acepta y la
+    # escribe, aunque la cotización no la tuviera antes.
+    odoo.productos[602] = {"default_code": "PL-PALMA", "name": "PALMA",
+                           "list_price": 20.0, "type": "consu"}
+    registro = cotizaciones.crear_cotizacion(
+        {"id": "g", "nombre": "Génesis"}, "renta", "María", "",
+        [{"texto": "Alquiler", "monto": "200"}],
+        [{"producto_id": 601, "cantidad": 10, "precio": 8.0}], cobro="planta")
+    r = cliente.post(
+        f"/venta/servicio/{registro['n']}/editar",
+        data={"servicio_texto": "Alquiler", "servicio_monto": "200",
+              "servicio_descripcion": "",
+              "planta_id": ["601", "602"],
+              "planta_nombre": ["CROTO", "PALMA"],
+              "planta_cantidad": ["10", "3"],
+              "planta_precio": ["8", "20"]},
+        follow_redirects=False)
+    assert r.status_code == 303
+    orden = odoo.ordenes[registro["orden_id"]]
+    nueva = next(l for l in orden["lineas"] if l.get("product_id") == 602)
+    assert nueva["product_uom_qty"] == 3.0
+    assert nueva["price_unit"] == 20.0
+
+
 def test_el_form_personalizada_trae_descripcion_de_renglon(cliente, odoo):
     pagina = cliente.get("/venta/servicio-personalizada")
     assert 'name="renglon_descripcion"' in pagina.text
