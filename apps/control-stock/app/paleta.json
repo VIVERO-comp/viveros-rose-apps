@@ -124,6 +124,15 @@
       "RECORDATORIO": "yellow",
       "PERDIDO": "red"
     },
+    "estado_compra": {
+      "POR_PEDIR": "gray",
+      "COTIZANDO": "yellow",
+      "PEDIDO": "blue",
+      "ABONADO": "sky",
+      "EN_CAMINO": "orange",
+      "RECIBIDO": "turquoise",
+      "CERRADO": "green"
+    },
     "etapa_opportunity": {
       "NUEVO": "blue",
       "CONTACTADO": "turquoise",

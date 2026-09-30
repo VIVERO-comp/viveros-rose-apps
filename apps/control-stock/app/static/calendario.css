@@ -1006,3 +1006,28 @@ a{color:inherit}
   .ficha-hilo{max-height:54vh}
   .hilo-pila{max-width:86%}
 }
+
+/* ===========================================================================
+   La pestaña Compras, Fase 1 (30/09/2026)
+
+   El tablero reusa TAL CUAL las clases .ret-* del tablero de Control (mismo
+   ancho de columna, mismo arrastre, misma tarjeta de dos líneas T2): acá
+   solo vive lo que Compras tiene y Control no — la barra de pagado sobre
+   total y el renglón que avisa cuando a Linear todavía le falta el
+   proyecto o alguna columna.
+   ======================================================================== */
+
+/* La barra de pagado sobre el total de la orden de compra. Solo se pinta
+   con plata CONOCIDA (Python decide: ver compras.plata_de) — nunca con un
+   0 inventado por no haber podido leer Odoo. */
+.cmp-barra{
+  flex:0 0 46px;height:5px;border-radius:999px;background:var(--crema-2);
+  border:1px solid var(--borde);overflow:hidden;padding:0;
+}
+.cmp-barra > span{display:block;height:100%;background:var(--texto);border-radius:999px}
+.cmp-barra.cmp-llena > span{background:#30a46c}
+.cmp-plata{font-variant-numeric:tabular-nums;white-space:nowrap}
+/* El proveedor y el P000xx de la tarjeta: texto tenue, nunca chips — la
+   tarjeta T2 son dos líneas y los chips la volvían tres. */
+.cmp-prov{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px}
+.cmp-orden{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.2px}

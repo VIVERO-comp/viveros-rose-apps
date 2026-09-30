@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import (acceso_google, agenda, avisos, calculos, calendario,
-               calendario_google, colores,
+               calendario_google, colores, compras,
                calendario_ics, conteos, control, cot_lead, cotizaciones,
                coworkers, crm_twenty, datos, fichas, fotos,
                linear_leads, mantenimiento, resumen, seguridad, vehiculos,
@@ -188,6 +188,7 @@ datos.iniciar_db()
 ventas.iniciar_tablas()
 cotizaciones.iniciar_tablas()
 control.iniciar_tablas()
+compras.iniciar_tablas()
 mantenimiento.iniciar_tablas()
 avisos.iniciar_tablas()
 calendario_ics.iniciar_tablas()
@@ -2791,6 +2792,157 @@ def control_cotizacion_pdf(request: Request, orden_id: int, nombre: str = "",
     archivo = ventas.nombre_de_pdf((nombre or str(orden_id)).replace("/", "-"), cliente)
     return Response(contenido, media_type="application/pdf",
                     headers=cabeceras_descarga(archivo))
+
+
+# ---------------------------------------------------------------------------
+# La pestaña Compras, Fase 1 (30/09/2026): el tablero de lo que se le compra
+# al proveedor. El estado vive en el proyecto COMPRAS del equipo VIV de
+# Linear (`app/compras.py`, la única puerta) y el dinero en Odoo. Quién
+# puede mover qué lo decide el MISMO mecanismo de Control
+# (`control.alcance` / `control.puede_tocar`): todos ven el tablero
+# completo y cada quien mueve lo suyo.
+# ---------------------------------------------------------------------------
+
+@app.get("/compras")
+def compras_pantalla(request: Request):
+    """El tablero de compras, con el formulario de «compra nueva» detrás
+    de `?nueva=1`.
+
+    Hoy el proyecto COMPRAS todavía no existe en Linear: las 7 columnas
+    salen vacías con el renglón que lo explica (`compras.falta_en_linear`),
+    nunca un 500.
+    """
+    empleada = request.state.empleada
+    alc = control.alcance(empleada, _es_admin(empleada))
+    # `listar_o_vacio` y no `listar`: si Linear tiene un mal rato, la
+    # pestaña sale con sus 7 columnas vacías y el renglón que lo explica,
+    # nunca un 500.
+    columnas = compras.tablero(compras.listar_o_vacio(
+        refrescar=request.query_params.get("refrescar") == "1"))
+    puede_escribir = compras.escritura_activa() or not compras.configurado()
+
+    # Los datos del formulario solo se arman cuando el formulario se abre:
+    # los proveedores son una consulta a Odoo y el tablero no la paga.
+    nueva = bool(request.query_params.get("nueva")) and puede_escribir
+    lista_prov, prov_error, leads = [], "", []
+    if nueva:
+        resultado = compras.proveedores()
+        lista_prov = resultado["proveedores"]
+        prov_error = "" if resultado["ok"] else resultado["error"]
+        try:
+            leads = [l for l in linear_leads.listar()
+                     if l["estado"] not in linear_leads.CERRADOS]
+        except linear_leads.ErrorLeads:
+            # El lead es OPCIONAL en el formulario: sin Linear, el selector
+            # sale con su "es para el vivero" y nada más. Que no se pueda
+            # amarrar a un cliente no puede impedir anotar la compra.
+            leads = []
+
+    return plantillas.TemplateResponse(request, "compras.html", {
+        "empleada": empleada,
+        "modo": compras.modo(),
+        "alc": alc,
+        "columnas": columnas,
+        "falta": compras.falta_en_linear(),
+        "puede_mover": puede_escribir,
+        "nueva": nueva,
+        "proveedores": lista_prov,
+        "proveedores_error": prov_error,
+        "leads": leads,
+        "responsables": linear_leads.responsables(),
+        "resp_sugerido": agenda.responsable_de_empleada(empleada),
+        "aviso": request.query_params.get("aviso"),
+        "error": request.query_params.get("error"),
+    })
+
+
+def _compras_vuelve(aviso="", error=""):
+    partes = []
+    if aviso:
+        partes.append("aviso=" + quote(aviso))
+    if error:
+        partes.append("error=" + quote(error))
+    return RedirectResponse(
+        "/compras" + ("?" + "&".join(partes) if partes else ""),
+        status_code=303)
+
+
+def _compras_permiso(request, ref):
+    """(alcance, error) — el candado del servidor para mover una compra.
+
+    Un empleado solo mueve lo suyo, y eso se verifica AQUÍ: que el
+    navegador no muestre la tarjeta como arrastrable no basta, porque un
+    POST se puede mandar a mano. Un `ref` VACÍO se corta acá mismo sin
+    preguntarle nada a Linear — es el POST del enlace arrastrado, no una
+    compra borrada (la lección del 29/09/2026 en Control).
+    """
+    empleada = request.state.empleada
+    alc = control.alcance(empleada, _es_admin(empleada))
+    if not (compras.escritura_activa() or not compras.configurado()):
+        return alc, ("Esta instancia mira el tablero real pero no escribe "
+                     "en Linear.")
+    ref = (ref or "").strip()
+    if not ref:
+        return alc, compras.mensaje_compra_ausente("")
+    compra = compras.uno(ref)
+    if compra is None:
+        return alc, compras.mensaje_compra_ausente(ref)
+    if not control.puede_tocar(compra, alc):
+        return alc, (f"Esa compra es de {compra.get('resp') or 'nadie'}: "
+                     f"no la movés vos.")
+    return alc, ""
+
+
+@app.post("/compras/estado")
+async def compras_estado(request: Request):
+    """Corregir la columna de una compra: es lo que hace el arrastre.
+
+    No pide motivo, a diferencia del embudo de los leads: en esta fase
+    nada mueve una compra sola, así que mover a mano es el camino normal y
+    no una excepción. Igual queda el comentario firmado en el issue con
+    quién la movió y de dónde a dónde.
+    """
+    form = await request.form()
+    ref = form.get("ref", "")
+    _alc, error = _compras_permiso(request, ref)
+    if error:
+        return _compras_vuelve(error=error)
+    autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
+    aviso, error = compras.mover(ref, form.get("estado", ""), autor=autor)
+    return _compras_vuelve(aviso=aviso, error=error)
+
+
+@app.post("/compras/nueva")
+async def compras_nueva(request: Request):
+    """Una compra a mano, que nace en «Por pedir».
+
+    El proveedor viaja como texto (hoy Odoo no tiene ninguno marcado y un
+    selector vacío no dejaría anotar nada): si lo escrito calza EXACTO con
+    un contacto de Odoo se guarda también su id, y si no queda el nombre
+    libre. Nunca se crea un contacto en Odoo desde acá.
+    """
+    form = await request.form()
+    if not (compras.escritura_activa() or not compras.configurado()):
+        return _compras_vuelve(error="Esta instancia mira el tablero real "
+                                     "pero no escribe en Linear.")
+    nombre_prov = (form.get("proveedor") or "").strip()
+    proveedor_id = None
+    if nombre_prov:
+        resultado = compras.proveedores()
+        for p in resultado["proveedores"]:
+            if p["nombre"].strip().lower() == nombre_prov.lower():
+                proveedor_id = p["id"]
+                break
+    autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
+    try:
+        nueva = compras.crear(
+            form.get("que_compro", ""), proveedor_nombre=nombre_prov,
+            proveedor_id=proveedor_id, resp=form.get("resp", ""),
+            lead_ref=form.get("lead_ref", ""), autor=autor)
+    except compras.ErrorCompras as fallo:
+        return _compras_vuelve(error=str(fallo))
+    return _compras_vuelve(
+        aviso=f"{nueva['ref']} anotada en «Por pedir».")
 
 
 # ---------------------------------------------------------------------------

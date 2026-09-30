@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Compras — Control Viverorose</title>
+<link rel="icon" type="image/jpeg" href="/static/logo.jpg">
+<link rel="apple-touch-icon" href="/static/logo.jpg">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Compras">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+{# La pestaña Compras, Fase 1 (30/09/2026): el tablero de lo que se le
+   compra al proveedor — las 7 columnas del proyecto COMPRAS del equipo VIV
+   de Linear. Modelada sobre control.html y con las MISMAS clases .ret-*
+   (misma piel, mismo ancho de columna, misma tarjeta de dos líneas): acá
+   no se inventó ningún diseño nuevo. Tampoco JS nuevo — el arrastre es el
+   control.js de siempre, que lee el destino y el campo de la propia
+   columna (data-destino / data-campo). El servidor arma todo. #}
+<link rel="stylesheet" href="/static/calendario.css?v={{ v_estaticos }}">
+</head>
+<body class="{{ 'menu-oculto' if request.cookies.get('menu') == '0' }}">
+
+<div class="app">
+  <aside class="lado">
+    <div class="marca">
+      <img src="/static/logo.jpg" alt="Vivero Rose">
+      <span>Control Viverorose</span>
+    </div>
+    <a class="pil" href="/calendario">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>Calendario
+    </a>
+    <a class="pil" href="/?tab=stock">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M12 10C12 6 9 3 4 3c0 5 3 8 8 7z"/><path d="M12 13c0-3.5 2.5-6 7-6 0 4.5-2.5 7-7 6z"/></svg>Stock
+    </a>
+    <a class="pil" href="/venta">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2 2h2l2.7 12.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 1.9-1.6L22 6H5"/></svg>Vender
+    </a>
+    <a class="pil" href="/control">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Control
+    </a>
+    <span class="pil on">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><path d="M2 4h20v4H2z"/><path d="M10 12h4"/></svg>Compras
+    </span>
+    <a class="pil" href="/?tab=ajustes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Ajustes
+    </a>
+    <div class="pie">
+      <b>{{ empleada.nombre or empleada.id }}</b>
+      <span>
+        {% if modo == 'muestra' %}Compras de muestra (sin Linear)
+        {% elif modo == 'lectura' %}Solo lectura del tablero real
+        {% else %}Equipo VIV · proyecto COMPRAS{% endif %}
+      </span>
+    </div>
+  </aside>
+
+  <div class="tablero">
+    {% with bm_titulo='Compras', bm_sub='Lo que le compramos al proveedor',
+            bm_accion_url=('/compras?nueva=1' if puede_mover else ''),
+            bm_accion_texto='+ Compra' %}{% include '_barra_movil.html' %}{% endwith %}
+    <div class="barra">
+      <button class="btn icono hamb" type="button" aria-label="Mostrar u ocultar el menú"
+              aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <h3>Compras</h3>
+      <span class="crece"></span>
+      <span class="tenue" style="font-size:12px">
+        {% if alc.admin %}Arrastra para corregir la columna
+        {% elif alc.resp_propio %}Todo el tablero · movés solo lo tuyo, {{ alc.resp_propio }}
+        {% else %}Todo el tablero · todavía no te toca ninguna compra{% endif %}
+      </span>
+      {# El único botón negro de la pantalla. #}
+      {% if puede_mover %}
+      <a class="btn oro" href="/compras?nueva=1">+ Compra</a>
+      {% endif %}
+    </div>
+
+    {# La X del banner: un aviso vive en el query y sin ella se queda hasta
+       la próxima navegación. Es un enlace a la misma vista sin el query. #}
+    {% if error %}<div class="franja"><b>Ups.</b> <span>{{ error }}</span>
+      <a class="cierra-banner" href="/compras" aria-label="Cerrar el aviso">×</a></div>{% endif %}
+    {% if aviso %}<div class="aviso-ok">{{ aviso }}
+      <a class="cierra-banner" href="/compras" aria-label="Cerrar el aviso">×</a></div>{% endif %}
+    {% if modo == 'lectura' %}
+    <div class="solo-lectura"><b>Solo lectura.</b> Esta instancia mira el
+      tablero real pero no escribe en Linear.</div>
+    {% endif %}
+    {# Hoy (30/09/2026) el proyecto COMPRAS todavía no existe en Linear: el
+       tablero sale con sus 7 columnas vacías y este renglón lo dice en
+       palabras simples. No es una falla, y el código no lo crea. #}
+    {% if falta %}
+    <div class="solo-lectura"><b>Falta prepararlo en Linear.</b> {{ falta }}</div>
+    {% endif %}
+    {% if not alc.admin and not alc.resp_propio %}
+    <div class="solo-lectura"><b>Sin etiqueta.</b> Tu cuenta todavía no tiene
+      su etiqueta <b>Resp:</b> en Linear: ves el tablero completo, pero
+      ninguna compra es tuya para mover.</div>
+    {% endif %}
+
+    <div class="ret-tablero">
+      {% for col in columnas %}
+      <div class="ret-col">
+        <div class="ret-cab">
+          <span class="pt-leyenda" style="background:{{ col.color }}"></span>
+          <b>{{ col.titulo }}</b><span class="crece"></span>
+          <span class="ret-cuenta">{{ col.compras|length }}</span>
+        </div>
+        {# El arrastre es el control.js de Control, sin tocarlo: la columna
+           dice a dónde va el POST y cómo se llama el campo. #}
+        <div class="ret-lista" data-columna="{{ col.clave }}"
+             data-destino="/compras/estado" data-campo="estado" data-vista="">
+          {% for c in col.compras %}
+          {# La tarjeta T2: DOS líneas. Arriba qué se compra; abajo, tenues,
+             el proveedor, el P000xx, la fecha, el Resp: y la barra de
+             pagado sobre total. Los <a> de adentro llevan
+             draggable="false": todo enlace es arrastrable por naturaleza y
+             sin eso el navegador arrastra el ENLACE, el drop postea sin
+             ref y el servidor contesta un error que no pasó (la lección
+             del 29/09/2026 en Control). #}
+          <div class="ret-tarjeta ctl-tarjeta"
+               draggable="{{ 'true' if puede_mover and (alc.admin or (alc.resp_propio and c.resp == alc.resp_propio)) else 'false' }}"
+               data-ref="{{ c.ref }}">
+            <span class="ctl-zona">
+              <span class="t-cab"><b>{{ c.que_compro }}</b></span>
+            </span>
+            <span class="t-sub ctl-pie-tarjeta">
+              {% if c.proveedor %}<span class="cmp-prov">{{ c.proveedor }}</span>{% endif %}
+              {% if c.orden_compra %}<span class="cmp-orden">{{ c.orden_compra }}</span>{% endif %}
+              <span class="{{ 'hace-alerta' if c.hace_alerta }}">{{ c.hace }}</span>
+              {% if c.resp %}<span class="chip-est">{{ c.resp }}</span>
+              {% else %}<span class="chip-est chip-nadie">Sin asignar</span>{% endif %}
+              {# La barra SOLO si hay plata conocida: sin dato no se pinta
+                 nada, nunca un 0 inventado (lo decide compras.plata_de). #}
+              {% if c.plata and c.plata.hay %}
+              <span class="cmp-barra {{ 'cmp-llena' if c.plata.porcentaje >= 100 }}"
+                    role="img"
+                    aria-label="Pagado {{ c.plata.pagado | dinero }} de {{ c.plata.total | dinero }}"><span
+                    style="width:{{ c.plata.porcentaje }}%"></span></span>
+              <span class="cmp-plata">{{ c.plata.pagado | dinero }} / {{ c.plata.total | dinero }}</span>
+              {% endif %}
+              {% if c.lead_ref %}<a class="ctl-wa" draggable="false"
+                 href="/control?abrir={{ c.lead_ref | urlencode }}"
+                 aria-label="Ver el lead {{ c.lead_ref }}">{{ c.lead_ref }}</a>{% endif %}
+            </span>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="ret-pie">{{ col.pie }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="pie-nota" style="padding:0 4px">
+      El estado de la compra vive en el proyecto <b>COMPRAS</b> del equipo VIV
+      de Linear; la orden <b>P000xx</b>, la factura del proveedor y los pagos,
+      en Odoo. El responsable es la etiqueta <b>Resp:</b> del issue, no el
+      asignado. Los proveedores son contactos de Odoo: no tocan WhatsApp.
+    </p>
+  </div>
+</div>
+
+{% set activa = 'compras' %}{% include '_nav.html' %}
+
+{% if nueva %}
+{# Una compra a mano: nace en «Por pedir». Mismo modal del motivo de
+   Control (.modal + .telon), sin JS. #}
+<a class="telon" href="/compras" aria-label="Cerrar"></a>
+<form class="modal" method="post" action="/compras/nueva">
+  <div class="cab-panel">
+    <div><span class="tenue">COMPRA NUEVA</span>
+      <h4>Nace en «Por pedir»</h4></div>
+    <a class="btn chico" href="/compras">Cerrar</a>
+  </div>
+
+  <div class="campo-caja">
+    <label for="cp-que">¿Qué se compra?</label>
+    <input class="campo" id="cp-que" name="que_compro" required maxlength="250"
+           autocomplete="off" placeholder="Ej: 50 sacos de tierra negra">
+  </div>
+
+  <div class="campo-caja">
+    <label for="cp-prov">Proveedor</label>
+    {# UN campo de texto con sugerencias, no un selector: hoy Odoo no tiene
+       ni un proveedor marcado, y un <select> vacío no deja anotar nada. Lo
+       escrito se casa por nombre exacto contra los contactos de Odoo para
+       guardar su id; lo que no calce queda como nombre libre. #}
+    <input class="campo" id="cp-prov" name="proveedor" maxlength="120"
+           list="cp-proveedores" autocomplete="off"
+           placeholder="Ej: Agroservicios del Istmo">
+    <datalist id="cp-proveedores">
+      {% for p in proveedores %}<option value="{{ p.nombre }}"></option>{% endfor %}
+    </datalist>
+    {% if proveedores_error %}
+    <span class="err">No se pudo leer los proveedores de Odoo: {{ proveedores_error }}.
+      Se puede escribir el nombre igual.</span>
+    {% endif %}
+  </div>
+
+  <div class="campo-caja">
+    <label for="cp-resp">Responsable</label>
+    <select class="sel ancho" id="cp-resp" name="resp">
+      <option value="">Sin asignar</option>
+      {% for r in responsables %}
+      <option value="{{ r }}" {{ 'selected' if r == resp_sugerido }}>{{ r }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="campo-caja">
+    <label for="cp-lead">¿Es para un cliente? (opcional)</label>
+    <select class="sel ancho" id="cp-lead" name="lead_ref">
+      <option value="">No, es para el vivero</option>
+      {% for l in leads %}
+      <option value="{{ l.ref }}">{{ l.ref }} · {{ l.nombre }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="acciones">
+    <button class="btn oro" type="submit" data-guardando="Anotando…">Anotar la compra</button>
+    <a class="btn" href="/compras">Mejor no</a>
+  </div>
+  <p class="pie-nota">Se crea el issue en el proyecto COMPRAS de Linear, con
+    la etiqueta <b>Resp:</b> del responsable. La orden de compra y los pagos
+    se hacen en Odoo.</p>
+</form>
+{% endif %}
+
+{# Los tres scripts que ya existen, sin uno nuevo: control.js es el
+   arrastre, menu.js la hamburguesa (la de computadora y la del cajón
+   móvil) y de calendario.js interesa el candado del doble toque — un
+   botón con `data-guardando` no manda el formulario dos veces, que en el
+   teléfono es fácil y acá crearía la compra dos veces. Los otros trozos de
+   calendario.js buscan ids que esta pantalla no tiene y no hacen nada. #}
+<script src="/static/control.js?v={{ v_estaticos }}"></script>
+<script src="/static/menu.js?v={{ v_estaticos }}"></script>
+<script src="/static/calendario.js?v={{ v_estaticos }}"></script>
+</body>
+</html>
