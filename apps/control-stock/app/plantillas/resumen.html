@@ -163,6 +163,31 @@
     {% endif %}
   </div>
 
+  {# ---------- 7. El gasto de Google del dia (tarifas de envio) ---------- #}
+  {# Tampoco es un bloque del negocio: es salud del sistema, igual que el
+     almacen. Las tarifas de envio le preguntan a Google cuanto se tarda en
+     llegar al punto que el cliente marco, y eso se paga por consulta. Tocado
+     el tope diario, el sistema deja de llamar a Google y cobra con el tiempo
+     de respaldo del corregimiento: el envio sigue cotizando y NADA se rompe,
+     que es justo por lo que hace falta contarlo aqui.
+
+     Cuando no se puede leer, el renglon lo dice y NO aparece en los huecos de
+     arriba: el endpoint del order-api se despliega aparte, y no vale degradar
+     el titular del dueno todas las noches por eso. Toda la regla esta en
+     Python (`mapas.armar`); aqui solo se pinta lo ya decidido. #}
+  <div class="inv-card">
+    <h3>Mapas · {% if r.mapas %}{{ r.mapas.consultas }}{% else %}—{% endif %}</h3>
+    {% if r.mapas is none %}
+    <p style="margin-bottom:0">No se pudo preguntar cuántas consultas se le
+      hicieron a Google, así que no se sabe. <b>No es 0</b>: es que el
+      order-api no contestó{% if r.mapas_motivo %} — {{ r.mapas_motivo }}{% endif %}</p>
+    {% elif r.mapas.alerta %}
+    <p style="margin-bottom:0"><b>{{ r.mapas.frase }}</b></p>
+    {% else %}
+    <p style="margin-bottom:0">{{ r.mapas.frase }}</p>
+    {% endif %}
+  </div>
+
   {# ---------- El estado del aviso mismo ---------- #}
   <div class="inv-card">
     <h3>El aviso de las 7 p.m.</h3>
