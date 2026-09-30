@@ -4,89 +4,18 @@
    así salen solos en la cotización, la propuesta y la factura PDF;
    vacíos no cobran nada.
 
-   Cada uno lleva su descripción ya escrita (24/09/2026) para que el
-   renglón explique qué se cobra en vez de decir solo "Envío": se puede
-   corregir en cada cotización y lo que se escriba manda.
+   Partido en dos el 30/09/2026 (rediseño de la pantalla de editar en dos
+   columnas): _cargos_envio.html y _cargos_instalacion.html, para que
+   editar los pliegue por separado ("Envío" / "Instalación y
+   mantenimiento", cada uno su propio <details>). Este archivo sigue
+   siendo el include de una sola pieza para Nueva venta y Personalizada,
+   que no cambiaron: mismas variables, mismo HTML de salida, solo
+   repartido en dos archivos.
 
    Variables (con {% with %} antes del include):
    - form_cargos   id del <form> al que pertenecen los campos
    - cargos        valores ya puestos: el borrador en los formularios de
                    crear, o lo que la cotización tiene en Odoo al editar
    - cargos_catalogo  ventas.CARGOS, para no repetir el HTML #}
-<div class="seccion-titulo" style="margin-top:16px">Envío (opcional)</div>
-{# El envío se elige, no se escribe (dueño, 28/09/2026): una opción con su
-   precio ya puesto —editable si el viaje pasa de lo que cubre— o
-   Personalizado con monto y nota (más de 30 min no tiene opción fija).
-   Los precios salen de Ajustes; el monto final lo decide el servidor
-   (ventas.resolver_envio), venta.js solo refresca el desglose. #}
-{% set precios = envio_precios() %}
-{% set eleccion = cargos['envio_opcion'] or '' %}
-<div class="opciones-envio">
-  <label class="opcion-envio">
-    <input class="dato-cliente" type="radio" name="envio_opcion" value=""
-           form="{{ form_cargos }}" data-precio="0"
-           {{ 'checked' if not eleccion }}>
-    <span>Sin envío</span>
-  </label>
-  {% for opcion in envio_opciones %}
-  <label class="opcion-envio">
-    <input class="dato-cliente" type="radio" name="envio_opcion"
-           value="{{ opcion.clave }}" form="{{ form_cargos }}"
-           data-precio="{{ '%.2f' | format(precios[opcion.clave]) }}"
-           data-nombre="Envío · {{ opcion.vehiculo }} · {{ opcion.zona }}"
-           {{ 'checked' if eleccion == opcion.clave }}>
-    <span>{{ opcion.vehiculo_pantalla }} · {{ opcion.zona }}
-      ({{ opcion.tiempo }}) — ${{ '%.2f' | format(precios[opcion.clave]) }}</span>
-  </label>
-  {% endfor %}
-  <label class="opcion-envio">
-    <input class="dato-cliente" type="radio" name="envio_opcion"
-           value="personalizado" form="{{ form_cargos }}" data-precio="0"
-           {{ 'checked' if eleccion == 'personalizado' }}>
-    <span>Personalizado (más de 30 min: monto y nota a mano)</span>
-  </label>
-</div>
-<div class="campos-cliente">
-  <div class="campo">
-    <span>Otro monto ($) — vacío usa el de la opción</span>
-    <input class="dato-cliente" name="envio" form="{{ form_cargos }}"
-           value="{{ cargos['envio'] or '' }}" type="number" step="0.01" min="0"
-           inputmode="decimal" placeholder="0.00" autocomplete="off"
-           onfocus="this.select()">
-  </div>
-  <div class="campo">
-    <span>Nota del personalizado (ej. «Chame, 50 min»)</span>
-    <input class="dato-cliente" name="envio_nota" form="{{ form_cargos }}"
-           value="{{ cargos['envio_nota'] or '' }}" type="text" maxlength="120"
-           autocomplete="off">
-  </div>
-  {% set cargo_envio = (cargos_catalogo | selectattr('clave', 'equalto', 'envio') | first) %}
-  <div class="campo campo-ancho">
-    <span>Qué incluye (sale en la cotización)</span>
-    <textarea class="dato-cliente parrafo-servicio" rows="2" maxlength="600"
-              name="envio_desc" form="{{ form_cargos }}"
-              >{{ cargos['envio_desc'] or cargo_envio.descripcion }}</textarea>
-  </div>
-</div>
-
-<div class="seccion-titulo" style="margin-top:16px">Cargos de servicio (opcional)</div>
-{% for cargo in cargos_catalogo if cargo.clave != 'envio' %}
-<div class="campos-cliente">
-  <div class="campo">
-    <span>{{ cargo.nombre }} ($)</span>
-    <input class="dato-cliente" name="{{ cargo.clave }}" form="{{ form_cargos }}"
-           value="{{ cargos[cargo.clave] or '' }}" type="number" step="0.01" min="0"
-           inputmode="decimal" placeholder="0.00" autocomplete="off"
-           onfocus="this.select()">
-  </div>
-  <div class="campo campo-ancho">
-    <span>Qué incluye (sale en la cotización)</span>
-    <textarea class="dato-cliente parrafo-servicio" rows="2" maxlength="600"
-              name="{{ cargo.clave }}_desc" form="{{ form_cargos }}"
-              >{{ cargos[cargo.clave ~ '_desc'] or cargo.descripcion }}</textarea>
-  </div>
-</div>
-{% endfor %}
-<p class="nota-cliente">Con monto se suman al total y salen como un renglón
-más —con su explicación debajo— en la cotización y la factura; vacíos no
-cobran nada.</p>
+{% include "_cargos_envio.html" %}
+{% include "_cargos_instalacion.html" %}
