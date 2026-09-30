@@ -89,6 +89,27 @@ DE_WHATSAPP = {"No leídos", "No leidos", "Favoritos", "Grupos"}
 # `_nombre_en_catalogo` ya tolera la marca a los dos lados: calza igual.
 ESTADOS_CON_ETIQUETA = ("Nuevo", "Hablando", "Cotizado", "Por agendar",
                         "Agendado", "Entregado", "Recordatorio")
+
+# El nombre que la etiqueta lleva EN WHATSAPP cuando no coincide con el
+# del estado (30/09/2026): Abraham creo la del telefono como «Recordar»
+# (sin U+200E), y lo que el puso a mano GANA — el codigo se adapta a su
+# nombre, no al reves. El estado en Linear/Twenty sigue llamandose
+# «Recordatorio»: esta traduccion es SOLO del lado WhatsApp, igual que el
+# puente `a_whatsapp`/`a_linear` de los representantes (y como el estado
+# SOLO BAJA, aqui no hace falta camino de vuelta).
+ETIQUETA_DE_ESTADO = {"Recordatorio": "Recordar"}
+
+
+def etiqueta_de_estado(estado):
+    """El nombre de la etiqueta de WhatsApp para un estado del embudo."""
+    return ETIQUETA_DE_ESTADO.get(estado, estado)
+
+
+# Los nombres que esos estados llevan en el TELEFONO — para la resta de un
+# lead cerrado, que compara contra lo que el chat tiene puesto (en el chat
+# lo que hay es «Recordar», nunca «Recordatorio»).
+ETIQUETAS_ESTADO_WHATSAPP = tuple(
+    etiqueta_de_estado(e) for e in ESTADOS_CON_ETIQUETA)
 INTERESES = ("Plantas", "Eventos", "Paisajismo", "Mantenimiento", "Mayorista")
 RESPONDER = "🔴 Responder"
 
@@ -141,12 +162,15 @@ def _nombre_en_catalogo(nombre_deseado, disponibles):
 # solas (regla 3): si el nombre no existe todavia en el catalogo de
 # WhatsApp, el chat se queda sin ella y el log lo avisa.
 #
-# Las cuatro (28/09/2026): «Importante», «Seguimiento» y «Cliente
-# potencial» las pone o las quita Abraham a mano en Linear (los botones de
-# la ficha); «Entrega pendiente» la pone y la quita el codigo de
-# control-stock solo, segun si a un lead Agendado ya le llego el dia de su
-# entrega -pero para EL SINCRONIZADOR las cuatro son lo mismo: una
-# etiqueta suelta que Linear manda y WhatsApp solo refleja.
+# Las cinco (28/09/2026; «Llamar» sumada el 30/09/2026): «Importante»,
+# «Seguimiento», «Cliente potencial» y «Llamar» las pone o las quita
+# Abraham a mano en Linear (los botones de la ficha); «Entrega pendiente»
+# la pone y la quita el codigo de control-stock solo, segun si a un lead
+# Agendado ya le llego el dia de su entrega -pero para EL SINCRONIZADOR
+# las cinco son lo mismo: una etiqueta suelta que Linear manda y WhatsApp
+# solo refleja. La de WhatsApp «Llamar» ya existe (la escribio Abraham a
+# mano, sin U+200E); la de Linear la crea el cuando quiera y mientras no
+# exista sencillamente ningun lead la trae puesta.
 #
 # «Seguimiento» y «Cliente potencial» son dos de las tres SUGERIDAS de
 # fabrica de WhatsApp Business (la tercera es "Pedido completado", ya en
@@ -160,7 +184,7 @@ def _nombre_en_catalogo(nombre_deseado, disponibles):
 # reglas de `quiere_para()` de mas abajo, sin que haga falta ningun codigo
 # extra aqui para excluirlas.
 SENALES_QUE_BAJAN = ("Importante", "Seguimiento", "Cliente potencial",
-                     "Entrega pendiente")
+                     "Entrega pendiente", "Llamar")
 
 # Las etiquetas de representante de WhatsApp, cada una con su color
 # (25/09/2026). El color dice de que familia es; el nombre, cual.
@@ -574,7 +598,9 @@ def deseadas(lead, disponibles):
     """
     quiere = []
     if lead["estado"] in ESTADOS_CON_ETIQUETA:
-        quiere.append(lead["estado"])
+        # El estado viaja con SU nombre de WhatsApp (hoy solo Recordatorio
+        # cambia: en el telefono la etiqueta es «Recordar»).
+        quiere.append(etiqueta_de_estado(lead["estado"]))
     if lead["interes"] in INTERESES:
         quiere.append(lead["interes"])
     if lead["resp"] and representantes_activos():
@@ -646,7 +672,10 @@ def quiere_para(lead, tiene, disponibles):
         # siempre, mas las señales sueltas -por si alguna quedo puesta de
         # cuando el lead estaba vivo-, tolerando el U+200E.
         sin_marca_senales = {_sin_marca(s) for s in SENALES_QUE_BAJAN}
-        quiere = [t for t in tiene if t not in ESTADOS_CON_ETIQUETA
+        # La resta compara contra lo que el CHAT tiene, asi que va con los
+        # nombres de WhatsApp (ETIQUETAS_ESTADO_WHATSAPP: ahi el estado
+        # Recordatorio se llama «Recordar»).
+        quiere = [t for t in tiene if t not in ETIQUETAS_ESTADO_WHATSAPP
                   and t != RESPONDER and _sin_marca(t) not in sin_marca_senales]
         return quiere, []
     return deseadas(lead, disponibles)
