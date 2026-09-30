@@ -672,7 +672,9 @@ def test_cotizacion_publica_por_whatsapp(cliente_venta, odoo):
     # "pon facturar y mandar factura y ya"); la ruta pública /f/<token>
     # sigue viva y se manda la FACTURA después de facturar.
     assert "Mandar cotizaci\u00f3n" not in pagina.text
-    assert ">Facturar<" in pagina.text
+    # El r\u00f3tulo pas\u00f3 a "Facturar / Pagado" (due\u00f1o, 30/09/2026): ver
+    # test_cotizacion_dice_facturar_pagado_y_ofrece_su_pdf abajo.
+    assert ">Facturar / Pagado<" in pagina.text
     registro = ventas.ventas_todas()[0]
     token = ventas.obtener_venta(registro["n"])["token"]
     cliente_venta.cookies.clear()
@@ -1149,3 +1151,72 @@ def test_el_enlace_de_repuesto_de_la_vista_previa_no_lleva_data_pdf(
             encontrado = True
             assert "data-pdf" not in enlace
     assert encontrado, "no se encontró el enlace de repuesto de la vista previa"
+
+
+# --- Facturar/Pagado + el PDF de la cotización, lado a lado (30/09/2026) ---
+# Pedido del dueño, literal: "pon compartir al lado de facturar y pon
+# facturar/pagado". La cotización local gana el mismo control «Descargar /
+# Compartir (PDF)» que ya usan las tarjetas hermanas, sin tocar Python: el
+# nombre del archivo (`nombre_cotizacion_pdf`) ya viajaba en el contexto
+# para TODAS las ventas, no solo las "vendida".
+
+def test_cotizacion_dice_facturar_pagado_y_ofrece_su_pdf(cliente_venta, odoo):
+    _agregar(cliente_venta, 501)
+    cliente_venta.post("/venta/cotizar", data={"cliente": "María"})
+    registro = ventas.ventas_todas()[0]
+    assert registro["estado"] == "cotizacion"
+    esperado = ventas.nombre_de_pdf(registro["orden"].replace("/", "-"),
+                                    registro["cliente"])
+    pagina = cliente_venta.get("/venta").text
+    assert ">Facturar / Pagado<" in pagina
+    encontrado = False
+    for trozo in pagina.split("<a ")[1:]:
+        enlace = trozo.split(">")[0]
+        if f"/venta/{registro['n']}/cotizacion.pdf" in enlace:
+            encontrado = True
+            assert 'target="_blank"' in enlace
+            assert 'rel="noopener"' in enlace
+            assert "data-pdf" in enlace
+            assert f'download="{esperado}"' in enlace
+            assert esperado  # el nombre no queda vacío
+    assert encontrado, "no se encontró el PDF de la cotización junto a Facturar / Pagado"
+
+
+def test_cotizacion_conserva_cancelar(cliente_venta, odoo):
+    """El botón Cancelar sigue vivo, después del PDF nuevo."""
+    _agregar(cliente_venta, 501)
+    cliente_venta.post("/venta/cotizar", data={"cliente": "María"})
+    registro = ventas.ventas_todas()[0]
+    pagina = cliente_venta.get("/venta").text
+    assert f'action="/venta/cancelar/{registro["n"]}"' in pagina
+    assert ">Cancelar</button>" in pagina
+
+
+def test_vendida_no_gana_ni_pierde_controles(cliente_venta, odoo):
+    """El cambio es solo para "cotizacion": "vendida" sigue con su único
+    control «Descargar / Compartir (PDF)», sin Facturar/Pagado ni Cancelar
+    duplicados."""
+    cliente_venta.post("/venta/carrito/agregar",
+                       data={"producto_id": 501, "cantidad": 1})
+    cliente_venta.post("/venta/vender", data={"cliente": "Ana", "celular": ""})
+    registro = ventas.ventas_todas()[0]
+    assert registro["estado"] == "vendida"
+    pagina = cliente_venta.get("/venta").text
+    assert pagina.count("Descargar / Compartir (PDF)") == 1
+    assert "Facturar / Pagado" not in pagina
+    assert f'action="/venta/cancelar/{registro["n"]}"' not in pagina
+
+
+def test_pagado_no_gana_ni_pierde_controles(cliente_venta, odoo):
+    """"pagado" sigue con «Descargar / Compartir factura» + «Mandar
+    factura», sin el PDF de cotización ni Facturar/Pagado de más."""
+    _agregar(cliente_venta, 501)
+    r = cliente_venta.post("/venta/pagar",
+                           data={"cliente": "María", "celular": "6123-4567"},
+                           follow_redirects=False)
+    n = r.headers["location"].rsplit("/", 1)[1]
+    cliente_venta.post(f"/venta/cobrar/{n}", data={"metodo": "yappy"})
+    pagina = cliente_venta.get("/venta").text
+    assert ">Descargar / Compartir factura</a>" in pagina
+    assert "Facturar / Pagado" not in pagina
+    assert f"/venta/{n}/cotizacion.pdf" not in pagina

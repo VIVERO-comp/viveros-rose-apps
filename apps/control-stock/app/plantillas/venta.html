@@ -113,10 +113,16 @@
     <div class="venta-acciones">
       <span>
         {% if v.estado == "cotizacion" %}
-          {# Solo Facturar (dueño, 23/09/2026: "pon facturar y mandar
-             factura y ya"); el Mandar de la cotización se fue — lo que se
-             manda es la factura, después de facturar. #}
-          <a href="/venta/cobrar/{{ v.n }}">Facturar</a>
+          {# Facturar/Pagado + el PDF de la cotización (dueño, 30/09/2026:
+             "pon compartir al lado de facturar y pon facturar/pagado") —
+             reemplaza el "Solo Facturar" del 23/09/2026. La pantalla destino
+             (/venta/cobrar) sigue siendo la misma, solo cambió el rótulo; y
+             se agrega el mismo control «Descargar / Compartir (PDF)» que ya
+             usan las tarjetas hermanas (data-pdf: en iPhone abre la hoja
+             nativa de compartir.js, en Android/computadora descarga en
+             pestaña nueva con el nombre calculado en Python). #}
+          <a href="/venta/cobrar/{{ v.n }}">Facturar / Pagado</a>
+          · <a href="/venta/{{ v.n }}/cotizacion.pdf" target="_blank" rel="noopener" download="{{ v.nombre_cotizacion_pdf }}" data-pdf>Descargar / Compartir (PDF)</a>
           <form class="forma-cancelar" method="post" action="/venta/cancelar/{{ v.n }}"
                 onsubmit="return confirm('Cancela la cotización {{ v.orden }} también en Odoo y no tiene marcha atrás desde la app: para revivirla habría que crear la venta de nuevo. ¿Cancelar?')">
             <button type="submit" class="enlace-sub">Cancelar</button>
