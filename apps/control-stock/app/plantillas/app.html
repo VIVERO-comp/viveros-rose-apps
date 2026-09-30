@@ -194,7 +194,7 @@
         <form method="post" action="/conteos/pdf" target="_blank">
           <button class="btn btn-dorado" type="submit"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg> Generar hoja PDF</button>
         </form>
-        {% if ultima_hoja %}<a class="btn btn-linea" href="/conteos/{{ ultima_hoja.n }}/pdf" target="_blank" rel="noopener" download>Ver último</a>{% endif %}
+        {% if ultima_hoja %}<a class="btn btn-linea" href="/conteos/{{ ultima_hoja.n }}/pdf" target="_blank" rel="noopener" download="{{ ultima_hoja.archivo or '' }}" data-pdf>Ver último</a>{% endif %}
         <form method="post" action="/revisiones">
           <button class="btn btn-linea" type="submit">Revisión hecha</button>
         </form>
@@ -227,7 +227,7 @@
         <span class="dif ok">Hecha ✓</span>
       </div>
       {% else %}
-      <a class="historial-item" href="/conteos/{{ c.n }}/pdf" target="_blank" rel="noopener" download>
+      <a class="historial-item" href="/conteos/{{ c.n }}/pdf" target="_blank" rel="noopener" download="{{ c.archivo or '' }}" data-pdf>
         <div><b>Hoja de conteo</b><small>{{ c.creado_en | fecha_bonita }} · {{ c.empleada }}</small></div>
         <span class="dif ok">PDF</span>
       </a>
@@ -466,7 +466,7 @@
         <form method="post" action="/conteos/pdf" target="_blank">
           <button class="btn btn-dorado" type="submit"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg> Generar hoja PDF</button>
         </form>
-        {% if ultima_hoja %}<a class="btn btn-linea" href="/conteos/{{ ultima_hoja.n }}/pdf" target="_blank" rel="noopener" download>Ver última</a>{% endif %}
+        {% if ultima_hoja %}<a class="btn btn-linea" href="/conteos/{{ ultima_hoja.n }}/pdf" target="_blank" rel="noopener" download="{{ ultima_hoja.archivo or '' }}" data-pdf>Ver última</a>{% endif %}
       </div>
     </div>
 

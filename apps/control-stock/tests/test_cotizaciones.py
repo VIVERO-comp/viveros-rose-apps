@@ -1147,3 +1147,25 @@ def test_la_propuesta_tiene_boton_compartir_oculto_con_su_nombre(cliente, odoo):
     tag = pagina[inicio:fin + 1]
     assert "hidden" in tag
     assert f'data-nombre="{esperado}"' in tag
+
+
+def test_el_enlace_de_la_propuesta_lleva_data_pdf_con_su_nombre(cliente, odoo):
+    """En iPhone «Descargar» abre la hoja nativa (30/09/2026): el enlace
+    lleva el marcador `data-pdf` y el nombre calculado en Python en el
+    propio atributo `download`."""
+    cliente.post("/venta/servicio/renta",
+                 data={"cliente": "María", "celular": "",
+                       "servicio_texto": "Alquiler de 20 plantas",
+                       "servicio_monto": "850"})
+    registro = cotizaciones.cotizaciones_todas()[0]
+    esperado = ventas.nombre_de_pdf(registro["orden"].replace("/", "-"),
+                                    registro["cliente"])
+    pagina = cliente.get("/venta").text
+    encontrado = False
+    for trozo in pagina.split("<a ")[1:]:
+        enlace = trozo.split(">")[0]
+        if "/propuesta.pdf" in enlace:
+            encontrado = True
+            assert "data-pdf" in enlace
+            assert f'download="{esperado}"' in enlace
+    assert encontrado, "no se encontró el enlace de la propuesta"

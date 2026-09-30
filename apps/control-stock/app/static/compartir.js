@@ -16,6 +16,12 @@
 // que le falla al primer toque.
 
 (function () {
+  // iPhone/iPad (la segunda mitad es iPadOS en modo escritorio, que se
+  // presenta como Mac pero tiene pantalla táctil). Solo el navegador
+  // puede saber esto — por eso vive acá y no en Python.
+  const ES_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
   const PUEDE_COMPARTIR_ARCHIVOS = (() => {
     try {
       const prueba = new File([""], "prueba.pdf", { type: "application/pdf" });
@@ -48,14 +54,49 @@
     }
   }
 
+  // En iPhone/iPad, «Descargar» un PDF hace LO MISMO que Compartir
+  // (dueño, 30/09/2026): iOS Safari ignora el attachment+download y
+  // pinta el PDF a pantalla completa, dejando al usuario trabado. La
+  // hoja nativa sí funciona: desde ahí se guarda en Archivos o se manda
+  // por WhatsApp. Qué enlace es un PDF lo decide Python: cada plantilla
+  // marca sus enlaces de descarga de PDF con `data-pdf`, y el nombre del
+  // archivo ya viaja en el atributo `download` (calculado en Python) —
+  // este script no adivina por la URL ni arma nombres. Si algo falla
+  // (menos cancelar), cae al comportamiento de siempre: pestaña nueva.
+  async function descargarPdfConHoja(enlace) {
+    const nombre = enlace.getAttribute("download") || "documento.pdf";
+    try {
+      const respuesta = await fetch(enlace.href);
+      if (!respuesta.ok) throw new Error("descarga fallida");
+      const blob = await respuesta.blob();
+      const archivo = new File([blob], nombre,
+        { type: blob.type || "application/pdf" });
+      await navigator.share({ files: [archivo], title: nombre });
+    } catch (error) {
+      if (error && error.name === "AbortError") return; // canceló: sin aviso
+      window.open(enlace.href, "_blank", "noopener");
+    }
+  }
+
   // Un solo listener delegado: sirve igual para los botones que ya
   // estaban en la página al cargar (Vender, la ficha de Control) y para
   // los que cambian de archivo en vivo (el modal de foto de producto).
   document.addEventListener("click", (evento) => {
     const boton = evento.target.closest("[data-compartir]");
-    if (!boton || boton.hidden) return;
+    if (boton && !boton.hidden) {
+      evento.preventDefault();
+      compartirArchivo(boton);
+      return;
+    }
+    // Solo iOS con Web Share de archivos: en Android y computadora la
+    // descarga normal funciona y no se toca; un iOS viejo sin Web Share
+    // de archivos se queda con el comportamiento actual (peor sería un
+    // botón muerto).
+    if (!ES_IOS || !PUEDE_COMPARTIR_ARCHIVOS) return;
+    const enlace = evento.target.closest("a[data-pdf]");
+    if (!enlace) return;
     evento.preventDefault();
-    compartirArchivo(boton);
+    descargarPdfConHoja(enlace);
   });
 
   document.addEventListener("DOMContentLoaded", () => activarBotonesCompartir());

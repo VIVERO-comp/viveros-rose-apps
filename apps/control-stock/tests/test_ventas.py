@@ -1103,3 +1103,65 @@ def test_la_pantalla_de_exito_tambien_tiene_boton_compartir(cliente_venta, odoo)
     assert "hidden" in tag
     assert f'data-nombre="{esperado}"' in tag
     assert "btn-dorado" not in tag  # secundario: el primario sigue siendo Descargar
+
+
+# --- El marcador `data-pdf` (30/09/2026): en iPhone «Descargar» abre la
+# hoja nativa. Qué enlace es un PDF lo decide Python: cada plantilla marca
+# sus enlaces de descarga de PDF con `data-pdf`, y el nombre del archivo
+# viaja en el propio atributo `download` — compartir.js no adivina por la
+# URL ni arma nombres.
+
+def test_la_factura_lleva_el_marcador_data_pdf_con_su_nombre(cliente_venta, odoo):
+    _agregar(cliente_venta, 501)
+    r = cliente_venta.post("/venta/pagar", data={"cliente": "María"},
+                           follow_redirects=False)
+    n = r.headers["location"].rsplit("/", 1)[1]
+    cliente_venta.post(f"/venta/cobrar/{n}", data={"metodo": "yappy"})
+    registro = ventas.obtener_venta(int(n))
+    esperado = ventas.nombre_de_pdf(
+        (registro["factura"] or str(n)).replace("/", "-"), registro["cliente"])
+    pagina = cliente_venta.get("/venta").text
+    encontrado = False
+    for trozo in pagina.split("<a ")[1:]:
+        enlace = trozo.split(">")[0]
+        if f"/venta/{n}/factura.pdf" in enlace:
+            encontrado = True
+            assert "data-pdf" in enlace
+            assert f'download="{esperado}"' in enlace
+    assert encontrado, "no se encontró el enlace de la factura"
+
+
+def test_la_pantalla_de_exito_lleva_el_marcador_data_pdf(cliente_venta, odoo):
+    _agregar(cliente_venta, 501)
+    r = cliente_venta.post("/venta/pagar", data={"cliente": "María"},
+                           follow_redirects=False)
+    n = r.headers["location"].rsplit("/", 1)[1]
+    pagina = cliente_venta.post(f"/venta/cobrar/{n}", data={"metodo": "yappy"}).text
+    registro = ventas.obtener_venta(int(n))
+    esperado = ventas.nombre_de_pdf(
+        (registro["factura"] or str(n)).replace("/", "-"), registro["cliente"])
+    encontrado = False
+    for trozo in pagina.split("<a ")[1:]:
+        enlace = trozo.split(">")[0]
+        if f"/venta/{n}/factura.pdf" in enlace:
+            encontrado = True
+            assert "data-pdf" in enlace
+            assert f'download="{esperado}"' in enlace
+    assert encontrado, "no se encontró el botón de la factura en la pantalla de éxito"
+
+
+def test_el_enlace_de_repuesto_de_la_vista_previa_no_lleva_data_pdf(
+        cliente_venta, odoo, monkeypatch):
+    """La vista previa es inline A PROPÓSITO (tiene su propio botón de
+    salida): su enlace de repuesto no se intercepta en iPhone."""
+    _pdf_falso(monkeypatch)
+    _agregar(cliente_venta, 501)
+    pagina = cliente_venta.post("/venta/vista-previa",
+                                data={"cliente": "Marta"}).text
+    encontrado = False
+    for trozo in pagina.split("<a ")[1:]:
+        enlace = trozo.split(">")[0]
+        if "vista-previa.pdf" in enlace:
+            encontrado = True
+            assert "data-pdf" not in enlace
+    assert encontrado, "no se encontró el enlace de repuesto de la vista previa"

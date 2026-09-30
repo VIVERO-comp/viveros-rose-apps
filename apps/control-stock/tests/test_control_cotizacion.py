@@ -545,3 +545,22 @@ def test_el_pdf_conectado_tiene_boton_compartir_oculto_con_su_nombre(
     tag = pagina[inicio:fin + 1]
     assert "hidden" in tag
     assert f'data-nombre="{esperado}"' in tag
+
+
+def test_el_pdf_conectado_lleva_data_pdf_con_su_nombre(cliente, de_dueno, odoo):
+    """En iPhone «Descargar» abre la hoja nativa (30/09/2026): el enlace
+    del PDF conectado lleva `data-pdf` y el nombre calculado en Python
+    (control._con_edicion) en el propio atributo `download`."""
+    lead, partner = _lead_y_partner(odoo, "LEAD-85")  # Diego Armando
+    odoo.agregar_orden(partner, "S00500", amount_total=10.0,
+                       lead_ref=lead["pp"], lead_real=True)
+    esperado = ventas.nombre_de_pdf("S00500", lead["nombre"])
+    pagina = cliente.get("/control", params={"abrir": "LEAD-85"}).text
+    encontrado = False
+    for trozo in pagina.split("<a ")[1:]:
+        enlace = trozo.split(">")[0]
+        if "/control/cotizacion/" in enlace and ".pdf" in enlace:
+            encontrado = True
+            assert "data-pdf" in enlace
+            assert f'download="{esperado}"' in enlace
+    assert encontrado, "no se encontró el enlace del PDF conectado"

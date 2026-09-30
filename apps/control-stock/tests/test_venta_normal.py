@@ -335,3 +335,23 @@ def test_lead_ref_no_bloquea_si_linear_no_contesta(con_comodin, monkeypatch):
     registro = ventas.crear_cotizacion(EMPLEADA, "Ana", "")  # no revienta
     orden = con_comodin.ordenes[registro["orden_id"]]
     assert not orden["lead_ref"]
+
+
+def test_la_orden_vendida_lleva_data_pdf_con_su_nombre(cliente_venta, con_comodin):
+    """En iPhone «Descargar» abre la hoja nativa (30/09/2026): el enlace
+    lleva `data-pdf` y el nombre calculado en Python en `download`."""
+    cliente_venta.post("/venta/carrito/agregar",
+                       data={"producto_id": 501, "cantidad": 1})
+    cliente_venta.post("/venta/vender", data={"cliente": "Ana", "celular": ""})
+    registro = ventas.ventas_todas()[0]
+    esperado = ventas.nombre_de_pdf(registro["orden"].replace("/", "-"),
+                                    registro["cliente"])
+    pagina = cliente_venta.get("/venta").text
+    encontrado = False
+    for trozo in pagina.split("<a ")[1:]:
+        enlace = trozo.split(">")[0]
+        if "/cotizacion.pdf" in enlace:
+            encontrado = True
+            assert "data-pdf" in enlace
+            assert f'download="{esperado}"' in enlace
+    assert encontrado, "no se encontró el enlace de la orden vendida"

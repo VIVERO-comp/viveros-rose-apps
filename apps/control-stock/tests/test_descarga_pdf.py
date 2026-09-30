@@ -57,3 +57,35 @@ def test_los_enlaces_de_pdf_abren_en_otra_pestana(cliente, con_inventario):
         enlace = trozo.split(">")[0]
         if "/pdf" in enlace:
             assert 'target="_blank"' in enlace, f"PDF sin nueva pestaña: {enlace}"
+
+
+def test_los_enlaces_de_la_hoja_de_conteo_llevan_data_pdf(cliente, con_inventario):
+    """En iPhone «Descargar» abre la hoja nativa (30/09/2026): también la
+    hoja de conteo es un PDF que atrapa en el celular, así que sus enlaces
+    llevan el marcador `data-pdf` y el nombre del archivo en `download`."""
+    cliente.post("/conteos/pdf", follow_redirects=False)
+    pagina = cliente.get("/?tab=stock").text
+    encontrados = 0
+    for trozo in pagina.split("<a ")[1:]:
+        enlace = trozo.split(">")[0]
+        if "/conteos/" in enlace and "/pdf" in enlace:
+            encontrados += 1
+            assert "data-pdf" in enlace, f"PDF de conteo sin marcador: {enlace}"
+            assert 'download="hoja-conteo-' in enlace
+    # "Ver último" (Inventario), el historial y "Ver última" (Ajustes).
+    assert encontrados >= 2, "no se encontraron los enlaces de la hoja de conteo"
+
+
+def test_las_descargas_que_no_son_pdf_no_llevan_data_pdf(cliente, con_inventario):
+    """El marcador es SOLO para PDF: ni la foto del modal de producto ni
+    la plantilla Excel se interceptan en iPhone."""
+    pagina = cliente.get("/?tab=stock").text
+    # El botón «Descargar» del modal de foto (no es un PDF).
+    pos = pagina.index('id="btn-descargar"')
+    tag = pagina[pagina.rindex("<", 0, pos):pagina.index(">", pos) + 1]
+    assert "data-pdf" not in tag
+    # La plantilla Excel del conteo quincenal.
+    for trozo in pagina.split("<a ")[1:]:
+        enlace = trozo.split(">")[0]
+        if "/plantilla.xlsx" in enlace:
+            assert "data-pdf" not in enlace

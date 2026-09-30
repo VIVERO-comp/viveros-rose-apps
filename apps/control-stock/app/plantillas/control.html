@@ -347,7 +347,7 @@
         <div class="ficha-cot-monto">{{ o.total | dinero }}{% if o.pagado %} · pagó {{ o.pagado | dinero }}{% endif %}</div>
         <div class="ficha-cot-acciones">
           <a href="/control/cotizacion/{{ o.orden_id }}.pdf?nombre={{ o.nombre | urlencode }}&cliente={{ abierta.nombre | urlencode }}"
-             target="_blank" rel="noopener" download>PDF</a>
+             target="_blank" rel="noopener" download="{{ o.nombre_pdf }}" data-pdf>PDF</a>
           {# Compartir (Abraham, 28/09/2026): el "·" va DENTRO del mismo
              `hidden` que el botón — solo el navegador sabe si puede
              compartir ARCHIVOS, y eso lo decide compartir.js al cargar. El
