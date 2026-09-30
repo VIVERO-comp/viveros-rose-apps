@@ -1026,6 +1026,61 @@ def test_editar_por_http_y_volver_anclado(cliente, odoo):
     assert r.headers["location"] == f"/venta#cot-{registro['n']}"
 
 
+def test_editar_no_muestra_la_casilla_de_precio_en_cobro_por_evento(cliente, odoo):
+    # El alquiler por EVENTO cobra las plantas en $0 (informativas): la
+    # casilla del precio no debe dibujarse, porque no serviría de nada y
+    # confundiría. Este caso tiene que seguir así tras el arreglo del
+    # 30/09/2026 (precio_editable=False).
+    registro = _cotizacion_de_renta(odoo)
+    pagina = cliente.get(f"/venta/servicio/{registro['n']}/editar")
+    assert "CROTO" in pagina.text
+    assert 'name="planta_precio"' not in pagina.text
+
+
+def test_editar_por_http_muestra_la_casilla_del_precio_por_planta(cliente, odoo):
+    # EL BUG (30/09/2026): _contexto_editar en app/main.py no le pasaba
+    # "precio_editable" a la plantilla, y una variable indefinida en
+    # Jinja2 es siempre falsa — la casilla del precio nunca se dibujaba
+    # en NINGUNA cotización editable, ni siquiera en las que cobran por
+    # planta (donde sí debe aparecer).
+    registro = cotizaciones.crear_cotizacion(
+        {"id": "g", "nombre": "Génesis"}, "renta", "María", "",
+        [], [{"producto_id": 601, "cantidad": 10, "precio": 60.0}],
+        cobro="planta")
+    pagina = cliente.get(f"/venta/servicio/{registro['n']}/editar")
+    assert 'name="planta_precio"' in pagina.text
+    assert 'value="60"' in pagina.text
+
+
+def test_precio_editado_a_mano_sobrevive_guardar_y_reabrir_editar(cliente, odoo):
+    # El ciclo completo que se estaba rompiendo: precio a mano -> guardar
+    # -> reabrir Editar -> el precio mostrado sigue siendo el editado, no
+    # el de lista de Odoo (que en el falso es $45 para el CROTO).
+    registro = cotizaciones.crear_cotizacion(
+        {"id": "g", "nombre": "Génesis"}, "renta", "María", "",
+        [{"texto": "Alquiler", "monto": "850"}],
+        [{"producto_id": 601, "cantidad": 10}], cobro="planta")
+    r = cliente.post(f"/venta/servicio/{registro['n']}/editar",
+                     data={"servicio_texto": "Alquiler", "servicio_monto": "850",
+                           "servicio_descripcion": "",
+                           "planta_id": "601", "planta_cantidad": "10",
+                           "planta_precio": "72.50"},
+                     follow_redirects=False)
+    assert r.status_code == 303
+    # La orden en Odoo ya quedó con el precio escrito a mano.
+    planta = next(l for l in odoo.ordenes[registro["orden_id"]]["lineas"]
+                  if l.get("product_id") == 601)
+    assert planta["price_unit"] == 72.5
+    # Y al reabrir Editar, la casilla lo muestra — no el de lista ($45).
+    pagina = cliente.get(f"/venta/servicio/{registro['n']}/editar")
+    assert 'name="planta_precio"' in pagina.text
+    assert 'value="72.50"' in pagina.text
+    assert 'value="45"' not in pagina.text
+    # Lo mismo por el camino directo de cargar_para_editar.
+    datos = cotizaciones.cargar_para_editar(registro["n"])
+    assert datos["plantas"][0]["precio"] == "72.50"
+
+
 def test_la_lista_muestra_editar_solo_en_cotizacion(cliente, odoo):
     editable = _cotizacion_de_renta(odoo)
     facturada = _cotizacion_de_renta(odoo)
