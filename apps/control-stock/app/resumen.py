@@ -11,6 +11,14 @@ se disparó a 70 MB bajando 20 584 mensajes de historial y nadie lo vio hasta
 que alguien se acordó de mirar. Vive en el OTRO droplet, así que se pregunta
 por el puente que ya existe (ver `almacen_waha.py`).
 
+Y un séptimo de la misma clase: **cuánto le costó Google el día** — las
+consultas de tiempo de viaje que hacen las tarifas de envío, y cuántas veces
+se cayó al tiempo de respaldo del corregimiento. Se sumó por la misma razón
+que el almacén: tocado el tope diario, el envío sigue cotizando con un tiempo
+aproximado y nada se rompe, así que sin este renglón el negocio se enteraría
+tarde. Los números los lleva el order-api, que es quien llama a Google (ver
+`mapas.py`).
+
 Vive en control-stock y no en order-api por una razón que no se negocia:
 el navegador amarra la suscripción de los avisos al **origen**. El celular
 del dueño se suscribe en `inventario.plantaspanama.com`, así que su
@@ -35,7 +43,7 @@ import os
 from datetime import datetime, timedelta
 
 from . import (almacen_waha, avisos, calendario, crm_twenty, linear_leads,
-               ventas)
+               mapas, ventas)
 from .datos import ZONA_PANAMA
 
 # El horario de atención del vivero (Abraham, 25/09/2026). Aquí solo se usa
@@ -308,6 +316,31 @@ def del_dia(dia=None):
             datos["errores"].append(
                 f"El almacén de WhatsApp no se pudo leer: {str(fallo)[:160]}")
 
+    # El séptimo: el gasto de Google del día, que lo lleva el order-api.
+    #
+    # Su hueco NO entra en `errores`, a propósito, y es la única excepción de
+    # esta función. Los otros seis bloques son el resumen del negocio: si uno
+    # falta, el resumen está incompleto y el titular tiene que decir «con
+    # huecos». Este mide una función que se está encendiendo y cuyo endpoint
+    # se despliega por separado, así que mientras allá no suba —o en una
+    # instancia que ni siquiera hable con el order-api— el titular del dueño
+    # se degradaría todas las noches por algo que no le falta a nadie. El
+    # motivo se dice en la pantalla (`mapas_motivo`) y queda en el log; lo que
+    # NUNCA pasa es que salga un «0 consultas» que parecería la mejor noticia
+    # del día cuando en realidad es no saber.
+    datos["mapas"] = None
+    datos["mapas_motivo"] = ""
+    if not mapas.configurado():
+        datos["mapas_motivo"] = ("falta el puente con el order-api "
+                                 "(ORDER_API_URL y ORDER_API_KEY).")
+    else:
+        try:
+            datos["mapas"] = mapas.bloque(dia.isoformat())
+        except Exception as fallo:
+            datos["mapas_motivo"] = str(fallo)[:160]
+            mapas._aviso("El gasto de Google no se pudo leer: "
+                         + datos["mapas_motivo"])
+
     return datos
 
 
@@ -325,7 +358,14 @@ def hay_algo(datos):
     # ve, crece toda la semana. Un hueco no, en cambio — no saber no es una
     # noticia por la que valga despertar el teléfono.
     almacen = datos.get("almacen")
-    return bool(almacen and almacen.get("alerta"))
+    if almacen and almacen.get("alerta"):
+        return True
+    # Y el tope de Google, por lo mismo: tocado el tope, el resto del día se
+    # cobró con un tiempo aproximado. Un domingo no se cotiza mucho, pero si
+    # el tope se tocó ese día hay algo que mirar. Un hueco, en cambio, no
+    # despierta a nadie: no saber no es una noticia.
+    mapa = datos.get("mapas")
+    return bool(mapa and mapa.get("alerta"))
 
 
 def titular(datos):
@@ -353,6 +393,10 @@ def titular(datos):
     a = datos.get("almacen")
     if a and a.get("corto"):
         partes.append(a["corto"])
+    # Igual el gasto de Google: un día normal no se nombra; el tope tocado sí.
+    m = datos.get("mapas")
+    if m and m.get("corto"):
+        partes.append(m["corto"])
     if datos.get("errores"):
         partes.append("con huecos")
     return " · ".join(partes) or "Día sin novedades."
