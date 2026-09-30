@@ -1837,6 +1837,10 @@ def _contexto_editar(request, datos_edicion, error=None):
         "etiqueta_tipo": cotizaciones.etiqueta_de(registro["tipo"]),
         "servicios": datos_edicion["servicios"],
         "plantas": datos_edicion["plantas"],
+        # Sin este dato la plantilla trata "precio_editable" como
+        # indefinida (falsa en Jinja2) y la casilla del precio nunca se
+        # dibuja: lo escrito a mano se pierde al guardar (30/09/2026).
+        "precio_editable": datos_edicion.get("precio_editable", True),
         "renglones": datos_edicion["renglones"],
         "cargos": datos_edicion.get("cargos") or {},
         # Al editar, las casillas quedan como se guardaron en la orden.
