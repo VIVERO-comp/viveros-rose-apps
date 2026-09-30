@@ -346,17 +346,12 @@
         </div>
         <div class="ficha-cot-monto">{{ o.total | dinero }}{% if o.pagado %} · pagó {{ o.pagado | dinero }}{% endif %}</div>
         <div class="ficha-cot-acciones">
+          {# UN solo control (Abraham, 30/09/2026): «Descargar / Compartir»
+             reemplaza el par PDF + Compartir. El nombre lo calcula Python
+             (control._con_edicion) y viaja en `download`; en iPhone el
+             intercept de `data-pdf` (compartir.js) abre la hoja nativa. #}
           <a href="/control/cotizacion/{{ o.orden_id }}.pdf?nombre={{ o.nombre | urlencode }}&cliente={{ abierta.nombre | urlencode }}"
-             target="_blank" rel="noopener" download="{{ o.nombre_pdf }}" data-pdf>PDF</a>
-          {# Compartir (Abraham, 28/09/2026): el "·" va DENTRO del mismo
-             `hidden` que el botón — solo el navegador sabe si puede
-             compartir ARCHIVOS, y eso lo decide compartir.js al cargar. El
-             nombre viaja calculado en Python (control._con_edicion), el
-             mismo que ya arma el PDF de arriba. #}
-          <span hidden data-compartir="/control/cotizacion/{{ o.orden_id }}.pdf?nombre={{ o.nombre | urlencode }}&cliente={{ abierta.nombre | urlencode }}"
-                data-nombre="{{ o.nombre_pdf }}">
-            <span class="sep">·</span><button type="button" class="enlace-sub">Compartir</button>
-          </span>
+             target="_blank" rel="noopener" download="{{ o.nombre_pdf }}" data-pdf>Descargar / Compartir (PDF)</a>
           {% if puede_tocar_abierta %}
           {% if o.editar_n %}<span class="sep">·</span><a href="/venta/servicio/{{ o.editar_n }}/editar">Editar</a>{% endif %}
           {% if not o.es_real %}

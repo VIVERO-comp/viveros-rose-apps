@@ -261,7 +261,7 @@ def test_venta_confirmada_y_cotizacion_salen_en_la_lista_de_vender(cliente_venta
     assert '<span class="badge b-ok">Venta</span>' in r.text
     assert '<span class="badge b-bajo">Cotización</span>' in r.text
     # "vendida" no ofrece Facturar/Reintentar: el cobro vive en Odoo.
-    assert "Descargar orden (PDF)" in r.text
+    assert "Descargar / Compartir (PDF)" in r.text
 
 
 def test_la_orden_vendida_baja_con_target_blank_y_download(cliente_venta, con_comodin):
@@ -283,23 +283,17 @@ def test_la_orden_vendida_baja_con_target_blank_y_download(cliente_venta, con_co
     assert encontrado, "no se encontró el enlace de la orden vendida"
 
 
-def test_la_orden_vendida_tiene_boton_compartir_oculto_con_su_nombre(
+def test_la_orden_vendida_ya_no_tiene_boton_compartir_aparte(
         cliente_venta, con_comodin):
+    """UN solo control (Abraham, 30/09/2026): el botón aparte con
+    `data-compartir` ya no existe junto a la orden vendida."""
     cliente_venta.post("/venta/carrito/agregar",
                        data={"producto_id": 501, "cantidad": 1})
     cliente_venta.post("/venta/vender", data={"cliente": "Ana", "celular": ""})
     registro = ventas.ventas_todas()[0]
-    esperado = ventas.nombre_de_pdf(registro["orden"].replace("/", "-"),
-                                    registro["cliente"])
     pagina = cliente_venta.get("/venta").text
-    marca = f'data-compartir="/venta/{registro["n"]}/cotizacion.pdf"'
-    assert marca in pagina
-    pos = pagina.index(marca)
-    inicio = pagina.rindex("<", 0, pos)
-    fin = pagina.index(">", pos)
-    tag = pagina[inicio:fin + 1]
-    assert "hidden" in tag
-    assert f'data-nombre="{esperado}"' in tag
+    assert f'data-compartir="/venta/{registro["n"]}/cotizacion.pdf"' \
+        not in pagina
 
 
 # ---------------------------------------------------------------------------

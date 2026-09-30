@@ -1,19 +1,23 @@
-// Compartir un PDF o una foto con la hoja nativa de compartir del
-// teléfono (Web Share API con archivos).
+// La hoja nativa de compartir del teléfono (Web Share API con archivos),
+// en dos caminos:
 //
-// El nombre del archivo SIEMPRE lo calcula Python y viaja en
-// `data-nombre` (para un PDF, la misma `ventas.nombre_de_pdf()` que ya
-// arma el `Content-Disposition` del servidor; para la foto del modal de
-// producto, el slug de la planta que arma app.js). Este script no arma
-// nombres ni decide nada de negocio — solo hace lo único que ningún
-// servidor puede hacer: pedirle al navegador que abra su hoja de
-// compartir (pedido del dueño, 28/09/2026).
+// 1. `[data-compartir]` — el botón «Compartir» de la foto del modal de
+//    producto (app.html), el ÚNICO que queda desde que los PDF pasaron a
+//    un solo control (dueño, 30/09/2026). Su nombre viaja en
+//    `data-nombre` (el slug de la planta, calculado en Python).
+// 2. `a[data-pdf]` — los enlaces «Descargar / Compartir» de PDF: solo en
+//    iPhone/iPad se interceptan para abrir la hoja; en el resto siguen
+//    como descarga normal en pestaña nueva.
 //
-// El botón nace OCULTO en el HTML (`hidden`), porque no todos los
-// navegadores saben compartir ARCHIVOS — `navigator.share` existe en más
-// sitios de los que aceptan `files` — y se muestra recién al confirmar
-// que sí puede, nunca al revés: así uno que no puede nunca ve un botón
-// que le falla al primer toque.
+// Este script no arma nombres ni decide nada de negocio — solo hace lo
+// único que ningún servidor puede hacer: pedirle al navegador que abra
+// su hoja de compartir.
+//
+// El botón de la foto nace OCULTO en el HTML (`hidden`), porque no todos
+// los navegadores saben compartir ARCHIVOS — `navigator.share` existe en
+// más sitios de los que aceptan `files` — y se muestra recién al
+// confirmar que sí puede, nunca al revés: así uno que no puede nunca ve
+// un botón que le falla al primer toque.
 
 (function () {
   // iPhone/iPad (la segunda mitad es iPadOS en modo escritorio, que se
@@ -54,7 +58,7 @@
     }
   }
 
-  // En iPhone/iPad, «Descargar» un PDF hace LO MISMO que Compartir
+  // En iPhone/iPad, «Descargar / Compartir» un PDF abre la hoja nativa
   // (dueño, 30/09/2026): iOS Safari ignora el attachment+download y
   // pinta el PDF a pantalla completa, dejando al usuario trabado. La
   // hoja nativa sí funciona: desde ahí se guarda en Archivos o se manda
@@ -78,9 +82,9 @@
     }
   }
 
-  // Un solo listener delegado: sirve igual para los botones que ya
-  // estaban en la página al cargar (Vender, la ficha de Control) y para
-  // los que cambian de archivo en vivo (el modal de foto de producto).
+  // Un solo listener delegado para los dos caminos: el botón de la foto
+  // del modal (cuyos data-atributos cambian en vivo) y los enlaces de
+  // PDF marcados con data-pdf.
   document.addEventListener("click", (evento) => {
     const boton = evento.target.closest("[data-compartir]");
     if (boton && !boton.hidden) {

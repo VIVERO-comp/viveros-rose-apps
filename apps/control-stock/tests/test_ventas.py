@@ -632,8 +632,9 @@ def test_mandar_factura_solo_con_celular(cliente_venta, odoo):
     assert "wa.me/50761234567" in pagina.text
     token = ventas.obtener_venta(int(n))["token"]
     assert token and f"/f/{token}" in pagina.text
-    # El PDF nativo sigue, ahora rotulado "Factura".
-    assert ">Factura</a>" in pagina.text and "Factura PDF" not in pagina.text
+    # El PDF nativo sigue, en el control único del 30/09/2026 — conserva
+    # la palabra factura para no confundirse con «Mandar factura».
+    assert ">Descargar / Compartir factura</a>" in pagina.text
 
 
 def test_factura_publica_sin_sesion(cliente_venta, odoo):
@@ -1059,50 +1060,33 @@ def test_la_pantalla_de_exito_tambien_baja_con_target_blank_y_download(
     assert encontrado, "no se encontró el botón de la factura en la pantalla de éxito"
 
 
-# --- El botón «Compartir» (28/09/2026): mismo nombre, oculto por defecto --
+# --- UN solo control por PDF (30/09/2026): el Compartir aparte se fue ---
 
-def _tag_con(pagina, buscar):
-    """El tag HTML completo que contiene `buscar` en alguno de sus
-    atributos: desde el '<' que lo abre hasta el primer '>' que lo cierra."""
-    pos = pagina.index(buscar)
-    inicio = pagina.rindex("<", 0, pos)
-    fin = pagina.index(">", pos)
-    return pagina[inicio:fin + 1]
-
-
-def test_la_factura_tiene_boton_compartir_oculto_con_su_nombre(cliente_venta, odoo):
-    """Junto a «Factura» va «Compartir»: mismo archivo, mismo nombre que
-    calcula Python, oculto hasta que compartir.js confirme que el
-    navegador sabe compartir archivos."""
+def test_la_factura_ya_no_tiene_boton_compartir_aparte(cliente_venta, odoo):
+    """UN solo control (Abraham, 30/09/2026): «Descargar / Compartir
+    factura» reemplaza el par Factura + Compartir. El botón aparte con
+    `data-compartir` ya no existe junto al PDF."""
     _agregar(cliente_venta, 501)
     r = cliente_venta.post("/venta/pagar", data={"cliente": "María"},
                            follow_redirects=False)
     n = r.headers["location"].rsplit("/", 1)[1]
     cliente_venta.post(f"/venta/cobrar/{n}", data={"metodo": "yappy"})
-    registro = ventas.obtener_venta(int(n))
-    esperado = ventas.nombre_de_pdf(
-        (registro["factura"] or str(n)).replace("/", "-"), registro["cliente"])
     pagina = cliente_venta.get("/venta").text
-    tag = _tag_con(pagina, f'data-compartir="/venta/{n}/factura.pdf"')
-    assert "hidden" in tag
-    assert f'data-nombre="{esperado}"' in tag
+    assert f'data-compartir="/venta/{n}/factura.pdf"' not in pagina
+    assert ">Descargar / Compartir factura</a>" in pagina
 
 
-def test_la_pantalla_de_exito_tambien_tiene_boton_compartir(cliente_venta, odoo):
-    """El botón grande de "Venta cobrada" gana su «Compartir» secundario
-    (nunca un segundo botón dorado): mismo `pdf_href`, mismo nombre."""
+def test_la_pantalla_de_exito_ya_no_tiene_boton_compartir_aparte(cliente_venta, odoo):
+    """UN solo control (Abraham, 30/09/2026): el botón dorado de la
+    pantalla de éxito dice «Descargar / Compartir» y el Compartir aparte
+    se retiró — el texto lo pone Python (`pdf_texto`)."""
     _agregar(cliente_venta, 501)
     r = cliente_venta.post("/venta/pagar", data={"cliente": "María"},
                            follow_redirects=False)
     n = r.headers["location"].rsplit("/", 1)[1]
     pagina = cliente_venta.post(f"/venta/cobrar/{n}", data={"metodo": "yappy"}).text
-    registro = ventas.obtener_venta(int(n))
-    esperado = ventas.nombre_de_pdf(
-        (registro["factura"] or str(n)).replace("/", "-"), registro["cliente"])
-    tag = _tag_con(pagina, f'data-compartir="/venta/{n}/factura.pdf"')
-    assert "hidden" in tag
-    assert f'data-nombre="{esperado}"' in tag
-    assert "btn-dorado" not in tag  # secundario: el primario sigue siendo Descargar
+    assert "data-compartir" not in pagina
+    assert "Descargar / Compartir factura" in pagina
 
 
 # --- El marcador `data-pdf` (30/09/2026): en iPhone «Descargar» abre la

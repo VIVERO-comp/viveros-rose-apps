@@ -527,24 +527,16 @@ def test_el_pdf_conectado_baja_con_target_blank_download_y_cliente(
     assert encontrado, "no se encontró el enlace del PDF conectado"
 
 
-def test_el_pdf_conectado_tiene_boton_compartir_oculto_con_su_nombre(
+def test_el_pdf_conectado_ya_no_tiene_boton_compartir_aparte(
         cliente, de_dueno, odoo):
-    """Junto al «PDF» va «Compartir» (28/09/2026): mismo archivo, mismo
-    nombre orden+cliente que calcula `control._con_edicion`, oculto por
-    defecto (el `hidden` va en el envoltorio que también trae el "·")."""
+    """UN solo control (Abraham, 30/09/2026): «Descargar / Compartir
+    (PDF)» reemplaza el par PDF + Compartir en la ficha del lead."""
     lead, partner = _lead_y_partner(odoo, "LEAD-85")  # Diego Armando
-    orden_id = odoo.agregar_orden(partner, "S00500", amount_total=10.0,
-                                  lead_ref=lead["pp"], lead_real=True)
-    esperado = ventas.nombre_de_pdf("S00500", lead["nombre"])
+    odoo.agregar_orden(partner, "S00500", amount_total=10.0,
+                       lead_ref=lead["pp"], lead_real=True)
     pagina = cliente.get("/control", params={"abrir": "LEAD-85"}).text
-    marca = f'data-compartir="/control/cotizacion/{orden_id}.pdf'
-    assert marca in pagina
-    pos = pagina.index(marca)
-    inicio = pagina.rindex("<", 0, pos)
-    fin = pagina.index(">", pos)
-    tag = pagina[inicio:fin + 1]
-    assert "hidden" in tag
-    assert f'data-nombre="{esperado}"' in tag
+    assert "data-compartir" not in pagina
+    assert ">Descargar / Compartir (PDF)</a>" in pagina
 
 
 def test_el_pdf_conectado_lleva_data_pdf_con_su_nombre(cliente, de_dueno, odoo):

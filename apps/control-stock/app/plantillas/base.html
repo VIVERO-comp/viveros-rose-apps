@@ -37,10 +37,11 @@
 </div>
 {% block scripts %}{% endblock %}
 <script src="/static/menu.js?v={{ v_estaticos }}"></script>
-{# Compartir un PDF con la hoja nativa del teléfono (Web Share API,
-   28/09/2026): global aquí porque lo usan Vender, Vender-listo y el
-   modal de foto (app.html) — páginas sin nada más en común. Inerte si la
-   pantalla no tiene ningún [data-compartir]. #}
+{# La hoja nativa del teléfono (Web Share API): el botón Compartir de
+   la foto del modal ([data-compartir], app.html) y el intercept en
+   iPhone de los enlaces «Descargar / Compartir» de PDF (a[data-pdf],
+   30/09/2026). Global aquí porque lo usan páginas sin nada más en
+   común; inerte si la pantalla no trae ninguno de los dos marcadores. #}
 <script src="/static/compartir.js?v={{ v_estaticos }}"></script>
 </body>
 </html>

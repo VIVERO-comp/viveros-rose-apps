@@ -1562,7 +1562,7 @@ async def venta_cotizar(request: Request):
         "filas": [("Total", dinero_venta(registro["total"]), None),
                   ("Estado", "Cotización (borrador en Odoo)", "dorado")],
         "pdf_href": f"/venta/{registro['n']}/cotizacion.pdf",
-        "pdf_texto": "Descargar cotización (PDF)",
+        "pdf_texto": "Descargar / Compartir (PDF)",
         "pdf_nombre": ventas.nombre_de_pdf(registro["orden"].replace("/", "-"),
                                            registro["cliente"]),
     })
@@ -1593,7 +1593,7 @@ async def venta_vender(request: Request):
         "filas": [("Total", dinero_venta(registro["total"]), None),
                   ("Estado", "Confirmada · el cobro se registra en Odoo", "dorado")],
         "pdf_href": f"/venta/{registro['n']}/cotizacion.pdf",
-        "pdf_texto": "Descargar orden (PDF)",
+        "pdf_texto": "Descargar / Compartir (PDF)",
         "pdf_nombre": ventas.nombre_de_pdf(registro["orden"].replace("/", "-"),
                                            registro["cliente"]),
     })
@@ -1701,7 +1701,7 @@ async def venta_servicio_crear(request: Request, tipo: str):
         "sub": f"{registro['orden']} · {registro['cliente']}",
         "filas": filas,
         "pdf_href": f"/venta/servicio/{registro['n']}/propuesta.pdf",
-        "pdf_texto": "Descargar propuesta (PDF)",
+        "pdf_texto": "Descargar / Compartir (PDF)",
         "pdf_nombre": ventas.nombre_de_pdf(registro["orden"].replace("/", "-"),
                                            registro["cliente"]),
     })
@@ -1788,7 +1788,7 @@ async def venta_personalizada_crear(request: Request):
                   ("Total", dinero_venta(registro["total"]), None),
                   ("Estado", "Cotización (borrador en Odoo)", "dorado")],
         "pdf_href": f"/venta/servicio/{registro['n']}/propuesta.pdf",
-        "pdf_texto": "Descargar propuesta (PDF)",
+        "pdf_texto": "Descargar / Compartir (PDF)",
         "pdf_nombre": ventas.nombre_de_pdf(registro["orden"].replace("/", "-"),
                                            registro["cliente"]),
     })
@@ -1959,7 +1959,7 @@ async def venta_cobrar_confirmar(request: Request, n: int):
                   ("Total", dinero_venta(registro["total"]), "ok"),
                   ("Método", metodo_texto, None)],
         "pdf_href": f"/venta/{n}/factura.pdf",
-        "pdf_texto": "Descargar factura (PDF)",
+        "pdf_texto": "Descargar / Compartir factura",
         "pdf_nombre": ventas.nombre_de_pdf(
             (registro["factura"] or str(n)).replace("/", "-"), registro["cliente"]),
     })
