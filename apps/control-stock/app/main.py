@@ -4736,3 +4736,87 @@ async def proveedores_producto(request: Request):
     return _proveedores_vuelve_a_la_ficha(
         partner_id, buscar=buscar,
         error="No llegó ninguna acción para hacer.")
+
+
+# ---------------------------------------------------------------------------
+# Ventas a revisar (Orquesta · M1, 01/10/2026): la foto de la reconciliación
+# —lo que dice Odoo contra lo que dicen las otras fuentes— SOLO para admins.
+# La pantalla es de lectura: lo único que escribe es una nota de texto
+# (`revision_nota`). Registrar un pago o confirmar una entrega es la fase
+# M2 y sus botones salen desactivados a propósito. Los datos los arma
+# `app/reconciliacion.py` (informe_datos(), el contrato de M1); el apoyo
+# de pantalla (palabras, chips, notas) vive en `app/revisar.py`.
+# ---------------------------------------------------------------------------
+
+def _revisar_apoyo():
+    """El módulo de apoyo de la pantalla. Import local a propósito: el
+    nombre `revisar` a nivel de módulo lo ocupa la ruta del conteo
+    quincenal (`def revisar`, /conteos/{n}/revisar) — un import de arriba
+    quedaría PISADO por esa función sin ningún aviso."""
+    from . import revisar
+    return revisar
+
+
+@app.get("/revisar")
+def ventas_a_revisar(request: Request):
+    """La lista de ventas a revisar, con sus contadores y el detalle de
+    una (`?abrir=<orden>`) en el panel lateral — el mismo mecanismo de
+    Proveedores, sin JS. Nada se inventa: si el informe trae huecos, la
+    pantalla los dice en un renglón visible, nunca un 0 fingido."""
+    if (rechazo := _solo_admin(request)) is not None:
+        return rechazo
+    apoyo = _revisar_apoyo()
+    informe = apoyo.informe()
+    lista = apoyo.preparar(informe.get("ventas") or [])
+    abrir = (request.query_params.get("abrir") or "").strip()
+    abierta, notas = None, []
+    error_aviso = request.query_params.get("error")
+    if abrir:
+        abierta = next(
+            (v for v in lista if str(v.get("orden_id")) == abrir), None)
+        if abierta is None:
+            if not error_aviso:
+                # Un enlace viejo: no es un 500, es el mismo "ya no está"
+                # de Compras, Control y Proveedores.
+                error_aviso = f"Esa venta ({abrir}) ya no está en la lista."
+        else:
+            notas = apoyo.notas_de(abrir)
+    return plantillas.TemplateResponse(request, "revisar_ventas.html", {
+        "empleada": request.state.empleada,
+        "contadores": informe.get("contadores") or {},
+        "ventas": lista,
+        "fuera_texto": apoyo.fuera_texto(informe.get("fuera_de_alcance")),
+        "huecos": informe.get("huecos") or [],
+        "abierta": abierta,
+        "notas": notas,
+        "aviso": request.query_params.get("aviso"),
+        "error_aviso": error_aviso,
+    })
+
+
+@app.post("/revisar/nota")
+async def ventas_a_revisar_nota(request: Request):
+    """Guarda una nota de revisión y vuelve a la MISMA tarjeta (ancla
+    #orden-<id>): en esta casa nunca se pierde el lugar en una lista.
+    La nota es texto y nada más — jamás escribe algo que signifique
+    «pagado»."""
+    if (rechazo := _solo_admin(request)) is not None:
+        return rechazo
+    apoyo = _revisar_apoyo()
+    form = await request.form()
+    orden_id = (form.get("orden_id") or "").strip()
+    error = apoyo.guardar_nota(
+        orden_id, form.get("nota"),
+        quien=(request.state.empleada.get("nombre")
+               or request.state.empleada["id"]))
+    partes = []
+    if orden_id:
+        partes.append("abrir=" + quote(orden_id))
+    if error:
+        partes.append("error=" + quote(error))
+    else:
+        partes.append("aviso=" + quote("Nota guardada."))
+    url = "/revisar?" + "&".join(partes)
+    if orden_id:
+        url += "#orden-" + quote(orden_id)
+    return RedirectResponse(url, status_code=303)
