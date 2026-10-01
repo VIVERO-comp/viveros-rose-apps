@@ -546,21 +546,31 @@ def test_el_formulario_ya_no_pide_disculpas_por_la_planta(cliente, de_dueno):
 
 
 def test_altas_sigue_siendo_el_unico_camino_de_creacion():
-    """No hay un segundo camino de alta para Compras: el producto se crea
+    """No hay un segundo camino de alta de PRODUCTO para Compras: se crea
     con `altas.crear`, que es el que tiene las reglas (los dos impuestos
     explícitamente vacíos, la casilla de ITBMS apagada, la maceta sin
     publicar). Mirado en el código, que es donde se cuela una copia.
 
-    El candado concreto: TODO lo que `compras.py` le pide a Odoo es de
-    lectura. Si algún día alguien mete acá un `create` de producto, esta
-    prueba lo caza.
+    El candado se afinó el 01/10/2026, cuando `compras.py` ganó su único
+    `create`: el del proveedor (`res.partner`). Antes la regla era «acá
+    nada se crea»; ahora es **«acá no se crea nada de `product.*`, y el
+    único `create` es el del proveedor»** — que es la regla que de verdad
+    importaba, porque lo que no puede haber es un alta de producto que se
+    saltee las reglas de impuestos de `altas`.
     """
     import re
     fuente = open(compras.__file__).read()
-    metodos = re.findall(r'_ejecutar\(\s*"[^"]+",\s*"(\w+)"', fuente)
-    assert len(metodos) >= 4, "el barrido no encontró las consultas a Odoo"
-    assert set(metodos) <= {"search_read", "read", "search", "fields_get"}, \
-        set(metodos)
+    llamadas = re.findall(r'_ejecutar\(\s*"([^"]+)",\s*"(\w+)"', fuente)
+    assert len(llamadas) >= 4, "el barrido no encontró las consultas a Odoo"
+    creaciones = [(modelo, metodo) for modelo, metodo in llamadas
+                  if metodo not in ("search_read", "read", "search",
+                                    "fields_get")]
+    assert creaciones == [("res.partner", "create")], creaciones
+    # Nada de `product.*` se toca para escribir: ni el producto, ni su
+    # plantilla, ni su proveedor-precio.
+    for modelo, metodo in llamadas:
+        if modelo.startswith("product."):
+            assert metodo in ("search_read", "read", "search"), (modelo, metodo)
     for prohibida in ("taxes_id", "categ_id", "supplier_taxes_id"):
         assert prohibida not in fuente, prohibida
     # Y el alta de verdad sigue siendo la de siempre.

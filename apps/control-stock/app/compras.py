@@ -67,7 +67,14 @@ import os
 import time
 from datetime import datetime
 
-from . import calendario, colores, linear_leads, ventas
+from . import calculos, calendario, colores, linear_leads, ventas
+# `datos` se importa con otro nombre a propósito: varias funciones de este
+# módulo ya tienen un parámetro llamado `datos` (el borrador del
+# formulario) y dos cosas distintas con el mismo nombre es cómo se cuela un
+# bug que solo aparece el día que algo falla. Se importa el MÓDULO y no sus
+# funciones para que las pruebas puedan doblar `datos.obtener_inventario`,
+# que es lo que hacen hoy.
+from . import datos as datos_stock
 from .datos import ZONA_PANAMA, _db
 
 TTL_COMPRAS = 60        # segundos de caché de la lista, como en los leads
@@ -219,6 +226,14 @@ def iniciar_tablas():
                 creada TEXT NOT NULL DEFAULT ''
             )
         """)
+        # Migración suave: cómo llega la compra al vivero (dueño,
+        # 01/10/2026). Nace vacía, o sea «todavía no se dijo»: una compra
+        # anotada antes de este cambio no estrena un dato que nadie eligió.
+        columnas_compra = {f[1] for f in con.execute(
+            "PRAGMA table_info(compra)")}
+        if "como_llega" not in columnas_compra:
+            con.execute("ALTER TABLE compra ADD COLUMN como_llega TEXT "
+                        "NOT NULL DEFAULT ''")
         # QUÉ productos se compran y cuántos. Apoyo de pantalla, igual que
         # la tabla `compra`: el estado sigue en Linear y el dinero en Odoo.
         # Cuando la compra llegue a «Pedido a proveedor» (otra tanda) estas
@@ -264,21 +279,33 @@ def iniciar_tablas():
                 lead_ref TEXT NOT NULL DEFAULT ''
             )
         """)
+        # Migración suave del borrador: el teléfono con el que se crea un
+        # proveedor nuevo y el «¿cómo llega?» (01/10/2026). Un borrador de
+        # antes del cambio sigue abriendo, con los dos en blanco.
+        columnas_borrador = {f[1] for f in con.execute(
+            "PRAGMA table_info(compra_borrador)")}
+        for columna in ("proveedor_tel", "como_llega"):
+            if columna not in columnas_borrador:
+                con.execute(f"ALTER TABLE compra_borrador ADD COLUMN "
+                            f"{columna} TEXT NOT NULL DEFAULT ''")
 
 
 def _guardar_fila(ref, que_compro="", proveedor_id=None, proveedor_nombre="",
-                  lead_ref=""):
+                  lead_ref="", como_llega=""):
     iniciar_tablas()
     with _db() as con:
         con.execute(
             "INSERT INTO compra (ref, que_compro, proveedor_id, "
-            "proveedor_nombre, lead_ref, creada) VALUES (?, ?, ?, ?, ?, ?) "
+            "proveedor_nombre, lead_ref, como_llega, creada) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(ref) DO UPDATE SET que_compro = excluded.que_compro, "
             "proveedor_id = excluded.proveedor_id, "
             "proveedor_nombre = excluded.proveedor_nombre, "
-            "lead_ref = excluded.lead_ref",
+            "lead_ref = excluded.lead_ref, "
+            "como_llega = excluded.como_llega",
             (ref, (que_compro or "").strip(), proveedor_id,
              (proveedor_nombre or "").strip(), (lead_ref or "").strip(),
+             _llegada(como_llega),
              datetime.now(ZONA_PANAMA).isoformat()))
 
 
@@ -289,6 +316,55 @@ def _filas_locales():
     with _db() as con:
         filas = con.execute("SELECT * FROM compra").fetchall()
     return {f["ref"]: dict(f) for f in filas}
+
+
+# ---------------------------------------------------------------------------
+# «¿Cómo llega?» — dato de la compra, no del calendario (dueño, 01/10/2026)
+#
+# Sirve para saber si hay que mandar a alguien a buscarla, que es la
+# pregunta que el dueño hace mirando el tablero. Son cuatro caminos, y los
+# dos primeros son sus palabras: «ahora yo traigo por camión o mula» (mula
+# es el tráiler).
+#
+# **OJO, y es el error que hubo que corregir en esta misma tanda:** moto,
+# carro y pickup —los de `vehiculos.py`— NO van acá. Esos son los tres
+# vehículos con los que el negocio ENTREGA a un cliente, y el camino de la
+# mercadería que ENTRA es otro. Mezclarlos ponía a elegir una moto para
+# traer 50 sacos de tierra.
+#
+# Lo que esta tanda NO hace, a propósito: agendar la salida o la llegada en
+# el calendario. Eso necesita una etiqueta de Linear que todavía no existe,
+# y las etiquetas no se crean desde el código.
+# ---------------------------------------------------------------------------
+
+FORMAS_LLEGADA = [
+    {"clave": "camion", "titulo": "Viene en camión", "corto": "En camión"},
+    {"clave": "mula", "titulo": "Viene en mula (tráiler)", "corto": "En mula"},
+    {"clave": "nosotros", "titulo": "La recogemos nosotros",
+     "corto": "La recogemos"},
+    {"clave": "encomienda", "titulo": "Viene por encomienda",
+     "corto": "Por encomienda"},
+]
+
+_FORMAS = {f["clave"]: f for f in FORMAS_LLEGADA}
+
+
+def _llegada(como_llega):
+    """La forma de llegada ya limpia, lista para guardar.
+
+    Lo que no sea una de las cuatro cae en "" — «todavía no se dijo». El
+    valor llega de un POST y de acá sale a la tarjeta: nada que no esté en
+    el vocabulario puede quedarse guardado.
+    """
+    como_llega = str(como_llega or "").strip()
+    return como_llega if como_llega in _FORMAS else ""
+
+
+def texto_llegada(como_llega):
+    """«En camión» para la tarjeta y el panel, o "" si todavía no se dijo.
+    Lo decide Python, como todo lo que se pinta."""
+    como_llega = _llegada(como_llega)
+    return _FORMAS[como_llega]["corto"] if como_llega else ""
 
 
 # ---------------------------------------------------------------------------
@@ -538,10 +614,26 @@ def _cantidad_bonita(numero):
 # `venta_borrador` en ventas.py.
 # ---------------------------------------------------------------------------
 
-CAMPOS_BORRADOR = ("que_compro", "proveedor", "resp", "lead_ref")
+CAMPOS_BORRADOR = ("que_compro", "proveedor", "proveedor_tel", "resp",
+                   "lead_ref", "como_llega")
 
-LARGO_BORRADOR = {"que_compro": 250, "proveedor": 120, "resp": 60,
-                  "lead_ref": 30}
+LARGO_BORRADOR = {"que_compro": 250, "proveedor": 120, "proveedor_tel": 40,
+                  "resp": 60, "lead_ref": 30, "como_llega": 20}
+
+
+def _limpiar_borrador(datos):
+    """Los campos del formulario, recortados y con el «¿cómo llega?»
+    pasado por su lista de permitidos.
+
+    El recorte por largo es para todos; `como_llega` además no puede
+    guardar nada que no sea del vocabulario, porque llega de un POST y de
+    acá sale a la tarjeta.
+    """
+    limpio = {campo: (str(datos.get(campo) or "").strip()
+                      [:LARGO_BORRADOR[campo]])
+              for campo in CAMPOS_BORRADOR}
+    limpio["como_llega"] = _llegada(limpio["como_llega"])
+    return limpio
 
 
 def guardar_borrador(usuario, datos=None, cantidades=None, costos=None):
@@ -553,18 +645,16 @@ def guardar_borrador(usuario, datos=None, cantidades=None, costos=None):
     """
     iniciar_tablas()
     if datos is not None:
-        limpio = {campo: (str(datos.get(campo) or "").strip()
-                          [:LARGO_BORRADOR[campo]])
-                  for campo in CAMPOS_BORRADOR}
+        limpio = _limpiar_borrador(datos)
+        campos = ", ".join(CAMPOS_BORRADOR)
+        marcas = ",".join("?" * (len(CAMPOS_BORRADOR) + 1))
+        pone = ", ".join(f"{c}=excluded.{c}" for c in CAMPOS_BORRADOR)
         with _db() as con:
             con.execute(
-                "INSERT INTO compra_borrador (usuario, que_compro, proveedor,"
-                " resp, lead_ref) VALUES (?,?,?,?,?)"
-                " ON CONFLICT(usuario) DO UPDATE SET que_compro=excluded.que_compro,"
-                " proveedor=excluded.proveedor, resp=excluded.resp,"
-                " lead_ref=excluded.lead_ref",
-                (str(usuario), limpio["que_compro"], limpio["proveedor"],
-                 limpio["resp"], limpio["lead_ref"]))
+                f"INSERT INTO compra_borrador (usuario, {campos})"
+                f" VALUES ({marcas})"
+                f" ON CONFLICT(usuario) DO UPDATE SET {pone}",
+                (str(usuario), *(limpio[c] for c in CAMPOS_BORRADOR)))
     guardar_cantidades(_clave_borrador(usuario), cantidades, costos)
 
 
@@ -648,7 +738,8 @@ SOLO_VENDIBLES_EN_COMPRAS = False
 
 
 def buscar_productos(texto):
-    """Plantas, macetas e insumos por nombre o SKU.
+    """Plantas, macetas e insumos por nombre o SKU, **con lo que hay de
+    cada uno en el vivero**.
 
     `{"ok": True, "productos": [...]}`, o `{"ok": False, "error": …}` si
     Odoo no contestó. **Una lista vacía es «no hay», nunca «no sé»**: la
@@ -659,14 +750,113 @@ def buscar_productos(texto):
     if not texto:
         return {"ok": True, "error": "", "productos": []}
     if not ventas.configurado():
-        return {"ok": True, "error": "", "productos": _muestra_buscar(texto)}
+        return {"ok": True, "error": "",
+                "productos": con_stock(_muestra_buscar(texto))}
     try:
         productos = ventas.buscar_productos(
             texto, prefijos=PREFIJOS_COMPRA,
             solo_vendibles=SOLO_VENDIBLES_EN_COMPRAS)
     except Exception as error:
         return {"ok": False, "error": _error(error), "productos": []}
-    return {"ok": True, "error": "", "productos": productos}
+    return {"ok": True, "error": "", "productos": con_stock(productos)}
+
+
+# ---------------------------------------------------------------------------
+# Cuánto hay de cada producto (dueño, 01/10/2026)
+#
+# Es la información que hace falta justo cuando se está decidiendo qué
+# comprar, y el buscador no la daba. Sale de donde ya la lee Stock y la
+# lee Vender (`datos.obtener_inventario`, mismo caché y mismo TTL): no se
+# inventa una segunda fuente de la verdad del stock.
+#
+# **`disponible` en None es «no se sabe» y JAMÁS un 0.** Pasa en dos casos
+# reales: el inventario no contestó, o ese SKU no viene en el inventario
+# (el stock-proxy sirve los prefijos de su `CATALOGO_FILTRO`, que es una
+# variable del droplet y no se puede afirmar desde acá qué trae hoy). Las
+# dos veces la pantalla tiene que decir que no se sabe — un 0 inventado
+# manda a comprar lo que ya está lleno, o al revés.
+# ---------------------------------------------------------------------------
+
+def _inventario_por_sku():
+    """{sku: disponible}, o None si no se pudo leer el inventario.
+
+    None y {} son distintos a propósito: `{}` es un inventario vacío de
+    verdad y None es «no se pudo preguntar».
+    """
+    try:
+        inventario, _leido_en = datos_stock.obtener_inventario()
+    except Exception:
+        return None
+    return {p["sku"]: p["disponible"] for p in inventario}
+
+
+def _stock_pintado(disponible):
+    """{disponible, stock_texto, stock_cero} — lo que la plantilla pinta
+    tal cual, sin decidir nada."""
+    if disponible is None:
+        return {"disponible": None, "stock_texto": "stock: no se sabe",
+                "stock_cero": False}
+    numero = _cantidad_bonita(disponible)
+    if disponible <= 0:
+        return {"disponible": disponible, "stock_texto": "sin stock",
+                "stock_cero": True}
+    return {"disponible": disponible, "stock_texto": f"{numero} en stock",
+            "stock_cero": False}
+
+
+def con_stock(productos):
+    """Los resultados del buscador con su stock y el texto ya resuelto."""
+    productos = list(productos or ())
+    if not productos:
+        return productos
+    stock = _inventario_por_sku()
+    return [{**p, **_stock_pintado(None if stock is None
+                                   else stock.get(p["sku"]))}
+            for p in productos]
+
+
+# Cuántos renglones de «lo que está bajo» se pintan. Es un límite de
+# pantalla: con el umbral en 3 el vivero puede tener decenas de SKU bajos y
+# la lista no es un inventario, es un atajo para agregar sin escribir.
+MAX_BAJOS = 40
+
+
+def bajos():
+    """Lo que está bajo o en cero, para agregarlo sin escribir el nombre.
+
+    `{"ok", "error", "productos", "cuantos", "umbral", "sobran"}`.
+
+    **Qué es «bajo» NO lo inventa esta pantalla**: es el mismo umbral
+    global de Stock (`datos.umbral()`, 3 si nadie lo cambió) con la misma
+    regla de `calculos.estado` — agotada, crítico o bajo, o sea menos de
+    dos veces el umbral. El día que el dueño cambie ese número en Ajustes,
+    esta lista cambia con él. (El mínimo POR PRODUCTO todavía no existe en
+    la app; cuando exista, este es el lugar.)
+
+    Lo más vacío arriba: es lo que hay que comprar primero. Un stock
+    negativo —físico negativo en Odoo, que pasa— sube igual y no se
+    disfraza de 0.
+    """
+    try:
+        # Las dos lecturas DENTRO del try: el umbral sale de la tabla
+        # `config` de SQLite y el inventario del proxy, y ni una ni otra
+        # pueden volver esta pantalla un 500. Si algo falla, `umbral` sale
+        # en None —«no se sabe»— y la lista no se pinta.
+        umbral = datos_stock.umbral()
+        inventario, _leido_en = datos_stock.obtener_inventario()
+    except Exception as error:
+        return {"ok": False, "error": _error(error), "productos": [],
+                "cuantos": 0, "umbral": None, "sobran": 0}
+    flojos = [p for p in inventario
+              if calculos.estado(p["disponible"], umbral) != "ok"]
+    flojos.sort(key=lambda p: (p["disponible"], _sin_acentos(p["nombre"])))
+    productos = [{"sku": p["sku"], "nombre": p["nombre"] or p["sku"],
+                  "categoria": p.get("categoria") or "",
+                  **_stock_pintado(p["disponible"])}
+                 for p in flojos[:MAX_BAJOS]]
+    return {"ok": True, "error": "", "productos": productos,
+            "cuantos": len(flojos), "umbral": umbral,
+            "sobran": max(0, len(flojos) - len(productos))}
 
 
 def producto_por_sku(sku):
@@ -933,6 +1123,8 @@ def _normalizar(issue, locales=None):
         "orden_compra_id": fila.get("orden_compra_id"),
         "orden_compra": fila.get("orden_compra_nombre") or "",
         "lead_ref": fila.get("lead_ref") or "",
+        "como_llega": fila.get("como_llega") or "",
+        "llegada": texto_llegada(fila.get("como_llega")),
         "creado": issue.get("createdAt") or "",
         "dias": dias,
         "hace": linear_leads.hace_bonito(dias),
@@ -1073,6 +1265,8 @@ def mensaje_compra_ausente(ref):
 ANCLA_LINEAS = "#cp-lineas"      # la lista de productos del formulario
 ANCLA_BUSCADOR = "#cp-buscar"    # el buscador de productos
 ANCLA_TABLERO = "#cp-tablero"    # las 7 columnas
+ANCLA_PROVEEDOR = "#cp-prov"     # el campo del proveedor y su «crearlo»
+ANCLA_BAJOS = "#cp-bajos"        # la lista de lo que está bajo o en cero
 
 
 def ancla_de_compra(ref):
@@ -1163,7 +1357,7 @@ mutation($id: String!, $estado: String!) {
 """
 
 
-def _descripcion(proveedor, lead_ref, autor):
+def _descripcion(proveedor, lead_ref, autor, llegada=""):
     """La tarjeta del issue, en texto legible para quien la abra en Linear.
 
     La pantalla NO lee esto: los datos de la tarjeta salen de la tabla
@@ -1175,6 +1369,8 @@ def _descripcion(proveedor, lead_ref, autor):
     lineas = []
     if proveedor:
         lineas.append(f"**Proveedor:** {proveedor}")
+    if llegada:
+        lineas.append(f"**Cómo llega:** {llegada}")
     if lead_ref:
         lineas.append(f"**Para el lead:** {lead_ref}")
     if autor:
@@ -1183,7 +1379,7 @@ def _descripcion(proveedor, lead_ref, autor):
 
 
 def crear(que_compro, proveedor_nombre="", proveedor_id=None, resp="",
-          lead_ref="", autor="", usuario_borrador=""):
+          lead_ref="", autor="", usuario_borrador="", como_llega=""):
     """Una compra nueva, en «Por pedir». Devuelve {"ref", "url", "id"}.
 
     `usuario_borrador` es de quién son las líneas que la compra se lleva:
@@ -1200,6 +1396,11 @@ def crear(que_compro, proveedor_nombre="", proveedor_id=None, resp="",
     que_compro = (que_compro or "").strip()
     if not que_compro:
         raise ErrorCompras("Escribí qué se compra.")
+    # «¿Cómo llega?» se limpia ACÁ, antes de tocar Linear: lo que no sea
+    # del vocabulario cae en «todavía no se dijo». Nunca rebota la compra
+    # por esto — es un dato de apoyo, no un requisito para anotar lo que
+    # hay que comprar.
+    como_llega = _llegada(como_llega)
     resp = (resp or "").strip()
     if resp and resp not in linear_leads.responsables():
         # Quién ES del equipo lo dicen las etiquetas `Resp:` del equipo
@@ -1228,7 +1429,8 @@ def crear(que_compro, proveedor_nombre="", proveedor_id=None, resp="",
         if resp and not resp_puesto:
             _aviso_sin_etiqueta(PREFIJO_RESP + resp)
         nueva = _muestra_crear(que_compro, proveedor_nombre, resp_puesto,
-                               lead_ref)
+                               lead_ref, como_llega,
+                               proveedor_id=proveedor_id)
     else:
         cat = catalogo()
         if not cat["proyecto"]:
@@ -1245,7 +1447,8 @@ def crear(que_compro, proveedor_nombre="", proveedor_id=None, resp="",
             "teamId": cat["equipo"],
             "projectId": cat["proyecto"],
             "title": que_compro[:250],
-            "description": _descripcion(proveedor_nombre, lead_ref, autor),
+            "description": _descripcion(proveedor_nombre, lead_ref, autor,
+                                        texto_llegada(como_llega)),
             "stateId": estado,
         }
         # Los issues se asignan a Abraham, jamás al bot (regla que no se
@@ -1284,7 +1487,8 @@ def crear(que_compro, proveedor_nombre="", proveedor_id=None, resp="",
 
     _guardar_fila(nueva["ref"], que_compro=que_compro,
                   proveedor_id=proveedor_id,
-                  proveedor_nombre=proveedor_nombre, lead_ref=lead_ref)
+                  proveedor_nombre=proveedor_nombre, lead_ref=lead_ref,
+                  como_llega=como_llega)
     if usuario_borrador:
         _mudar_lineas_del_borrador(usuario_borrador, nueva["ref"])
         descartar_borrador(usuario_borrador)
@@ -1400,6 +1604,111 @@ def proveedores():
          "telefono": f.get("phone") or "", "correo": f.get("email") or "",
          "ciudad": f.get("city") or ""}
         for f in filas]}
+
+
+# ---------------------------------------------------------------------------
+# El proveedor deja de ser texto suelto (dueño, 01/10/2026)
+#
+# El campo sigue siendo de texto con sugerencias —un `<select>` no serviría
+# mientras la lista de proveedores de Odoo esté corta—, pero lo escrito ya
+# no se pierde: si no calza con ninguno, la pantalla ofrece CREARLO.
+#
+# «Ofrece» y no «lo crea»: un dedo resbalado no puede dejar dos
+# «Agroservicios» distintos y partir en dos el historial de lo que se le
+# compró. Es el mismo criterio de las etiquetas de Linear, que tampoco
+# nacen solas — con la diferencia de que acá sí hay un botón, porque un
+# proveedor es dato del día a día y no vocabulario del sistema.
+# ---------------------------------------------------------------------------
+
+# El `supplier_rank` con el que nace un proveedor. Odoo lo usa como
+# contador (lo sube solo con cada compra) y cualquier valor > 0 es «este
+# contacto es proveedor»: es justo lo que `proveedores()` filtra.
+RANK_PROVEEDOR = 1
+
+# Lo único que se escribe en `res.partner`, y a propósito nada más: nombre,
+# la marca de proveedor y el teléfono si lo escribieron. Ni impuestos (no
+# los decide el código), ni correo, ni ciudad, ni términos de pago —
+# inventarle campos a un contacto es inventarle datos al negocio.
+#
+# OJO con Odoo 19: el teléfono es `phone`. `mobile` YA NO EXISTE en
+# `res.partner` y pedirlo o escribirlo revienta la llamada entera.
+CAMPO_TELEFONO = "phone"
+
+
+def proveedor_que_calza(nombre, lista=None):
+    """El proveedor de Odoo que se llama así, o None.
+
+    Compara sin mayúsculas ni tildes y sin espacios de sobra, que es como
+    la gente escribe el mismo nombre dos veces. `lista` es para no volver
+    a preguntarle a Odoo cuando quien llama ya tiene los proveedores.
+    """
+    nombre = str(nombre or "").strip()
+    if not nombre:
+        return None
+    if lista is None:
+        resultado = proveedores()
+        if not resultado["ok"]:
+            # No se pudo preguntar: eso NO es «no existe», y por eso no se
+            # devuelve None a secas sin que quien llama sepa la diferencia
+            # — la sabe por `proveedores()["ok"]`, que es quien la tiene.
+            return None
+        lista = resultado["proveedores"]
+    buscado = _sin_acentos(nombre)
+    for p in lista:
+        if _sin_acentos((p.get("nombre") or "").strip()) == buscado:
+            return p
+    return None
+
+
+def crear_proveedor(nombre, telefono=""):
+    """Un contacto de Odoo marcado como proveedor.
+
+    `{"ok", "error", "proveedor"}`. Nace con su nombre, `supplier_rank` y
+    el teléfono si lo escribieron: nada más.
+
+    Vuelve a mirar si ya existe JUSTO ANTES de crearlo, con la lista
+    fresca: entre que la pantalla se pintó y el clic pudo haberlo creado
+    otra persona, y dos contactos con el mismo nombre parten en dos el
+    historial de ese proveedor. En ese caso devuelve el que ya estaba, que
+    es lo que quien apretó el botón quería.
+    """
+    nombre = str(nombre or "").strip()[:120]
+    telefono = str(telefono or "").strip()[:40]
+    if not nombre:
+        return _no_se_creo("Escribí el nombre del proveedor.")
+    if not ventas.configurado():
+        return _no_se_creo("Odoo no está conectado en este servidor, así que "
+                           "el proveedor no se puede crear.")
+    actuales = proveedores()
+    if not actuales["ok"]:
+        # Sin poder leer la lista no se puede saber si ya existe, y crear a
+        # ciegas es justo lo que se está evitando.
+        return _no_se_creo(f"No se pudo leer los proveedores de Odoo: "
+                           f"{actuales['error']}.")
+    ya = proveedor_que_calza(nombre, actuales["proveedores"])
+    if ya is not None:
+        return {"ok": True, "error": "", "proveedor": ya, "ya_estaba": True}
+    valores = {"name": nombre, "supplier_rank": RANK_PROVEEDOR}
+    if telefono:
+        valores[CAMPO_TELEFONO] = telefono
+    try:
+        nuevo = ventas._ejecutar("res.partner", "create", [valores])
+    except Exception as error:
+        return _no_se_creo(_error(error))
+    if isinstance(nuevo, list):
+        nuevo = nuevo[0] if nuevo else 0
+    if not nuevo:
+        return _no_se_creo("Odoo no dijo el número del proveedor nuevo.")
+    return {"ok": True, "error": "", "ya_estaba": False, "proveedor": {
+        "id": int(nuevo), "nombre": nombre, "telefono": telefono,
+        "correo": "", "ciudad": ""}}
+
+
+def _no_se_creo(error):
+    """El «no quedó creado», siempre con la misma forma: quien llama no
+    tiene que adivinar qué llaves vienen según por dónde falló."""
+    return {"ok": False, "error": error, "proveedor": None,
+            "ya_estaba": False}
 
 
 def _plata_de_ordenes(ids):
@@ -1579,23 +1888,26 @@ def _muestra_buscar(texto):
             or buscado in _sin_acentos(p["sku"])]
 
 _SEMILLA = [
-    # ref, qué se compra, proveedor, resp, orden, total, pagado, lead, días
+    # ref, qué se compra, proveedor, resp, orden, total, pagado, lead, días,
+    # cómo llega. Las cuatro formas aparecen, y dos compras quedan SIN
+    # decir cómo llega (es lo que pasa con todo lo anotado antes del
+    # 01/10/2026, y la pantalla tiene que verse bien así).
     ("VIV-201", "50 sacos de tierra negra", "Agroservicios del Istmo",
-     "Abraham", "", 0.0, 0.0, "", 1),
+     "Abraham", "", 0.0, 0.0, "", 1, "camion"),
     ("VIV-202", "Macetas de barro 12\"", "Cerámica Chorrera",
-     "", "", 0.0, 0.0, "", 3),
+     "", "", 0.0, 0.0, "", 3, "nosotros"),
     ("VIV-203", "Palmas areca para el lobby del Bristol", "Vivero El Roble",
-     "Mary", "P00014", 840.0, 0.0, "LEAD-88", 5),
+     "Mary", "P00014", 840.0, 0.0, "LEAD-88", 5, "mula"),
     ("VIV-204", "Abono orgánico a granel", "Agroservicios del Istmo",
-     "Abraham", "P00015", 320.0, 160.0, "", 8),
+     "Abraham", "P00015", 320.0, 160.0, "", 8, "camion"),
     ("VIV-205", "Grama San Agustín, 200 m²", "Grama Panamá",
-     "Mary", "P00016", 1250.0, 625.0, "", 2),
+     "Mary", "P00016", 1250.0, 625.0, "", 2, "encomienda"),
     ("VIV-206", "Piedra blanca decorativa", "Canteras Pacora",
-     "", "P00017", 480.0, 480.0, "", 6),
+     "", "P00017", 480.0, 480.0, "", 6, ""),
     ("VIV-207", "Mangueras y aspersores", "Ferretería Central",
-     "Mary", "P00012", 210.0, 210.0, "", 11),
+     "Mary", "P00012", 210.0, 210.0, "", 11, "nosotros"),
     ("VIV-208", "Bolsas de vivero 6x8", "Plásticos Nacionales",
-     "Abraham", "", 0.0, 0.0, "", 14),
+     "Abraham", "", 0.0, 0.0, "", 14, ""),
 ]
 
 _ESTADOS_MUESTRA = ["POR_PEDIR", "COTIZANDO", "PEDIDO", "ABONADO",
@@ -1611,9 +1923,10 @@ def _muestra():
     if _MUESTRA is None:
         _MUESTRA = []
         _MUESTRA_PLATA.clear()
-        for (ref, que, prov, resp, orden, total, pagado, lead, dias), clave in zip(
-                _SEMILLA, _ESTADOS_MUESTRA):
+        for (ref, que, prov, resp, orden, total, pagado, lead, dias,
+             como), clave in zip(_SEMILLA, _ESTADOS_MUESTRA):
             ficha = POR_CLAVE[clave]
+            como = _llegada(como)
             _MUESTRA.append({
                 "id": "muestra-" + ref, "ref": ref, "url": "",
                 "que_compro": que, "estado": clave,
@@ -1622,6 +1935,7 @@ def _muestra():
                 "resp": resp, "proveedor_id": None, "proveedor": prov,
                 "orden_compra_id": (int(orden[1:]) if orden else None),
                 "orden_compra": orden, "lead_ref": lead,
+                "como_llega": como, "llegada": texto_llegada(como),
                 "creado": "", "dias": dias,
                 "hace": linear_leads.hace_bonito(dias),
             })
@@ -1671,17 +1985,24 @@ def _muestra_mover(ref, clave):
     return True
 
 
-def _muestra_crear(que_compro, proveedor_nombre, resp, lead_ref):
+def _muestra_crear(que_compro, proveedor_nombre, resp, lead_ref,
+                   como_llega="", proveedor_id=None):
     ficha = POR_CLAVE[CLAVE_INICIAL]
     ref = "VIV-%d" % _MUESTRA_SIGUIENTE["n"]
     _MUESTRA_SIGUIENTE["n"] += 1
+    como_llega = _llegada(como_llega)
     _muestra().insert(0, {
         "id": "muestra-" + ref, "ref": ref, "url": "",
         "que_compro": que_compro, "estado": CLAVE_INICIAL,
         "estado_nombre": ficha["nombre"], "estado_ficha": ficha,
         "etiquetas": ([PREFIJO_RESP + resp] if resp else []),
-        "resp": resp, "proveedor_id": None, "proveedor": proveedor_nombre,
+        # El id del proveedor viaja también en la muestra: en modo real la
+        # tarjeta lo lee de la tabla local, y si acá quedara en None el
+        # modo muestra mentiría sobre un dato que el formulario SÍ guarda.
+        "resp": resp, "proveedor_id": proveedor_id,
+        "proveedor": proveedor_nombre,
         "orden_compra_id": None, "orden_compra": "", "lead_ref": lead_ref,
+        "como_llega": como_llega, "llegada": texto_llegada(como_llega),
         "creado": "", "dias": 0, "hace": linear_leads.hace_bonito(0),
     })
     return {"ref": ref, "url": "", "id": "muestra-" + ref}

@@ -3077,12 +3077,34 @@ def compras_pantalla(request: Request):
     # Los datos del formulario solo se arman cuando el formulario se abre:
     # los proveedores son una consulta a Odoo y el tablero no la paga.
     lista_prov, prov_error, leads = [], "", []
+    # El proveedor escrito: ¿ya existe en Odoo, o hay que ofrecer crearlo?
+    # Lo decide Python para que un error de Odoo (`ok: False`) NUNCA se lea
+    # como «ese proveedor no existe» — la misma trampa que ya tenía resuelta
+    # el buscador de productos con `sin_resultados`.
+    prov_calza, prov_nuevo = None, False
     busqueda = {"ok": True, "error": "", "productos": []}
+    # «Lo que está bajo»: el atajo para agregar sin escribir el nombre. Se
+    # abre con `?bajos=1` y el formulario lo arrastra en un marcador
+    # escondido, así que agregar varios seguidos no la cierra.
+    bajos = {"ok": True, "error": "", "productos": [], "cuantos": 0,
+             "umbral": None, "sobran": 0}
+    ver_bajos = bool(request.query_params.get("bajos"))
     texto_buscado = (request.query_params.get("q") or "").strip()[:120]
     if nueva:
         resultado = compras.proveedores()
         lista_prov = resultado["proveedores"]
         prov_error = "" if resultado["ok"] else resultado["error"]
+        if resultado["ok"] and borrador["proveedor"]:
+            prov_calza = compras.proveedor_que_calza(borrador["proveedor"],
+                                                     lista_prov)
+            # El «crearlo» solo se ofrece si Odoo está conectado: sin
+            # conexión el botón no podría crear nada, y un botón muerto es
+            # peor que no tenerlo. Con Odoo conectado pero caído,
+            # `resultado["ok"]` ya es False y acá no se entra — la pantalla
+            # dice que no se pudo leer, que es la verdad.
+            prov_nuevo = prov_calza is None and ventas.configurado()
+        if ver_bajos:
+            bajos = compras.bajos()
         try:
             leads = [l for l in linear_leads.listar()
                      if l["estado"] not in linear_leads.CERRADOS]
@@ -3118,6 +3140,17 @@ def compras_pantalla(request: Request):
                     else compras.con_lineas(compras.uno(abrir, lista))),
         "proveedores": lista_prov,
         "proveedores_error": prov_error,
+        # El proveedor escrito calza con este contacto de Odoo (y entonces
+        # la compra guarda su id), o no calza con ninguno y hay que ofrecer
+        # crearlo — explícito, nunca solo.
+        "proveedor_calza": prov_calza,
+        "proveedor_nuevo": prov_nuevo,
+        # Lo que está bajo o en cero, para agregarlo sin escribir.
+        "ver_bajos": ver_bajos,
+        "bajos": bajos,
+        # El vocabulario de «¿cómo llega?», que vive en compras.py: la
+        # plantilla recorre las opciones, no las escribe.
+        "formas_llegada": compras.FORMAS_LLEGADA,
         "leads": leads,
         "responsables": linear_leads.responsables(),
         "resp_sugerido": agenda.responsable_de_empleada(empleada),
@@ -3126,7 +3159,8 @@ def compras_pantalla(request: Request):
     })
 
 
-def _compras_vuelve(aviso="", error="", ancla="", nueva=False, abrir=""):
+def _compras_vuelve(aviso="", error="", ancla="", nueva=False, abrir="",
+                    bajos=False, q=""):
     """El 303 de vuelta a Compras, SIN tirar al empleado para arriba.
 
     La regla de siempre del proyecto («volver tiene que devolverte donde
@@ -3134,10 +3168,18 @@ def _compras_vuelve(aviso="", error="", ancla="", nueva=False, abrir=""):
     es la tarjeta que acaba de tocar, `#cp-lineas` la lista de productos
     del formulario. El navegador la trae a la vista y, como el tablero
     scrollea de lado, también corre la columna sola — sin una línea de JS.
+
+    `bajos` y `q` son el ESTADO de la pantalla, no datos: la lista de lo
+    que está bajo y lo que se buscó tienen que seguir ahí después de
+    agregar un producto, o cada clic cerraría lo que el empleado abrió.
     """
     partes = []
     if nueva:
         partes.append("nueva=1")
+    if bajos:
+        partes.append("bajos=1")
+    if q:
+        partes.append("q=" + quote(q))
     if abrir:
         partes.append("abrir=" + quote(abrir))
     if aviso:
@@ -3249,6 +3291,9 @@ async def compras_borrador(request: Request):
     compras.guardar_borrador(usuario, datos=_campos_del_borrador(form),
                              cantidades=cantidades, costos=costos)
     texto = (form.get("q") or "").strip()[:120]
+    # El marcador escondido del formulario: la lista de «lo que está bajo»
+    # sigue abierta al volver. Mismo patrón que `casillas` en Vender.
+    bajos = bool(form.get("bajos")) and accion != "ocultar_bajos"
 
     # Agregar y quitar viajan en el NOMBRE del botón, no en un `accion`:
     # un submit manda un solo par nombre/valor, y cada renglón necesita
@@ -3259,17 +3304,56 @@ async def compras_borrador(request: Request):
     # la búsqueda y el clic).
     sku = (form.get("agregar") or "").strip()
     if sku:
+        producto_id = _entero_o_nada(form.get("pid-" + sku))
+        if producto_id is None:
+            # Los renglones de «lo que está bajo» salen del inventario, que
+            # trae el SKU y el nombre pero no el id de `product.product`:
+            # se le pregunta a Odoo por ESE producto, una sola consulta y
+            # solo en este clic. Si Odoo no contesta queda en None, que la
+            # línea ya sabe aguantar (el SKU es lo durable).
+            producto = compras.producto_por_sku(sku)
+            if producto:
+                producto_id = producto["id"]
         aviso, error = compras.agregar_al_borrador(
-            usuario, producto_id=_entero_o_nada(form.get("pid-" + sku)),
+            usuario, producto_id=producto_id,
             sku=sku, nombre=form.get("nom-" + sku) or "")
         # Se vuelve a la LISTA, que es donde está lo nuevo, y el buscador
         # queda vacío para que el siguiente producto empiece de cero.
         return _compras_vuelve(aviso=aviso, error=error, nueva=True,
-                               ancla=compras.ANCLA_LINEAS)
+                               bajos=bajos, ancla=compras.ANCLA_LINEAS)
     if form.get("quitar") is not None:
         aviso, error = compras.quitar_del_borrador(usuario, form.get("quitar"))
         return _compras_vuelve(aviso=aviso, error=error, nueva=True,
-                               ancla=compras.ANCLA_LINEAS)
+                               bajos=bajos, ancla=compras.ANCLA_LINEAS)
+    if accion == "crear_proveedor":
+        # El proveedor nace en Odoo **solo acá**, con el clic explícito: ni
+        # anotar la compra ni escribir el nombre lo crean. Y el borrador ya
+        # quedó guardado arriba, así que el viaje no pierde nada.
+        resultado = compras.crear_proveedor(form.get("proveedor") or "",
+                                            form.get("proveedor_tel") or "")
+        if not resultado["ok"]:
+            return _compras_vuelve(
+                error=f"El proveedor no se creó: {resultado['error']}",
+                nueva=True, bajos=bajos, q=texto,
+                ancla=compras.ANCLA_PROVEEDOR)
+        proveedor = resultado["proveedor"]
+        # El nombre del borrador se reemplaza por el de Odoo tal cual quedó
+        # (o por el del que ya estaba): así la pantalla siguiente CALZA y
+        # ofrece crearlo de nuevo nunca más.
+        compras.guardar_borrador(
+            usuario, datos={**_campos_del_borrador(form),
+                            "proveedor": proveedor["nombre"]})
+        aviso = (f"{proveedor['nombre']} ya estaba en Odoo: queda elegido."
+                 if resultado["ya_estaba"]
+                 else f"{proveedor['nombre']} creado como proveedor en Odoo.")
+        return _compras_vuelve(aviso=aviso, nueva=True, bajos=bajos, q=texto,
+                               ancla=compras.ANCLA_PROVEEDOR)
+    if accion in ("bajos", "ocultar_bajos"):
+        # Abrir o cerrar la lista de lo que está bajo. Son dos acciones y no
+        # un interruptor porque sin JavaScript el formulario no sabe
+        # alternar nada: cada botón dice qué quiere.
+        return _compras_vuelve(nueva=True, bajos=(accion == "bajos"),
+                               q=texto, ancla=compras.ANCLA_BAJOS)
     if accion == "crear_producto":
         # Se va a dar de alta el producto que no apareció, y vuelve acá: el
         # borrador ya quedó guardado arriba. Lo escrito en el buscador viaja
@@ -3281,14 +3365,10 @@ async def compras_borrador(request: Request):
 
     # "buscar" y "guardar": el texto buscado viaja en el query, así que
     # recargar la pantalla repite la búsqueda y nada más.
-    partes = ["nueva=1"]
-    if texto:
-        partes.append("q=" + quote(texto))
-    return RedirectResponse(
-        "/compras?" + "&".join(partes)
-        + (compras.ANCLA_BUSCADOR if accion == "buscar"
-           else compras.ANCLA_LINEAS),
-        status_code=303)
+    return _compras_vuelve(
+        nueva=True, bajos=bajos, q=texto,
+        ancla=(compras.ANCLA_BUSCADOR if accion == "buscar"
+               else compras.ANCLA_LINEAS))
 
 
 def _entero_o_nada(valor):
@@ -3324,17 +3404,20 @@ async def compras_nueva(request: Request):
     nombre_prov = (form.get("proveedor") or "").strip()
     proveedor_id = None
     if nombre_prov:
-        resultado = compras.proveedores()
-        for p in resultado["proveedores"]:
-            if p["nombre"].strip().lower() == nombre_prov.lower():
-                proveedor_id = p["id"]
-                break
+        # El id sale del MISMO casamiento que usa la pantalla para decidir
+        # si ofrece crearlo (`compras.proveedor_que_calza`): un solo lugar
+        # define cuándo dos nombres son el mismo proveedor, así que lo que
+        # la pantalla dio por existente es lo que se guarda con su id.
+        calza = compras.proveedor_que_calza(nombre_prov)
+        if calza is not None:
+            proveedor_id = calza["id"]
     autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
     try:
         nueva = compras.crear(
             form.get("que_compro", ""), proveedor_nombre=nombre_prov,
             proveedor_id=proveedor_id, resp=form.get("resp", ""),
             lead_ref=form.get("lead_ref", ""), autor=autor,
+            como_llega=form.get("como_llega", ""),
             # Las líneas del borrador pasan a ser las de esta compra, y el
             # borrador se descarta — solo si Linear aceptó.
             usuario_borrador=usuario)

@@ -1072,6 +1072,26 @@ input.campo.cmp-mini{width:72px;padding:7px 8px;text-align:right}
    (la tarjeta entera ya se ve como algo que se toca). */
 .ret-tarjeta a.eq-texto{text-decoration:none;color:var(--suave)}
 .ret-tarjeta a.eq-texto:hover{text-decoration:underline}
+
+/* Cuánto hay de cada producto, junto a su nombre en el buscador y en la
+   lista de «lo que está bajo» (01/10/2026). Va en su propio renglón bajo
+   el nombre, como el SKU: la columna del nombre es la que tiene ancho.
+   `.cmp-sin` es el cero REAL —medido, no inventado— y por eso se resalta;
+   un stock que no se sabe sale con el color tenue de siempre, porque no
+   es una alarma, es una ausencia de dato. */
+.cmp-stock{display:block;font-size:10.5px;color:var(--suave);margin-top:1px}
+.cmp-stock.cmp-sin{color:var(--critico, #e5484d);font-weight:700}
+
+/* Cómo llega la compra, en la tarjeta: texto tenue como el proveedor, con
+   su tope de ancho para que la tarjeta T2 siga siendo de dos líneas. */
+.cmp-llega{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px}
+
+/* Los radios de «¿cómo llega?»: apilados, con el mismo lenguaje que las
+   opciones de envío de Vender (que viven en styles.css, y esta pantalla no
+   lo carga — de ahí que estén acá y no allá). */
+.cmp-ops{display:flex;flex-direction:column;gap:6px}
+.cmp-op{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
+.cmp-op input{accent-color:var(--dorado, #b8860b);margin:0;flex-shrink:0}
 @media (max-width:767.98px){
   /* En el teléfono el formulario es pantalla completa y sus campos crecen a
      16px (así iOS no hace zoom al enfocar). Los de cantidad y costo se
