@@ -534,9 +534,9 @@ Antes de producción tienen que estar definidas: cancelación después de pagar,
 
 **Tareas programadas de Odoo a resolver antes de M2** (medidas el 1/10 [VERIFICADO M0]; nada se toca sin decisión de Korto):
 
-1. **«Send invoices automatically»** (activa, diaria, `_cron_account_move_send()`): solo procesa las facturas que alguien dejó EN COLA con «Enviar e imprimir» — hoy la cola está en 0, así que con la configuración actual **no manda nada a nadie**. Propuesta: no hace falta apagarla; si Korto quiere cero riesgo de un envío accidental, se apaga sin perder nada. [KORTO decide]
-2. **«Vivero: desactivar leads inactivos en Nuevo»** (activa, diaria 07:00 UTC, del addon): es el barrido viejo, neutralizado por `vivero.barrido_leads_activo = 0` pero todavía programado. Propuesta: **apagarla** (`active = False`), la reemplaza el barrido de 14 días de Linear. [KORTO decide]
-3. **«CRM: enrich leads (IAP)»** (activa, cada 24 h): enriquece leads con el servicio de pago IAP de Odoo — nadie lo pidió. Propuesta: **apagarla**. [KORTO decide]
+1. **«Send invoices automatically»**: SE QUEDA [KORTO 1/10]. Solo procesa facturas dejadas en cola con «Enviar e imprimir» (cola en 0 hoy). **Regla para M2: el motor nunca usa «Enviar e imprimir» ni deja facturas en la cola de envío.**
+2. **«Vivero: desactivar leads inactivos en Nuevo»**: la apaga Korto a mano (`active = False`) — la reemplaza el barrido de 14 días de Linear. [KORTO 1/10]
+3. **«CRM: enrich leads (IAP)»**: la apaga Korto a mano. [KORTO 1/10]
 
 
 **Fin del documento. Esperando M0.5.**
