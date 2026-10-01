@@ -1142,3 +1142,6 @@ input.campo.cmp-mini{width:72px;padding:7px 8px;text-align:right}
    compramos y su precio, de `product.supplierinfo`). */
 .prov-abrir{display:block;margin-top:2px;font-size:11.5px;font-weight:600;color:var(--suave);text-decoration:none}
 .prov-abrir:hover{text-decoration:underline;text-underline-offset:2px}
+/* Cómo le dice EL PROVEEDOR a la planta, en la ficha: aparte del nombre
+   nuestro, chico y tenue, para leer su factura. */
+.prov-lo-llama{display:block;font-size:10.5px;color:var(--muy-suave);font-weight:500}
