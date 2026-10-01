@@ -47,13 +47,20 @@ Tres modos, los mismos de `linear_leads` y con el MISMO interruptor
 - Con clave y `CALENDARIO_ESCRITURA` apagado: **solo lectura**.
 - Con clave y `CALENDARIO_ESCRITURA=1`: lectura y escritura.
 
-**El mundo de hoy (30/09/2026): el proyecto COMPRAS y sus 7 columnas
-TODAVÍA NO EXISTEN en Linear, y el módulo `purchase` de Odoo no está
-instalado** (o sea que `purchase.order` no existe y cualquier consulta a
-él devuelve un `Fault`). Esta pantalla está escrita para ese mundo: las 7
-columnas salen vacías con un renglón que lo dice en palabras simples, la
-tarjeta no pinta barra de plata, y no hay ni un 500. Ver `falta_en_linear`
-y `plata_de`.
+**Medido en el proceso vivo el 30/09/2026 de tarde: el proyecto COMPRAS y
+sus 7 columnas SÍ EXISTEN en Linear** (`falta_en_linear()` devuelve "") **y
+el módulo `purchase` de Odoo SÍ está instalado**, en producción y en
+pruebas desde las 16:15 de ese día, con 0 órdenes todavía.
+
+Hasta esa tarde este párrafo decía lo contrario, y la versión vieja se
+citó como estado actual sin volver a medirla. **Lo que un comentario
+afirma del mundo envejece; el mundo se le pregunta al proceso vivo.**
+
+La tolerancia del módulo NO se toca por eso: si mañana falta una columna,
+las 7 salen vacías con su renglón en palabras simples; si `purchase.order`
+no contesta, la tarjeta no pinta barra de plata y nunca inventa un 0. Y no
+hay ni un 500 en ninguno de los dos casos. Ver `falta_en_linear` y
+`plata_de`.
 """
 
 import os
@@ -1348,10 +1355,12 @@ def mover(ref, clave, autor=""):
 # si Odoo no contesta. **Una lista vacía nunca significa «Odoo falló»**: la
 # diferencia entre "no hay" y "no sé" tiene que llegar a quien muestre.
 #
-# **El módulo `purchase` de Odoo NO está instalado hoy (30/09/2026)**, así
-# que `purchase.order` no existe y la consulta devuelve un `Fault`. Ese
-# `Fault` cae en el `except` y sale como `{"ok": False}`: la tarjeta no
-# pinta barra y la pantalla no se entera de nada raro.
+# El módulo `purchase` quedó INSTALADO el 30/09/2026 a las 16:15 (medido en
+# el proceso vivo, producción y pruebas; 0 órdenes todavía). Antes de eso
+# `purchase.order` no existía y la consulta devolvía un `Fault`; el camino
+# que lo aguanta se queda igual, porque un modelo puede desaparecer de un
+# Odoo de pruebas o una base nueva: ese `Fault` cae en el `except` y sale
+# como `{"ok": False}`, la tarjeta no pinta barra y nadie ve un 500.
 # ---------------------------------------------------------------------------
 
 # OJO con Odoo 19: `res.partner` ya NO tiene el campo `mobile` — pedirlo
@@ -1438,7 +1447,7 @@ def _plata_de_ordenes(ids):
 def _plata_de_ordenes_o_vacio(ids):
     """Como `_plata_de_ordenes`, pero se calla con un aviso al log: es la
     que usa el TABLERO, que no puede reventar porque Odoo tuvo un mal rato
-    — y menos hoy, con el módulo `purchase` sin instalar."""
+    ni porque en ese Odoo falte el módulo `purchase`."""
     try:
         return _plata_de_ordenes(ids)
     except Exception as error:

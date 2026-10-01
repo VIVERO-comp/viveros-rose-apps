@@ -393,6 +393,156 @@ def test_si_odoo_no_dice_el_id_del_producto_la_linea_no_se_pierde(
     assert lineas[0]["producto_id"] is None       # no se sabe, y no se inventa
 
 
+# ---------------------------------------------------------------------------
+# La PLANTA, que es el caso que el dueño describió con esas palabras
+#
+# Su alta es la única que no vive en `/productos/crear`: sigue en el modal de
+# Stock, que postea a `/productos/nuevo` por el order-api. La primera
+# entrega dejaba el borrador a salvo pero la planta había que buscarla otra
+# vez — media solución, justo para el caso principal.
+#
+# Lo que lo cerró: el destino de después de crear LO CALCULA PYTHON y el JS
+# solo lo lee (antes era una URL escrita a mano en app.js, que es justo lo
+# que la regla del proyecto no permite), y la línea la agrega el SERVIDOR al
+# recibir el alta.
+# ---------------------------------------------------------------------------
+
+def test_crear_planta_desde_una_compra_lleva_el_volver_hasta_stock(cliente,
+                                                                   de_dueno):
+    respuesta = cliente.get("/productos/crear?tipo=planta&volver=compra",
+                            follow_redirects=False)
+    assert respuesta.status_code == 303
+    assert respuesta.headers["location"] == ("/?tab=stock&crear=planta"
+                                             "&volver=compra")
+
+
+def test_sin_volver_la_planta_sigue_yendo_a_stock_como_siempre(cliente):
+    respuesta = cliente.get("/productos/crear?tipo=planta",
+                            follow_redirects=False)
+    assert respuesta.headers["location"] == "/?tab=stock&crear=planta"
+
+
+def test_el_destino_despues_de_crear_la_planta_lo_decide_python(
+        cliente, con_inventario, de_dueno):
+    """La pantalla de Stock renderiza el destino; el JS no elige nada. Sin
+    nadie esperando la planta es la recarga de siempre."""
+    from app import main
+    assert main._destino_tras_crear_planta("") == main.DESTINO_TRAS_CREAR_PLANTA
+    assert main._destino_tras_crear_planta("compra") == (
+        "/compras?nueva=1" + compras.ANCLA_LINEAS)
+    # Un `volver` inventado no manda a ninguna parte: cae en el de siempre.
+    assert main._destino_tras_crear_planta("https://otro-sitio.com") == (
+        main.DESTINO_TRAS_CREAR_PLANTA)
+
+    normal = cliente.get("/?tab=stock").text
+    assert '"destinoTrasCrear": "/?refrescar=1&tab=stock&vista=global"' in normal
+    assert '"volverTrasCrear": ""' in normal
+
+    desde_compra = cliente.get("/?tab=stock&crear=planta&volver=compra").text
+    assert '"destinoTrasCrear": "/compras?nueva=1#cp-lineas"' in desde_compra
+    assert '"volverTrasCrear": "compra"' in desde_compra
+
+
+def test_el_js_no_elige_el_destino_ni_lo_lleva_escrito():
+    """El candado, mirado en el código: la URL de después de crear una
+    planta ya no vive en app.js, y la línea que navega solo LEE el valor que
+    mandó Python. Si alguien la vuelve a escribir a mano, esto lo caza."""
+    fuente = open("app/static/app.js").read()
+    assert "location.assign(DATOS.destinoTrasCrear)" in fuente
+    # La URL de Stock aparece UNA sola vez, y es el respaldo de `DATOS`
+    # cuando la página no lo trae — no la decisión de a dónde ir.
+    assert fuente.count("/?refrescar=1&tab=stock&vista=global") == 1
+    assert "volver: DATOS.volverTrasCrear" in fuente
+
+
+def test_la_planta_recien_creada_entra_sola_a_la_compra(monkeypatch, cliente,
+                                                        de_dueno):
+    """El caso del dueño, cerrado: vuelve y la planta está puesta, igual que
+    una maceta o un insumo."""
+    compras.guardar_borrador(USUARIO, datos={
+        "que_compro": "Pedido de octubre", "proveedor": "Don Pepe",
+        "resp": "", "lead_ref": ""})
+    monkeypatch.setattr(datos, "crear_planta_en_odoo",
+                        lambda *a, **k: {"ok": True, "id": 555})
+    monkeypatch.setattr(ventas, "configurado", lambda: True)
+    monkeypatch.setattr(ventas, "_ejecutar", lambda *a, **k: [
+        {"id": 666, "default_code": "PL-CORTEZA-DE-PINO",
+         "name": "Corteza de Pino", "list_price": 0.0}])
+
+    respuesta = cliente.post("/productos/nuevo", json={
+        "nombre": "Corteza de Pino", "sku": "PL-CORTEZA-DE-PINO",
+        "categoria": "Exterior", "precioCentavos": 0, "costoCentavos": 450,
+        "cantidad": 0, "alturaMin": 0, "alturaMax": 0, "sinMoto": False,
+        "volver": "compra"})
+    assert respuesta.status_code == 200
+    assert respuesta.json()["agregadaA"] == "compra"
+
+    borrador = compras.borrador_de(USUARIO)
+    assert borrador["que_compro"] == "Pedido de octubre"   # nada se perdió
+    assert [(l["sku"], l["nombre"], l["producto_id"])
+            for l in borrador["lineas"]] == [
+        ("PL-CORTEZA-DE-PINO", "Corteza de Pino", 666)]
+
+
+def test_una_planta_creada_desde_stock_no_se_mete_en_ninguna_compra(
+        monkeypatch, cliente, de_dueno):
+    """Sin `volver` no se toca nada: quien entró a Stock por su cuenta crea
+    su planta y se queda en Stock, aunque tenga una compra a medio llenar."""
+    compras.guardar_borrador(USUARIO, datos={
+        "que_compro": "Pedido de octubre", "proveedor": "", "resp": "",
+        "lead_ref": ""})
+    monkeypatch.setattr(datos, "crear_planta_en_odoo",
+                        lambda *a, **k: {"ok": True, "id": 555})
+    respuesta = cliente.post("/productos/nuevo", json={
+        "nombre": "Palma Areca", "sku": "PL-PALMA-ARECA",
+        "categoria": "Exterior", "precioCentavos": 1500, "costoCentavos": 0,
+        "cantidad": 0, "alturaMin": 0, "alturaMax": 0, "sinMoto": False})
+    assert respuesta.status_code == 200
+    assert respuesta.json()["agregadaA"] == ""
+    assert compras.borrador_de(USUARIO)["lineas"] == []
+
+
+def test_un_volver_inventado_en_el_alta_de_planta_no_hace_nada(monkeypatch,
+                                                               cliente):
+    monkeypatch.setattr(datos, "crear_planta_en_odoo",
+                        lambda *a, **k: {"ok": True, "id": 555})
+    respuesta = cliente.post("/productos/nuevo", json={
+        "nombre": "Palma Areca", "sku": "PL-PALMA-ARECA",
+        "categoria": "Exterior", "precioCentavos": 0, "costoCentavos": 0,
+        "cantidad": 0, "alturaMin": 0, "alturaMax": 0, "sinMoto": False,
+        "volver": "https://otro-sitio.com"})
+    assert respuesta.json()["agregadaA"] == ""
+    assert compras.borrador_con_algo(USUARIO) is False
+
+
+def test_si_la_linea_no_se_puede_agregar_la_planta_igual_queda_creada(
+        monkeypatch, cliente, de_dueno):
+    """La planta YA está en Odoo: cantar un error ahí dejaría al empleado
+    creyendo que no se creó, y la crearía dos veces."""
+    monkeypatch.setattr(datos, "crear_planta_en_odoo",
+                        lambda *a, **k: {"ok": True, "id": 555})
+
+    def revienta(*_a, **_k):
+        raise RuntimeError("la base local se cayó")
+
+    monkeypatch.setattr(compras, "agregar_al_borrador", revienta)
+    respuesta = cliente.post("/productos/nuevo", json={
+        "nombre": "Corteza de Pino", "sku": "PL-CORTEZA-DE-PINO",
+        "categoria": "Exterior", "precioCentavos": 0, "costoCentavos": 0,
+        "cantidad": 0, "alturaMin": 0, "alturaMax": 0, "sinMoto": False,
+        "volver": "compra"})
+    assert respuesta.status_code == 200
+    assert respuesta.json()["ok"] is True       # la planta se creó
+    assert respuesta.json()["agregadaA"] == ""  # y se dice que no se agregó
+
+
+def test_el_formulario_ya_no_pide_disculpas_por_la_planta(cliente, de_dueno):
+    modal = _modal(cliente.get("/compras?nueva=1&q=corteza").text)
+    assert "Vale para los tres" in modal
+    assert "planta, maceta e insumo" in modal
+    assert "formulario vive en Stock" not in modal
+
+
 def test_altas_sigue_siendo_el_unico_camino_de_creacion():
     """No hay un segundo camino de alta para Compras: el producto se crea
     con `altas.crear`, que es el que tiene las reglas (los dos impuestos

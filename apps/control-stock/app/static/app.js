@@ -1,7 +1,14 @@
 /* JS del prototipo aprobado, adaptado a datos reales (window.DATOS) y a los
    POSTs de la app. Pestañas, buscador, panel de alertas, modal de ajuste. */
 
-const DATOS = window.DATOS || { plantas: [], umbral: 3, alertas: [] };
+/* El respaldo lleva los mismos campos que manda el servidor, para que nada
+   de abajo tenga que preguntar si existen: `destinoTrasCrear` es la recarga
+   de Stock de siempre (Python manda la de verdad, que puede ser otra). */
+const DATOS = window.DATOS || {
+  plantas: [], umbral: 3, alertas: [],
+  destinoTrasCrear: "/?refrescar=1&tab=stock&vista=global",
+  volverTrasCrear: "",
+};
 const plantas = DATOS.plantas;
 const UMBRAL = DATOS.umbral;
 let catActiva = "Todas";
@@ -514,6 +521,10 @@ async function crearPlanta() {
         alturaMin: entero(document.getElementById("agregar-hmin").value),
         alturaMax: entero(document.getElementById("agregar-hmax").value),
         sinMoto: document.getElementById("agregar-sinmoto").checked,
+        /* Quién está esperando esta planta (hoy, una compra en curso). Lo
+           decide Python y acá solo se reenvía: el servidor es el que la
+           agrega como línea. */
+        volver: DATOS.volverTrasCrear,
       }),
     });
     const datos = await r.json();
@@ -527,8 +538,12 @@ async function crearPlanta() {
     toast(datos.stock === "falló"
       ? `✓ ${datos.nombre} creada, pero el stock quedó en 0: ajústalo a mano`
       : `✓ ${datos.nombre} creada en Odoo`);
-    // Recargar: la planta nueva tiene que entrar a la lista con su stock.
-    setTimeout(() => location.assign("/?refrescar=1&tab=stock&vista=global"), 1400);
+    /* A dónde ir ahora lo decide PYTHON (DATOS.destinoTrasCrear): la
+       recarga de Stock de siempre —la planta nueva tiene que entrar a la
+       lista con su stock— o la pantalla que mandó a crearla, con la planta
+       ya agregada. Aquí no se elige nada: antes esta URL estaba escrita a
+       mano y por eso la planta no podía volver a su compra. */
+    setTimeout(() => location.assign(DATOS.destinoTrasCrear), 1400);
   } catch (e) {
     mostrarErrorAgregar("No hay conexión con el servidor.");
   } finally {

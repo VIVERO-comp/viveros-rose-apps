@@ -11,9 +11,13 @@ Lo que se cuida acá es lo que duele si se rompe:
 - que a `asignaciones.estado_compra` de paleta.json no le falte ni una
   clave — si falta, el KeyError salta AL IMPORTAR y la app entera no
   arranca;
-- que el mundo de HOY (30/09/2026: el proyecto COMPRAS no existe en Linear
-  y `purchase.order` no existe en Odoo porque el módulo `purchase` no está
-  instalado) dé una pantalla vacía con su aviso y NUNCA un 500;
+- que un Linear SIN el proyecto COMPRAS —o sin alguna de sus columnas— y un
+  Odoo sin el módulo `purchase` (o sea, sin `purchase.order`) den una
+  pantalla vacía con su aviso y NUNCA un 500. **Ojo al leer esto: las dos
+  cosas YA existen** — el proyecto en Linear, y `purchase` instalado en
+  producción y en pruebas, medido en el proceso vivo el 30/09/2026 de
+  tarde. Lo que estas pruebas cuidan es la TOLERANCIA, que sigue haciendo
+  falta para una base nueva o un entorno de pruebas;
 - que las etiquetas no se creen solas: sin `Resp: <nombre>` en el equipo
   VIV la compra se crea igual, sin responsable y con el aviso en el log;
 - que el issue se asigne a Abraham y jamás al bot;
