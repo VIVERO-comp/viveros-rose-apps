@@ -1376,7 +1376,7 @@ def venta_nueva(request: Request, q: str = "", error: str = ""):
     # confirma Odoo al crear.
     contexto["leads_crm"] = _leads_para_elegir()
     contexto["cargos_montos"] = _cargos_del_form(contexto["borrador"])
-    # Las casillas del PDF: en venta normal nacen DESMARCADAS.
+    # La casilla del PDF (garantía): en venta normal nace DESMARCADA.
     contexto["casillas"] = ventas.banderas_de(contexto["borrador"], False)
     contexto["total_con_cargos"] = (
         contexto["total_carrito"] + contexto["total_renglones_planta"]
@@ -1860,7 +1860,7 @@ def _contexto_personalizada(request, q="", error=None, renglones=None,
         "ventas_activo": ventas.configurado(), "q": (q or "").strip(),
         "resultados": None, "carrito": [], "total_carrito": 0.0,
         "borrador": borrador, "error_venta": error or None,
-        # Las casillas del PDF: en el personalizado nacen MARCADAS.
+        # La casilla del PDF (garantía): en el personalizado nace MARCADA.
         "casillas": ventas.banderas_de(borrador, True),
         "renglones": renglones or [{"texto": "", "cantidad": "", "precio": "", "descripcion": ""}],
         "servicios": servicios or [{"texto": "", "monto": "", "descripcion": ""}],
@@ -1989,8 +1989,7 @@ def _contexto_editar(request, datos_edicion, error=None):
     renglones = datos_edicion["renglones"]
     cargos = datos_edicion.get("cargos") or {}
     es_personalizada = registro["tipo"] not in cotizaciones.TIPOS
-    casillas = (datos_edicion.get("banderas")
-                or {"pago_50_50": True, "con_garantia": True})
+    casillas = (datos_edicion.get("banderas") or {"con_garantia": True})
     precio_editable = datos_edicion.get("precio_editable", True)
 
     # El subtotal de cada planta se calcula acá, no en la plantilla (nada
@@ -2026,8 +2025,7 @@ def _contexto_editar(request, datos_edicion, error=None):
     resumen_cargos = (" y ".join(partes_cargos).capitalize()
                       if partes_cargos else "sin cobrar")
 
-    resumen_pdf = (("con garantía" if casillas["con_garantia"] else "sin garantía")
-                   + " · " + ("50% abono" if casillas["pago_50_50"] else "pago completo"))
+    resumen_pdf = "con garantía" if casillas["con_garantia"] else "sin garantía"
 
     return {
         "puede_fichas": fichas.es_editora(request.state.empleada["id"]),
@@ -2058,7 +2056,7 @@ def _contexto_editar(request, datos_edicion, error=None):
         "resumen_pdf": resumen_pdf,
         "abrir_envio": bool((cargos.get("envio_opcion") or "").strip()) or monto_envio > 0,
         "abrir_cargos": monto_instalacion > 0 or monto_mantenimiento > 0,
-        "abrir_pdf": not casillas["pago_50_50"] or not casillas["con_garantia"],
+        "abrir_pdf": not casillas["con_garantia"],
     }
 
 

@@ -842,8 +842,9 @@ def crear_personalizada(empleada, nombre, celular, lineas_catalogo=None,
         "order_line": [[0, 0, linea] for linea in lineas],
     }
     if banderas is not None:
-        # Las casillas del PDF (en el personalizado nacen marcadas).
-        valores["pago_50_50"] = bool(banderas["pago_50_50"])
+        # La casilla del PDF (en el personalizado nace marcada). El pago
+        # 50/50 ya no se manda (1/10/2026): sin escribirlo, Odoo deja la
+        # orden en su default (False).
         valores["con_garantia"] = bool(banderas["con_garantia"])
     orden_id = ventas._ejecutar("sale.order", "create", [valores])
     if isinstance(orden_id, list):
@@ -1070,10 +1071,12 @@ def cargar_para_editar(n):
     estado = estados_en_odoo([orden_id]).get(orden_id)
     if estado is None:
         return None
-    # Las casillas del PDF, tal como están HOY en la orden: al editar
-    # quedan como se guardaron.
+    # La casilla del PDF (garantía), tal como está HOY en la orden: al
+    # editar queda como se guardó. El pago 50/50 ya no se lee aquí
+    # (1/10/2026): nadie lo pinta y editar nunca lo toca, así que una
+    # orden vieja que lo tenga prendido se queda exactamente así.
     flags = ventas._ejecutar("sale.order", "read", [[orden_id]],
-                             {"fields": ["pago_50_50", "con_garantia"]})[0]
+                             {"fields": ["con_garantia"]})[0]
     lineas = ventas._ejecutar(
         "sale.order.line", "search_read", [[["order_id", "=", orden_id]]],
         {"fields": ["name", "display_type", "product_id",
@@ -1179,8 +1182,7 @@ def cargar_para_editar(n):
         "renglones": renglones or [{"texto": "", "cantidad": "", "precio": "",
                                     "descripcion": ""}],
         "cargos": cargos,
-        "banderas": {"pago_50_50": bool(flags["pago_50_50"]),
-                     "con_garantia": bool(flags["con_garantia"])},
+        "banderas": {"con_garantia": bool(flags["con_garantia"])},
     }
 
 
@@ -1283,9 +1285,10 @@ def editar_cotizacion(n, servicios, plantas, renglones=None, cargos=None,
     # en el mismo write: la orden nunca queda a medias.
     cambios = {"order_line": [[5, 0, 0]] + [[0, 0, linea] for linea in lineas]}
     if banderas is not None:
-        # Solo el formulario del personalizado trae las casillas; un
-        # None (los otros tipos) no toca lo que la orden ya tenga.
-        cambios["pago_50_50"] = bool(banderas["pago_50_50"])
+        # Solo el formulario del personalizado trae la casilla; un None
+        # (los otros tipos) no toca lo que la orden ya tenga. El pago
+        # 50/50 nunca se escribe aquí (1/10/2026): una orden vieja que lo
+        # tenga prendido se queda así, aunque se edite su garantía.
         cambios["con_garantia"] = bool(banderas["con_garantia"])
     total_antes = registro.get("total")
     ventas._ejecutar("sale.order", "write", [[orden_id], cambios])

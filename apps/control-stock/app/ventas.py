@@ -1018,21 +1018,22 @@ CAMPOS_EXTRA = (CAMPOS_CLIENTE
                 # La opción de envío elegida y la nota del personalizado
                 # sobreviven a los reloads igual que los montos.
                 + ("envio_opcion", "envio_nota")
-                # Las dos casillas del PDF y su marcador (28/09/2026).
-                + ("casillas", "pago_50_50", "con_garantia"))
+                # La casilla del PDF y su marcador (28/09/2026). [1/10/2026:
+                # el pago 50/50 se retiró; queda solo la garantía.]
+                + ("casillas", "con_garantia"))
 
 
-def banderas_de(form, marcadas_por_defecto):
-    """Las dos casillas del PDF (dueño, 28/09/2026): pago 50/50 y
-    garantía. El campo escondido "casillas" marca que el formulario (o el
-    borrador) ES de la versión con casillas; sin él —formularios y
-    borradores de antes del cambio— rigen los defaults de la pantalla:
-    venta normal desmarcadas, personalizado marcadas."""
+def banderas_de(form, marcada_por_defecto):
+    """La casilla del PDF (dueño, 28/09/2026): garantía. [1/10/2026: la
+    casilla del pago 50/50 se retiró por decisión del dueño — las
+    cotizaciones nuevas ya no prometen pago en dos partes, así que no hay
+    nada que elegir ahí.] El campo escondido "casillas" marca que el
+    formulario (o el borrador) ES de la versión con casillas; sin él
+    —formularios y borradores de antes del cambio— rige el default de la
+    pantalla: venta normal desmarcada, personalizado marcada."""
     if str(form.get("casillas") or "") != "1":
-        return {"pago_50_50": bool(marcadas_por_defecto),
-                "con_garantia": bool(marcadas_por_defecto)}
-    return {"pago_50_50": str(form.get("pago_50_50") or "") == "1",
-            "con_garantia": str(form.get("con_garantia") or "") == "1"}
+        return {"con_garantia": bool(marcada_por_defecto)}
+    return {"con_garantia": str(form.get("con_garantia") or "") == "1"}
 
 
 def valores_de_cliente(datos):
@@ -1141,8 +1142,9 @@ def crear_cotizacion(empleada, nombre_cliente, celular="", datos=None,
     if pp_lead:
         valores_orden["lead_ref"] = pp_lead
     if banderas is not None:
-        # Las casillas del PDF: cómo imprime la propuesta esta orden.
-        valores_orden["pago_50_50"] = bool(banderas["pago_50_50"])
+        # La casilla del PDF: cómo imprime la propuesta esta orden. El
+        # pago 50/50 ya no se manda (1/10/2026): sin escribirlo, Odoo deja
+        # la orden en su default (False).
         valores_orden["con_garantia"] = bool(banderas["con_garantia"])
     orden_id = _ejecutar("sale.order", "create", [valores_orden])
     if isinstance(orden_id, list):
@@ -1211,8 +1213,7 @@ def _orden_vista_previa(usuario, partner, lineas, banderas=None):
     nuevas = [[0, 0, linea] for linea in lineas]
     extra = {}
     if banderas is not None:
-        extra = {"pago_50_50": bool(banderas["pago_50_50"]),
-                 "con_garantia": bool(banderas["con_garantia"])}
+        extra = {"con_garantia": bool(banderas["con_garantia"])}
     ids = _ejecutar("sale.order", "search",
                     [[["client_order_ref", "=", ref], ["state", "=", "draft"]]],
                     {"limit": 1})
