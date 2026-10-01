@@ -33,7 +33,7 @@
 
 | # | Choque | Por qué choca | Propuesta |
 |---|---|---|---|
-| C1 | **D15 "no reservar stock al pagar"** vs **D2 "el pedido nace al confirmar dentro del cobro"** | Confirmar un pedido en Odoo crea la salida de almacén y **reserva el stock** en ese momento. Está medido: `reservation_method = at_confirm` — confirmar SÍ aparta stock. [VERIFICADO M0] | Cambiar el tipo de operación de entrega a **reserva manual**. Al confirmar se crea la salida, pero no aparta nada. El stock se reserva o se descuenta solo al entregar. [REC] El REC queda, pendiente del experimento M0.5-A y decisión de Korto (**P11**). [PENDIENTE M0.5] |
+| C1 | **D15 "no reservar stock al pagar"** vs **D2 "el pedido nace al confirmar dentro del cobro"** | Confirmar un pedido en Odoo crea la salida de almacén y **reserva el stock** en ese momento. Está medido: `reservation_method = at_confirm` — confirmar SÍ aparta stock. [VERIFICADO M0] | **P11 DECIDIDA [KORTO 1/10]: se queda la reserva automática (`at_confirm`).** Confirmar solo ocurre al cobrar, así que lo pagado queda guardado para su cliente. No se cambia nada en producción. (Los dos modos quedaron medidos en pruebas: `at_confirm` aparta al confirmar; `manual` no aparta. [VERIFICADO M0.5-A/A2]) |
 | C2 | **"Autorizar entrega sin pago"** vs **D2 "el pedido solo nace al cobrar"** | Si no se cobra, el pedido no existe en Odoo y no hay salida de almacén que validar. | La autorización de admin ejecuta "confirmar sin cobrar": crea el pedido sin pago y lo marca **Entregado, debe $X**. Es la única forma de tener un pedido sin pago. [REC] |
 | C3 | **"Entregar sin pago"** vs **"no manejamos crédito"** | Entregar sin cobrar es crédito, aunque sea excepcional. | Aceptarlo como excepción explícita: solo admin, con motivo, aviso y chip rojo hasta que se cobre. [REC] |
 | C4 | **Abono 50%** y **pago parcial**: dos mecanismos para lo mismo | Para el empleado, "abono" y "pagó menos" son la misma situación. En Odoo serían dos cosas distintas: una factura de anticipo, o un pago parcial sobre una factura completa. | **Aprobada con esta forma [KORTO 1/10]:** un solo mecanismo, "Cobrar otro monto", que vive escondido en Más opciones y **NO muestra un 50% pre-escrito** (el monto arranca vacío). Si todavía no hay factura, el monto entra como anticipo. Así existe una sola forma de deber dinero en todo el sistema. Requiere producto de anticipo, que HOY NO está configurado (`sale.default_deposit_product_id = False` [VERIFICADO M0]) → [PENDIENTE M0.5] |
@@ -112,7 +112,7 @@ Traducción a Odoo, que el empleado no ve:
 
 | Orquesta | Odoo |
 |---|---|
-| Pagado | Todas las facturas en `paid` o `in_payment`, y nada por facturar. `in_payment` cuenta como pagado solo si se confirma la configuración del diario. [PENDIENTE M0.5: experimento B] Dato: hoy solo han existido `paid` y `not_paid`. [VERIFICADO M0] |
+| Pagado | Todas las facturas en `paid`, y nada pendiente de cobrar (total − pagado = 0). Medido: el pago por banco Y por caja queda `paid` directo — `in_payment` no ocurre con los diarios actuales. [VERIFICADO M0.5-B] |
 | Debe $X | X = por facturar del pedido + saldo de facturas publicadas |
 | Sin pago | Cotización sin facturas pagadas |
 | Programado | `commitment_date` del pedido + petición aceptada |
@@ -198,7 +198,9 @@ Orquesta, por detrás:
 Orquesta: confirmar → factura de anticipo $500 → publicar → pago → releer
 Tarjeta: "Debe $500"
 ```
-Saldo, en cualquier momento (antes, al entregar o después): `[COBRAR $500]` → factura final ($1,000 − $500 anticipo) → publicar → pago → **Pagado**. [ODOO-STD] [PENDIENTE M0.5: producto de anticipo + comportamiento de la factura final]
+Saldo, en cualquier momento (antes, al entregar o después): `[COBRAR $500]` → factura final ($1,000 − $500 anticipo) → publicar → pago → **Pagado**. [VERIFICADO M0.5-B: la factura final descuenta el anticipo sola]
+
+Odoo 19 maneja el anticipo mediante su mecanismo nativo de anticipo; no requiere configurar un producto de anticipo en nuestra instalación. No crear producto propio. [KORTO 1/10]
 
 ### 5.3 Entrega a domicilio
 ```
@@ -219,7 +221,7 @@ Pedido pagado o con abono → Retiro → responsable de preparar → Listo para 
 → Odoo: valida 7 y deja una salida pendiente con 3
 → tarjeta "Parcial 7/10" + [PROGRAMAR LO PENDIENTE] (☐ envío gratis: fue nuestro error)
 ```
-El tipo de operación tiene `create_backorder = ask` y el asistente existe [VERIFICADO M0]; el detalle de qué pregunta y qué crea queda [PENDIENTE M0.5-C]. Hoy el código siempre entrega todo y nunca ve la pregunta de entrega parcial de Odoo [VERIFICADO M0: ventas.py:1300-1318]. Hay que programarla.
+Medido [VERIFICADO M0.5-C]: al validar 7 de 10 aparece el asistente «¿Crear orden parcial?» con dos salidas — `process` (valida 7 y crea la salida pendiente por 3) o `process_cancel_backorder` (valida 7 y cancela el resto). **Regla para M2: el motor responde el asistente EXPLÍCITAMENTE (`process` para dejar lo pendiente), nunca a ciegas.** Hoy el código siempre entrega todo y nunca ve la pregunta de entrega parcial de Odoo [VERIFICADO M0: ventas.py:1300-1318]. Hay que programarla.
 
 ### 5.6 Cliente rechaza
 ```
@@ -250,7 +252,7 @@ Pedido → [+ AGREGAR AL PEDIDO] → busca producto → cantidad → revisa stoc
 
 | Situación | Qué hace Orquesta | Qué pasa en Odoo |
 |---|---|---|
-| **Aún no se entregó** | Agrega al **mismo pedido** | Línea nueva en el pedido; Odoo la suma a la misma salida de almacén pendiente. Se factura y cobra solo lo agregado; lo ya pagado no se toca. [ODOO-STD] [PENDIENTE M0.5-D: que se sume a la misma salida] |
+| **Aún no se entregó** | Agrega al **mismo pedido** | Línea nueva en el pedido; Odoo la suma a la misma salida de almacén pendiente. Se factura y cobra solo lo agregado; lo ya pagado no se toca. [VERIFICADO M0.5-D: la línea nueva se sumó a la MISMA salida pendiente]. OJO: con la política «por entregado», `amount_to_invoice` NO sube al agregar — **«Debe $X» se calcula siempre como total − pagado**, nunca leyendo `amount_to_invoice`. |
 | **Pedido con abono** | Agrega al mismo pedido | Sube el saldo ("Debe $X" + lo agregado). Se cobra junto con el saldo. |
 | **Ya se entregó** | **Venta nueva** del mismo cliente, enlazada al pedido anterior | Pedido nuevo con su propia entrega. Si es el mismo día y el carro no ha vuelto, se ofrece "llevar en la misma ruta". |
 | **Ya salió (En camino)** | Pregunta: "¿Lo lleva ahora o en otra entrega?" | Si va ahora: se agrega y se entrega todo junto. Si no: queda como entrega pendiente. |
@@ -507,13 +509,13 @@ Todas las ventas nuevas pasan por Orquesta. Las etapas manuales Abono y Pagado d
 | P12 | Cliente pide más con el pedido ya en camino: ¿se puede agregar en la ruta, o siempre va en otra entrega? | Flujo 5.8 |
 | P13 | Flujo del CRM de Odoo después de migrar: ¿solo lectura o se apaga? | 10.6 |
 | P14 | Pagos fuera del sistema: ¿tienes registro propio (capturas, estado de cuenta) para comparar? | 10.1 |
-| P11 | Reserva manual de stock en Odoo (C1): se prueba en M0.5-A y Korto decide con los datos. Afecta también a la tienda web: lo cobrado no se aparta. | Stock |
+| P11 | **DECIDIDA [KORTO 1/10]:** se queda la reserva automática (`at_confirm`); confirmar solo ocurre al cobrar, así que lo pagado queda guardado para su cliente. Nada se cambia en producción. | Stock |
 
 P7 eliminada (el tablero de Proyectos se borró el 24/09/2026; ver C12).
 
 **Ya verificado en Odoo el 1/10 [VERIFICADO M0]:** versión 19.0-20260723 · diarios (Yappy, Banco General, Efectivo; «Ventas Super Extra» activo y fuera de alcance; sin Tarjeta) · política de facturación MIXTA: 100 productos por entregado / 16 por pedido / 14 servicios por pedido · sin producto de anticipo (`sale.default_deposit_product_id = False`) · reserva `at_confirm` · backorder `ask` · `ship_only` · campo `locked` con 0 pedidos bloqueados · módulos instalados · ubicaciones de stock · usuarios activos.
 
-**Sigue pendiente de verificar:** grupo de auto-bloqueo de pedidos confirmados (ilegible por XML-RPC) · comportamiento de `in_payment` · producto de anticipo (comportamiento al configurarlo) · que una línea agregada se sume a la misma salida.
+**Sigue pendiente de verificar:** solo el grupo de auto-bloqueo de pedidos confirmados (ilegible por XML-RPC; dato operativo medido: 0 pedidos bloqueados). Todo lo demás quedó verificado en M0.5.
 
 ---
 
@@ -524,7 +526,7 @@ P7 eliminada (el tablero de Proyectos se borró el 24/09/2026; ver C12).
 | Fase | Qué | ¿Escribe en Odoo? |
 |---|---|---|
 | **M0** | **HECHO (1/10/2026; informe A–J entregado en el chat)** | No |
-| **M0.5** | Prueba real en **odoo-pruebas**: pedido $1,000 → anticipo $500 → entrega → saldo; y confirmar un pedido sin que aparte stock. Solo con tu OK | Solo en pruebas |
+| **M0.5** | **HECHO (1/10/2026): experimentos A·A2·B·C·D en odoo-pruebas.** Los documentos de prueba (S00218–S00222, cliente «PRUEBA ORQUESTA M0.5») se quedan en pruebas hasta que Korto diga | Solo en pruebas |
 | **M1** | Clasificación de ventas existentes + pantalla "Ventas a revisar" + consultar stock, clientes y pedidos | No |
 | **M2** | Motor de cobro, entrega, programar, regularizar. Primero en odoo-pruebas | Pruebas, después producción |
 | **Migración** | Regularizar las ventas históricas una por una | Sí, con tu OK |
@@ -538,5 +540,7 @@ Antes de producción tienen que estar definidas: cancelación después de pagar,
 2. **«Vivero: desactivar leads inactivos en Nuevo»**: la apaga Korto a mano (`active = False`) — la reemplaza el barrido de 14 días de Linear. [KORTO 1/10]
 3. **«CRM: enrich leads (IAP)»**: la apaga Korto a mano. [KORTO 1/10]
 
+**Primer paso de M2 [KORTO 1/10]:** D1 sigue vigente — las plantas pasan a facturarse **por cantidad pedida** (hoy 100 productos facturan por entregado [VERIFICADO M0]). Primero en pruebas y con OK de Korto. La regla «Debe $X = total − pagado» se mantiene igual.
 
-**Fin del documento. Esperando M0.5.**
+
+**Fin del documento. M0 y M0.5 cerrados; esperando la Parada 3 de M1.**
