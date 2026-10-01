@@ -40,7 +40,7 @@
 | C5 | Estado financiero "Abono → **Saldo pendiente** → Pagado" | "Abono" y "Saldo pendiente" describen el mismo momento. | Tres estados: **Sin pago · Debe $X · Pagado**, más el rojo **Entregado, debe $X**. [REC] |
 | C6 | **Factura final "al pagar el saldo"** + **"se puede entregar con saldo"** | Mientras no se cobra el saldo, Odoo no registra esa deuda como cuenta por cobrar del cliente: la ve como "falta facturar" en el pedido. Los reportes contables de Odoo no la muestran como deuda. | Aceptable. Orquesta muestra la deuda leyendo "por facturar + por cobrar" del pedido. Si quieres que el contador la vea, la factura final tiene que salir al entregar (decisión **P3**). [REC] |
 | C7 | **Tarjeta como método principal** | No hay integración de tarjeta para ventas en el vivero o por teléfono. PagueloFacil es solo para la tienda web y está bloqueado (error 615). [CÓDIGO / doc pagos 23/09] Además, **no existe ningún diario de Tarjeta en Odoo**. [VERIFICADO M0] | Tarjeta = registro manual del cobro hecho en el POS del banco, con comprobante. El diario de Tarjeta lo crea Korto SOLO si confirma que hay POS físico del banco (**P5** sigue abierta). |
-| C8 | **Efectivo "secundario"** | Hoy Vender solo ofrece **Yappy y Efectivo**. [CÓDIGO ventas.py:853] Los diarios reales de Odoo son **Yappy, Banco General y Efectivo** [VERIFICADO M0]: la transferencia SÍ existe (Banco General). El diario «Ventas Super Extra» sigue activo y queda fuera de Orquesta. | Orden en pantalla: Yappy · Transferencia · Tarjeta; Efectivo dentro de "Más opciones". [REC] |
+| C8 | **Efectivo "secundario"** | Hoy Vender solo ofrece **Yappy y Efectivo**. [CÓDIGO venta_cobrar.html:42-52] Los diarios reales de Odoo son **Yappy, Banco General y Efectivo** [VERIFICADO M0]: la transferencia SÍ existe (Banco General). El diario «Ventas Super Extra» sigue activo y queda fuera de Orquesta. | Orden en pantalla: Yappy · Transferencia · Tarjeta; Efectivo dentro de "Más opciones". [REC] |
 | C9 | **Alquiler con salida y regreso** | Odoo 19 Community no trae la app de Alquiler: es de la versión de pago. [ODOO-STD] `sale_renting` NO existe en esta instalación y no hay ubicación «Alquiladas» (solo WH/Existencias). [VERIFICADO M0] | El alquiler NO parte de cero: Vender ya tiene el tipo **«Alquiler / Eventos»** (28/09) con selector de cobro total/planta-por-planta y sección de plantas que se llevan y regresan. El REC **SE SUMA** a eso: una ubicación de stock "Alquiladas" con dos movimientos internos (Vivero → "Alquiladas" al llevar, y "Alquiladas" → Vivero al recoger) y dos peticiones; fechas y responsables se guardan en el addon `vivero_rose_pedidos`. [REC] |
 | C10 | **Peticiones a varias personas (D9 nuevo)** vs **un solo responsable** | En alquiler hay dos responsables: uno lleva y otro recoge. | Una petición por tarea. Alquiler = dos tareas, Llevar y Recoger, cada una con su propio aceptante. [REC] |
 | C11 | **Cambios después del pago "sin bloquear"** | Si baja el monto, hay que devolver dinero o dejarlo a favor. Eso es salida de dinero. | Cualquiera puede **subir** (se cobra la diferencia). Solo admin puede **bajar** (devolver o dejar a favor). [REC] (**P6**) |
@@ -137,7 +137,7 @@ Traducción a Odoo, que el empleado no ve:
 | Autorizar entrega sin pago | ✔ | — | — |
 | Ver Registro completo | ✔ | lo suyo | lo suyo |
 
-Odoo no puede aplicar esta tabla: la app entra a Odoo con **un solo usuario**. [CÓDIGO ventas.py:69] La aplica Orquesta, y el Registro guarda el nombre real.
+Odoo no puede aplicar esta tabla: la app entra a Odoo con **un solo usuario**. [CÓDIGO ventas.py:89-98] La aplica Orquesta, y el Registro guarda el nombre real.
 
 En Odoo, Rubén y Mary comparten la cuenta MARY/RUBEN [VERIFICADO M0]: allá son indistinguibles. La tabla la aplica Orquesta y el Registro guarda el nombre real (ya dicho). Rubén es además admin de Control desde el 1/10.
 
@@ -165,7 +165,7 @@ Saldo, en cualquier momento (antes, al entregar o después): `[COBRAR $500]` →
 
 ### 5.3 Entrega a domicilio
 ```
-Pedido pagado o con abono → [PROGRAMAR] → fecha (mar/mié) + ☐Korto ☐Rubén ☐Mary → [ENVIAR PETICIÓN]
+Pedido pagado o con abono → [PROGRAMAR] → fecha (días por decidir, ver regla 11) + ☐Korto ☐Rubén ☐Mary → [ENVIAR PETICIÓN]
 → el primero que toca Aceptar (en la app o en el correo) queda como responsable → Programado
 → [SALIR] En camino → [ENTREGAR] → foto opcional → valida la salida en Odoo → Entregado
 ```
@@ -397,7 +397,7 @@ Orquesta no empieza vacía. Antes de activar cualquier botón que escriba en Odo
 | Fuente | Qué dice | ¿Es verdad? |
 |---|---|---|
 | **Facturas y pagos en Odoo** | Cuánto se facturó y cuánto se pagó de verdad | **Sí, manda** |
-| **Etapas del Flujo en el CRM de Odoo** (Cotizado · Facturado · Abono · Pagado) | El código mueve solo hasta Facturado; Abono y Pagado los mueves tú a mano [CÓDIGO ventas.py:879] | Información externa: sirve para comparar |
+| **Etapas del Flujo en el CRM de Odoo** (Cotizado · Facturado · Abono · Pagado) | El código mueve solo hasta Facturado; Abono y Pagado los mueves tú a mano [CÓDIGO ventas.py:1411-1431] | Información externa: sirve para comparar |
 | **Ventas de la pestaña Vender** (tabla `ventas_locales` en SQLite) | Hasta qué paso llegó cada cobro de la app | Información externa |
 | **Etiquetas en Linear** | Las reales son **Abono 50% · Pagado 100% · Cobrar saldo** (automáticas desde Odoo); "Facturado" no existe y "Pedido completado" es etiqueta de WhatsApp, no de Linear [VERIFICADO M0/bitácora 24-28/09] | Información externa |
 | **Lo que sabes tú** | Pagos por Yappy o transferencia que nunca se registraron | Se carga a mano en la revisión |
