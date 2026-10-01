@@ -539,6 +539,11 @@ a{color:inherit}
    el "+" flotante. Todo lo demás de la pantalla grande (barra, chips,
    buscador, vistas, sidebar) se esconde. */
 .movil,.fab,body>nav,.barra-m{display:none}
+/* La copia del teléfono del segmento de vistas de Compras (tablero /
+   proveedores, 01/10/2026). En computadora no se ve: ahí manda la copia
+   que vive dentro de la `.barra`. Mismo reparto que los leads por agendar
+   del calendario, que también se pintan dos veces y los decide el CSS. */
+.segmento.seg-movil{display:none}
 
 @media (max-width:767.98px){
   /* Solo navbar + calendario: fuera la barra de controles, los chips, la
@@ -548,6 +553,13 @@ a{color:inherit}
      respuesta a lo que la empleada acaba de hacer. */
   .barra,.chips,a.franja,.zona,.lado{display:none}
   .tablero{padding:10px 12px calc(24px + env(safe-area-inset-bottom));gap:10px}
+
+  /* …y por eso el segmento de vistas de Compras aparece acá: la `.barra`
+     que lo lleva en computadora está escondida justo arriba, y sin esta
+     copia no habría cómo pasar del tablero a Proveedores en el celular.
+     Ocupa el ancho entero porque es la única navegación de la pantalla. */
+  .segmento.seg-movil{display:flex;width:100%;justify-content:stretch}
+  .segmento.seg-movil a{flex:1;text-align:center;padding:8px 10px;font-size:12.5px}
 
   /* ---------- la barra única de arriba (artefacto aprobado, 23/09/2026):
      hamburguesa · título · acción. Nada flota sobre el contenido. ---------- */

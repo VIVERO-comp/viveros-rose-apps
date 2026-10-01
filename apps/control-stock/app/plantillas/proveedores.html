@@ -55,18 +55,26 @@
   </aside>
 
   <div class="tablero">
-    {% with bm_titulo='Proveedores', bm_sub='Lo que de verdad se les compró',
-            bm_volver='/compras' %}{% include '_barra_movil.html' %}{% endwith %}
+    {# Sin `bm_volver`: el «← Volver» es para los formularios de pantalla
+       completa, y esta no es un formulario — es una de las dos vistas de
+       Compras, y se cambia con el segmento, igual que en el tablero. Así
+       el teléfono conserva además su hamburguesa, que con «← Volver» se
+       perdía. #}
+    {% with bm_titulo='Proveedores',
+            bm_sub='Lo que de verdad se les compró' %}{% include '_barra_movil.html' %}{% endwith %}
+    {% with vc_activa='proveedores', vc_clase='seg-movil' %}{% include '_vistas_compras.html' %}{% endwith %}
     <div class="barra">
       <button class="btn icono hamb" type="button" aria-label="Mostrar u ocultar el menú"
               aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
       <h3>Proveedores</h3>
+      {# El MISMO segmento del tablero. Reemplaza al «← Compras» que esta
+         pantalla traía: eran dos inventos para la misma cosa. #}
+      {% with vc_activa='proveedores' %}{% include '_vistas_compras.html' %}{% endwith %}
       <span class="crece"></span>
       <span class="tenue" style="font-size:12px">Todo calculado de Odoo —
         «Preferido» es la única marca a mano</span>
-      <a class="btn" href="/compras">← Compras</a>
     </div>
 
     {# Las X de los banners vuelven a la vista limpia, sin query: acá no hay

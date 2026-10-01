@@ -60,12 +60,18 @@
     {% with bm_titulo='Compras', bm_sub='Lo que le compramos al proveedor',
             bm_accion_url=('/compras?nueva=1' if puede_mover else ''),
             bm_accion_texto='+ Compra' %}{% include '_barra_movil.html' %}{% endwith %}
+    {# La copia del teléfono del segmento de vistas: bajo 768px la `.barra`
+       está escondida, y sin esto no habría cómo llegar a Proveedores desde
+       el celular. #}
+    {% with vc_activa='tablero', vc_clase='seg-movil' %}{% include '_vistas_compras.html' %}{% endwith %}
     <div class="barra">
       <button class="btn icono hamb" type="button" aria-label="Mostrar u ocultar el menú"
               aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
       <h3>Compras</h3>
+      {# Las dos vistas de esta pestaña, con el segmento de Control. #}
+      {% with vc_activa='tablero' %}{% include '_vistas_compras.html' %}{% endwith %}
       <span class="crece"></span>
       <span class="tenue" style="font-size:12px">
         {% if alc.admin %}Arrastra para corregir la columna
