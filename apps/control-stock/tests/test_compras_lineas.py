@@ -353,7 +353,9 @@ def test_al_crear_el_producto_vuelve_a_la_compra_con_la_linea_puesta(
 
     respuesta = cliente.post("/productos/crear", data={
         "tipo": "insumo", "volver": "compra", "nombre": "Corteza de pino",
-        "unidad": "saco", "precio": "0", "costo": "4.50"},
+        # "saco" salió de las unidades el 01/10/2026 (dueño): el formulario
+        # ofrece litro y unidad, que son las que Odoo tiene.
+        "unidad": "unidad", "precio": "0", "costo": "4.50"},
         follow_redirects=False)
     assert respuesta.status_code == 303
     destino = respuesta.headers["location"]
@@ -386,7 +388,7 @@ def test_si_odoo_no_dice_el_id_del_producto_la_linea_no_se_pierde(
     monkeypatch.setattr(ventas, "_ejecutar", falso)
     cliente.post("/productos/crear", data={
         "tipo": "insumo", "volver": "compra", "nombre": "Corteza de pino",
-        "unidad": "saco"}, follow_redirects=False)
+        "unidad": "unidad"}, follow_redirects=False)
     lineas = compras.borrador_de(USUARIO)["lineas"]
     assert len(lineas) == 1
     assert lineas[0]["sku"] == "IN-CORTEZA-DE-PINO"

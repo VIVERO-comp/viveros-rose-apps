@@ -89,7 +89,7 @@ def odoo(monkeypatch):
 
 MACETA = {"nombre": "Maceta barro 30", "material": "barro", "diametro": "30",
           "alto": "25", "color": "Terracota", "precio": "12.50", "costo": "6"}
-INSUMO = {"nombre": "Abono orgánico", "unidad": "saco", "precio": "9",
+INSUMO = {"nombre": "Abono orgánico", "unidad": "unidad", "precio": "9",
           "costo": "4.50"}
 
 
@@ -282,15 +282,37 @@ def test_la_unidad_se_busca_entre_las_que_odoo_ya_tiene(odoo):
     _crear("insumo", {**INSUMO, "unidad": "litro"})
     assert odoo.creados[0]["uom_id"] == 11
     assert odoo.creados[0]["uom_po_id"] == 11
+    # Y la otra que ofrece el formulario también calza ("Unidades").
+    _crear("insumo", {**INSUMO, "unidad": "unidad"})
+    assert odoo.creados[1]["uom_id"] == 1
+
+
+def test_el_formulario_solo_ofrece_litro_y_unidad(odoo):
+    """«Saco» se quitó (dueño, 01/10/2026: «saco no lo pongas, ponlo como
+    insumo y listo»): en este Odoo esa unidad de medida no existe y él no
+    quiso crearla. Quedan las dos que Odoo sí tiene."""
+    assert [u["clave"] for u in altas.UNIDADES] == ["litro", "unidad"]
+    assert all(altas.id_de_unidad(u["clave"]) for u in altas.UNIDADES)
+    # Y lo que ya no se ofrece tampoco se acepta si alguien lo postea.
+    limpio, error = altas.revisar("insumo", {**INSUMO, "unidad": "saco"})
+    assert limpio is None
+    assert "unidad" in error.lower()
+    assert odoo.creados == []
 
 
 def test_una_unidad_que_odoo_no_tiene_no_se_crea(odoo):
-    """No hay "Saco" en Odoo: el insumo queda con la unidad por defecto y la
-    pantalla lo dice. Nunca se crea una unidad de medida."""
-    hecho = _crear("insumo", INSUMO)  # saco
+    """La red de seguridad: si alguien renombra o archiva una unidad en Odoo,
+    el insumo se crea igual con la unidad por defecto y la pantalla lo dice.
+    Nunca se crea una unidad de medida. (Hoy las dos del formulario existen,
+    así que esto no se dispara por el camino normal.)"""
+    odoo.unidades = [{"id": 21, "name": "kg"}]
+    altas.reiniciar_cache()
+    hecho = _crear("insumo", INSUMO)
     assert "uom_id" not in odoo.creados[0]
     assert "sin_unidad" in hecho["avisos"]
     assert ("uom.uom", "create") not in odoo.llamadas
+    # El insumo quedó creado: una unidad que no calza no bloquea el alta.
+    assert odoo.creados[0]["default_code"] == "IN-ABONO-ORGANICO"
 
 
 def test_sin_unidad_elegida_no_se_crea_nada(odoo):
@@ -382,11 +404,11 @@ def test_el_boton_de_stock_ahora_lleva_a_elegir_el_tipo(cliente, con_inventario)
     assert "abrirAgregar()" not in html
 
 
-def _opciones_del_selector(html):
-    """Los value= del <select name="tipo">, en orden."""
+def _opciones_del_selector(html, campo="tipo"):
+    """Los value= de ese <select>, en orden."""
     import re
 
-    trozo = html.split('name="tipo"', 1)[1].split("</select>", 1)[0]
+    trozo = html.split(f'name="{campo}"', 1)[1].split("</select>", 1)[0]
     return re.findall(r'value="([^"]*)"', trozo)
 
 
@@ -487,6 +509,16 @@ def test_el_formulario_de_insumo_trae_su_unidad_y_nada_de_maceta(
     assert 'name="foto"' not in html
 
 
+def test_el_selector_de_unidad_ofrece_litro_y_unidad_y_nada_mas(
+        cliente, con_inventario, odoo):
+    """En la pantalla, exactamente las dos que Odoo tiene, con el placeholder
+    vacío primero. «Saco» ya no se ofrece (dueño, 01/10/2026)."""
+    html = cliente.get("/productos/crear?tipo=insumo").text
+    assert _opciones_del_selector(html, "unidad") == ["", "litro", "unidad"]
+    assert ">Litro<" in html and ">Unidad<" in html
+    assert "Saco" not in html
+
+
 def test_el_post_crea_y_redirige_con_la_referencia(cliente, con_inventario, odoo):
     r = cliente.post("/productos/crear",
                      data={"tipo": "maceta", **MACETA},
@@ -501,6 +533,10 @@ def test_el_post_crea_y_redirige_con_la_referencia(cliente, con_inventario, odoo
 
 
 def test_el_post_con_avisos_los_pasa_en_la_url(cliente, con_inventario, odoo):
+    # Un Odoo sin ninguna unidad que calce: el insumo se crea igual y el
+    # aviso viaja como código en la URL del redirect.
+    odoo.unidades = [{"id": 21, "name": "kg"}]
+    altas.reiniciar_cache()
     r = cliente.post("/productos/crear",
                      data={"tipo": "insumo", **INSUMO},
                      follow_redirects=False)

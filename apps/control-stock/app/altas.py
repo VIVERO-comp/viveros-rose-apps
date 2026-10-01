@@ -71,9 +71,15 @@ MATERIALES = (("fibra", "Fibra"), ("barro", "Barro"),
 # La unidad del insumo se mapea a una unidad de medida que Odoo YA tenga:
 # esta app no crea unidades. `nombres` son los nombres plausibles en Odoo
 # (español e inglés); se comparan sin tildes ni mayúsculas.
+#
+# SOLO van las que Odoo tiene de verdad. "Saco" estaba y se QUITÓ (dueño,
+# 01/10/2026: «saco no lo pongas, ponlo como insumo y listo»): en este Odoo
+# no existe esa unidad de medida, así que un insumo por saco se creaba con la
+# unidad por defecto y un aviso. Se le ofreció crearla en Odoo y dijo que no.
+# Litro cae en "L" (id 13 en el Odoo real) y unidad en "Unidades" (id 1).
+# Para sumar una unidad nueva: primero se crea en Odoo (a mano, con su OK) y
+# después entra acá con sus nombres plausibles.
 UNIDADES = (
-    {"clave": "saco", "etiqueta": "Saco",
-     "nombres": ("Saco", "Sacos", "Bolsa", "Bag")},
     {"clave": "litro", "etiqueta": "Litro",
      "nombres": ("L", "Litro", "Litros", "Liter", "Litre", "Liters")},
     {"clave": "unidad", "etiqueta": "Unidad",
@@ -248,11 +254,16 @@ def _sin_tildes(texto):
 
 
 def id_de_unidad(clave):
-    """El id de la unidad de medida de Odoo para saco/litro/unidad, o None.
+    """El id de la unidad de medida de Odoo para litro / unidad, o None.
 
     Busca entre las que YA existen, comparando el nombre sin tildes ni
     mayúsculas. No crea unidades: sin coincidencia el insumo se queda con la
     que Odoo ponga por defecto y la pantalla lo dice.
+
+    Hoy las dos que ofrece el formulario existen en el Odoo real, así que por
+    el camino normal esto no devuelve None. El camino sigue acá igual, y con
+    su prueba: es la red de seguridad para el día en que alguien renombre o
+    archive una unidad en Odoo — eso NO puede dejar sin crear un insumo.
     """
     if not ventas.configurado():
         return None
@@ -572,7 +583,7 @@ def tipos_para_pantalla():
     }]
     for clave, titulo, detalle in (
             ("maceta", "Maceta", "Material, diámetro, alto y color"),
-            ("insumo", "Insumo", "Por saco, litro o unidad")):
+            ("insumo", "Insumo", "Por litro o por unidad")):
         nombre_categoria = CATEGORIA_DE[clave]
         if categorias is None:
             motivo = ("No se pudo hablar con Odoo, así que no se puede crear "
