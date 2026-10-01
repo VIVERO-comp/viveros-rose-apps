@@ -4459,19 +4459,25 @@ def proveedores_pantalla(request: Request):
     (`proveedores.listar_o_vacio`), nunca un error ni un 500.
 
     `?abrir=<id>` trae la ficha de UN proveedor en el panel lateral: sus
-    datos y, de `product.supplierinfo`, lo que le compramos con su precio.
-    SOLO LECTURA por ahora — asignar productos nuevos espera el plan
-    completo que está mirando el dueño.
+    datos y, de `product.supplierinfo`, lo que le compramos con su precio
+    — y desde el 01/10/2026, ya editable (ver `/compras/proveedores/producto`
+    más abajo). `?buscar=<texto>` busca en el catálogo (PL-/MC-/IN-) para
+    asignarle un producto nuevo: es un GET porque buscar no escribe nada,
+    y así recargar o volver desde un error nunca pierde lo que se había
+    escrito.
     """
     resultado = proveedores.listar_o_vacio()
     lista = resultado["proveedores"]
     abrir = (request.query_params.get("abrir") or "").strip()
-    abierto, productos_abierto = None, None
+    buscar = (request.query_params.get("buscar") or "").strip()[:120]
+    abierto, productos_abierto, buscados = None, None, None
     error_aviso = request.query_params.get("error")
     if abrir and resultado["ok"]:
         abierto = proveedores.uno(abrir, lista)
         if abierto is not None:
             productos_abierto = proveedores.productos_de(abierto["id"])
+            if buscar:
+                buscados = proveedores.buscar_para_asignar(buscar)
         elif not error_aviso:
             # Un enlace viejo (o tocado a mano): no es un 500, es el mismo
             # caso de "ya no está" que ya existe en Compras y en Control.
@@ -4485,6 +4491,11 @@ def proveedores_pantalla(request: Request):
         "es_admin": _es_admin(request.state.empleada),
         "abierto": abierto,
         "productos_abierto": productos_abierto,
+        "buscar": buscar,
+        "buscados": buscados,
+        "delay_comun": (proveedores.delay_comun(productos_abierto["productos"])
+                        if productos_abierto and productos_abierto["ok"]
+                        else None),
         "aviso": request.query_params.get("aviso"),
         "error_aviso": error_aviso,
     })
@@ -4643,3 +4654,87 @@ def _recepcion_del_form(form):
         elif clave.startswith("roto-"):
             danadas[clave[len("roto-"):]] = form.get(clave)
     return llegadas, danadas
+# El catálogo de un proveedor, editable (01/10/2026): pedido literal del
+# dueño, «quiero poder asignar plantas a cada proveedor, precio, etc.».
+# `app/proveedores.py` tiene las cuatro escrituras; esta ruta solo lee el
+# formulario y decide CUÁL de las cuatro corresponde — por el NOMBRE del
+# botón que llegó, igual que `/compras/borrador` distingue agregar/quitar.
+# Admin-only, como «Marcar Preferido»: es la misma pantalla y el mismo
+# tipo de decisión (plata de un proveedor), no una del día a día de un
+# empleado cualquiera.
+# ---------------------------------------------------------------------------
+
+def _proveedores_vuelve_a_la_ficha(partner_id, buscar="", aviso="", error=""):
+    """El 303 de vuelta a la FICHA abierta (a diferencia de
+    `_proveedores_vuelve`, que cierra el panel): toda escritura del
+    catálogo pasa por acá, así que quien agrega tres productos seguidos
+    no tiene que volver a abrir la ficha cada vez, y el buscador conserva
+    lo que tenía escrito."""
+    url = f"/compras/proveedores?abrir={quote(str(partner_id))}"
+    if buscar:
+        url += "&buscar=" + quote(buscar)
+    if aviso:
+        url += "&aviso=" + quote(aviso)
+    if error:
+        url += "&error=" + quote(error)
+    return RedirectResponse(url, status_code=303)
+
+
+@app.post("/compras/proveedores/producto")
+async def proveedores_producto(request: Request):
+    """Las cuatro formas de tocar el catálogo de UN proveedor: agregar,
+    cambiar precio, quitar, y los días que tarda (que se escriben en
+    TODAS sus líneas a la vez — es un dato del proveedor, no del
+    producto). Cuál de las cuatro llegó se decide por el NOMBRE del botón
+    que se apretó, nunca por adivinar: cada botón manda su propio campo.
+    """
+    form = await request.form()
+    partner_id = (form.get("partner_id") or "").strip()
+    buscar = (form.get("buscar") or "").strip()[:120]
+    if not _es_admin(request.state.empleada):
+        return _proveedores_vuelve_a_la_ficha(
+            partner_id, buscar=buscar,
+            error="Solo un admin puede editar el catálogo de un proveedor.")
+
+    tmpl_agregar = (form.get("agregar") or "").strip()
+    if tmpl_agregar:
+        error = proveedores.agregar_producto(
+            partner_id, tmpl_agregar,
+            precio=form.get(f"precio-{tmpl_agregar}"),
+            cantidad_minima=form.get(f"minimo-{tmpl_agregar}"),
+            codigo_proveedor=form.get(f"codigo-{tmpl_agregar}"),
+            nombre_proveedor=form.get(f"nombreprov-{tmpl_agregar}"))
+        return _proveedores_vuelve_a_la_ficha(
+            partner_id, buscar=buscar, error=error,
+            aviso=("" if error else "Producto agregado al catálogo."))
+
+    linea_guardar = (form.get("guardar") or "").strip()
+    if linea_guardar:
+        error = proveedores.actualizar_linea(
+            partner_id, linea_guardar,
+            precio=form.get(f"precio-{linea_guardar}"),
+            cantidad_minima=form.get(f"minimo-{linea_guardar}"),
+            codigo_proveedor=form.get(f"codigo-{linea_guardar}"),
+            nombre_proveedor=form.get(f"nombreprov-{linea_guardar}"))
+        return _proveedores_vuelve_a_la_ficha(
+            partner_id, error=error,
+            aviso=("" if error else "Precio actualizado."))
+
+    linea_quitar = (form.get("quitar") or "").strip()
+    if linea_quitar:
+        error = proveedores.quitar_producto(partner_id, linea_quitar)
+        return _proveedores_vuelve_a_la_ficha(
+            partner_id, error=error,
+            aviso=("" if error else "Producto quitado del proveedor."))
+
+    if (form.get("accion") or "").strip() == "dias":
+        error = proveedores.cambiar_dias_entrega(
+            partner_id, form.get("dias_valor"))
+        return _proveedores_vuelve_a_la_ficha(
+            partner_id, error=error,
+            aviso=("" if error else "Días que tarda actualizados en "
+                                    "todas sus líneas."))
+
+    return _proveedores_vuelve_a_la_ficha(
+        partner_id, buscar=buscar,
+        error="No llegó ninguna acción para hacer.")

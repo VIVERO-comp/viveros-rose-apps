@@ -376,10 +376,12 @@ def uno(partner_id, lista=None):
 # mientras estaba en construcción): «quiero poder asignar plantas a cada
 # proveedor, precio, etc.» Lo que ya existe en Odoo para esto es
 # `product.supplierinfo` (producto + proveedor + precio + cantidad mínima),
-# que vino con el módulo `purchase` instalado el 30/09. **Por ahora esto
-# SOLO LEE** — el dueño está mirando el plan completo en un artefacto y
-# todavía no lo aprobó, así que la pantalla de asignar/editar precios NO se
-# construye en esta tanda.
+# que vino con el módulo `purchase` instalado el 30/09.
+#
+# **01/10/2026: ya se puede editar.** `productos_de()` sigue siendo la
+# única lectura (y sigue solo lectura); lo nuevo son las cuatro escrituras
+# de más abajo — agregar, cambiar precio, quitar, y el delay compartido —
+# cada una pensada para el botón exacto que la pide.
 #
 # MEDIDO CONTRA EL ODOO REAL (30/09/2026, por la coordinadora): el
 # `fields_get` de `product.supplierinfo` tiene los seis campos de abajo,
@@ -476,6 +478,11 @@ def productos_de(partner_id):
         # "todavía no se puso" — nunca se pinta un $0.00 que nadie cobra.
         precio = f.get("price") or None
         productos.append({
+            # El id de la LÍNEA (`product.supplierinfo`), no el del
+            # producto: es lo que identifica a cambiar-precio y a quitar —
+            # dos proveedores con el mismo producto tienen cada uno su
+            # propia línea, y esto es lo que las distingue.
+            "linea_id": f["id"],
             "producto_tmpl_id": tmpl_id, "nombre": nombre, "sku": sku,
             "precio": (round(float(precio), 2) if precio else None),
             "cantidad_minima": f.get("min_qty") or 0,
@@ -491,5 +498,372 @@ def productos_de(partner_id):
             # cuando el proveedor no escribió ninguno de los dos.
             "nombre_proveedor": f.get("product_name") or "",
             "codigo_proveedor": f.get("product_code") or "",
+        })
+    return {"ok": True, "error": "", "productos": productos}
+
+
+def uno_de(productos, linea_id):
+    """Una línea de `productos_de(...)["productos"]` por su `linea_id`, o
+    None. Mismo patrón que `uno()`: filtra sobre lo ya leído, no pide otra
+    consulta a Odoo solo para encontrar cuál es cuál."""
+    try:
+        linea_id = int(linea_id)
+    except (TypeError, ValueError):
+        return None
+    for p in (productos or ()):
+        if p["linea_id"] == linea_id:
+            return p
+    return None
+
+
+def delay_comun(productos):
+    """El «días que tarda» que YA comparten TODAS las líneas de la lista,
+    o None si no hay ninguna línea o si no están todas de acuerdo. Nunca
+    se inventa un valor «común» promediando: o todas dicen lo mismo, o no
+    hay un común que mostrar."""
+    valores = {p["dias_entrega"] for p in (productos or ())
+              if p.get("dias_entrega") is not None}
+    return valores.pop() if len(valores) == 1 else None
+
+
+# ---------------------------------------------------------------------------
+# Escribir el catálogo de un proveedor (01/10/2026)
+#
+# Pedido literal del dueño: «quiero poder asignar plantas a cada
+# proveedor, precio, etc.» Cuatro escrituras, una por cada cosa que pidió:
+#
+#   1. agregar_producto      — agregarle un producto con su precio
+#   2. actualizar_linea      — cambiarle el precio a uno que ya está
+#   3. quitar_producto       — quitarle un producto (la RELACIÓN, nunca el
+#                              producto propio)
+#   4. cambiar_dias_entrega  — los días que tarda, que son del PROVEEDOR y
+#                              se escriben en TODAS sus líneas a la vez
+#
+# Las cuatro son fail-soft: devuelven "" en éxito o el texto del error,
+# nunca revientan un 500 por un Odoo que tuvo un mal rato. Ninguna crea un
+# `product.template`/`product.product` — si el producto no existe, la
+# pantalla manda a `/productos/crear`, que ya sabe hacerlo con sus reglas
+# (sin impuestos); escribir un segundo camino de alta acá sería
+# exactamente lo que la consigna pidió no hacer.
+#
+# `min_qty`, `delay` y `currency_id` son OBLIGATORIOS en `product.
+# supplierinfo`: un `create` sin los tres revienta. Los valores que esta
+# pantalla pone por defecto, y por qué:
+#
+# - `min_qty` → 0.0 cuando no se escribió nada. Es el propio default de
+#   fábrica de Odoo (su formulario nace igual) y significa «sin mínimo» —
+#   nunca «cero plantas».
+# - `currency_id` → la moneda de la COMPAÑÍA (`_moneda_de_la_compania`,
+#   cacheada 1 hora: no cambia nunca en la práctica). `product.
+#   supplierinfo` no tiene una moneda «del proveedor» separada en este
+#   Odoo, así que no hay otra fuente razonable.
+# - `delay` → el que YA comparten todas las demás líneas de ESE proveedor
+#   (`_delay_para_nueva_linea`), o `DELAY_DEFECTO` (1, el mismo default de
+#   fábrica de Odoo) si todavía no tiene ninguna o no están de acuerdo.
+#   Es la decisión del punto 4 de la consigna: **el delay es del
+#   proveedor, no de cada producto**, así que una planta nueva no lo pide
+#   — hereda la cadencia que el proveedor ya tenga, y la ÚNICA forma de
+#   cambiarlo después es `cambiar_dias_entrega`, que escribe las líneas
+#   TODAS de una vez, nunca una sola. Si el dueño quiere un delay distinto
+#   desde el primer producto, lo ajusta ahí mismo apenas lo agrega.
+# ---------------------------------------------------------------------------
+
+DELAY_DEFECTO = 1  # el default de fábrica de Odoo para `product.supplierinfo.delay`
+
+_CACHE_MONEDA = {"id": None, "en": 0.0}
+TTL_MONEDA = 3600  # 1 hora: la moneda de la compañía no cambia en la práctica
+
+
+def reiniciar_cache_moneda():
+    """Solo para pruebas: sin esto, la moneda resuelta en una prueba queda
+    pegada para las siguientes (mismo motivo que `ventas.reiniciar_cache`)."""
+    _CACHE_MONEDA["id"] = None
+    _CACHE_MONEDA["en"] = 0.0
+
+
+def _moneda_de_la_compania():
+    """El id de `res.currency` de la compañía, o None si no se pudo leer.
+
+    None es «todavía no se puede escribir» — nunca se inventa un id de
+    moneda para no dejar un `create` a medias.
+    """
+    ahora = time.time()
+    if _CACHE_MONEDA["id"] and ahora - _CACHE_MONEDA["en"] < TTL_MONEDA:
+        return _CACHE_MONEDA["id"]
+    try:
+        filas = ventas._ejecutar(
+            "res.company", "search_read", [[]],
+            {"fields": ["currency_id"], "limit": 1, "order": "id"})
+    except Exception as error:
+        registro_aviso("No se pudo leer la moneda de la compañía: "
+                       f"{ventas._mensaje_de_error(error)}")
+        return None
+    crudo = filas and filas[0].get("currency_id")
+    if not crudo:
+        return None
+    _CACHE_MONEDA["id"] = crudo[0]
+    _CACHE_MONEDA["en"] = ahora
+    return crudo[0]
+
+
+def _delay_para_nueva_linea(partner_id):
+    """El delay que le toca a una línea NUEVA de este proveedor (ver nota
+    de arriba): el que ya comparten TODAS sus líneas existentes, o
+    `DELAY_DEFECTO` si no tiene ninguna todavía, si no están de acuerdo, o
+    si Odoo no contestó esta consulta — nunca se deja de crear la línea
+    por esto, el peor caso es que nazca con el default de fábrica."""
+    try:
+        filas = ventas._ejecutar(
+            "product.supplierinfo", "search_read",
+            [[["partner_id", "=", int(partner_id)]]],
+            {"fields": ["delay"], "limit": 1000})
+    except Exception:
+        return DELAY_DEFECTO
+    valores = {f.get("delay") for f in filas if f.get("delay") is not None}
+    return valores.pop() if len(valores) == 1 else DELAY_DEFECTO
+
+
+def _numero_o_cero(crudo):
+    """Un precio o una cantidad mínima escritos a mano: vacío → 0.0 («sin
+    precio todavía» / «sin mínimo», los dos defaults correctos de esta
+    pantalla); ilegible o negativo → None, que quien llama trata como
+    error y nunca como 0."""
+    return ventas._num_positivo(crudo, defecto=0.0, permitir_cero=True)
+
+
+def agregar_producto(partner_id, producto_tmpl_id, precio="",
+                     cantidad_minima="", codigo_proveedor="",
+                     nombre_proveedor=""):
+    """Punto 1: agregarle un producto a un proveedor, con su precio.
+
+    **Nunca duplica.** Si ESTE proveedor ya tenía una línea para ESTE
+    producto (la pantalla lo ofrece igual si el buscador lo vuelve a
+    traer, o por un doble clic), se actualiza esa misma fila en vez de
+    crear una segunda — `product.supplierinfo` es una fila por PAR
+    proveedor-producto, nunca dos.
+
+    Devuelve "" en éxito, o el texto del error.
+    """
+    try:
+        partner_id = int(partner_id)
+        producto_tmpl_id = int(producto_tmpl_id)
+    except (TypeError, ValueError):
+        return "No llegó qué proveedor o qué producto asignar."
+    if not ventas.configurado():
+        return "Odoo no está conectado."
+    precio_valor = _numero_o_cero(precio)
+    if precio_valor is None:
+        return "El precio tiene que ser un número (o quedarse vacío)."
+    minimo_valor = _numero_o_cero(cantidad_minima)
+    if minimo_valor is None:
+        return "La cantidad mínima tiene que ser un número (o quedarse vacía)."
+    valores = {
+        "price": precio_valor,
+        "min_qty": minimo_valor,
+        "product_code": (codigo_proveedor or "").strip(),
+        "product_name": (nombre_proveedor or "").strip(),
+    }
+    try:
+        existentes = ventas._ejecutar(
+            "product.supplierinfo", "search_read",
+            [[["partner_id", "=", partner_id],
+              ["product_tmpl_id", "=", producto_tmpl_id]]],
+            {"fields": ["id"], "limit": 1})
+    except Exception as error:
+        return ventas._mensaje_de_error(error)
+    try:
+        if existentes:
+            ventas._ejecutar("product.supplierinfo", "write",
+                             [[existentes[0]["id"]], valores])
+        else:
+            moneda_id = _moneda_de_la_compania()
+            if not moneda_id:
+                return ("No se pudo leer la moneda de la compañía en Odoo; "
+                        "probá de nuevo.")
+            valores.update({
+                "partner_id": partner_id,
+                "product_tmpl_id": producto_tmpl_id,
+                "currency_id": moneda_id,
+                "delay": _delay_para_nueva_linea(partner_id),
+            })
+            ventas._ejecutar("product.supplierinfo", "create", [valores])
+    except Exception as error:
+        return ventas._mensaje_de_error(error)
+    return ""
+
+
+def actualizar_linea(partner_id, linea_id, precio="", cantidad_minima="",
+                     codigo_proveedor="", nombre_proveedor=""):
+    """Punto 2: cambiarle el precio (o el mínimo, o cómo le llama) a una
+    línea que YA ESTÁ. Nunca toca otra: `linea_id` tiene que pertenecer a
+    ESE `partner_id` o la escritura se rechaza antes de llegar a Odoo —
+    así un id de línea de OTRO proveedor nunca se pisa por un formulario
+    mandado a mano o un dato viejo.
+
+    Devuelve "" en éxito, o el texto del error.
+    """
+    try:
+        partner_id = int(partner_id)
+        linea_id = int(linea_id)
+    except (TypeError, ValueError):
+        return "No llegó qué línea cambiar."
+    if not ventas.configurado():
+        return "Odoo no está conectado."
+    precio_valor = _numero_o_cero(precio)
+    if precio_valor is None:
+        return "El precio tiene que ser un número (o quedarse vacío)."
+    minimo_valor = _numero_o_cero(cantidad_minima)
+    if minimo_valor is None:
+        return "La cantidad mínima tiene que ser un número (o quedarse vacía)."
+    try:
+        filas = ventas._ejecutar(
+            "product.supplierinfo", "read", [[linea_id]],
+            {"fields": ["partner_id"]})
+    except Exception as error:
+        return ventas._mensaje_de_error(error)
+    if not filas:
+        return "Esa línea ya no está en Odoo."
+    dueno = (filas[0].get("partner_id") or [None])[0]
+    if dueno != partner_id:
+        return "Esa línea no es de este proveedor."
+    try:
+        ventas._ejecutar("product.supplierinfo", "write", [[linea_id], {
+            "price": precio_valor,
+            "min_qty": minimo_valor,
+            "product_code": (codigo_proveedor or "").strip(),
+            "product_name": (nombre_proveedor or "").strip(),
+        }])
+    except Exception as error:
+        return ventas._mensaje_de_error(error)
+    return ""
+
+
+def quitar_producto(partner_id, linea_id):
+    """Punto 3: quitarle un producto a un proveedor — borra la RELACIÓN
+    (`product.supplierinfo`), **nunca el producto**: lo que se `unlink`-ea
+    es la línea de precio, no `product.template`.
+
+    Mismo candado que `actualizar_linea`: la línea tiene que ser de ESE
+    proveedor. Una línea que ya no existe (otro clic, otra pestaña) no es
+    un error — ya se logró lo que se pedía.
+
+    Devuelve "" en éxito, o el texto del error.
+    """
+    try:
+        partner_id = int(partner_id)
+        linea_id = int(linea_id)
+    except (TypeError, ValueError):
+        return "No llegó qué línea quitar."
+    if not ventas.configurado():
+        return "Odoo no está conectado."
+    try:
+        filas = ventas._ejecutar(
+            "product.supplierinfo", "read", [[linea_id]],
+            {"fields": ["partner_id"]})
+    except Exception as error:
+        return ventas._mensaje_de_error(error)
+    if not filas:
+        return ""
+    dueno = (filas[0].get("partner_id") or [None])[0]
+    if dueno != partner_id:
+        return "Esa línea no es de este proveedor."
+    try:
+        ventas._ejecutar("product.supplierinfo", "unlink", [[linea_id]])
+    except Exception as error:
+        return ventas._mensaje_de_error(error)
+    return ""
+
+
+def cambiar_dias_entrega(partner_id, delay):
+    """Punto 4: los días que tarda. **Es un dato del PROVEEDOR, no de cada
+    producto** (lo pidió la consigna), así que esto escribe el MISMO
+    número en TODAS las líneas de ese proveedor a la vez — nunca en una
+    sola. Una planta nueva que se agregue después hereda este valor sola
+    (`_delay_para_nueva_linea`), sin que nadie tenga que volver a tocarlo.
+
+    Si el proveedor todavía no tiene ninguna línea no hay nada que
+    escribir: no es un error, simplemente no hay dónde poner el número
+    todavía (nace en la primera línea que se agregue).
+
+    Devuelve "" en éxito, o el texto del error.
+    """
+    try:
+        partner_id = int(partner_id)
+    except (TypeError, ValueError):
+        return "No llegó qué proveedor cambiar."
+    delay_texto = str(delay if delay is not None else "").strip()
+    try:
+        delay_valor = int(float(delay_texto.replace(",", ".")))
+    except ValueError:
+        return "Los días que tarda tienen que ser un número entero."
+    if delay_valor < 0:
+        return "Los días que tarda no pueden ser negativos."
+    if not ventas.configurado():
+        return "Odoo no está conectado."
+    try:
+        ids = [f["id"] for f in ventas._ejecutar(
+            "product.supplierinfo", "search_read",
+            [[["partner_id", "=", partner_id]]],
+            {"fields": ["id"], "limit": 1000})]
+        if ids:
+            ventas._ejecutar("product.supplierinfo", "write",
+                             [ids, {"delay": delay_valor}])
+    except Exception as error:
+        return ventas._mensaje_de_error(error)
+    return ""
+
+
+# ---------------------------------------------------------------------------
+# Buscar un producto para asignarlo (01/10/2026)
+#
+# El MISMO buscador que usa el formulario de compra —tres prefijos
+# (PL-/MC-/IN-), sin pedir `sale_ok`, porque un insumo que se compra no
+# tiene por qué estar a la venta— pero sin tocar `compras.py`: ese archivo
+# lo está trabajando otra tanda en paralelo. Esta función reusa
+# `ventas.dominio_de_busqueda` (público, sin tocar) y las dos constantes
+# de `compras.py` (`PREFIJOS_COMPRA`/`SOLO_VENDIBLES_EN_COMPRAS`, que solo
+# se LEEN) para que los dos buscadores nunca se desincronicen.
+#
+# Distinto de `compras.buscar_productos`: este trae `product_tmpl_id`
+# (lo que pide `product.supplierinfo`, nunca el id de la variante) y
+# dedup por plantilla — un producto con variantes aparece UNA sola vez.
+# ---------------------------------------------------------------------------
+
+def buscar_para_asignar(texto):
+    """{"ok", "error", "productos": [{"producto_tmpl_id", "sku", "nombre",
+    "precio_lista"}]}. Una lista vacía es «no hay», nunca «no sé» — igual
+    que `compras.buscar_productos`."""
+    texto = (texto or "").strip()
+    if not texto:
+        return {"ok": True, "error": "", "productos": []}
+    if not ventas.configurado():
+        return {"ok": False, "error": "Odoo no está conectado.",
+                "productos": []}
+    try:
+        dominio = ventas.dominio_de_busqueda(
+            texto, prefijos=compras.PREFIJOS_COMPRA,
+            solo_vendibles=compras.SOLO_VENDIBLES_EN_COMPRAS)
+        filas = ventas._ejecutar(
+            "product.product", "search_read", [dominio],
+            {"fields": ["default_code", "name", "list_price",
+                        "product_tmpl_id"], "limit": 20, "order": "name"})
+    except Exception as error:
+        return {"ok": False, "error": ventas._mensaje_de_error(error),
+                "productos": []}
+    vistos, productos = set(), []
+    for f in filas:
+        tmpl = f.get("product_tmpl_id") or [None]
+        tmpl_id = tmpl[0]
+        if not tmpl_id or tmpl_id in vistos:
+            # Un producto con variantes trae más de una fila de
+            # `product.product`; `product.supplierinfo` va por la
+            # PLANTILLA, así que se ofrece una sola vez.
+            continue
+        vistos.add(tmpl_id)
+        productos.append({
+            "producto_tmpl_id": tmpl_id,
+            "sku": f.get("default_code") or "",
+            "nombre": f.get("name") or "",
+            "precio_lista": f.get("list_price") or 0.0,
         })
     return {"ok": True, "error": "", "productos": productos}
