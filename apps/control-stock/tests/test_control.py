@@ -560,7 +560,7 @@ def test_sin_claves_vapid_no_suena_nada():
 # desde el formulario (28/09/2026): nunca se recalcula acá.
 # ---------------------------------------------------------------------------
 
-def test_responder_prende_te_toca_lo_anota_y_sincroniza(monkeypatch):
+def test_responder_prende_te_toca_y_sincroniza(monkeypatch):
     pedidos = []
     monkeypatch.setattr(control, "waha_activo", lambda: True)
     monkeypatch.setattr(control, "etiquetar_en_whatsapp",
@@ -570,12 +570,10 @@ def test_responder_prende_te_toca_lo_anota_y_sincroniza(monkeypatch):
     assert "prendido" in aviso
     lead = linear_leads.uno("LEAD-90")
     assert lead["te_toca"] is True
-    nota = linear_leads.comentarios(lead["id"])[0]["texto"]
-    assert "Responder" in nota and "prendido" in nota and "Ruben" in nota
     assert pedidos == ["LEAD-90"]
 
 
-def test_responder_se_apaga_y_tambien_queda_anotado(monkeypatch):
+def test_responder_se_apaga(monkeypatch):
     monkeypatch.setattr(control, "waha_activo", lambda: False)
     lead = linear_leads.uno("LEAD-87")  # ya tiene Te toca en la muestra
     assert lead["te_toca"] is True
@@ -584,8 +582,25 @@ def test_responder_se_apaga_y_tambien_queda_anotado(monkeypatch):
     assert "apagado" in aviso
     lead = linear_leads.uno("LEAD-87")
     assert lead["te_toca"] is False
-    nota = linear_leads.comentarios(lead["id"])[-1]["texto"]
-    assert "apagado" in nota and "Mary" in nota
+
+
+def test_responder_no_deja_comentario_en_el_issue(monkeypatch):
+    # Decisión de Abraham (1/10/2026): el botón ya lo aprieta él mismo y el
+    # estado ya se ve en la tarjeta, así que el eco en el issue solo le
+    # mandaba una notificación de Linear más. La red de seguridad: ni
+    # prender ni apagar dejan comentario, y la etiqueta SÍ se mueve.
+    monkeypatch.setattr(control, "waha_activo", lambda: False)
+    lead = linear_leads.uno("LEAD-90")
+    antes = len(linear_leads.comentarios(lead["id"]))
+    aviso, error = control.alternar_responder("LEAD-90", True, autor="Ruben")
+    assert error == ""
+    assert linear_leads.uno("LEAD-90")["te_toca"] is True
+    despues = len(linear_leads.comentarios(lead["id"]))
+    assert despues == antes
+    aviso, error = control.alternar_responder("LEAD-90", False, autor="Ruben")
+    assert error == ""
+    assert linear_leads.uno("LEAD-90")["te_toca"] is False
+    assert len(linear_leads.comentarios(lead["id"])) == antes
 
 
 def test_responder_sin_waha_no_intenta_sincronizar(monkeypatch):

@@ -685,10 +685,16 @@ def alternar_responder(ref, prender, autor=""):
     mano»; al apagar, al revés, para que «Responder a mano» nunca
     sobreviva sin «Te toca».
 
-    Queda anotado en el issue quién lo cambió (un comentario firmado, corto)
-    y, si WAHA ya anda, se pide la sincronización inmediata al chat en vez
-    de esperar los 2 minutos del sincronizador. Nunca manda nada al
-    cliente: esto solo cambia etiquetas, no manda WhatsApp saliente.
+    Si WAHA ya anda, se pide la sincronización inmediata al chat en vez de
+    esperar los 2 minutos del sincronizador. Nunca manda nada al cliente:
+    esto solo cambia etiquetas, no manda WhatsApp saliente.
+
+    NO deja comentario en el issue (decisión de Abraham, 1/10/2026): el
+    botón ya lo aprieta él mismo y el estado ya se ve en la tarjeta y en la
+    ficha, así que el comentario no le decía nada nuevo y solo le mandaba
+    una notificación de Linear más. Medido contra el Linear real: 33 de
+    311 comentarios del bot eran justo este eco. Mismo criterio que ya
+    tiene `alternar_senal()`, que nunca comentó.
     """
     lead = linear_leads.uno(ref)
     if lead is None:
@@ -705,10 +711,6 @@ def alternar_responder(ref, prender, autor=""):
                 linear_leads.poner_etiqueta_suelta(
                     lead["id"], linear_leads.LABEL_RESPONDER_A_MANO, False)
             linear_leads.poner_te_toca(lead["id"], False)
-        linear_leads.comentar(
-            lead["id"],
-            "🔴 Responder " + ("prendido" if prender else "apagado") + ".",
-            autor=autor)
     except linear_leads.ErrorLeads as fallo:
         return "", str(fallo)
     linear_leads.refrescar()
