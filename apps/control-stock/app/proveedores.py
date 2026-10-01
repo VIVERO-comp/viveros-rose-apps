@@ -381,27 +381,30 @@ def uno(partner_id, lista=None):
 # todavía no lo aprobó, así que la pantalla de asignar/editar precios NO se
 # construye en esta tanda.
 #
-# OJO, honestidad sobre lo que se pudo medir: este módulo se escribió desde
-# un worktree sin SSH ni credenciales del Odoo real (fuera de los límites
-# de esta tanda), así que **no se pudo confirmar en vivo** cuántas filas
-# tiene `product.supplierinfo` hoy ni si el Odoo real difiere del esquema
-# estándar. Los campos de abajo son los del modelo `product.supplierinfo`
-# de Odoo (estables desde hace muchas versiones: `partner_id`,
-# `product_tmpl_id`, `product_name`, `product_code`, `min_qty`, `price`);
-# si ese Odoo tuviera algún campo distinto, esta función falla con
-# `ok: False` y su motivo — nunca con un 500 ni una lista vacía que se haga
-# pasar por "no tiene productos". Hace falta medirlo contra el Odoo real
-# antes de confiar en el conteo.
+# MEDIDO CONTRA EL ODOO REAL (30/09/2026, por la coordinadora): el
+# `fields_get` de `product.supplierinfo` tiene los seis campos de abajo,
+# con esos nombres y esos tipos exactos — `price` es Float y por eso NUNCA
+# llega `None` desde Odoo, así que tratar el 0 como "todavía no tiene
+# precio" es lo correcto (nadie cobra de verdad $0). 0 registros, 0
+# proveedores y 0 órdenes de compra ese día. Esta función ya no es un
+# supuesto: es lo que el Odoo real tiene.
 # ---------------------------------------------------------------------------
 
 CAMPOS_SUPPLIERINFO = ["product_tmpl_id", "product_name", "product_code",
-                       "min_qty", "price"]
+                       "min_qty", "price", "delay"]
 
 
 def productos_de(partner_id):
     """{"ok", "error", "productos": [{"nombre", "sku", "precio",
-    "cantidad_minima"}]} de lo que ese proveedor vende, leído de
+    "cantidad_minima", "dias_entrega", "nombre_proveedor",
+    "codigo_proveedor"}]} de lo que ese proveedor vende, leído de
     `product.supplierinfo`. SOLO LECTURA.
+
+    `nombre`/`sku` son los NUESTROS (el catálogo); `nombre_proveedor`/
+    `codigo_proveedor` son como ESE proveedor le llama a la planta — las
+    dos cosas se guardan por separado a propósito, para que el dueño pueda
+    leer la factura del proveedor y reconocer de cuál producto propio se
+    trata, aunque el proveedor le haya puesto otro nombre u otro código.
 
     - Sin productos asignados (hoy, el caso más probable: `ok` True con
       lista vacía. No es una falla.
@@ -427,11 +430,12 @@ def productos_de(partner_id):
     if not filas:
         return {"ok": True, "error": "", "productos": []}
 
-    # El nombre y el SKU del catálogo (no el texto libre del proveedor) son
-    # ADORNO de esta lectura: si esta segunda vuelta a Odoo falla, las
-    # líneas se muestran igual con lo que ya trajo `product.supplierinfo`
-    # (su `product_name`/`product_code`, si los tiene) — perder el nombre
-    # bonito no puede tapar que SÍ hay una línea.
+    # El nombre y el SKU DEL CATÁLOGO son ADORNO de esta lectura: si esta
+    # segunda vuelta a Odoo falla, la línea se muestra igual —con el
+    # nombre que ya trae `product_tmpl_id` y sin SKU propio— porque perder
+    # el nombre bonito no puede tapar que SÍ hay una línea. `product_name`/
+    # `product_code` (los del proveedor) no dependen de esta consulta: ya
+    # vinieron en la primera.
     ids_tmpl = sorted({f["product_tmpl_id"][0] for f in filas
                        if f.get("product_tmpl_id")})
     nombres, skus = {}, {}
@@ -457,12 +461,15 @@ def productos_de(partner_id):
     for f in filas:
         tmpl = f.get("product_tmpl_id") or [None, ""]
         tmpl_id = tmpl[0]
-        # `product_name` es lo que ESE proveedor le puso al producto (más
-        # específico que el nombre de nuestro catálogo, cuando está
-        # escrito): le gana al nombre del catálogo, que es el respaldo.
-        nombre = (f.get("product_name") or nombres.get(tmpl_id)
+        # `nombre`/`sku` son LOS NUESTROS: el nombre del catálogo primero
+        # (la lectura de `product.template`), y si esa segunda consulta
+        # falló, el nombre que el propio `product_tmpl_id` de la línea ya
+        # trae (`product_tmpl_id` es obligatorio en Odoo, así que esto casi
+        # nunca falta). Nunca se usa el texto del proveedor para esto —
+        # mezclar los dos vocabularios es justo lo que se quiere evitar.
+        nombre = (nombres.get(tmpl_id)
                  or (tmpl[1] if len(tmpl) > 1 else "") or "")
-        sku = skus.get(tmpl_id) or f.get("product_code") or ""
+        sku = skus.get(tmpl_id) or ""
         # `price` es un Float de Odoo: nunca llega `None` por XML-RPC, así
         # que 0 (puesto o de fábrica) y "no se sabe" se ven IGUAL ahí.
         # Nadie vende de verdad a $0, así que un precio en 0 se trata como
@@ -472,5 +479,17 @@ def productos_de(partner_id):
             "producto_tmpl_id": tmpl_id, "nombre": nombre, "sku": sku,
             "precio": (round(float(precio), 2) if precio else None),
             "cantidad_minima": f.get("min_qty") or 0,
+            # Cuántos días dice el PROVEEDOR que tarda en entregar esto.
+            # Es un Integer con valor real siempre puesto (Odoo lo deja en
+            # 1 de fábrica si nadie lo toca): se muestra tal cual, sin
+            # tratar ningún número como "no se sabe".
+            "dias_entrega": f.get("delay"),
+            # Cómo LE DICE el proveedor a esto (su propio nombre y su
+            # propio código) — separado a propósito de `nombre`/`sku`:
+            # sirve para leer SU factura y reconocer cuál producto propio
+            # es, aunque le haya puesto otro nombre u otro código. Vacío
+            # cuando el proveedor no escribió ninguno de los dos.
+            "nombre_proveedor": f.get("product_name") or "",
+            "codigo_proveedor": f.get("product_code") or "",
         })
     return {"ok": True, "error": "", "productos": productos}

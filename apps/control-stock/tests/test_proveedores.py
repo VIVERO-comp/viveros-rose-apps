@@ -383,15 +383,15 @@ def test_productos_de_odoo_caido_no_se_confunde_con_sin_productos(
     assert resultado["error"]
 
 
-def test_productos_de_arma_nombre_sku_y_precio(monkeypatch, odoo_configurado):
+def test_productos_de_arma_nombre_sku_precio_y_dias(monkeypatch, odoo_configurado):
     supplierinfo = [
         {"id": 1, "product_tmpl_id": [501, "Tierra negra"],
-         "product_name": False, "product_code": False,
-         "min_qty": 10.0, "price": 4.25},
+         "product_name": "Black soil", "product_code": "BS-50",
+         "min_qty": 10.0, "price": 4.25, "delay": 3},
         # Sin precio todavía: "sin precio", nunca un $0.00 inventado.
         {"id": 2, "product_tmpl_id": [502, "Abono orgánico"],
          "product_name": False, "product_code": False,
-         "min_qty": 0.0, "price": False},
+         "min_qty": 0.0, "price": False, "delay": 1},
     ]
     templates = [{"id": 501, "name": "Tierra negra"},
                 {"id": 502, "name": "Abono orgánico"}]
@@ -405,30 +405,47 @@ def test_productos_de_arma_nombre_sku_y_precio(monkeypatch, odoo_configurado):
     assert resultado["ok"] is True
     por_sku = {p["sku"]: p for p in resultado["productos"]}
     tierra = por_sku["IN-TIERRA-NEGRA"]
+    # El nombre y el SKU son LOS NUESTROS (del catálogo), no los del
+    # proveedor — esos van aparte, en nombre_proveedor/codigo_proveedor.
     assert tierra["nombre"] == "Tierra negra"
     assert tierra["precio"] == 4.25
     assert tierra["cantidad_minima"] == 10.0
+    assert tierra["dias_entrega"] == 3
+    assert tierra["nombre_proveedor"] == "Black soil"
+    assert tierra["codigo_proveedor"] == "BS-50"
     abono = por_sku["IN-ABONO-ORGANICO"]
     assert abono["precio"] is None  # "sin precio", no 0.0
+    assert abono["nombre_proveedor"] == ""
+    assert abono["codigo_proveedor"] == ""
 
 
 def test_productos_de_si_falla_el_nombre_muestra_igual_la_linea(
         monkeypatch, odoo_configurado):
-    """El nombre/SKU bonito es adorno: si esa segunda consulta revienta,
-    la línea de `product.supplierinfo` se muestra igual con lo que trajo
-    ella misma (su `product_name`, si lo tiene)."""
+    """El nombre/SKU DEL CATÁLOGO son adorno de la segunda consulta: si
+    esa revienta, la línea se muestra igual con el nombre que ya trae el
+    propio `product_tmpl_id` (obligatorio en Odoo) — y lo que el
+    proveedor escribió (`nombre_proveedor`/`codigo_proveedor`) no depende
+    para nada de esa segunda consulta: ya vino en la primera."""
     def ejecutar(modelo, metodo, args, kw=None):
         if modelo == "product.supplierinfo":
             return [{"id": 1, "product_tmpl_id": [501, "Tierra negra"],
                      "product_name": "Tierra negra a granel",
-                     "product_code": "TN-50", "min_qty": 1.0, "price": 4.0}]
+                     "product_code": "TN-50", "min_qty": 1.0, "price": 4.0,
+                     "delay": 2}]
         raise RuntimeError("Odoo con un mal rato")
     monkeypatch.setattr(ventas, "_ejecutar", ejecutar)
     resultado = proveedores.productos_de(11)
     assert resultado["ok"] is True
     [p] = resultado["productos"]
-    assert p["nombre"] == "Tierra negra a granel"
-    assert p["sku"] == "TN-50"
+    # El nombre NUESTRO sale del propio product_tmpl_id de la línea
+    # (nunca falta: es obligatorio), no del SKU propio (esa consulta sí
+    # falló, así que no hay SKU).
+    assert p["nombre"] == "Tierra negra"
+    assert p["sku"] == ""
+    assert p["dias_entrega"] == 2
+    # Y lo del proveedor queda intacto, vino en la primera consulta.
+    assert p["nombre_proveedor"] == "Tierra negra a granel"
+    assert p["codigo_proveedor"] == "TN-50"
     assert p["precio"] == 4.0
 
 

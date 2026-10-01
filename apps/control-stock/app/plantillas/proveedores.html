@@ -189,7 +189,19 @@
         {% for pr in productos_abierto.productos %}
         <tr>
           <td><b>{{ pr.nombre or 'Sin nombre' }}</b>
-            {% if pr.sku %}<span class="cmp-orden">{{ pr.sku }}</span>{% endif %}</td>
+            {% if pr.sku %}<span class="cmp-orden">{{ pr.sku }}</span>{% endif %}
+            {# Cómo le dice EL PROVEEDOR a esto — útil para leer su
+               factura, donde puede no aparecer el nombre de nuestro
+               catálogo. #}
+            {% if pr.nombre_proveedor or pr.codigo_proveedor %}
+            <span class="prov-lo-llama">Lo llama
+              {% if pr.nombre_proveedor %}«{{ pr.nombre_proveedor }}»{% endif %}
+              {% if pr.codigo_proveedor %}· {{ pr.codigo_proveedor }}{% endif %}</span>
+            {% endif %}
+          </td>
+          <td class="cmp-num">
+            {% if pr.dias_entrega is not none %}{{ pr.dias_entrega }} día{{ 's' if pr.dias_entrega != 1 }}
+            {% else %}<span class="tenue">—</span>{% endif %}</td>
           <td class="cmp-num">
             {% if pr.precio is not none %}{{ pr.precio | dinero }}
             {% else %}<span class="tenue">sin precio</span>{% endif %}</td>
