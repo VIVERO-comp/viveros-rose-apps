@@ -244,3 +244,15 @@ def test_nota_vacia_no_guarda_y_lo_dice(admin, informe_falso):
     assert "error=" in r.headers["location"]
     assert r.headers["location"].endswith("#orden-S00078")
     assert _notas_guardadas() == []
+
+
+def test_la_marca_roja_exige_entrega_validada():
+    """Una C con saldo pero SIN entregar no puede decir «Entregado»."""
+    from app import revisar
+
+    sin_entregar, entregada = revisar.preparar([
+        {"clase": "C", "debe": 500.0, "entregado_odoo": False},
+        {"clase": "C", "debe": 500.0, "entregado_odoo": True},
+    ])
+    assert sin_entregar["marca_debe"] is None
+    assert entregada["marca_debe"] == "Entregado, debe $500.00"

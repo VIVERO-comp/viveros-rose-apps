@@ -71,8 +71,12 @@ def preparar(ventas):
         v["chip"] = PALABRA_DE_CLASE.get(clase, "Revisar")
         v["tono"] = TONO_DE_CLASE.get(clase, "rojo")
         debe = v.get("debe") or 0
+        # La marca roja es SOLO para la C entregada con saldo (regla 4 de
+        # Korto): una C confirmada sin entregar debe su plata, pero no
+        # puede decir «Entregado».
         v["marca_debe"] = (f"Entregado, debe {_dinero(debe)}"
-                           if clase == "C" and debe > 0 else None)
+                           if clase == "C" and debe > 0
+                           and v.get("entregado_odoo") else None)
         listas.append(v)
     return listas
 
