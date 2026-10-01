@@ -161,12 +161,13 @@
 {% set activa = 'compras' %}{% include '_nav.html' %}
 
 {% if abierto %}
-{# La ficha de UN proveedor: sus datos y, de `product.supplierinfo`, lo
-   que le compramos con su precio. SOLO LECTURA — pedido del dueño
-   30/09/2026, ampliando esta misma pantalla mientras se construía; la
-   pantalla de asignar/editar precios espera el plan completo que está
-   mirando. Mismo panel de «ver los productos de una compra» en Compras
-   (.panel-der + .telon), sin JS. #}
+{# La ficha de UN proveedor: sus datos y, de `product.supplierinfo`, el
+   catálogo que le compramos — editable desde el 01/10/2026 («quiero poder
+   asignar plantas a cada proveedor, precio, etc.»). Las cuatro escrituras
+   viven en `app/proveedores.py`; esta plantilla solo pinta formularios que
+   apuntan a `/compras/proveedores/producto`, multiplexados por el NOMBRE
+   del botón (mismo patrón que `/compras/borrador`). Mismo panel de «ver
+   los productos de una compra» en Compras (.panel-der + .telon), sin JS. #}
 {% set vuelta = '/compras/proveedores#pv-' ~ abierto.id %}
 <a class="telon" href="{{ vuelta }}" aria-label="Cerrar"></a>
 <aside class="panel-der">
@@ -186,21 +187,24 @@
   <div class="campo-caja">
     <label>Lo que le compramos (producto y precio)</label>
     {% if not productos_abierto.ok %}
-    <span class="err">No se pudo leer de Odoo: {{ productos_abierto.error }}.</span>
-    {% elif not productos_abierto.productos %}
-    <p class="pie-nota">Todavía no tiene ningún producto asignado en Odoo.
-      Por ahora esta pantalla solo LEE lo que ya esté asignado allá —
-      asignar productos y precios desde acá es la próxima tanda.</p>
+    {# Odoo no contestó: NUNCA se lee como «no tiene productos». #}
+    <span class="err">No se pudo leer de Odoo: {{ productos_abierto.error }}.
+      No se sabe todavía si tiene productos asignados — reintentá en un
+      momento.</span>
     {% else %}
+
+    {% if not productos_abierto.productos %}
+    <p class="pie-nota">Todavía no tiene ningún producto asignado. Buscalo
+      abajo para agregarle el primero.</p>
+    {% elif not es_admin %}
+    {# Solo lectura para quien no es admin: misma tabla de siempre, sin
+       formularios de edición. #}
     <table class="cmp-tabla">
       <tbody>
         {% for pr in productos_abierto.productos %}
         <tr>
           <td><b>{{ pr.nombre or 'Sin nombre' }}</b>
             {% if pr.sku %}<span class="cmp-orden">{{ pr.sku }}</span>{% endif %}
-            {# Cómo le dice EL PROVEEDOR a esto — útil para leer su
-               factura, donde puede no aparecer el nombre de nuestro
-               catálogo. #}
             {% if pr.nombre_proveedor or pr.codigo_proveedor %}
             <span class="prov-lo-llama">Lo llama
               {% if pr.nombre_proveedor %}«{{ pr.nombre_proveedor }}»{% endif %}
@@ -217,11 +221,149 @@
         {% endfor %}
       </tbody>
     </table>
+    {% else %}
+    {# Admin: cada renglón es editable — cómo le llama, su código, el
+       mínimo y el precio, con «Guardar» y «Quitar» propios. Las cuatro
+       líneas de ESTE proveedor viajan en UN formulario (como las
+       cantidades de Compras), pero cada botón manda solo SU `linea_id`:
+       tocar «Guardar» en un renglón nunca reescribe otro sin que nadie lo
+       haya pedido. #}
+    <form method="post" action="/compras/proveedores/producto">
+      <input type="hidden" name="partner_id" value="{{ abierto.id }}">
+      <table class="cmp-tabla cmp-tabla-prov">
+        <thead>
+          <tr>
+            <th>Producto</th><th>Lo llama</th><th>Su código</th>
+            <th>Días</th><th>Mínimo</th><th>Precio</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for pr in productos_abierto.productos %}
+          <tr>
+            <td><b>{{ pr.nombre or 'Sin nombre' }}</b>
+              {% if pr.sku %}<span class="cmp-orden">{{ pr.sku }}</span>{% endif %}</td>
+            <td><input class="campo cmp-mini" type="text" maxlength="60"
+                       name="nombreprov-{{ pr.linea_id }}" value="{{ pr.nombre_proveedor }}"
+                       placeholder="cómo le llama"
+                       aria-label="Cómo le llama el proveedor a {{ pr.nombre }}"></td>
+            <td><input class="campo cmp-mini" type="text" maxlength="60"
+                       name="codigo-{{ pr.linea_id }}" value="{{ pr.codigo_proveedor }}"
+                       placeholder="su código"
+                       aria-label="Código del proveedor para {{ pr.nombre }}"></td>
+            {# Los días que tarda NO se editan por renglón: son del
+               PROVEEDOR, se cambian todos juntos más abajo. #}
+            <td class="cmp-num">
+              {% if pr.dias_entrega is not none %}{{ pr.dias_entrega }}
+              {% else %}<span class="tenue">—</span>{% endif %}</td>
+            <td><input class="campo cmp-mini" type="number" inputmode="decimal"
+                       min="0" step="any" name="minimo-{{ pr.linea_id }}"
+                       value="{{ pr.cantidad_minima }}"
+                       aria-label="Cantidad mínima de {{ pr.nombre }}"></td>
+            <td><input class="campo cmp-mini" type="number" inputmode="decimal"
+                       min="0" step="0.01" name="precio-{{ pr.linea_id }}"
+                       value="{{ pr.precio if pr.precio is not none else '' }}"
+                       placeholder="sin precio"
+                       aria-label="Precio de {{ pr.nombre }}"></td>
+            <td class="cmp-acciones-fila">
+              <button class="btn chico" type="submit"
+                      name="guardar" value="{{ pr.linea_id }}"
+                      aria-label="Guardar los cambios de {{ pr.nombre }}">Guardar</button>
+              <button class="btn chico" type="submit"
+                      name="quitar" value="{{ pr.linea_id }}"
+                      aria-label="Quitarle {{ pr.nombre }} a este proveedor">Quitar</button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </form>
+
+    {# Los días que tarda son del PROVEEDOR, no de cada producto: un solo
+       campo que se escribe en TODAS sus líneas a la vez. Si no están de
+       acuerdo (`delay_comun` es None) el campo nace vacío — nunca se
+       inventa un número que no todas dicen. #}
+    <form method="post" action="/compras/proveedores/producto" class="acciones">
+      <input type="hidden" name="partner_id" value="{{ abierto.id }}">
+      <label class="crece" for="pv-dias">Días que tarda (se pone en TODAS sus líneas)</label>
+      <input class="campo cmp-mini" id="pv-dias" type="number" inputmode="numeric"
+             min="0" step="1" name="dias_valor"
+             value="{{ delay_comun if delay_comun is not none else '' }}"
+             placeholder="{{ 'no coinciden' if delay_comun is none else '' }}">
+      <button class="btn chico" type="submit" name="accion" value="dias">Guardar días</button>
+    </form>
+    {% endif %}
     {% endif %}
   </div>
-  <p class="pie-nota">Esta ficha solo lee de Odoo (`product.supplierinfo`).
-    Asignar productos nuevos o cambiar precios todavía no se puede desde
-    acá.</p>
+
+  {% if es_admin %}
+  {# ---------- Agregar un producto ----------
+     El MISMO buscador de Compras (PL-/MC-/IN-, con lo que de verdad esté
+     en el catálogo) pero sin tocar `compras.py`: `buscar_para_asignar`
+     vive en `proveedores.py`. Es un GET —buscar no escribe nada— así que
+     recargar o volver desde un error nunca pierde lo escrito. #}
+  <div class="campo-caja">
+    <label for="pv-buscar">Agregar un producto</label>
+    <form method="get" action="/compras/proveedores" class="acciones">
+      <input type="hidden" name="abrir" value="{{ abierto.id }}">
+      <input class="campo crece" id="pv-buscar" name="buscar" maxlength="120"
+             autocomplete="off" value="{{ buscar }}"
+             placeholder="Nombre o referencia — planta, maceta o insumo">
+      <button class="btn chico" type="submit">Buscar</button>
+    </form>
+
+    {% if buscar %}
+    {% if not buscados.ok %}
+    <span class="err">No se pudo buscar en Odoo: {{ buscados.error }}.</span>
+    {% elif not buscados.productos %}
+    <p class="pie-nota">No hay ningún producto que diga «{{ buscar }}».</p>
+    <div class="acciones">
+      <a class="btn chico" href="/productos/crear">Crear producto</a>
+    </div>
+    <p class="pie-nota">Se crea en Odoo con sus reglas (sin impuestos); al
+      volver, buscalo de nuevo acá para asignárselo a este proveedor con su
+      precio.</p>
+    {% else %}
+    <form method="post" action="/compras/proveedores/producto">
+      <input type="hidden" name="partner_id" value="{{ abierto.id }}">
+      <input type="hidden" name="buscar" value="{{ buscar }}">
+      <table class="cmp-tabla cmp-tabla-prov">
+        <thead>
+          <tr>
+            <th>Producto</th><th>Precio</th><th>Mínimo</th>
+            <th>Lo llama</th><th>Su código</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in buscados.productos %}
+          <tr>
+            <td><b>{{ p.nombre }}</b>
+              {% if p.sku %}<span class="cmp-orden">{{ p.sku }}</span>{% endif %}</td>
+            <td><input class="campo cmp-mini" type="number" inputmode="decimal"
+                       min="0" step="0.01" name="precio-{{ p.producto_tmpl_id }}"
+                       placeholder="precio" aria-label="Precio de {{ p.nombre }}"></td>
+            <td><input class="campo cmp-mini" type="number" inputmode="decimal"
+                       min="0" step="any" name="minimo-{{ p.producto_tmpl_id }}"
+                       placeholder="mínimo" aria-label="Cantidad mínima de {{ p.nombre }}"></td>
+            <td><input class="campo cmp-mini" type="text" maxlength="60"
+                       name="nombreprov-{{ p.producto_tmpl_id }}"
+                       placeholder="cómo le llama"
+                       aria-label="Cómo le llama el proveedor a {{ p.nombre }}"></td>
+            <td><input class="campo cmp-mini" type="text" maxlength="60"
+                       name="codigo-{{ p.producto_tmpl_id }}"
+                       placeholder="su código"
+                       aria-label="Código del proveedor para {{ p.nombre }}"></td>
+            <td><button class="btn chico" type="submit"
+                        name="agregar" value="{{ p.producto_tmpl_id }}"
+                        aria-label="Agregar {{ p.nombre }} a este proveedor">+ Agregar</button></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </form>
+    {% endif %}
+    {% endif %}
+  </div>
+  {% endif %}
 </aside>
 {% endif %}
 

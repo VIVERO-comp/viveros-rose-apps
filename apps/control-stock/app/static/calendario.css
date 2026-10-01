@@ -1145,3 +1145,16 @@ input.campo.cmp-mini{width:72px;padding:7px 8px;text-align:right}
 /* Cómo le dice EL PROVEEDOR a la planta, en la ficha: aparte del nombre
    nuestro, chico y tenue, para leer su factura. */
 .prov-lo-llama{display:block;font-size:10.5px;color:var(--muy-suave);font-weight:500}
+
+/* El catálogo EDITABLE de un proveedor (01/10/2026): la misma `.cmp-tabla`
+   de Compras, pero con más columnas angostas (lo llama, su código,
+   mínimo, precio) — el nombre ya no necesita el 100% del ancho, y las
+   dos acciones de la fila no deben partirse en dos líneas. */
+.cmp-tabla-prov td:first-child{width:auto}
+.cmp-tabla-prov th{
+  text-align:left;font-size:10px;font-weight:600;color:var(--muy-suave);
+  padding:0 4px 4px;white-space:nowrap;
+}
+.cmp-acciones-fila{white-space:nowrap}
+.cmp-acciones-fila .btn{margin-left:4px}
+.cmp-acciones-fila .btn:first-child{margin-left:0}
