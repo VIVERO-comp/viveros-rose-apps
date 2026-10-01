@@ -532,4 +532,11 @@ P7 eliminada (el tablero de Proyectos se borró el 24/09/2026; ver C12).
 
 Antes de producción tienen que estar definidas: cancelación después de pagar, devolución, rechazo, planta dañada en alquiler, entrega sin pago, quién baja montos, tarjeta, pagos fuera de Odoo, agregar productos a un pedido que ya salió.
 
+**Tareas programadas de Odoo a resolver antes de M2** (medidas el 1/10 [VERIFICADO M0]; nada se toca sin decisión de Korto):
+
+1. **«Send invoices automatically»** (activa, diaria, `_cron_account_move_send()`): solo procesa las facturas que alguien dejó EN COLA con «Enviar e imprimir» — hoy la cola está en 0, así que con la configuración actual **no manda nada a nadie**. Propuesta: no hace falta apagarla; si Korto quiere cero riesgo de un envío accidental, se apaga sin perder nada. [KORTO decide]
+2. **«Vivero: desactivar leads inactivos en Nuevo»** (activa, diaria 07:00 UTC, del addon): es el barrido viejo, neutralizado por `vivero.barrido_leads_activo = 0` pero todavía programado. Propuesta: **apagarla** (`active = False`), la reemplaza el barrido de 14 días de Linear. [KORTO decide]
+3. **«CRM: enrich leads (IAP)»** (activa, cada 24 h): enriquece leads con el servicio de pago IAP de Odoo — nadie lo pidió. Propuesta: **apagarla**. [KORTO decide]
+
+
 **Fin del documento. Esperando M0.5.**
