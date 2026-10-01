@@ -1113,6 +1113,41 @@ input.campo.cmp-mini{width:72px;padding:7px 8px;text-align:right}
   .cmp-tabla td{padding:7px 3px}
 }
 
+/* ---------- La orden de compra de Odoo (Fase 2, 01/10/2026) ----------
+   Dos piezas nuevas y nada más: la marca de la tarjeta cuando el tablero
+   dice «pedida» y Odoo no tiene su orden, y la hoja de la pantalla de
+   recibir. El resto de esa pantalla son las clases que ya existen
+   (.campo-caja, .dato, .cmp-tabla, .acciones). */
+
+/* «falta la orden en Odoo»: una desincronización que se VE, con el color de
+   lo crítico que ya tiene la paleta (el mismo de `.cmp-sin`) — ni un hex
+   inventado. Es un enlace al panel, que es donde está el reintento, y por
+   eso se subraya al pasar: se toca. */
+.cmp-falta{
+  font-size:10.2px;font-weight:700;color:var(--critico);text-decoration:none;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px;
+}
+.ret-tarjeta a.cmp-falta{color:var(--critico)}
+.ret-tarjeta a.cmp-falta:hover{text-decoration:underline;text-underline-offset:2px}
+
+/* La hoja de «Lo que llegó». `.tablero` es una columna con overflow oculto,
+   así que el scroll vive acá adentro; el ancho tope es para que los
+   renglones no se estiren a lo ancho de un monitor — son cuatro columnas
+   angostas. */
+.cmp-hoja{
+  display:flex;flex-direction:column;gap:12px;overflow-y:auto;
+  max-width:720px;padding-bottom:6px;
+}
+/* La única tabla de Compras con encabezado, y acá hace falta: las tres
+   columnas de números («se pidió», «llegó», «dañadas») no se distinguen
+   solas, y confundirlas escribiría en Odoo lo que no llegó. */
+.cmp-recibir th{
+  font-size:10.2px;font-weight:700;color:var(--muy-suave);text-align:left;
+  text-transform:uppercase;letter-spacing:.05em;padding:0 4px 5px;
+  border-bottom:1px solid var(--borde);
+}
+.cmp-recibir th.cmp-num{text-align:right}
+
 /* ---------- Proveedores (30/09/2026): la segunda pantalla de Compras ----------
    Una grilla de tarjetas, no un tablero: no hay columnas que arrastrar
    acá, solo lo que de verdad se le compró a cada uno. El color del chip de

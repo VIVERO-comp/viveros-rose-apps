@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Lo que llegó — Control Viverorose</title>
+<link rel="icon" type="image/jpeg" href="/static/logo.jpg">
+<link rel="apple-touch-icon" href="/static/logo.jpg">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Recibir">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+{# RECIBIR, la tercera pantalla de Compras (Fase 2, 01/10/2026): cuánto
+   llegó y cuántas llegaron dañadas, renglón por renglón de la entrada de
+   stock que Odoo ya tiene abierta.
+
+   Misma piel que Compras y Proveedores: calendario.css y las clases que ya
+   existen (.cmp-tabla para los renglones, .campo-caja para los bloques).
+   Sin JavaScript nuevo — menu.js es la hamburguesa de siempre y de
+   calendario.js interesa solo el candado del doble toque (`data-guardando`),
+   que acá importa de verdad: un submit repetido en el teléfono validaría
+   la entrada dos veces.
+
+   Lo que se decide en Python y la plantilla solo recorre: qué renglones
+   hay, cuánto se pidió, cuánto se recibió ya, si la entrada está cerrada y
+   qué dañado hay anotado (`app/compra_odoo.py`). #}
+<link rel="stylesheet" href="/static/calendario.css?v={{ v_estaticos }}">
+</head>
+<body class="{{ 'menu-oculto' if request.cookies.get('menu') == '0' }}">
+
+<div class="app">
+  <aside class="lado">
+    <div class="marca">
+      <img src="/static/logo.jpg" alt="Vivero Rose">
+      <span>Control Viverorose</span>
+    </div>
+    <a class="pil" href="/calendario">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>Calendario
+    </a>
+    <a class="pil" href="/?tab=stock">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M12 10C12 6 9 3 4 3c0 5 3 8 8 7z"/><path d="M12 13c0-3.5 2.5-6 7-6 0 4.5-2.5 7-7 6z"/></svg>Stock
+    </a>
+    <a class="pil" href="/venta">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2 2h2l2.7 12.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 1.9-1.6L22 6H5"/></svg>Vender
+    </a>
+    <a class="pil" href="/control">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Control
+    </a>
+    {# El pill de Compras queda "on": esta pantalla es parte de Compras, no
+       una pestaña propia del menú — lo mismo que hace Proveedores. #}
+    <a class="pil on" href="/compras">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><path d="M2 4h20v4H2z"/><path d="M10 12h4"/></svg>Compras
+    </a>
+    <a class="pil" href="/?tab=ajustes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Ajustes
+    </a>
+    <div class="pie">
+      <b>{{ empleada.nombre or empleada.id }}</b>
+      <span>Lo que llegó · sube el stock en Odoo</span>
+    </div>
+  </aside>
+
+  <div class="tablero">
+    {# Acá sí va «← Volver»: esta pantalla ES un formulario de pantalla
+       completa, no una de las vistas del segmento. Vuelve a SU tarjeta. #}
+    {# `compra` nunca es None acá: la ruta ya rebotó al tablero si el ref no
+       es de una compra que exista y que esta cuenta pueda tocar
+       (`_compras_permiso`). Por eso el volver no tiene rama de respaldo. #}
+    {% set vuelta_tarjeta = '/compras?abrir=' ~ (compra.ref | urlencode) ~ '#c-' ~ compra.ref %}
+    {% with bm_titulo='Lo que llegó', bm_sub=compra.que_compro,
+            bm_volver=vuelta_tarjeta %}{% include '_barra_movil.html' %}{% endwith %}
+    <div class="barra">
+      <button class="btn icono hamb" type="button" aria-label="Mostrar u ocultar el menú"
+              aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <h3>Lo que llegó</h3>
+      <span class="crece"></span>
+      <span class="tenue" style="font-size:12px">
+        {{ compra.ref }} · {{ compra.proveedor or 'sin proveedor' }}
+      </span>
+      {# El botón negro de esta pantalla vive al pie del formulario, junto a
+         los renglones: es el que hace subir el stock. Este es el de volver,
+         y va gris. #}
+      <a class="btn" href="{{ vuelta_tarjeta }}">← Compras</a>
+    </div>
+
+    {% set vuelta = '/compras/recibir?ref=' ~ (compra.ref | urlencode) ~ '#cp-recibir' %}
+    {% if error %}<div class="franja"><b>Ups.</b> <span>{{ error }}</span>
+      <a class="cierra-banner" href="{{ vuelta }}" aria-label="Cerrar el aviso">×</a></div>{% endif %}
+    {% if aviso %}<div class="aviso-ok">{{ aviso }}
+      <a class="cierra-banner" href="{{ vuelta }}" aria-label="Cerrar el aviso">×</a></div>{% endif %}
+
+    <div class="cmp-hoja">
+      <div class="campo-caja">
+        <label>La compra</label>
+        <div class="dato"><b>Qué se compra</b><span>{{ compra.que_compro }}</span></div>
+        <div class="dato"><b>Proveedor</b><span>{{ compra.proveedor or 'Sin proveedor' }}</span></div>
+        <div class="dato"><b>Cómo llega</b><span>{{ compra.llegada or 'Todavía no se dijo' }}</span></div>
+        {% if recepcion.orden %}
+        <div class="dato"><b>Orden de compra</b><span>{{ recepcion.orden.nombre }}</span></div>
+        {% endif %}
+      </div>
+
+      {% if not recepcion.ok %}
+      {# Odoo no contestó, o esta compra todavía no tiene orden. NUNCA se
+         lee como «no llegó nada»: son cosas distintas y la diferencia tiene
+         que llegar hasta acá. #}
+      <div class="solo-lectura"><b>No se puede recibir todavía.</b>
+        {{ recepcion.error }}</div>
+      {% elif recepcion.cerrada %}
+      {# «No queda nada por recibir» es un hecho medido en Odoo, no una
+         falla: la orden ya se recibió completa. #}
+      <div class="solo-lectura"><b>Ya no queda nada por recibir.</b> La orden
+        {{ recepcion.orden.nombre }} está completa en Odoo. Si llegó algo
+        más de lo pedido, se recibe desde Odoo.</div>
+      {% elif not recepcion.renglones %}
+      {# La entrada está abierta y no tiene ni un movimiento vivo. Es raro,
+         pero es un estado posible en Odoo (alguien procesó los movimientos
+         desde allá y la dejó abierta), y mostrar una tabla vacía con su
+         botón sería ofrecer una acción que no haría nada. #}
+      <div class="solo-lectura"><b>La entrada está abierta y vacía.</b> Odoo
+        no tiene ningún renglón por recibir en
+        {{ recepcion.orden.nombre }}, así que acá no hay nada que anotar —
+        hay que mirarla en Odoo.</div>
+      {% else %}
+      {# ---------- Los renglones ----------
+         Uno por MOVIMIENTO de la entrada abierta, que es lo que se escribe
+         al validar: leer y escribir por el mismo id es lo que evita que una
+         contradicción pase desapercibida. Los dos campos viajan con el id
+         del movimiento en su nombre (`llego-7`, `roto-7`), porque un
+         formulario sin JavaScript no puede mandar una lista de objetos. #}
+      <form method="post" action="/compras/recibir">
+        <input type="hidden" name="ref" value="{{ compra.ref }}">
+        <div class="campo-caja" id="cp-recibir">
+          <label>¿Qué llegó?</label>
+          <table class="cmp-tabla cmp-recibir">
+            <thead>
+              <tr><th>Producto</th><th class="cmp-num">Se pidió</th>
+                <th class="cmp-num">Llegó</th><th class="cmp-num">Dañadas</th></tr>
+            </thead>
+            <tbody>
+              {% for r in recepcion.renglones %}
+              <tr>
+                <td><b>{{ r.nombre }}</b>
+                  {# «Ya se recibió» solo sale si hubo una recepción antes:
+                     un 0 en un renglón que nunca se tocó es ruido. #}
+                  {% if r.recibido %}
+                  <span class="cmp-stock">ya se recibieron {{ r.recibido_texto }}</span>
+                  {% endif %}</td>
+                <td class="cmp-num">{{ r.esperado_texto }}
+                  {% if r.pedido is not none and r.pedido != r.esperado %}
+                  <span class="cmp-stock">de {{ r.pedido_texto }}</span>
+                  {% endif %}</td>
+                {# «Llegó» nace con lo que Odoo espera en esta entrada: el
+                   camión completo es el caso normal y así no hay que
+                   escribir nada. Se corrige escribiendo. #}
+                <td><input class="campo cmp-mini" type="number" inputmode="decimal"
+                           min="0" step="any" name="llego-{{ r.movimiento }}"
+                           value="{{ r.esperado_texto }}"
+                           aria-label="Cuántos llegaron de {{ r.nombre }}"></td>
+                {# Las dañadas nacen VACÍAS, o sea en cero: lo normal es que
+                   no llegue nada roto, y un número sugerido ahí sería
+                   inventar una rotura. #}
+                <td><input class="campo cmp-mini" type="number" inputmode="decimal"
+                           min="0" step="any" name="roto-{{ r.movimiento }}"
+                           placeholder="0"
+                           aria-label="Cuántas llegaron dañadas de {{ r.nombre }}"></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <span class="pie-nota">Al stock entra lo que llegó <b>menos</b> las
+            dañadas. Lo dañado queda anotado acá y no entra al inventario; lo
+            que faltó queda pendiente en {{ recepcion.orden.nombre }} y se
+            recibe cuando llegue — esta pantalla se puede usar otra vez.</span>
+        </div>
+        <div class="acciones">
+          {# El único botón negro de esta pantalla: es la acción que hace
+             subir el stock. `data-guardando` es el candado del doble toque,
+             que acá importa de verdad. #}
+          <button class="btn oro" type="submit" data-guardando="Registrando…">Registrar lo que llegó</button>
+          <a class="btn" href="/compras?abrir={{ compra.ref | urlencode }}#c-{{ compra.ref }}">Mejor no</a>
+        </div>
+      </form>
+      {% endif %}
+
+      {% if danado %}
+      {# Lo dañado ya anotado, de todas las recepciones de esta compra. Vive
+         en la app y no en Odoo: una merma es un asiento contable y esa es
+         otra decisión, de otro dueño. El reclamo al proveedor es la tanda
+         siguiente; esto es el número con el que se hará. #}
+      <div class="campo-caja">
+        <label>Lo que llegó dañado</label>
+        <table class="cmp-tabla">
+          <tbody>
+            {% for d in danado %}
+            <tr>
+              <td><b>{{ d.nombre }}</b>
+                {% if d.sku %}<span class="cmp-orden">{{ d.sku }}</span>{% endif %}</td>
+              <td class="cmp-num">{{ d.cantidad_texto }}</td>
+              <td class="cmp-num"><span class="tenue">{{ d.quien }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <span class="pie-nota">No entró al stock. El reclamo al proveedor se
+          hace aparte.</span>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% set activa = 'compras' %}{% include '_nav.html' %}
+
+<script src="/static/menu.js?v={{ v_estaticos }}"></script>
+<script src="/static/calendario.js?v={{ v_estaticos }}"></script>
+</body>
+</html>

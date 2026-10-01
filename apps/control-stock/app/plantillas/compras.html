@@ -150,6 +150,15 @@
                  entonces no se pinta nada. #}
               {% if c.llegada %}<span class="cmp-llega">{{ c.llegada }}</span>{% endif %}
               {% if c.orden_compra %}<span class="cmp-orden">{{ c.orden_compra }}</span>{% endif %}
+              {# La compra dice «pedida» en Linear y Odoo no se enteró. Se
+                 VE en la tarjeta a propósito: un estado que dice pedido con
+                 un Odoo sin orden, en silencio, es lo único que esta fase
+                 no puede permitir. El enlace abre el panel, que es donde
+                 está el botón de reintentar. Lo decide Python
+                 (`compras.falta_la_orden`). #}
+              {% if c.falta_orden %}<a class="cmp-falta" draggable="false"
+                 href="/compras?abrir={{ c.ref | urlencode }}#c-{{ c.ref }}"
+                 aria-label="Falta la orden de compra de {{ c.ref }} en Odoo">falta la orden en Odoo</a>{% endif %}
               <span class="{{ 'hace-alerta' if c.hace_alerta }}">{{ c.hace }}</span>
               {% if c.resp %}<span class="chip-est">{{ c.resp }}</span>
               {% else %}<span class="chip-est chip-nadie">Sin asignar</span>{% endif %}
@@ -249,9 +258,48 @@
       está en su título.</p>
     {% endif %}
   </div>
-  <p class="pie-nota">Los productos se eligen al anotar la compra. Cuando
-    pase a «Pedido» se vuelven la orden de compra de Odoo, y ahí vive la
+  {# ---------- La orden de compra de Odoo (Fase 2, 01/10/2026) ----------
+     Tres caminos, y los tres son estados del mundo, no modos de pantalla:
+     falta la orden (y se puede reintentar), la orden existe y se puede
+     recibir, o todavía no se pidió. Lo decide Python
+     (`compras.falta_la_orden` / `compras.desde_pedido`), no la plantilla.
+
+     Cada botón es su propio <form>: dentro de una tarjeta arrastrable no
+     hay formularios, y acá en el panel sí — son dos acciones distintas y
+     ninguna es LA acción principal de la pantalla, así que van grises (el
+     botón negro de Compras es «+ Compra»). #}
+  {% if abierta.falta_orden %}
+  <div class="campo-caja">
+    <label>Orden de compra</label>
+    <span class="err">Esta compra dice «{{ abierta.estado_ficha.titulo }}» en
+      el tablero y Odoo no tiene su orden. El tablero manda sobre el estado,
+      así que la compra se queda donde está — pero la orden hay que
+      crearla.</span>
+    <form method="post" action="/compras/orden">
+      <input type="hidden" name="ref" value="{{ abierta.ref }}">
+      <div class="acciones">
+        <button class="btn" type="submit" data-guardando="Creando…">Crear la orden en Odoo</button>
+      </div>
+    </form>
+    <span class="pie-nota">Se crea con el proveedor y los productos de
+      arriba, y queda confirmada: ahí Odoo abre solo su entrada de stock.
+      Apretarlo dos veces no crea dos órdenes.</span>
+  </div>
+  {% elif abierta.orden_compra %}
+  <div class="campo-caja">
+    <label>Lo que llegó</label>
+    <div class="acciones">
+      <a class="btn" href="/compras/recibir?ref={{ abierta.ref | urlencode }}#cp-recibir">Registrar lo que llegó</a>
+    </div>
+    <span class="pie-nota">Cuánto llegó y cuántas llegaron dañadas. Lo bueno
+      sube el stock por la entrada de {{ abierta.orden_compra }}; lo que
+      faltó queda pendiente y se recibe cuando llegue.</span>
+  </div>
+  {% elif not abierta.pedida %}
+  <p class="pie-nota">Los productos se eligen al anotar la compra. Al pasar
+    a «Pedido» se vuelven la orden de compra de Odoo, y ahí vive la
     plata.</p>
+  {% endif %}
 </aside>
 {% endif %}
 

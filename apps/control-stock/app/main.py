@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import (acceso_google, agenda, altas, avisos, calculos, calendario,
-               calendario_google, colores, compras,
+               calendario_google, colores, compra_odoo, compras,
                calendario_ics, conteos, control, cot_lead, cotizaciones,
                coworkers, crm_twenty, datos, fichas, fotos,
                linear_leads, mantenimiento, proveedores, resumen, seguridad,
@@ -190,6 +190,7 @@ ventas.iniciar_tablas()
 cotizaciones.iniciar_tablas()
 control.iniciar_tablas()
 compras.iniciar_tablas()
+compra_odoo.iniciar_tablas()
 proveedores.iniciar_tablas()
 mantenimiento.iniciar_tablas()
 avisos.iniciar_tablas()
@@ -3222,10 +3223,22 @@ def _compras_permiso(request, ref):
 async def compras_estado(request: Request):
     """Corregir la columna de una compra: es lo que hace el arrastre.
 
-    No pide motivo, a diferencia del embudo de los leads: en esta fase
-    nada mueve una compra sola, así que mover a mano es el camino normal y
-    no una excepción. Igual queda el comentario firmado en el issue con
-    quién la movió y de dónde a dónde.
+    No pide motivo, a diferencia del embudo de los leads: nada mueve una
+    compra sola, así que mover a mano es el camino normal y no una
+    excepción. Igual queda el comentario firmado en el issue con quién la
+    movió y de dónde a dónde.
+
+    Dos columnas hacen algo más, y es la Fase 2 (01/10/2026):
+
+    - **«Pedido a proveedor»** hace nacer la orden de compra en Odoo. Lo que
+      le FALTE a la compra para poder tener orden —proveedor de Odoo,
+      productos— se dice ANTES y la compra se queda donde está: un dato que
+      falta se arregla, no se arrastra. En cambio un Odoo que no contesta no
+      frena nada (Linear es el tablero y manda sobre el estado): la compra
+      se mueve y queda la marca «falta la orden en Odoo» con su reintento.
+    - **«Recibido»** lleva a la pantalla de recepción, que es donde se dice
+      cuánto llegó y cuánto llegó dañado. El estado ya se movió: la
+      pantalla es para que el stock suba, no para decidir la columna.
     """
     form = await request.form()
     ref = form.get("ref", "")
@@ -3234,7 +3247,21 @@ async def compras_estado(request: Request):
     if error:
         return _compras_vuelve(error=error, ancla=ancla)
     autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
-    aviso, error = compras.mover(ref, form.get("estado", ""), autor=autor)
+    destino = form.get("estado", "")
+    if destino == compra_odoo.CLAVE_PEDIDO:
+        falta = compra_odoo.falta_para_pedir(ref)
+        if falta:
+            return _compras_vuelve(error=falta, ancla=ancla)
+    aviso, error = compras.mover(ref, destino, autor=autor)
+    if error:
+        return _compras_vuelve(aviso=aviso, error=error, ancla=ancla)
+    if destino == compra_odoo.CLAVE_PEDIDO:
+        aviso_odoo, error_odoo = compra_odoo.al_pedir(ref, autor=autor)
+        return _compras_vuelve(
+            aviso=" ".join(p for p in (aviso, aviso_odoo) if p),
+            error=error_odoo, abrir=(ref if error_odoo else ""), ancla=ancla)
+    if destino == compra_odoo.CLAVE_RECIBIDO:
+        return _compras_recibir_vuelve(ref, aviso=aviso)
     return _compras_vuelve(aviso=aviso, error=error, ancla=ancla)
 
 
@@ -4487,3 +4514,132 @@ async def proveedores_preferido(request: Request):
         partner_id, form.get("preferido") == "1",
         autor=request.state.empleada.get("nombre") or request.state.empleada["id"])
     return _proveedores_vuelve(partner_id, error)
+
+
+# ---------------------------------------------------------------------------
+# Compras · Fase 2 (01/10/2026): la orden de compra en Odoo y la entrada de
+# stock al recibir. La lógica vive en `app/compra_odoo.py` (el único que le
+# habla a `purchase.order` y a los `stock.picking` de una compra); acá solo
+# están las pantallas y los redirects, con su ancla de siempre.
+# ---------------------------------------------------------------------------
+
+def _compras_recibir_vuelve(ref, aviso="", error=""):
+    """El 303 a la pantalla de recibir, con su ancla.
+
+    Es la pantalla a la que lleva arrastrar una compra a «Recibido» y a la
+    que vuelve un error de la recepción: el empleado tiene que caer en la
+    lista de renglones y no en el tope, igual que en todo el resto de
+    Compras.
+    """
+    partes = ["ref=" + quote((ref or "").strip())]
+    if aviso:
+        partes.append("aviso=" + quote(aviso))
+    if error:
+        partes.append("error=" + quote(error))
+    return RedirectResponse(
+        "/compras/recibir?" + "&".join(partes) + compras.ANCLA_RECIBIR,
+        status_code=303)
+
+
+@app.post("/compras/orden")
+async def compras_orden(request: Request):
+    """Crear (o reintentar) la orden de compra de esta compra en Odoo.
+
+    Es el botón del panel, y es el que resuelve la marca «falta la orden en
+    Odoo»: `asegurar_orden` es idempotente en sus dos mitades —busca la
+    orden por su `origin` antes de crear nada y confirma la que quedó en
+    borrador—, así que apretarlo dos veces no crea dos órdenes.
+    """
+    form = await request.form()
+    ref = (form.get("ref") or "").strip()
+    ancla = compras.ancla_de_compra(ref)
+    _alc, error = _compras_permiso(request, ref)
+    if error:
+        return _compras_vuelve(error=error, ancla=ancla)
+    autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
+    resultado = compra_odoo.asegurar_orden(ref, autor=autor)
+    if not resultado["ok"]:
+        return _compras_vuelve(error=resultado["error"], abrir=ref, ancla=ancla)
+    orden = resultado["orden"]
+    aviso = (f"La orden {orden['nombre']} ya estaba en Odoo."
+             if resultado["ya_estaba"]
+             else f"Orden de compra {orden['nombre']} creada en Odoo.")
+    return _compras_vuelve(aviso=aviso, abrir=ref, ancla=ancla)
+
+
+@app.get("/compras/recibir")
+def compras_recibir_pantalla(request: Request):
+    """Lo que llegó: los renglones de la entrada de stock de Odoo.
+
+    Cada renglón dice cuánto se pidió, cuánto se recibió ya, y pide cuánto
+    llegó ahora y cuántas llegaron dañadas. Lo que se escribe en Odoo es lo
+    que llegó BUENO (llegó − dañadas), así el stock sube por el camino de
+    Odoo y no por uno propio.
+
+    Sin orden de compra, o con Odoo caído, la pantalla lo dice en palabras
+    simples y nunca es un 500 — la misma tolerancia del tablero.
+    """
+    empleada = request.state.empleada
+    ref = (request.query_params.get("ref") or "").strip()
+    _alc, error = _compras_permiso(request, ref)
+    if error:
+        return _compras_vuelve(error=error,
+                               ancla=compras.ancla_de_compra(ref))
+    compra = compras.con_lineas(compras.uno(ref))
+    estado = compra_odoo.recepcion(ref)
+    return plantillas.TemplateResponse(request, "compras_recibir.html", {
+        "empleada": empleada,
+        "modo": compras.modo(),
+        "compra": compra,
+        "recepcion": estado,
+        # El panel de lo dañado se pinta aunque Odoo no contestara: es una
+        # tabla local y no tiene por qué desaparecer con Odoo.
+        "danado": compra_odoo.danado_de(ref),
+        "aviso": request.query_params.get("aviso"),
+        "error": request.query_params.get("error"),
+    })
+
+
+@app.post("/compras/recibir")
+async def compras_recibir(request: Request):
+    """Registra lo que llegó: valida la entrada en Odoo y sube el stock.
+
+    Lo dañado NO entra al stock y queda anotado en la app; lo que faltó
+    queda pendiente en la orden de compra, que es como Odoo ya lo maneja —
+    así la recepción se puede repetir cuando llegue el resto.
+    """
+    form = await request.form()
+    ref = (form.get("ref") or "").strip()
+    _alc, error = _compras_permiso(request, ref)
+    if error:
+        return _compras_vuelve(error=error,
+                               ancla=compras.ancla_de_compra(ref))
+    llegadas, danadas = _recepcion_del_form(form)
+    autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
+    resultado = compra_odoo.recibir(ref, llegadas=llegadas, danadas=danadas,
+                                    autor=autor)
+    if not resultado["ok"]:
+        # Se vuelve a la MISMA pantalla: lo que se escribió se puede
+        # corregir ahí, y mandar al tablero obligaría a volver a entrar.
+        return _compras_recibir_vuelve(ref, error=resultado["error"])
+    return _compras_vuelve(aviso=resultado["aviso"], abrir=ref,
+                           ancla=compras.ancla_de_compra(ref))
+
+
+def _recepcion_del_form(form):
+    """({movimiento: llegó}, {movimiento: dañadas}) de los renglones que el
+    formulario trae.
+
+    Viajan como `llego-7` / `roto-7` porque un formulario sin JavaScript no
+    puede mandar una lista de objetos: el id del movimiento de Odoo va en el
+    nombre del campo. Un id que no sea de esta entrada lo descarta
+    `compra_odoo.recibir`, que recorre los renglones que Odoo dio y no los
+    que el navegador mandó.
+    """
+    llegadas, danadas = {}, {}
+    for clave in form.keys():
+        if clave.startswith("llego-"):
+            llegadas[clave[len("llego-"):]] = form.get(clave)
+        elif clave.startswith("roto-"):
+            danadas[clave[len("roto-"):]] = form.get(clave)
+    return llegadas, danadas

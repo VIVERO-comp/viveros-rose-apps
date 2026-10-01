@@ -13,8 +13,12 @@ proveedores y el calendario son fases de después.
 - **Linear es el único tablero**: el estado de la compra vive en la
   columna del issue, en ningún otro lado.
 - **Odoo es solo dinero y stock**: la orden de compra (`P000xx`), la
-  factura del proveedor, los pagos y la entrada al inventario. Este módulo
-  LEE de Odoo (nunca escribe) y solo para pintar cuánto se pagó de cuánto.
+  factura del proveedor, los pagos y la entrada al inventario. De Odoo este
+  módulo LEE —para pintar cuánto se pagó de cuánto y para sugerir
+  proveedores— y lo único que escribe es el contacto del proveedor nuevo,
+  con un clic explícito. **La orden de compra y la entrada de stock las
+  escribe `compra_odoo.py`**, que es el único que les habla; acá solo queda
+  guardado su número (`guardar_orden`).
 - **Los proveedores no tocan WhatsApp ni Twenty**: viven como contacto de
   Odoo (`res.partner` con `supplier_rank > 0`). Un proveedor no es un lead.
 
@@ -130,6 +134,12 @@ for _e in ESTADOS:
 
 POR_CLAVE = {e["clave"]: e for e in ESTADOS}
 ORDEN = [e["clave"] for e in ESTADOS]
+
+# En qué lugar de la fila va cada columna. Sirve para una sola pregunta —
+# «¿esta compra ya se pidió?» (`desde_pedido`)— y no es una escalera que
+# degrade sola: las compras se mueven a mano para los dos lados, a
+# diferencia del embudo de los leads.
+_LUGAR = {clave: i for i, clave in enumerate(ORDEN)}
 
 # La columna donde nace toda compra hecha a mano.
 CLAVE_INICIAL = "POR_PEDIR"
@@ -316,6 +326,71 @@ def _filas_locales():
     with _db() as con:
         filas = con.execute("SELECT * FROM compra").fetchall()
     return {f["ref"]: dict(f) for f in filas}
+
+
+def guardar_orden(ref, orden_id, nombre=""):
+    """Guarda en la compra el número de su orden de compra de Odoo.
+
+    Lo llama `compra_odoo` justo después de crearla, y se hace ANTES de
+    confirmarla a propósito: si confirmar falla, la orden ya existe en Odoo
+    y el reintento tiene que encontrarla por su id en vez de crear una
+    segunda.
+
+    Parchea la caché y la muestra EN EL MOMENTO, por lo mismo que lo hace
+    `_parchear_estado`: sin eso, el aviso diría «orden P00003 creada» y la
+    tarjeta seguiría pintando «falta la orden en Odoo» hasta que el refresco
+    de fondo terminara.
+    """
+    ref = (ref or "").strip()
+    if not ref:
+        return
+    orden_id = int(orden_id) if orden_id else None
+    nombre = (nombre or "").strip()
+    iniciar_tablas()
+    with _db() as con:
+        cambiadas = con.execute(
+            "UPDATE compra SET orden_compra_id = ?, orden_compra_nombre = ? "
+            "WHERE ref = ?", (orden_id, nombre, ref)).rowcount
+        if not cambiadas:
+            # La compra puede no tener fila local: una base recién creada, o
+            # un issue que alguien abrió a mano en el proyecto COMPRAS de
+            # Linear. Se le abre la fila con lo que se sabe, para que el
+            # número de la orden no se pierda por eso.
+            con.execute(
+                "INSERT INTO compra (ref, orden_compra_id, "
+                "orden_compra_nombre, creada) VALUES (?, ?, ?, ?)",
+                (ref, orden_id, nombre,
+                 datetime.now(ZONA_PANAMA).isoformat()))
+    for compra in (_en_cache(ref), None if configurado() else _muestra_uno(ref)):
+        if compra is not None:
+            compra.update({"orden_compra_id": orden_id,
+                           "orden_compra": nombre})
+    refrescar()
+
+
+def desde_pedido(clave):
+    """¿Esta columna es «Pedido a proveedor» o una de las de después?
+
+    O sea: ¿esta compra ya se le pidió al proveedor? Es lo que decide si la
+    tarjeta tiene que avisar que a Odoo le falta la orden.
+    """
+    return _LUGAR.get(clave, -1) >= _LUGAR["PEDIDO"]
+
+
+def falta_la_orden(compra, lineas):
+    """¿Esta compra dice «pedida» en Linear y Odoo no se enteró?
+
+    True solo cuando hay algo que pedir de verdad: una compra anotada SIN
+    productos no tiene orden que hacer —lo que se compra está en su título,
+    y eso es un camino que el formulario ofrece a propósito—, así que no
+    estrena una marca de falla que nadie puede resolver.
+
+    La marca no se guarda en ninguna parte: se deduce de lo que hay. Un
+    estado derivado no se puede desincronizar de la realidad.
+    """
+    return bool(desde_pedido((compra or {}).get("estado"))
+                and not (compra or {}).get("orden_compra_id")
+                and lineas)
 
 
 # ---------------------------------------------------------------------------
@@ -1267,6 +1342,7 @@ ANCLA_BUSCADOR = "#cp-buscar"    # el buscador de productos
 ANCLA_TABLERO = "#cp-tablero"    # las 7 columnas
 ANCLA_PROVEEDOR = "#cp-prov"     # el campo del proveedor y su «crearlo»
 ANCLA_BAJOS = "#cp-bajos"        # la lista de lo que está bajo o en cero
+ANCLA_RECIBIR = "#cp-recibir"    # la lista de la pantalla de recibir
 
 
 def ancla_de_compra(ref):
@@ -1301,6 +1377,9 @@ def _tarjeta(compra, plata_por_ref, lineas_por_ref=None):
         "cuantas_lineas": len(lineas),
         "lineas_resumen": resumen_de_lineas(lineas),
         "lineas_total": total_de_lineas(lineas),
+        # «Pedida en Linear y Odoo no se enteró»: la desincronización se ve
+        # en la tarjeta, nunca se esconde.
+        "falta_orden": falta_la_orden(compra, lineas),
     })
 
 
@@ -1314,6 +1393,8 @@ def con_lineas(compra):
         "lineas": lineas, "cuantas_lineas": len(lineas),
         "lineas_resumen": resumen_de_lineas(lineas),
         "lineas_total": total_de_lineas(lineas),
+        "falta_orden": falta_la_orden(compra, lineas),
+        "pedida": desde_pedido(compra.get("estado")),
     })
 
 
