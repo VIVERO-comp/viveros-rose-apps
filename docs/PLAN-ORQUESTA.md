@@ -66,7 +66,7 @@ C12 eliminada: el tablero de Proyectos se borró el 24/09/2026.
 8. Excepción: **Autorizar entrega sin pago**, solo admin, con motivo, registrada y avisada. [KORTO]
 9. Domicilio: se programa con petición. Lo acepta el primero de los elegidos; el admin puede cambiar el responsable después. [KORTO]
 10. Retiro en vivero: cualquier día, sin petición, con responsable de preparar. [KORTO + REC]
-11. Días de entrega a domicilio: **[DECISIÓN PENDIENTE de Korto]**. Hoy el checkout web vigente (29/09) funciona así: moto = mismo día con corte 1 p.m. (pagado viernes o sábado → lunes); carro/pickup = la fecha la pone Korto desde /admin. La regla "solo martes y miércoles" no está registrada en ningún documento del proyecto; si Korto la confirma, hay que decidir si aplica también a la tienda web.
+11. Días de entrega a domicilio: **cualquier día** — valen las reglas del checkout (29/09) para todo: moto = mismo día con corte 1 p.m. (pagado viernes o sábado → lunes); carro/pickup = la fecha la pone Korto desde /admin. La regla "solo martes y miércoles" quedó **DESCARTADA**. [KORTO 1/10]
 12. Entrega parcial permitida. Lo que falta queda como "entrega pendiente" y se programa aparte. Si la falla fue nuestra, ese envío puede ser gratis. [KORTO]
 13. Cliente rechaza la entrega: el pedido no desaparece, queda "Por resolver". Puede cobrarse el envío. [KORTO]
 
@@ -202,7 +202,7 @@ Saldo, en cualquier momento (antes, al entregar o después): `[COBRAR $500]` →
 
 ### 5.3 Entrega a domicilio
 ```
-Pedido pagado o con abono → [PROGRAMAR] → fecha (días por decidir, ver regla 11) + ☐Korto ☐Rubén ☐Mary → [ENVIAR PETICIÓN]
+Pedido pagado o con abono → [PROGRAMAR] → fecha (cualquier día, regla 11) + ☐Korto ☐Rubén ☐Mary → [ENVIAR PETICIÓN]
 → el primero que toca Aceptar (en la app o en el correo) queda como responsable → Programado
 → [SALIR] En camino → [ENTREGAR] → foto opcional → valida la salida en Odoo → Entregado
 ```
@@ -417,7 +417,7 @@ Calendario · Stock · CRM (Mío / Todos) · Pedidos · Vender · Compras. Regis
 W1 Hoy · W2 Tarjeta de pedido · W11 Agregar al pedido · W3 Cobrar · W4 Otro monto · W5 Programar y petición · W6 Aceptar (app y correo) · W7 Entregar y entrega parcial · W8 Alquiler · W9 Autorizar entrega sin pago · W10 Historial del pedido.
 
 ### Componentes
-Tarjeta (nombre, número, monto, hasta dos chips, iniciales) · Chip de estado · Botón principal con monto · Hoja "Más opciones" · Selector de personas · Selector de fecha que solo habilita días válidos · Cámara o subida de comprobante · Paso de confirmación ("¿Seguro? Esto devuelve $100") · Línea de historial.
+Tarjeta (nombre, número, monto, hasta dos chips, iniciales) · Chip de estado · Botón principal con monto · Hoja "Más opciones" · Selector de personas · Selector de fecha (cualquier día; W5 va sin restricción de días) · Cámara o subida de comprobante · Paso de confirmación ("¿Seguro? Esto devuelve $100") · Línea de historial.
 
 ---
 
@@ -498,7 +498,7 @@ Todas las ventas nuevas pasan por Orquesta. Las etapas manuales Abono y Pagado d
 | P1 | Cliente cancela después de pagar: ¿devolver, dejar a favor o retener? | Define notas de crédito y reembolsos |
 | P2 | **Respondida [KORTO 1/10]:** sí al mecanismo único "Cobrar otro monto" (C4), con esta forma: escondido en Más opciones y sin 50% pre-escrito (el monto arranca vacío) | Simplifica todo el sistema |
 | P3 | Factura del saldo: ¿al cobrarlo (tu decisión) aunque el contador no vea la deuda en Odoo hasta entonces? ¿O al entregar? | Contabilidad (C6) |
-| P4 | Días de entrega a domicilio: **[DECISIÓN PENDIENTE]** (ver regla 11) | Selector de fechas |
+| P4 | **Respondida [KORTO 1/10]:** cualquier día; valen las reglas del checkout para todo (mar/mié descartada) | Selector de fechas |
 | P5 | Tarjeta: ¿tienen POS físico del banco? ¿Qué se registra como comprobante? | Método de pago (C7) |
 | P6 | ¿Rubén y Mary pueden **bajar** montos y devolver dinero, o solo tú? | Permisos (C11) |
 | P8 | Alquiler: si una planta vuelve dañada o no vuelve, ¿se cobra? ¿Cuánto? | Flujo 5.7 |
