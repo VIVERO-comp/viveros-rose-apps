@@ -28,7 +28,7 @@ from . import (acceso_google, agenda, altas, avisos, calculos, calendario,
                calendario_google, colores, compras,
                calendario_ics, conteos, control, cot_lead, cotizaciones,
                coworkers, crm_twenty, datos, fichas, fotos,
-               linear_leads, mantenimiento, resumen, seguridad,
+               linear_leads, mantenimiento, proveedores, resumen, seguridad,
                vehiculos, ventas, wa_autor)
 
 app = FastAPI(title="Control Viverorose")
@@ -190,6 +190,7 @@ ventas.iniciar_tablas()
 cotizaciones.iniciar_tablas()
 control.iniciar_tablas()
 compras.iniciar_tablas()
+proveedores.iniciar_tablas()
 mantenimiento.iniciar_tablas()
 avisos.iniciar_tablas()
 calendario_ics.iniciar_tablas()
@@ -4412,3 +4413,77 @@ def _compras_con_el_producto_nuevo(request, hecho):
             aviso = f"{aviso} {texto}"
     return _compras_vuelve(aviso=aviso, error=error, nueva=True,
                            ancla=compras.ANCLA_LINEAS)
+
+
+# ---------------------------------------------------------------------------
+# La vista de PROVEEDORES, la segunda pantalla de Compras (30/09/2026):
+# cuánto se le compró a cada uno, calculado de Odoo, con "Preferido" como
+# única marca a mano. `app/proveedores.py` es la única puerta a este dato;
+# esta ruta solo lo pinta. El enlace desde el tablero de Compras lo pone
+# la otra tanda que trabaja esa pantalla — acá no se toca `compras.html`.
+# ---------------------------------------------------------------------------
+
+@app.get("/compras/proveedores")
+def proveedores_pantalla(request: Request):
+    """La lista de proveedores con lo que de verdad se les compró.
+
+    Hoy (30/09/2026) no hay ni un proveedor marcado ni una orden de compra
+    en Odoo: la pantalla nace vacía y lo dice en palabras simples
+    (`proveedores.listar_o_vacio`), nunca un error ni un 500.
+
+    `?abrir=<id>` trae la ficha de UN proveedor en el panel lateral: sus
+    datos y, de `product.supplierinfo`, lo que le compramos con su precio.
+    SOLO LECTURA por ahora — asignar productos nuevos espera el plan
+    completo que está mirando el dueño.
+    """
+    resultado = proveedores.listar_o_vacio()
+    lista = resultado["proveedores"]
+    abrir = (request.query_params.get("abrir") or "").strip()
+    abierto, productos_abierto = None, None
+    error_aviso = request.query_params.get("error")
+    if abrir and resultado["ok"]:
+        abierto = proveedores.uno(abrir, lista)
+        if abierto is not None:
+            productos_abierto = proveedores.productos_de(abierto["id"])
+        elif not error_aviso:
+            # Un enlace viejo (o tocado a mano): no es un 500, es el mismo
+            # caso de "ya no está" que ya existe en Compras y en Control.
+            error_aviso = f"Ese proveedor ({abrir}) ya no está en la lista."
+    return plantillas.TemplateResponse(request, "proveedores.html", {
+        "empleada": request.state.empleada,
+        "ok": resultado["ok"],
+        "error": resultado["error"],
+        "proveedores": lista,
+        "resumen": proveedores.resumen(lista),
+        "es_admin": _es_admin(request.state.empleada),
+        "abierto": abierto,
+        "productos_abierto": productos_abierto,
+        "aviso": request.query_params.get("aviso"),
+        "error_aviso": error_aviso,
+    })
+
+
+def _proveedores_vuelve(partner_id="", error=""):
+    """El 303 de vuelta a Proveedores, a la tarjeta que se tocó (si llegó
+    cuál era) y no al tope de la lista."""
+    url = "/compras/proveedores"
+    if error:
+        url += "?error=" + quote(error)
+    if partner_id:
+        url += f"#pv-{partner_id}"
+    return RedirectResponse(url, status_code=303)
+
+
+@app.post("/compras/proveedores/preferido")
+async def proveedores_preferido(request: Request):
+    """Prende o apaga «Preferido». Solo lo puede tocar un admin: es la
+    única decisión de esta pantalla que no se calcula, y es del dueño."""
+    form = await request.form()
+    partner_id = (form.get("partner_id") or "").strip()
+    if not _es_admin(request.state.empleada):
+        return _proveedores_vuelve(
+            partner_id, "Solo un admin puede marcar «Preferido».")
+    error = proveedores.marcar_preferido(
+        partner_id, form.get("preferido") == "1",
+        autor=request.state.empleada.get("nombre") or request.state.empleada["id"])
+    return _proveedores_vuelve(partner_id, error)

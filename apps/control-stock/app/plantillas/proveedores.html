@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Proveedores — Control Viverorose</title>
+<link rel="icon" type="image/jpeg" href="/static/logo.jpg">
+<link rel="apple-touch-icon" href="/static/logo.jpg">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Proveedores">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+{# La vista de PROVEEDORES, segunda pantalla de Compras (30/09/2026): lo
+   que de verdad se le compró a cada uno, todo calculado de Odoo
+   (`app/proveedores.py`). Misma piel que Compras y Control — calendario.css,
+   las clases que ya existen, un solo botón negro por pantalla (y acá ni
+   siquiera hay uno: nada que esta pantalla hace es LA acción principal del
+   día, así que «Marcar Preferido» va gris como cualquier botón de fila, no
+   dorado). Sin JavaScript nuevo: menu.js es la hamburguesa de siempre. #}
+<link rel="stylesheet" href="/static/calendario.css?v={{ v_estaticos }}">
+</head>
+<body class="{{ 'menu-oculto' if request.cookies.get('menu') == '0' }}">
+
+<div class="app">
+  <aside class="lado">
+    <div class="marca">
+      <img src="/static/logo.jpg" alt="Vivero Rose">
+      <span>Control Viverorose</span>
+    </div>
+    <a class="pil" href="/calendario">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>Calendario
+    </a>
+    <a class="pil" href="/?tab=stock">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M12 10C12 6 9 3 4 3c0 5 3 8 8 7z"/><path d="M12 13c0-3.5 2.5-6 7-6 0 4.5-2.5 7-7 6z"/></svg>Stock
+    </a>
+    <a class="pil" href="/venta">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2 2h2l2.7 12.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 1.9-1.6L22 6H5"/></svg>Vender
+    </a>
+    <a class="pil" href="/control">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Control
+    </a>
+    {# El pill de Compras queda "on": esta pantalla es parte de Compras,
+       no una pestaña propia del menú. #}
+    <a class="pil on" href="/compras">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><path d="M2 4h20v4H2z"/><path d="M10 12h4"/></svg>Compras
+    </a>
+    <a class="pil" href="/?tab=ajustes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Ajustes
+    </a>
+    <div class="pie">
+      <b>{{ empleada.nombre or empleada.id }}</b>
+      <span>Proveedores · calculado de Odoo</span>
+    </div>
+  </aside>
+
+  <div class="tablero">
+    {% with bm_titulo='Proveedores', bm_sub='Lo que de verdad se les compró',
+            bm_volver='/compras' %}{% include '_barra_movil.html' %}{% endwith %}
+    <div class="barra">
+      <button class="btn icono hamb" type="button" aria-label="Mostrar u ocultar el menú"
+              aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <h3>Proveedores</h3>
+      <span class="crece"></span>
+      <span class="tenue" style="font-size:12px">Todo calculado de Odoo —
+        «Preferido» es la única marca a mano</span>
+      <a class="btn" href="/compras">← Compras</a>
+    </div>
+
+    {# Las X de los banners vuelven a la vista limpia, sin query: acá no hay
+       tarjeta ni formulario que "donde estaba" tenga que recordar más que
+       la pantalla misma. #}
+    {% if error_aviso %}<div class="franja"><b>Ups.</b> <span>{{ error_aviso }}</span>
+      <a class="cierra-banner" href="/compras/proveedores" aria-label="Cerrar el aviso">×</a></div>{% endif %}
+    {% if aviso %}<div class="aviso-ok">{{ aviso }}
+      <a class="cierra-banner" href="/compras/proveedores" aria-label="Cerrar el aviso">×</a></div>{% endif %}
+
+    {% if not ok %}
+    {# Odoo no contestó (o esta instancia no tiene credenciales): NUNCA se
+       lee como "no hay proveedores". Son dos cosas distintas y la
+       diferencia tiene que llegar hasta acá. #}
+    <div class="solo-lectura"><b>No se pudo leer Odoo.</b> {{ error }} Esta
+      pantalla no sabe todavía si hay proveedores o no — vuelve a intentar
+      sola.</div>
+    {% elif not proveedores %}
+    {# El estado de HOY (30/09/2026): cero contactos marcados proveedor.
+       Es un hecho del negocio, no una falla, y se explica en palabras
+       simples en vez de salir en blanco. #}
+    <div class="solo-lectura prov-vacio">
+      <b>Todavía no hay proveedores.</b> Nace el primero al anotar la
+      primera compra: en <a href="/compras?nueva=1">Compras → + Compra</a>
+      se escribe o elige a quién se le compra, y en cuanto esa compra tenga
+      una orden confirmada en Odoo, el proveedor aparece acá con su
+      historia — cuánto se le compró, cuántas compras y su última.
+    </div>
+    {% else %}
+
+    {% if resumen.compras_ano %}
+    <p class="pie-nota">Este año: <b>{{ resumen.total_ano | dinero }}</b> en
+      {{ resumen.compras_ano }} compra{{ 's' if resumen.compras_ano != 1 }}{% if resumen.preferidos %},
+      {{ resumen.preferidos }} preferido{{ 's' if resumen.preferidos != 1 }}{% endif %}.</p>
+    {% endif %}
+
+    <div class="prov-grid">
+      {% for p in proveedores %}
+      <div class="prov-tarjeta" id="pv-{{ p.id }}">
+        <div class="prov-cab">
+          <b>{{ p.nombre or 'Sin nombre' }}</b>
+          <span class="chip-est prov-badge {{ p.estado_clase }}">{{ p.estado_titulo }}</span>
+        </div>
+        {% if p.telefono or p.correo or p.ciudad %}
+        <p class="prov-contacto">
+          {% if p.telefono %}<span>{{ p.telefono }}</span>{% endif %}
+          {% if p.correo %}<span>{{ p.correo }}</span>{% endif %}
+          {% if p.ciudad %}<span>{{ p.ciudad }}</span>{% endif %}
+        </p>
+        {% endif %}
+        <div class="dato"><b>Este año</b><span>
+          {% if p.hay_compra_alguna %}{{ p.total_ano | dinero }} · {{ p.compras_ano }} compra{{ 's' if p.compras_ano != 1 }}
+          {% else %}—{% endif %}</span></div>
+        <div class="dato"><b>Última compra</b><span>{{ p.ultima_compra_texto }}</span></div>
+        {# Los dos datos imposibles hoy: nunca un 0 ni un 100% inventados,
+           siempre "—" con la nota de abajo. #}
+        <div class="dato"><b>A tiempo</b><span>{{ p.a_tiempo_texto }}</span></div>
+        <div class="dato"><b>Dañado</b><span>{{ p.danado_texto }}</span></div>
+        {# La ficha: lo que le compramos a este proveedor y su precio
+           (`product.supplierinfo` de Odoo). Solo lectura por ahora. #}
+        <a class="prov-abrir" href="/compras/proveedores?abrir={{ p.id }}#pv-{{ p.id }}">
+          Ver productos y precio →</a>
+        {% if es_admin %}
+        <form class="acciones" method="post" action="/compras/proveedores/preferido">
+          <input type="hidden" name="partner_id" value="{{ p.id }}">
+          <input type="hidden" name="preferido" value="{{ '0' if p.preferido else '1' }}">
+          <button class="btn chico" type="submit">
+            {{ 'Quitar «Preferido»' if p.preferido else '★ Marcar «Preferido»' }}
+          </button>
+        </form>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    <p class="pie-nota">«A tiempo» y «Dañado» todavía no se pueden calcular:
+      se empiezan a contar el día que se reciba la primera compra (con
+      cantidades y unidades dañadas), que es otra tanda. Todo lo demás sale
+      de las órdenes de compra CONFIRMADAS en Odoo, nunca de una cotización
+      sin aceptar.</p>
+    {% endif %}
+  </div>
+</div>
+
+{% set activa = 'compras' %}{% include '_nav.html' %}
+
+{% if abierto %}
+{# La ficha de UN proveedor: sus datos y, de `product.supplierinfo`, lo
+   que le compramos con su precio. SOLO LECTURA — pedido del dueño
+   30/09/2026, ampliando esta misma pantalla mientras se construía; la
+   pantalla de asignar/editar precios espera el plan completo que está
+   mirando. Mismo panel de «ver los productos de una compra» en Compras
+   (.panel-der + .telon), sin JS. #}
+{% set vuelta = '/compras/proveedores#pv-' ~ abierto.id %}
+<a class="telon" href="{{ vuelta }}" aria-label="Cerrar"></a>
+<aside class="panel-der">
+  <div class="cab-panel">
+    <div><span class="chip-est prov-badge {{ abierto.estado_clase }}">{{ abierto.estado_titulo }}</span>
+      <h4>{{ abierto.nombre }}</h4></div>
+    <a class="btn chico" href="{{ vuelta }}">Cerrar</a>
+  </div>
+  {% if abierto.telefono %}<div class="dato"><b>Teléfono</b><span>{{ abierto.telefono }}</span></div>{% endif %}
+  {% if abierto.correo %}<div class="dato"><b>Correo</b><span>{{ abierto.correo }}</span></div>{% endif %}
+  {% if abierto.ciudad %}<div class="dato"><b>Ciudad</b><span>{{ abierto.ciudad }}</span></div>{% endif %}
+  <div class="dato"><b>Este año</b><span>
+    {% if abierto.hay_compra_alguna %}{{ abierto.total_ano | dinero }} · {{ abierto.compras_ano }} compra{{ 's' if abierto.compras_ano != 1 }}
+    {% else %}—{% endif %}</span></div>
+  <div class="dato"><b>Última compra</b><span>{{ abierto.ultima_compra_texto }}</span></div>
+
+  <div class="campo-caja">
+    <label>Lo que le compramos (producto y precio)</label>
+    {% if not productos_abierto.ok %}
+    <span class="err">No se pudo leer de Odoo: {{ productos_abierto.error }}.</span>
+    {% elif not productos_abierto.productos %}
+    <p class="pie-nota">Todavía no tiene ningún producto asignado en Odoo.
+      Por ahora esta pantalla solo LEE lo que ya esté asignado allá —
+      asignar productos y precios desde acá es la próxima tanda.</p>
+    {% else %}
+    <table class="cmp-tabla">
+      <tbody>
+        {% for pr in productos_abierto.productos %}
+        <tr>
+          <td><b>{{ pr.nombre or 'Sin nombre' }}</b>
+            {% if pr.sku %}<span class="cmp-orden">{{ pr.sku }}</span>{% endif %}</td>
+          <td class="cmp-num">
+            {% if pr.precio is not none %}{{ pr.precio | dinero }}
+            {% else %}<span class="tenue">sin precio</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+  <p class="pie-nota">Esta ficha solo lee de Odoo (`product.supplierinfo`).
+    Asignar productos nuevos o cambiar precios todavía no se puede desde
+    acá.</p>
+</aside>
+{% endif %}
+
+<script src="/static/menu.js?v={{ v_estaticos }}"></script>
+</body>
+</html>
