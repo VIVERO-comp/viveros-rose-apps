@@ -35,6 +35,7 @@ def db_limpia(tmp_path, monkeypatch):
     calendario_ics.iniciar_tablas()
     calendario_google.iniciar_tablas()
     cotizaciones.reiniciar_cache()
+    ventas.reiniciar_cache()
     datos.reiniciar_cache_proxy()
 
 

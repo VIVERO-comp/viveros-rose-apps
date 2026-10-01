@@ -7,6 +7,7 @@ prototipo. Las acciones (ajustar stock, atender alertas, conteos, fichas)
 son POSTs de vuelta a este mismo servidor; la app nunca toca Odoo directo.
 """
 
+import base64
 import json
 import logging
 import os
@@ -23,8 +24,8 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import (acceso_google, agenda, avisos, calculos, calendario,
-               calendario_google, colores,
+from . import (acceso_google, agenda, altas, avisos, calculos, calendario,
+               calendario_google, colores, compras,
                calendario_ics, conteos, control, cot_lead, cotizaciones,
                coworkers, crm_twenty, datos, fichas, fotos,
                linear_leads, mantenimiento, resumen, seguridad, vehiculos,
@@ -188,6 +189,7 @@ datos.iniciar_db()
 ventas.iniciar_tablas()
 cotizaciones.iniciar_tablas()
 control.iniciar_tablas()
+compras.iniciar_tablas()
 mantenimiento.iniciar_tablas()
 avisos.iniciar_tablas()
 calendario_ics.iniciar_tablas()
@@ -436,7 +438,7 @@ def _resumen_categorias(inventario, umbral):
 
 
 @app.get("/")
-def inicio(request: Request, refrescar: int = 0):
+def inicio(request: Request, refrescar: int = 0, crear: str = ""):
     # Sin pestaña pedida, la app ABRE en el Calendario (dueño, 22/09/2026:
     # "quita inicio y pon calendario de primero" y, al ver que la raíz
     # seguía mostrando el tablero, "todavía inicio está"). El tablero del
@@ -586,6 +588,13 @@ def inicio(request: Request, refrescar: int = 0):
         "dias_conteo": dias_conteo,
         "conteo_vencido": conteo_vencido,
         "categorias": _resumen_categorias(inventario, umbral),
+        # Las categorías del alta de plantas las pinta Jinja (antes las
+        # armaba el JS): así la pantalla puede llegar con el formulario ya
+        # abierto desde "Crear producto" sin una línea de JavaScript.
+        "categorias_planta": datos.CATEGORIAS_PLANTA,
+        # /?tab=stock&crear=planta —el enlace "Planta" de Crear producto—
+        # abre el formulario de siempre ya desplegado.
+        "abrir_crear_planta": crear == "planta",
         "umbral": umbral,
         "alertas": alertas,
         "cal": panel_cal,
@@ -609,7 +618,6 @@ def inicio(request: Request, refrescar: int = 0):
             "fichas": fichas.todas(),
             "referencias": fichas.referencias(),
             "sinPublicados": sin_publicados,
-            "categoriasPlanta": datos.CATEGORIAS_PLANTA,
         }, ensure_ascii=False),
     })
 
@@ -1130,16 +1138,67 @@ def venta(request: Request, error: str = "", lead: str = "",
         "en_curso": en_curso,
         "tipos_servicio": [(t, cotizaciones.etiqueta_para_cotizar(t))
                           for t in cotizaciones.ORDEN_TIPOS],
-        "ventas": [{**v, "fecha_texto": _fecha_venta(v["creado_en"]),
-                    "etiqueta_estado": ventas.ETIQUETAS_ESTADO[v["estado"]],
-                    "whatsapp": _enlace_whatsapp(request, v),
-                    "nombre_cotizacion_pdf": ventas.nombre_de_pdf(
-                        v["orden"].replace("/", "-"), v["cliente"]),
-                    "nombre_factura_pdf": ventas.nombre_de_pdf(
-                        (v["factura"] or str(v["n"])).replace("/", "-"), v["cliente"])}
-                   for v in ventas.ventas_todas()],
-        "cotizaciones_servicio": _cotizaciones_con_estado(),
+        "vender_lista": _lista_vender(request),
     })
+
+
+# ---------------------------------------------------------------------------
+# La lista única de "Vender": ventas de plantas y cotizaciones de
+# servicio mezcladas (dueño, 30/09/2026: "ponlo en orden de número, y no,
+# si es de servicio o planta no importa, pon todo en una fila"). La
+# decisión de QUÉ se pinta y en qué ORDEN vive aquí, en Python — la
+# plantilla solo recorre esta lista ya armada (regla del proyecto).
+# ---------------------------------------------------------------------------
+
+_RE_NUMERO_ORDEN = re.compile(r"(\d+)\s*$")
+
+
+def _numero_de_orden(orden):
+    """El número dentro de "S00099" -> 99, para ordenar de mayor a menor.
+    None si la orden no tiene ni un dígito al final (un renglón que
+    todavía no llegó a Odoo, ej. un borrador local sin confirmar) — el
+    llamador lo manda al fondo, nunca intercalado entre los que sí tienen
+    número."""
+    coincidencia = _RE_NUMERO_ORDEN.search(orden or "")
+    return int(coincidencia.group(1)) if coincidencia else None
+
+
+def _fila_venta(request, v):
+    """Una venta de plantas, con "tipo" para que la plantilla sepa qué
+    tarjeta pintar en la lista única."""
+    return {
+        **v, "tipo": "venta", "fecha_texto": _fecha_venta(v["creado_en"]),
+        "etiqueta_estado": ventas.ETIQUETAS_ESTADO[v["estado"]],
+        "whatsapp": _enlace_whatsapp(request, v),
+        # (v["orden"] or ""): un renglón que todavía no llegó a Odoo (sin
+        # número, ver _lista_vender) no puede tronar aquí con un
+        # AttributeError sobre None.
+        "nombre_cotizacion_pdf": ventas.nombre_de_pdf(
+            (v["orden"] or "").replace("/", "-"), v["cliente"]),
+        "nombre_factura_pdf": ventas.nombre_de_pdf(
+            (v["factura"] or str(v["n"])).replace("/", "-"), v["cliente"]),
+    }
+
+
+def _lista_vender(request):
+    """Ventas locales + cotizaciones de servicio, en UNA sola lista,
+    ordenada por número de orden de mayor a menor (la más nueva arriba).
+
+    Una CANCELADA no se pinta (dueño, 30/09/2026): el dato se queda
+    intacto en Odoo (y en la tabla local, para una venta), solo deja de
+    aparecer aquí. Un renglón sin número (todavía no llegó a Odoo) cae al
+    fondo por construcción: `_numero_de_orden` devuelve None y la clave de
+    orden lo trata como el más chico de todos, nunca intercalado."""
+    filas = (
+        [_fila_venta(request, v) for v in ventas.ventas_todas()
+         if v["estado"] != "cancelada"]
+        + [{**c, "tipo": "servicio"} for c in _cotizaciones_con_estado()
+           if not c["cancelada"]]
+    )
+    filas.sort(key=lambda f: (_numero_de_orden(f["orden"]) is not None,
+                              _numero_de_orden(f["orden"]) or 0),
+              reverse=True)
+    return filas
 
 
 def _cotizaciones_con_estado():
@@ -1184,6 +1243,20 @@ def venta_cancelar(request: Request, n: int):
     except Exception as error:
         return RedirectResponse(
             "/venta?error=" + quote(f"No se pudo cancelar: {error}"),
+            status_code=303)
+    return RedirectResponse("/venta", status_code=303)
+
+
+@app.post("/venta/servicio/{n}/cancelar")
+def venta_servicio_cancelar(request: Request, n: int):
+    # "Quitar" en una cotización de servicio (dueño, 30/09/2026): mismo
+    # efecto que Cancelar en una venta de planta, reusando el mismo
+    # camino a Odoo (cotizaciones.cancelar -> ventas._cancelar_en_odoo).
+    try:
+        cotizaciones.cancelar(n)
+    except Exception as error:
+        return RedirectResponse(
+            "/venta?error=" + quote(f"No se pudo quitar: {error}"),
             status_code=303)
     return RedirectResponse("/venta", status_code=303)
 
@@ -1277,7 +1350,12 @@ def venta_buscar(request: Request, q: str = ""):
         resultados = _resultados_con_stock(ventas.buscar_productos(q))
     except Exception:
         return {"error": "Sin conexión con Odoo en este momento."}
-    return {"resultados": [{**p, "precio": dinero_venta(p["precio"])} for p in resultados]}
+    # "precio_num" (30/09/2026): el buscador de la pantalla de editar arma
+    # la fila de la planta en el navegador (no hay a dónde hacer un POST
+    # con carrito, esa pantalla edita una orden ya existente) y necesita el
+    # número crudo, no el "$3.50" ya formateado para mostrar.
+    return {"resultados": [{**p, "precio": dinero_venta(p["precio"]),
+                            "precio_num": p["precio"]} for p in resultados]}
 
 
 def _datos_cliente_del_form(form):
@@ -1827,21 +1905,100 @@ def venta_servicio_editar(request: Request, n: int):
                                        _contexto_editar(request, datos_edicion))
 
 
+def _flot(valor):
+    """Un campo del formulario o de cargar_para_editar (string, puede venir
+    vacío) a float; nunca revienta, nunca None — para sumar subtotales."""
+    try:
+        texto = str(valor or "").strip().replace(",", ".")
+        return float(texto) if texto else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _contexto_editar(request, datos_edicion, error=None):
+    """El contexto de la pantalla de editar (30/09/2026, rediseño de dos
+    columnas): además de los datos ya recuperados de Odoo, calcula en
+    Python —nunca en la plantilla ni en JS— los subtotales y el total con
+    los que arranca pintada la cuenta de la derecha, y si cada plegable
+    (Envío, Instalación y mantenimiento, El PDF) nace abierto porque ya
+    trae algo distinto del silencio/default. El total EN VIVO, mientras la
+    empleada edita, lo recalcula venta.js con estos mismos números como
+    punto de partida."""
     registro = datos_edicion["registro"]
+    servicios = datos_edicion["servicios"]
+    renglones = datos_edicion["renglones"]
+    cargos = datos_edicion.get("cargos") or {}
+    es_personalizada = registro["tipo"] not in cotizaciones.TIPOS
+    casillas = (datos_edicion.get("banderas")
+                or {"pago_50_50": True, "con_garantia": True})
+    precio_editable = datos_edicion.get("precio_editable", True)
+
+    # El subtotal de cada planta se calcula acá, no en la plantilla (nada
+    # de aritmética en Jinja): sin precio editable (cobro por total) Odoo
+    # la deja en $0 igual, así que el subtotal también es $0.
+    plantas = [{**p, "subtotal": (_flot(p.get("cantidad")) * _flot(p.get("precio"))
+                                  if precio_editable else 0.0)}
+              for p in datos_edicion["plantas"]]
+
+    subtotal_plantas = sum(p["subtotal"] for p in plantas)
+    subtotal_servicios = sum(_flot(s.get("monto")) for s in servicios)
+    subtotal_renglones = (sum(_flot(r.get("cantidad")) * _flot(r.get("precio"))
+                              for r in renglones) if es_personalizada else 0.0)
+    monto_envio = _flot(cargos.get("envio"))
+    monto_instalacion = _flot(cargos.get("instalacion"))
+    monto_mantenimiento = _flot(cargos.get("mantenimiento"))
+    total_inicial = (subtotal_plantas + subtotal_servicios + subtotal_renglones
+                     + monto_envio + monto_instalacion + monto_mantenimiento)
+
+    opcion = ventas.opcion_envio(cargos.get("envio_opcion") or "")
+    if opcion:
+        resumen_envio = f"{opcion['vehiculo_pantalla']} · {opcion['zona']}"
+    elif (cargos.get("envio_opcion") or "") == "personalizado":
+        resumen_envio = "Personalizado"
+    else:
+        resumen_envio = "Sin envío"
+
+    partes_cargos = []
+    if monto_instalacion > 0:
+        partes_cargos.append("instalación")
+    if monto_mantenimiento > 0:
+        partes_cargos.append("mantenimiento")
+    resumen_cargos = (" y ".join(partes_cargos).capitalize()
+                      if partes_cargos else "sin cobrar")
+
+    resumen_pdf = (("con garantía" if casillas["con_garantia"] else "sin garantía")
+                   + " · " + ("50% abono" if casillas["pago_50_50"] else "pago completo"))
+
     return {
         "puede_fichas": fichas.es_editora(request.state.empleada["id"]),
         "registro": registro,
-        "es_personalizada": registro["tipo"] not in cotizaciones.TIPOS,
+        "es_personalizada": es_personalizada,
         "etiqueta_tipo": cotizaciones.etiqueta_de(registro["tipo"]),
-        "servicios": datos_edicion["servicios"],
-        "plantas": datos_edicion["plantas"],
-        "renglones": datos_edicion["renglones"],
-        "cargos": datos_edicion.get("cargos") or {},
+        "servicios": servicios,
+        "plantas": plantas,
+        # Sin este dato la plantilla trata "precio_editable" como
+        # indefinida (falsa en Jinja2) y la casilla del precio nunca se
+        # dibuja: lo escrito a mano se pierde al guardar (30/09/2026).
+        "precio_editable": datos_edicion.get("precio_editable", True),
+        "plantas_permitidas": datos_edicion.get("plantas_permitidas", True),
+        "renglones": renglones,
+        "cargos": cargos,
         # Al editar, las casillas quedan como se guardaron en la orden.
-        "casillas": datos_edicion.get("banderas")
-                    or {"pago_50_50": True, "con_garantia": True},
+        "casillas": casillas,
         "error_venta": error or None,
+        # La cuenta de la derecha, calculada en Python para la carga
+        # inicial (30/09/2026): venta.js la recalcula en vivo desde aquí.
+        "subtotal_plantas": subtotal_plantas,
+        "subtotal_servicios": subtotal_servicios,
+        "subtotal_renglones": subtotal_renglones,
+        "subtotal_cargos": monto_envio + monto_instalacion + monto_mantenimiento,
+        "total_inicial": total_inicial,
+        "resumen_envio": resumen_envio,
+        "resumen_cargos": resumen_cargos,
+        "resumen_pdf": resumen_pdf,
+        "abrir_envio": bool((cargos.get("envio_opcion") or "").strip()) or monto_envio > 0,
+        "abrir_cargos": monto_instalacion > 0 or monto_mantenimiento > 0,
+        "abrir_pdf": not casillas["pago_50_50"] or not casillas["con_garantia"],
     }
 
 
@@ -1866,7 +2023,11 @@ async def venta_servicio_editar_guardar(request: Request, n: int):
             # Solo el formulario del personalizado pinta las casillas; los
             # demás tipos mandan None y la orden conserva lo que tenga.
             banderas=(ventas.banderas_de(form, True)
-                      if str(form.get("casillas") or "") == "1" else None))
+                      if str(form.get("casillas") or "") == "1" else None),
+            # Quién lo editó, para el renglón del antes/después en el hilo
+            # del lead — mismo patrón que conectar/desconectar cotización.
+            autor=(request.state.empleada.get("nombre")
+                  or request.state.empleada["id"]))
     except ValueError as error:
         # El formulario vuelve con lo escrito, como al crear: un redirect
         # perdería lo que la empleada ya corrigió.
@@ -1875,6 +2036,14 @@ async def venta_servicio_editar_guardar(request: Request, n: int):
             return _redirigir_venta(str(error))
         datos_edicion["servicios"] = servicios or datos_edicion["servicios"]
         nombres = {p["producto_id"]: p["nombre"] for p in datos_edicion["plantas"]}
+        # El buscador (30/09/2026) puede haber sumado una planta que la
+        # cotización todavía no tenía en Odoo: su nombre no está en
+        # `nombres`. El formulario ya lo sabe (lo puso el buscador en un
+        # campo oculto junto al id) y gana sobre el diccionario viejo.
+        nombres.update({
+            _entero_o_none(pid): nombre
+            for pid, nombre in zip(form.getlist("planta_id"),
+                                   form.getlist("planta_nombre")) if nombre})
         datos_edicion["plantas"] = [
             {**p, "nombre": nombres.get(_entero_o_none(p["producto_id"]), "")}
             for p in plantas] or datos_edicion["plantas"]
@@ -2794,6 +2963,157 @@ def control_cotizacion_pdf(request: Request, orden_id: int, nombre: str = "",
 
 
 # ---------------------------------------------------------------------------
+# La pestaña Compras, Fase 1 (30/09/2026): el tablero de lo que se le compra
+# al proveedor. El estado vive en el proyecto COMPRAS del equipo VIV de
+# Linear (`app/compras.py`, la única puerta) y el dinero en Odoo. Quién
+# puede mover qué lo decide el MISMO mecanismo de Control
+# (`control.alcance` / `control.puede_tocar`): todos ven el tablero
+# completo y cada quien mueve lo suyo.
+# ---------------------------------------------------------------------------
+
+@app.get("/compras")
+def compras_pantalla(request: Request):
+    """El tablero de compras, con el formulario de «compra nueva» detrás
+    de `?nueva=1`.
+
+    Hoy el proyecto COMPRAS todavía no existe en Linear: las 7 columnas
+    salen vacías con el renglón que lo explica (`compras.falta_en_linear`),
+    nunca un 500.
+    """
+    empleada = request.state.empleada
+    alc = control.alcance(empleada, _es_admin(empleada))
+    # `listar_o_vacio` y no `listar`: si Linear tiene un mal rato, la
+    # pestaña sale con sus 7 columnas vacías y el renglón que lo explica,
+    # nunca un 500.
+    columnas = compras.tablero(compras.listar_o_vacio(
+        refrescar=request.query_params.get("refrescar") == "1"))
+    puede_escribir = compras.escritura_activa() or not compras.configurado()
+
+    # Los datos del formulario solo se arman cuando el formulario se abre:
+    # los proveedores son una consulta a Odoo y el tablero no la paga.
+    nueva = bool(request.query_params.get("nueva")) and puede_escribir
+    lista_prov, prov_error, leads = [], "", []
+    if nueva:
+        resultado = compras.proveedores()
+        lista_prov = resultado["proveedores"]
+        prov_error = "" if resultado["ok"] else resultado["error"]
+        try:
+            leads = [l for l in linear_leads.listar()
+                     if l["estado"] not in linear_leads.CERRADOS]
+        except linear_leads.ErrorLeads:
+            # El lead es OPCIONAL en el formulario: sin Linear, el selector
+            # sale con su "es para el vivero" y nada más. Que no se pueda
+            # amarrar a un cliente no puede impedir anotar la compra.
+            leads = []
+
+    return plantillas.TemplateResponse(request, "compras.html", {
+        "empleada": empleada,
+        "modo": compras.modo(),
+        "alc": alc,
+        "columnas": columnas,
+        "falta": compras.falta_en_linear(),
+        "puede_mover": puede_escribir,
+        "nueva": nueva,
+        "proveedores": lista_prov,
+        "proveedores_error": prov_error,
+        "leads": leads,
+        "responsables": linear_leads.responsables(),
+        "resp_sugerido": agenda.responsable_de_empleada(empleada),
+        "aviso": request.query_params.get("aviso"),
+        "error": request.query_params.get("error"),
+    })
+
+
+def _compras_vuelve(aviso="", error=""):
+    partes = []
+    if aviso:
+        partes.append("aviso=" + quote(aviso))
+    if error:
+        partes.append("error=" + quote(error))
+    return RedirectResponse(
+        "/compras" + ("?" + "&".join(partes) if partes else ""),
+        status_code=303)
+
+
+def _compras_permiso(request, ref):
+    """(alcance, error) — el candado del servidor para mover una compra.
+
+    Un empleado solo mueve lo suyo, y eso se verifica AQUÍ: que el
+    navegador no muestre la tarjeta como arrastrable no basta, porque un
+    POST se puede mandar a mano. Un `ref` VACÍO se corta acá mismo sin
+    preguntarle nada a Linear — es el POST del enlace arrastrado, no una
+    compra borrada (la lección del 29/09/2026 en Control).
+    """
+    empleada = request.state.empleada
+    alc = control.alcance(empleada, _es_admin(empleada))
+    if not (compras.escritura_activa() or not compras.configurado()):
+        return alc, ("Esta instancia mira el tablero real pero no escribe "
+                     "en Linear.")
+    ref = (ref or "").strip()
+    if not ref:
+        return alc, compras.mensaje_compra_ausente("")
+    compra = compras.uno(ref)
+    if compra is None:
+        return alc, compras.mensaje_compra_ausente(ref)
+    if not control.puede_tocar(compra, alc):
+        return alc, (f"Esa compra es de {compra.get('resp') or 'nadie'}: "
+                     f"no la movés vos.")
+    return alc, ""
+
+
+@app.post("/compras/estado")
+async def compras_estado(request: Request):
+    """Corregir la columna de una compra: es lo que hace el arrastre.
+
+    No pide motivo, a diferencia del embudo de los leads: en esta fase
+    nada mueve una compra sola, así que mover a mano es el camino normal y
+    no una excepción. Igual queda el comentario firmado en el issue con
+    quién la movió y de dónde a dónde.
+    """
+    form = await request.form()
+    ref = form.get("ref", "")
+    _alc, error = _compras_permiso(request, ref)
+    if error:
+        return _compras_vuelve(error=error)
+    autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
+    aviso, error = compras.mover(ref, form.get("estado", ""), autor=autor)
+    return _compras_vuelve(aviso=aviso, error=error)
+
+
+@app.post("/compras/nueva")
+async def compras_nueva(request: Request):
+    """Una compra a mano, que nace en «Por pedir».
+
+    El proveedor viaja como texto (hoy Odoo no tiene ninguno marcado y un
+    selector vacío no dejaría anotar nada): si lo escrito calza EXACTO con
+    un contacto de Odoo se guarda también su id, y si no queda el nombre
+    libre. Nunca se crea un contacto en Odoo desde acá.
+    """
+    form = await request.form()
+    if not (compras.escritura_activa() or not compras.configurado()):
+        return _compras_vuelve(error="Esta instancia mira el tablero real "
+                                     "pero no escribe en Linear.")
+    nombre_prov = (form.get("proveedor") or "").strip()
+    proveedor_id = None
+    if nombre_prov:
+        resultado = compras.proveedores()
+        for p in resultado["proveedores"]:
+            if p["nombre"].strip().lower() == nombre_prov.lower():
+                proveedor_id = p["id"]
+                break
+    autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
+    try:
+        nueva = compras.crear(
+            form.get("que_compro", ""), proveedor_nombre=nombre_prov,
+            proveedor_id=proveedor_id, resp=form.get("resp", ""),
+            lead_ref=form.get("lead_ref", ""), autor=autor)
+    except compras.ErrorCompras as fallo:
+        return _compras_vuelve(error=str(fallo))
+    return _compras_vuelve(
+        aviso=f"{nueva['ref']} anotada en «Por pedir».")
+
+
+# ---------------------------------------------------------------------------
 
 @app.get("/sw-avisos.js")
 def avisos_service_worker():
@@ -3589,3 +3909,101 @@ def calendario_regenerar_enlace(request: Request):
     """Enlace nuevo para la empleada de la sesión; el viejo muere ya."""
     calendario_ics.regenerar(request.state.empleada["id"])
     return RedirectResponse("/?tab=ajustes&aviso=enlace-nuevo", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Crear producto: Planta · Maceta · Insumo (dueño, 30/09/2026)
+# ---------------------------------------------------------------------------
+# El botón negro de Stock dejó de ser "Crear planta". Primero se elige el
+# tipo —una pantalla con tres ENLACES, sin JS— y después se llena su
+# formulario. La planta sigue por su camino de siempre (el modal de Stock y
+# POST /productos/nuevo, que pasa por el order-api); maceta e insumo se
+# crean acá, directo en Odoo, con las reglas de app/altas.py: los dos
+# impuestos explícitamente vacíos, la categoría por NOMBRE y la maceta
+# naciendo sin publicar.
+
+# Lo más grande que acepta la foto de una maceta. Odoo la guarda en
+# image_1920 y la reescala; 12 MB cubre cualquier foto de teléfono.
+MAX_FOTO_PRODUCTO = 12 * 1024 * 1024
+
+
+def _pantalla_alta(request, tipo, previo=None, error=None, creado="",
+                   avisos=(), estado=200):
+    """La pantalla de Crear producto: el paso de elegir, o un formulario."""
+    etiquetas = {"maceta": "Maceta", "insumo": "Insumo"}
+    return plantillas.TemplateResponse(request, "crear_producto.html", {
+        "tipo": tipo,
+        "tipos": altas.tipos_para_pantalla(),
+        "materiales": altas.MATERIALES,
+        "unidades": altas.UNIDADES,
+        "prefijo": altas.PREFIJO_DE.get(tipo, ""),
+        "previo": previo or {},
+        "error": error,
+        "creado": creado,
+        # "Maceta creada" / "Insumo creado": el género lo decide Python, no
+        # la plantilla.
+        "frase_creado": ("Maceta creada" if tipo == "maceta"
+                         else "Insumo creado"),
+        "etiqueta_tipo": etiquetas.get(tipo, "Producto"),
+        "avisos": altas.texto_de_avisos(avisos),
+    }, status_code=estado)
+
+
+@app.get("/productos/crear")
+def alta_producto(request: Request, tipo: str = "", creado: str = ""):
+    """Elegir el tipo, o el formulario de maceta / insumo.
+
+    El tipo planta no tiene formulario propio acá: manda al de siempre, que
+    vive en la pantalla de Stock. Un tipo raro (o uno cuya categoría no está
+    en Odoo) cae en el paso de elegir, donde se explica qué falta.
+    """
+    if tipo == "planta":
+        return RedirectResponse("/?tab=stock&crear=planta", status_code=303)
+    if tipo not in altas.CATEGORIA_DE:
+        return _pantalla_alta(request, "")
+    if not any(t["clave"] == tipo and t["listo"]
+               for t in altas.tipos_para_pantalla()):
+        return _pantalla_alta(request, "")
+    return _pantalla_alta(request, tipo, creado=creado,
+                          avisos=request.query_params.getlist("aviso"))
+
+
+@app.post("/productos/crear")
+async def alta_producto_guardar(request: Request):
+    """Crea la maceta o el insumo en Odoo y vuelve con su referencia.
+
+    Un error de validación NO redirige: se repinta el formulario con lo que
+    el empleado escribió, para no hacerle escribir todo de nuevo. El éxito sí
+    redirige (303) con la referencia y los avisos como códigos en la URL, así
+    que recargar no crea un segundo producto.
+    """
+    form = await request.form()
+    tipo = (form.get("tipo") or "").strip()
+    crudo = {campo: form.get(campo) for campo in
+             ("nombre", "material", "diametro", "alto", "color", "precio",
+              "costo", "unidad", "itbms")}
+    limpio, error = altas.revisar(tipo, crudo)
+    if error:
+        return _pantalla_alta(request, tipo if tipo in altas.CATEGORIA_DE else "",
+                              previo=crudo, error=error, estado=400)
+
+    foto = None
+    subida = form.get("foto")
+    if hasattr(subida, "read"):
+        contenido = await subida.read()
+        if contenido:
+            if len(contenido) > MAX_FOTO_PRODUCTO:
+                return _pantalla_alta(request, tipo, previo=crudo, estado=400,
+                                      error="La foto pesa demasiado: manda "
+                                            "una de menos de 12 MB.")
+            foto = base64.b64encode(contenido).decode()
+
+    try:
+        hecho = altas.crear(limpio, foto=foto)
+    except datos.SinConexion as fallo:
+        return _pantalla_alta(request, tipo, previo=crudo, error=str(fallo),
+                              estado=502)
+    destino = f"/productos/crear?tipo={tipo}&creado={quote(hecho['sku'])}"
+    for aviso in hecho["avisos"]:
+        destino += f"&aviso={quote(aviso)}"
+    return RedirectResponse(destino, status_code=303)

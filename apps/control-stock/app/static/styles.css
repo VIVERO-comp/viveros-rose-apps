@@ -173,7 +173,8 @@ main{position:relative;z-index:1;flex:1;overflow-y:auto;padding:6px 20px 110px}
   font-size:9.5px;font-weight:700;letter-spacing:.3px;
   background:#f4f4f5;color:#52525b;border-radius:7px;padding:2px 7px;margin-top:4px;
 }
-/* Formulario Crear planta: los campos cortos van de a dos por fila. */
+/* Formularios de alta (Crear planta, y las macetas e insumos de Crear
+   producto): los campos cortos van de a dos por fila. */
 .campos-nuevo{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .campos-nuevo .campo select{
   width:100%;background:var(--noche-2);border:1px solid var(--noche-3);
@@ -441,11 +442,13 @@ nav button, nav a{
 nav button .ic, nav a .ic{display:flex;align-items:center;justify-content:center;height:20px}
 nav button.on, nav a.on{color:var(--dorado);background:rgba(24,24,27,.06)}
 
-/* ---------- FAB agregar planta ---------- */
+/* ---------- FAB crear producto ---------- */
+/* Desde el 30/09/2026 es un ENLACE a /productos/crear (elegir Planta ·
+   Maceta · Insumo), no un botón con onclick: de ahí el text-decoration. */
 .fab{
   position:absolute;right:16px;bottom:calc(94px + env(safe-area-inset-bottom));
   z-index:15;border:none;border-radius:18px;
-  background:var(--dorado);color:#ffffff;
+  background:var(--dorado);color:#ffffff;text-decoration:none;
   font-family:inherit;font-size:13px;font-weight:800;
   display:flex;align-items:center;gap:7px;padding:14px 17px;
   cursor:pointer;box-shadow:0 8px 22px rgba(0,0,0,.4);
@@ -457,6 +460,25 @@ nav button.on, nav a.on{color:var(--dorado);background:rgba(24,24,27,.06)}
 
 /* ---------- modal agregar planta ---------- */
 .form-agregar{display:flex;flex-direction:column;gap:11px;margin-bottom:14px}
+
+/* ---------- Crear producto: elegir el tipo (crear_producto.html) ----------
+   Tres tarjetas-enlace, una por tipo. La apagada (su categoría no está en
+   Odoo) no es un enlace: es un div con el motivo, para que no se pueda
+   entrar a un formulario que no podría guardar. */
+.tipos-alta{display:flex;flex-direction:column;gap:10px;margin-bottom:18px}
+.tipo-tarjeta{
+  display:block;padding:15px 16px;border-radius:16px;
+  background:var(--noche-2);border:1.5px solid var(--noche-3);
+  color:var(--texto);text-decoration:none;
+}
+.tipo-tarjeta b{display:block;font-size:15px;font-weight:700;margin-bottom:3px}
+.tipo-tarjeta span{display:block;font-size:11.5px;color:var(--texto-suave)}
+.tipo-tarjeta:active{transform:scale(.99)}
+.tipo-tarjeta.apagada{opacity:.55;border-style:dashed}
+@media (min-width: 900px){
+  .tipos-alta{flex-direction:row}
+  .tipos-alta > *{flex:1 1 0}
+}
 
 /* ---------- modal foto de producto ---------- */
 /* El atributo hidden debe ganar aunque la clase fije display (ej. .btn es
@@ -1707,4 +1729,46 @@ nav .marca{display:none}
   .fila-planta .precio-unit{grid-column:1;grid-row:2}
   .fila-planta .qty-mini{grid-column:2;grid-row:2;justify-self:end}
   .fila-planta .quitar-venta{margin-top:1px}
+}
+
+/* ---------- Editar una cotización, en dos columnas (30/09/2026) ----------
+   El formulario ocupaba media pantalla en computadora (865px de 1372px) y
+   nunca decía el total. Mismo patrón de .venta-dos (el trabajo a la
+   izquierda, la cuenta a la derecha), pero MÁS SIMPLE: aquí no hay "de
+   dónde viene" -no aplica a una orden que ya existe-, así que basta una
+   sola fila de dos columnas en vez del grid de dos filas de .venta-dos.
+   Reusa el mismo punto de quiebre (1080px) y las clases .col-trabajo/
+   .col-cuenta ya existentes -la sticky de .col-cuenta ya está puesta ahí
+   arriba y aplica igual acá, sin repetirla.
+
+   LA TRAMPA: .col-trabajo/.col-cuenta ya llevan `grid-area:trabajo`/
+   `grid-area:cuenta` puestos arriba para encajar en las DOS filas de
+   .venta-dos ("trabajo lead" / "trabajo cuenta"). .editar-dos no define
+   grid-template-areas, pero el navegador igual busca las líneas con
+   nombre trabajo-start/cuenta-start —que SÍ existen, las crea
+   .venta-dos en otra parte del documento— y las dos columnas terminaban
+   pegadas una sobre la otra en vez de una al lado de la otra. Hay que
+   devolver el grid-area a auto, con más especificidad para ganarle a la
+   regla de arriba. */
+.editar-dos{display:flex;flex-direction:column;gap:18px}
+@media (min-width:1080px){
+  .editar-dos{
+    display:grid;grid-template-columns:minmax(0,1fr) 320px;
+    gap:18px 24px;align-items:start;
+  }
+  .editar-dos > .col-trabajo,.editar-dos > .col-cuenta{grid-area:auto}
+}
+/* La fila de una planta (nombre + Cant + Precio + Subtotal + Quitar) es la
+   más cargada de .servicio-pie: en celular angosto (medido en un iPhone
+   de 390px) "Subtotal $X.XX" y "Quitar" se salían de la pantalla aunque
+   .servicio-pie ya envuelve (flex-wrap acomoda Cant+Precio en una línea,
+   pero Subtotal y Quitar seguían peleando el mismo renglón angosto).
+   Apilado vertical, sin pelear por el ancho: cada dato en su propio
+   renglón y Quitar a la derecha del último. */
+@media (max-width:480px){
+  .fila-planta-editar .servicio-pie{
+    flex-direction:column; align-items:stretch; gap:6px;
+  }
+  .fila-planta-editar .servicio-monto{justify-content:space-between}
+  .fila-planta-editar .quitar-servicio{margin-left:0; align-self:flex-end}
 }

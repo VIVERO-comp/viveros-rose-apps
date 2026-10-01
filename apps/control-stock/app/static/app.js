@@ -170,9 +170,9 @@ function tab(id, btn) {
   recordarScroll();
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("activa"));
   seccion.classList.add("activa");
-  // El botón flotante de sugerir planta estorba encima del detalle.
+  // El enlace flotante "Crear producto" estorba encima del detalle.
   document.getElementById("fab-agregar").hidden = id === "detalle";
-  // La barra del teléfono: el título acompaña a la pestaña y Crear planta
+  // La barra del teléfono: el título acompaña a la pestaña y Crear producto
   // (el único botón negro) solo se ve en Stock. En el detalle la barra se
   // esconde entera: ahí mandan ← Volver y Guardar ficha de .det-top.
   const barra = document.getElementById("barra-m");
@@ -443,22 +443,10 @@ async function subirFoto(input) {
 let skuTocado = false;
 let creandoPlanta = false;
 
-function abrirAgregar() {
-  ["agregar-nombre", "agregar-sku", "agregar-precio", "agregar-costo",
-   "agregar-hmin", "agregar-hmax",
-   "agregar-secundario", "agregar-cientifico"].forEach(id => {
-    document.getElementById(id).value = "";
-  });
-  document.getElementById("agregar-cantidad").value = "0";
-  document.getElementById("agregar-sinmoto").checked = false;
-  const cat = document.getElementById("agregar-categoria");
-  cat.innerHTML = (DATOS.categoriasPlanta || ["Interior", "Exterior", "Florales"])
-    .map(c => `<option value="${c}">${c}</option>`).join("");
-  skuTocado = false;
-  mostrarErrorAgregar("");
-  document.getElementById("modal-agregar").classList.add("abierto");
-  document.getElementById("agregar-nombre").focus();
-}
+/* Ya no existe un abrirAgregar(): el formulario llega ABIERTO desde
+   "Crear producto" → Planta (/?tab=stock&crear=planta) y la clase la pone el
+   servidor en la plantilla. Los campos nacen vacíos con la página y las
+   categorías las pinta Jinja, así que no queda nada que reiniciar aquí. */
 function cerrarAgregar() {
   document.getElementById("modal-agregar").classList.remove("abierto");
 }
@@ -498,6 +486,12 @@ async function crearPlanta() {
   if (!nombre) { mostrarErrorAgregar("Escribe el nombre de la planta."); return; }
   if (!sku.startsWith("PL-") || sku.length < 4) {
     mostrarErrorAgregar("La referencia debe empezar por PL-.");
+    return;
+  }
+  // La categoría arranca sin elegir (dueño, 30/09/2026): el servidor
+  // rebota igual, esto solo evita el viaje.
+  if (!document.getElementById("agregar-categoria").value) {
+    mostrarErrorAgregar("Elige la categoría de la planta.");
     return;
   }
   const boton = document.getElementById("btn-crear-planta");

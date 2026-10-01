@@ -336,3 +336,198 @@ if (contenedorRenglones) {
                      Math.max(
                        numeroDe(renglon.querySelector('[name="renglon_precio"]'), 0), 0));
 }
+
+/* ---------------------------------------------------------------------
+   Pantalla de EDITAR una cotización (30/09/2026): las plantas se pueden
+   quitar con una X (nunca hace falta bajar la cantidad a 0 a mano) y se
+   pueden AÑADIR con un buscador propio -ids distintos de busca-venta/
+   resultados-venta de arriba, a propósito: ese buscador agrega al
+   carrito compartido por empleada de Nueva venta, y esta pantalla edita
+   UNA orden que ya existe, de un tirón. Agregar acá arma la fila con JS
+   (clonando <template id="plantilla-planta">) en vez de recargar la
+   página: un reload perdería cualquier otro cambio a medio escribir,
+   porque esta pantalla no guarda borrador (ver sincronizarCliente más
+   arriba). La cuenta de la derecha (el total y "qué cambió") también se
+   recalcula acá, con los mismos números con los que Python la pintó. --- */
+
+const listaPlantas = document.getElementById("listaPlantas");
+const cuentaEditar = document.getElementById("cuenta-editar");
+
+function pintarSubtotalPlanta(fila) {
+  const cant = Math.max(numeroDe(fila.querySelector("[data-planta-cant]"), 0), 0);
+  const campoPrecio = fila.querySelector("[data-planta-precio]");
+  const precio = campoPrecio ? Math.max(numeroDe(campoPrecio, 0), 0) : 0;
+  const importe = cant * precio;
+  const salida = fila.querySelector("[data-planta-sub]");
+  if (salida) salida.textContent = "$" + importe.toFixed(2);
+  return importe;
+}
+
+function avisoSinPlantas() {
+  // El mensaje "búscala abajo" solo tiene sentido con la lista vacía.
+  const aviso = document.getElementById("plantas-vacio");
+  if (aviso && listaPlantas) aviso.hidden = listaPlantas.children.length > 0;
+}
+
+function recalcularCuentaEditar() {
+  if (!cuentaEditar) return;
+  let plantas = 0;
+  if (listaPlantas) {
+    for (const fila of listaPlantas.querySelectorAll(".servicio")) {
+      plantas += pintarSubtotalPlanta(fila);
+    }
+  }
+  const subtotalPlantas = document.getElementById("subtotal-plantas");
+  if (subtotalPlantas) subtotalPlantas.textContent = "$" + plantas.toFixed(2);
+
+  let servicios = 0;
+  if (contenedorServicios) {
+    for (const s of contenedorServicios.querySelectorAll(".servicio")) {
+      servicios += Math.max(numeroDe(s.querySelector('[name="servicio_monto"]'), 0), 0);
+    }
+  }
+  let renglones = 0;
+  if (contenedorRenglones) {
+    for (const r of contenedorRenglones.querySelectorAll(".servicio")) {
+      renglones += Math.max(
+        numeroDe(r.querySelector('[name="renglon_cantidad"]'), 1), 0) *
+        Math.max(numeroDe(r.querySelector('[name="renglon_precio"]'), 0), 0);
+    }
+  }
+  // El mismo desglose de envío que ya usa Nueva venta (envioEnVivo, arriba
+  // en este archivo): no se reescribe, solo se suma acá también.
+  const envio = typeof envioEnVivo === "function" ? envioEnVivo().monto : 0;
+  const instalacion = Math.max(
+    numeroDe(document.querySelector('.dato-cliente[name="instalacion"]'), 0), 0);
+  const mantenimiento = Math.max(
+    numeroDe(document.querySelector('.dato-cliente[name="mantenimiento"]'), 0), 0);
+  const cargos = envio + instalacion + mantenimiento;
+  const total = plantas + servicios + renglones + cargos;
+
+  const pintar = (id, valor) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = "$" + valor.toFixed(2);
+  };
+  pintar("cuenta-plantas", plantas);
+  pintar("cuenta-servicios", servicios);
+  pintar("cuenta-renglones", renglones);
+  pintar("cuenta-cargos", cargos);
+  pintar("cuenta-total", total);
+
+  const cambio = document.getElementById("cuenta-cambio");
+  if (cambio) {
+    const original = parseFloat(cuentaEditar.dataset.original) || 0;
+    const diferencia = total - original;
+    if (Math.abs(diferencia) < 0.005) {
+      cambio.textContent = "Sin cambios todavía. Así está guardada en Odoo.";
+    } else {
+      const signo = diferencia > 0 ? "+" : "−";
+      cambio.innerHTML = "Cambia de <b>$" + original.toFixed(2) + "</b> a <b>$" +
+        total.toFixed(2) + "</b> · " + signo + "$" + Math.abs(diferencia).toFixed(2);
+    }
+  }
+}
+
+function quitarPlanta(fila) {
+  fila.remove();
+  avisoSinPlantas();
+  recalcularCuentaEditar();
+}
+
+function agregarPlantaEditar(producto) {
+  if (!listaPlantas) return;
+  // Si ya está en la lista, sube la cantidad en vez de duplicar la fila.
+  const existente = [...listaPlantas.querySelectorAll(".servicio")].find(
+    fila => fila.querySelector('[name="planta_id"]').value === String(producto.id));
+  if (existente) {
+    const campoCant = existente.querySelector("[data-planta-cant]");
+    campoCant.value = Math.max(numeroDe(campoCant, 0), 0) + 1;
+    recalcularCuentaEditar();
+    existente.scrollIntoView({block: "center", behavior: "smooth"});
+    return;
+  }
+  const plantilla = document.getElementById("plantilla-planta");
+  if (!plantilla) return;
+  const fila = plantilla.content.firstElementChild.cloneNode(true);
+  fila.querySelector('[name="planta_id"]').value = producto.id;
+  fila.querySelector('[name="planta_nombre"]').value = producto.nombre;
+  fila.querySelector("[data-planta-nombre]").textContent = producto.nombre;
+  const campoPrecio = fila.querySelector("[data-planta-precio]");
+  if (campoPrecio) campoPrecio.value = producto.precio_num.toFixed(2);
+  listaPlantas.appendChild(fila);
+  avisoSinPlantas();
+  recalcularCuentaEditar();
+  fila.scrollIntoView({block: "center", behavior: "smooth"});
+}
+
+if (listaPlantas) {
+  listaPlantas.addEventListener("click", evento => {
+    const boton = evento.target.closest(".quitar-servicio");
+    if (boton) quitarPlanta(boton.closest(".servicio"));
+  });
+}
+
+if (cuentaEditar) {
+  // Delegado en document (no en cada contenedor): servicios, renglones,
+  // plantas y los cargos (envío/instalación/mantenimiento, plegados) son
+  // secciones distintas y todas mueven el total.
+  document.addEventListener("input", recalcularCuentaEditar);
+  document.addEventListener("change", recalcularCuentaEditar);
+  recalcularCuentaEditar();
+}
+
+const entradaBuscaPlanta = document.getElementById("busca-planta-editar");
+const resultadosPlanta = document.getElementById("resultados-planta-editar");
+let temporizadorBuscaPlanta = null;
+
+function pintarResultadosPlanta(lista, q) {
+  if (!lista.length) {
+    resultadosPlanta.innerHTML =
+      '<p class="nada-venta">Nada con "' + escaparHtml(q) + '". Prueba otro nombre o el SKU.</p>';
+    return;
+  }
+  resultadosPlanta.innerHTML = lista.map(p => `
+    <button class="planta planta-boton" type="button"
+            data-id="${p.id}" data-nombre="${escaparHtml(p.nombre)}" data-precio="${p.precio_num}">
+      <div class="foto">🪴<img src="/venta/foto/${p.id}" alt="" loading="lazy" onerror="this.remove()"></div>
+      <div class="info"><b>${escaparHtml(p.nombre)}</b><span>${escaparHtml(p.sku)}</span>
+        <span class="precio"><b>${escaparHtml(p.precio)}</b></span></div>
+      <div class="agregar-venta">+</div>
+    </button>`).join("");
+}
+
+if (entradaBuscaPlanta && resultadosPlanta) {
+  entradaBuscaPlanta.addEventListener("input", () => {
+    clearTimeout(temporizadorBuscaPlanta);
+    const q = entradaBuscaPlanta.value.trim();
+    if (!q) {
+      resultadosPlanta.innerHTML = "";
+      return;
+    }
+    temporizadorBuscaPlanta = setTimeout(async () => {
+      try {
+        const respuesta = await fetch("/venta/buscar?q=" + encodeURIComponent(q));
+        const datos = await respuesta.json();
+        if (entradaBuscaPlanta.value.trim() !== q) return; // ya escribió otra cosa
+        if (datos.error) {
+          resultadosPlanta.innerHTML = '<p class="nada-venta">' + escaparHtml(datos.error) + "</p>";
+          return;
+        }
+        pintarResultadosPlanta(datos.resultados, q);
+      } catch (e) {
+        resultadosPlanta.innerHTML = '<p class="nada-venta">Sin conexión. Intenta de nuevo.</p>';
+      }
+    }, 300);
+  });
+  resultadosPlanta.addEventListener("click", evento => {
+    const boton = evento.target.closest("[data-id]");
+    if (!boton) return;
+    agregarPlantaEditar({
+      id: boton.dataset.id, nombre: boton.dataset.nombre,
+      precio_num: parseFloat(boton.dataset.precio) || 0,
+    });
+    entradaBuscaPlanta.value = "";
+    resultadosPlanta.innerHTML = "";
+    entradaBuscaPlanta.focus();
+  });
+}

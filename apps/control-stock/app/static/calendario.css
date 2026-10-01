@@ -368,6 +368,24 @@ input.campo:focus,textarea.campo:focus,select.sel:focus{border-color:var(--dorad
 }
 @media (prefers-reduced-motion: reduce){.panel-der{animation:none}.act:hover{transform:none}}
 .cab-panel{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+/* «Que cerrar baje con el scroll» (dueño, 30/09/2026): el chip de estado y
+   el botón Cerrar acompañan el scroll de la ficha, pegados arriba de
+   .panel-der (que es el propio contenedor que scrollea — la conversación
+   de WhatsApp vive adentro, en .ficha-hilo, que tiene su scroll propio
+   pero más corto que el panel entero). Mismo truco ya usado en .stock-top:
+   el sticky se ancla contra el borde del CONTENIDO de .panel-der, 20px
+   abajo de su borde real (su padding:20px) — con top:0 quedaría ese hueco
+   por donde se colaría la conversación al pasar. margin negativo + padding
+   estira el bloque hasta los bordes reales del panel (fondo opaco de lado
+   a lado) y top:-20px lo sube al ras; el padding nuevo devuelve el mismo
+   aire que tenía antes (20px arriba/lados, el de abajo lo sigue poniendo
+   el gap:13px de .panel-der entre hijos). */
+.panel-der .cab-panel{
+  position:sticky;top:-20px;z-index:2;
+  margin:-20px -20px 0;padding:20px 20px 0;
+  background:var(--lienzo);
+  box-shadow:0 8px 10px -10px rgba(24,24,27,.45);
+}
 .panel-der h4,.modal h4{font-size:18px;font-weight:700}
 .dato{display:grid;grid-template-columns:104px 1fr;gap:8px;font-size:12.8px;padding:7px 0;border-bottom:1px solid var(--borde-2);align-items:center}
 .dato b{color:var(--muy-suave);font-weight:600;font-size:10.8px;text-transform:uppercase;letter-spacing:.05em}
@@ -1006,3 +1024,28 @@ a{color:inherit}
   .ficha-hilo{max-height:54vh}
   .hilo-pila{max-width:86%}
 }
+
+/* ===========================================================================
+   La pestaña Compras, Fase 1 (30/09/2026)
+
+   El tablero reusa TAL CUAL las clases .ret-* del tablero de Control (mismo
+   ancho de columna, mismo arrastre, misma tarjeta de dos líneas T2): acá
+   solo vive lo que Compras tiene y Control no — la barra de pagado sobre
+   total y el renglón que avisa cuando a Linear todavía le falta el
+   proyecto o alguna columna.
+   ======================================================================== */
+
+/* La barra de pagado sobre el total de la orden de compra. Solo se pinta
+   con plata CONOCIDA (Python decide: ver compras.plata_de) — nunca con un
+   0 inventado por no haber podido leer Odoo. */
+.cmp-barra{
+  flex:0 0 46px;height:5px;border-radius:999px;background:var(--crema-2);
+  border:1px solid var(--borde);overflow:hidden;padding:0;
+}
+.cmp-barra > span{display:block;height:100%;background:var(--texto);border-radius:999px}
+.cmp-barra.cmp-llena > span{background:#30a46c}
+.cmp-plata{font-variant-numeric:tabular-nums;white-space:nowrap}
+/* El proveedor y el P000xx de la tarjeta: texto tenue, nunca chips — la
+   tarjeta T2 son dos líneas y los chips la volvían tres. */
+.cmp-prov{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px}
+.cmp-orden{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.2px}

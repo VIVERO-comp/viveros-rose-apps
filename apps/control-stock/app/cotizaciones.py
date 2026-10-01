@@ -20,7 +20,7 @@ import re
 from datetime import date, datetime, timedelta
 
 from .datos import ZONA_PANAMA, _db
-from . import crm_leads, ventas
+from . import crm_leads, linear_leads, ventas
 
 # Un presupuesto cancelado no suma al ingreso esperado de la oportunidad.
 # (Vivía en app/proyectos.py hasta que Proyectos se retiró, 24/09/2026.)
@@ -1007,6 +1007,25 @@ def estados_en_odoo(orden_ids):
     return estados
 
 
+def cancelar(n):
+    """"Quitar" una cotización de servicio (dueño, 30/09/2026): cancela la
+    orden en Odoo por el MISMO camino que ventas.cancelar() en una venta
+    de planta — reusa ventas._cancelar_en_odoo(), nunca una segunda
+    llamada a action_cancel con otro nombre. No hay estado local que
+    actualizar aquí (a diferencia de ventas_locales, cotizaciones_servicio
+    no guarda un campo "estado": lo cancelado/facturado se lee siempre de
+    Odoo vía estados_en_odoo(), así que la fila desaparece sola de la
+    lista en la próxima carga, sin tocar nada más)."""
+    fila = obtener(n)
+    if fila is None:
+        return None
+    estado = estados_en_odoo([fila["orden_id"]]).get(fila["orden_id"])
+    if estado and estado["facturada"]:
+        raise ValueError("Esta cotización ya se facturó; no se puede quitar.")
+    ventas._cancelar_en_odoo(fila["orden_id"])
+    return fila
+
+
 def por_planta_en_odoo(orden_id):
     """Si esa orden quedó marcada como alquiler cobrado por planta. Se
     pregunta aparte y a prueba de fallos: un Odoo todavía sin la bandera
@@ -1075,8 +1094,16 @@ def cargar_para_editar(n):
             seccion = linea.get("name") or ""
         elif tipo_linea in ("line_subsection", "line_note"):
             # La descripción: el párrafo pegado debajo del último renglón
-            # (servicio o renglón libre, lo que se haya agregado último).
-            if ultimo is not None and not ultimo.get("descripcion"):
+            # (servicio, renglón libre o cargo -lo que se haya agregado
+            # último-). `ultimo` es un texto ("envio", "instalacion", …)
+            # cuando lo último fue un cargo (30/09/2026: antes se perdía
+            # la descripción escrita a mano de un cargo y, al guardar, caía
+            # siempre al texto de fábrica).
+            if isinstance(ultimo, str):
+                clave_desc = ultimo + "_desc"
+                if not cargos.get(clave_desc):
+                    cargos[clave_desc] = linea.get("name") or ""
+            elif ultimo is not None and not ultimo.get("descripcion"):
                 ultimo["descripcion"] = linea.get("name") or ""
         elif not tipo_linea:
             producto = productos.get(linea["product_id"][0]) if linea.get("product_id") else None
@@ -1093,7 +1120,9 @@ def cargar_para_editar(n):
                     (cargos["envio_opcion"],
                      cargos["envio_nota"]) = ventas.opcion_de_linea_envio(
                         linea.get("name"))
-                ultimo = None
+                # Espera su descripción en la próxima línea (si la hay):
+                # ver el `isinstance(ultimo, str)` de arriba.
+                ultimo = clave
                 continue
             if producto and producto.get("type") != "service":
                 plantas.append({
@@ -1137,6 +1166,14 @@ def cargar_para_editar(n):
         "cobro": ventas.COBRO_PLANTA if por_planta else ventas.COBRO_TOTAL,
         "facturada": estado["facturada"],
         "cancelada": estado["cancelada"],
+        # El buscador de "añadir planta" (30/09/2026) solo tiene sentido si
+        # el tipo tiene dónde poner una: la personalizada siempre, y los
+        # demás solo si alguna de sus secciones lleva catálogo (boda y
+        # evento, retirados, no llevan ninguna — editar_cotizacion rechaza
+        # sus plantas al guardar, y sin esto el buscador ofrecería algo
+        # que después revienta).
+        "plantas_permitidas": (registro["tipo"] not in TIPOS or any(
+            s.get("catalogo") for s in TIPOS[registro["tipo"]]["secciones"])),
         "servicios": servicios or [{"texto": "", "monto": "", "descripcion": ""}],
         "plantas": plantas,
         "renglones": renglones or [{"texto": "", "cantidad": "", "precio": "",
@@ -1199,11 +1236,21 @@ def _plantas_limpias(plantas):
 
 
 def editar_cotizacion(n, servicios, plantas, renglones=None, cargos=None,
-                      banderas=None):
+                      banderas=None, autor=""):
     """Reescribe los renglones de la cotización en Odoo (misma estructura
     que al crearla, descripciones incluidas) y actualiza el total local y
     el ingreso esperado de la oportunidad. Antes de escribir re-verifica
-    que siga editable: si alguien la facturó en el medio, no toca nada."""
+    que siga editable: si alguien la facturó en el medio, no toca nada.
+
+    Si el total cambió de verdad Y la cotización está conectada a un lead
+    (`registro["lead_issue"]`, la misma referencia LEAD-NN que deja el
+    espejo al crearla), deja en el hilo del lead un renglón con el antes y
+    el después: «🧾 S00096 · de $205.00 a $111.00 — editada por Rubén» —
+    mismo formato que el «🧾 … — hecha en inventario (Vender)» que deja el
+    puente al nacer, para que el chat cuente lo que de verdad pasó con la
+    plata en vez de quedarse con el precio original (el caso real, 30/09/
+    2026: Rubén bajó una cotización de $205 a $111 en tres ediciones y el
+    hilo del lead seguía diciendo $205)."""
     registro = obtener(n)
     if not registro:
         raise ValueError("No existe esa cotización.")
@@ -1240,6 +1287,7 @@ def editar_cotizacion(n, servicios, plantas, renglones=None, cargos=None,
         # None (los otros tipos) no toca lo que la orden ya tenga.
         cambios["pago_50_50"] = bool(banderas["pago_50_50"])
         cambios["con_garantia"] = bool(banderas["con_garantia"])
+    total_antes = registro.get("total")
     ventas._ejecutar("sale.order", "write", [[orden_id], cambios])
     leido = ventas._ejecutar(
         "sale.order", "read", [[orden_id]],
@@ -1248,7 +1296,34 @@ def editar_cotizacion(n, servicios, plantas, renglones=None, cargos=None,
         con.execute("UPDATE cotizaciones_servicio SET total=? WHERE n=?",
                     (leido["amount_total"], n))
     _actualizar_ingreso_esperado(leido.get("opportunity_id"))
+    _comentar_edicion(registro, leido, total_antes, autor)
     return obtener(n)
+
+
+def _comentar_edicion(registro, leido, total_antes, autor):
+    """El renglón del antes/después en el hilo del lead, si corresponde.
+    Nunca puede tumbar el guardado (fail-open, como todo el espejo del
+    CRM): un error acá queda en el log y la cotización ya quedó guardada
+    en Odoo de todos modos."""
+    lead_issue = (registro.get("lead_issue") or "").strip()
+    if not lead_issue:
+        return  # esta cotización no nació (ni se amarró) a ningún lead
+    total_despues = leido.get("amount_total") or 0.0
+    if total_antes is None or round(float(total_antes), 2) == round(float(total_despues), 2):
+        return  # guardó sin mover la plata: no hay nada que contar
+    quien = f" por {autor}" if (autor or "").strip() else ""
+    texto = (f"🧾 {leido.get('name') or lead_issue} · de ${float(total_antes):.2f} "
+             f"a ${float(total_despues):.2f} — editada{quien}")
+    try:
+        lead = linear_leads.uno(lead_issue)
+        if lead is None:
+            print(f"cotizaciones: {lead_issue} ya no está en Linear, no se "
+                  f"pudo dejar el renglón de la edición", flush=True)
+            return
+        linear_leads.comentar(lead["id"], texto)
+    except Exception as error:  # el espejo es un extra, nunca tumba el guardado
+        print(f"cotizaciones: no se pudo comentar la edición en "
+              f"{lead_issue}: {error!r}", flush=True)
 
 
 def _actualizar_ingreso_esperado(oportunidad):

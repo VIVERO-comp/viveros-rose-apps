@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block titulo %}Crear producto — Control Viverorose{% endblock %}
+
+{% block contenido %}
+{# Crear producto (dueño, 30/09/2026): el botón negro de Stock dejó de ser
+   "Crear planta". Primero se elige el TIPO —tres enlaces, sin una línea de
+   JS— y después se llena su formulario:
+
+   · Planta  → el modal de siempre en Stock (/?tab=stock&crear=planta), con
+               su selector Exterior / Interior / Florales. No cambió.
+   · Maceta  → aquí, POST a /productos/crear.
+   · Insumo  → aquí, POST a /productos/crear.
+
+   Todo se decide en Python (app/altas.py): qué tipos están disponibles, qué
+   campos guarda este Odoo y qué avisos salen. La plantilla solo recorre lo
+   que le llega. #}
+{% with bm_titulo='Crear producto', bm_volver='/?tab=stock' %}
+  {% include '_barra_movil.html' %}
+{% endwith %}
+<header class="cabecera-venta">
+  <a class="volver volver-cabecera" href="/?tab=stock">← Volver a Stock</a>
+  <div class="brand">
+    <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
+    <div>
+      <h1>{% if tipo %}{{ 'Nueva maceta' if tipo == 'maceta' else 'Nuevo insumo' }}{% else %}Crear producto{% endif %}</h1>
+      <small>{% if tipo %}Se crea en Odoo al momento{% else %}Elige qué vas a crear{% endif %}</small>
+    </div>
+  </div>
+</header>
+
+<main class="angosto">
+
+  {% if creado %}
+  {# El producto YA quedó en Odoo: se dice con su referencia (que se arma
+     sola y puede llevar sufijo si el nombre estaba repetido). #}
+  <div class="aviso-ok">
+    ✓ {{ frase_creado }} en Odoo con la referencia <b>{{ creado }}</b>.
+    {% if tipo == 'maceta' %} Nace <b>sin publicar</b> en la tienda.{% endif %}
+  </div>
+  {% endif %}
+
+  {% for aviso in avisos %}
+  <div class="aviso-error">{{ aviso }}</div>
+  {% endfor %}
+
+  {% if error %}
+  <div class="aviso-error">{{ error }}</div>
+  {% endif %}
+
+  {% if not tipo %}
+  {# ---------- Paso 1: elegir el tipo (enlaces, nada de JS) ---------- #}
+  <div class="seccion-titulo">¿Qué vas a crear?</div>
+  <div class="tipos-alta">
+    {% for t in tipos %}
+      {% if t.listo %}
+      <a class="tipo-tarjeta" href="{{ t.ruta }}">
+        <b>{{ t.etiqueta }}</b>
+        <span>{{ t.detalle }}</span>
+      </a>
+      {% else %}
+      <div class="tipo-tarjeta apagada" aria-disabled="true">
+        <b>{{ t.etiqueta }}</b>
+        <span>{{ t.motivo }}</span>
+      </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  {% else %}
+  {# ---------- Paso 2: el formulario del tipo elegido ---------- #}
+  <form method="post" action="/productos/crear" enctype="multipart/form-data">
+    <input type="hidden" name="tipo" value="{{ tipo }}">
+    <div class="form-agregar">
+
+      <div class="campo">
+        <span>Nombre {{ 'de la maceta' if tipo == 'maceta' else 'del insumo' }}</span>
+        <input name="nombre" autocomplete="off" required autofocus
+               value="{{ previo.nombre or '' }}"
+               placeholder="{{ 'Ej: Maceta barro 30 cm' if tipo == 'maceta' else 'Ej: Abono orgánico' }}">
+        <span class="nota-campo">La referencia en Odoo se arma sola desde el
+          nombre y empieza por <b>{{ prefijo }}</b>.</span>
+      </div>
+
+      {% if tipo == 'maceta' %}
+      <div class="campo">
+        <span>Material</span>
+        <select name="material" required>
+          <option value="">— elige el material —</option>
+          {% for clave, etiqueta in materiales %}
+          <option value="{{ clave }}" {{ 'selected' if previo.material == clave }}>{{ etiqueta }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="campos-nuevo">
+        <div class="campo">
+          <span>Diámetro (cm)</span>
+          <input name="diametro" type="number" inputmode="decimal" min="0" step="0.5"
+                 placeholder="opcional" value="{{ previo.diametro or '' }}">
+        </div>
+        <div class="campo">
+          <span>Alto (cm)</span>
+          <input name="alto" type="number" inputmode="decimal" min="0" step="0.5"
+                 placeholder="opcional" value="{{ previo.alto or '' }}">
+        </div>
+      </div>
+      <div class="campo">
+        <span>Color</span>
+        <input name="color" autocomplete="off" placeholder="opcional — ej: terracota"
+               value="{{ previo.color or '' }}">
+      </div>
+      {% endif %}
+
+      {% if tipo == 'insumo' %}
+      <div class="campo">
+        <span>Unidad</span>
+        <select name="unidad" required>
+          <option value="">— elige la unidad —</option>
+          {% for u in unidades %}
+          <option value="{{ u.clave }}" {{ 'selected' if previo.unidad == u.clave }}>{{ u.etiqueta }}</option>
+          {% endfor %}
+        </select>
+        <span class="nota-campo">Se usa la unidad de medida que Odoo ya tenga;
+          esta app no crea unidades nuevas.</span>
+      </div>
+      {% endif %}
+
+      <div class="campos-nuevo">
+        <div class="campo">
+          <span>Precio de venta ($)</span>
+          <input name="precio" type="number" inputmode="decimal" min="0" step="0.01"
+                 placeholder="0.00" value="{{ previo.precio or '' }}">
+        </div>
+        <div class="campo">
+          <span>Costo ($)</span>
+          <input name="costo" type="number" inputmode="decimal" min="0" step="0.01"
+                 placeholder="0.00" value="{{ previo.costo or '' }}">
+        </div>
+      </div>
+
+      {% if tipo == 'maceta' %}
+      <div class="campo">
+        <span>Foto (opcional)</span>
+        <input name="foto" type="file" accept="image/*">
+        <span class="nota-campo">Queda en la ficha de Odoo. Se puede cambiar
+          después desde el producto.</span>
+      </div>
+      {% endif %}
+
+      {# La casilla del ITBMS nace APAGADA (dueño): ningún producto del
+         negocio lo cobra hoy. Marcada pone SOLO el impuesto de VENTA; el de
+         compra queda vacío siempre. #}
+      <label class="casilla">
+        <input type="checkbox" name="itbms" value="1" {{ 'checked' if previo.itbms }}>
+        Cobra ITBMS (7%)
+      </label>
+      <span class="nota-campo">Déjala apagada salvo que Abraham diga lo
+        contrario: se le pone solo al precio de venta.</span>
+    </div>
+
+    <button class="btn btn-dorado btn-grande" type="submit" style="margin-top:14px">
+      CREAR EN ODOO
+    </button>
+  </form>
+
+  <p class="nota-campo" style="margin-top:14px">
+    <a class="volver" href="/productos/crear">← Elegir otro tipo</a>
+  </p>
+  {% endif %}
+
+</main>
+{% set activa = 'stock' %}{% include '_nav.html' %}
+{% endblock %}

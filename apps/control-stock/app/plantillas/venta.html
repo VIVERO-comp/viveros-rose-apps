@@ -87,32 +87,40 @@
   </div>
   {% endif %}
 
+  {# UNA sola lista, ordenada por número de orden (dueño, 30/09/2026:
+     "ponlo en orden de número... pon todo en una fila"). Reemplaza las
+     dos listas separadas de antes ("Ventas y cotizaciones locales" +
+     "Cotizaciones de servicios"). El orden y el filtrado (una cancelada
+     ya NO se pinta, dueño 30/09/2026) se decide en Python
+     (main._lista_vender); aquí solo se recorre y, según item.tipo, se
+     pinta la tarjeta que corresponde — cada tipo conserva sus propias
+     acciones y chips, no se unifica la tarjeta, solo la lista. #}
   <div class="seccion-titulo" style="margin-top:16px">Ventas y cotizaciones locales</div>
-  {% if not ventas %}
-  <p class="nada-venta">Aún no hay ventas locales.</p>
+  {% if not vender_lista %}
+  <p class="nada-venta">Aún no hay ventas ni cotizaciones locales.</p>
   {% endif %}
-  {% for v in ventas %}
-  <div class="venta-item {{ 'pagado' if v.estado == 'pagado' else ('cotizacion' if v.estado == 'cotizacion' else ('vendida' if v.estado == 'vendida' else ('cancelada' if v.estado == 'cancelada' else 'parcial'))) }}">
+  {% for item in vender_lista %}
+  {% if item.tipo == "venta" %}
+  <div class="venta-item {{ 'pagado' if item.estado == 'pagado' else ('cotizacion' if item.estado == 'cotizacion' else ('vendida' if item.estado == 'vendida' else 'parcial')) }}">
     <div class="fila1">
       <div>
-        <b class="titulo">{{ v.orden }} · {{ v.cliente }}{% if v.celular %} <span class="cel-titulo">· {{ v.celular }}</span>{% endif %}</b>
-        <small>{{ v.fecha_texto }}{% if v.factura %} · Factura {{ v.factura }}{% endif %}{% if v.metodo %} · {{ "Yappy" if v.metodo == "yappy" else "Efectivo" }}{% endif %}</small>
-        {% if v.resumen %}<small class="compra">{{ v.resumen }}</small>{% endif %}
+        {% with item=item %}{% include "_vender_titulo.html" %}{% endwith %}
+        <small>{{ item.fecha_texto }}{% if item.factura %} · Factura {{ item.factura }}{% endif %}{% if item.metodo %} · {{ "Yappy" if item.metodo == "yappy" else "Efectivo" }}{% endif %}</small>
+        {% if item.resumen %}<small class="compra">{{ item.resumen }}</small>{% endif %}
       </div>
-      {% if v.estado == "pagado" %}<span class="badge b-ok">Pagado</span>
-      {% elif v.estado == "cotizacion" %}<span class="badge b-bajo">Cotización</span>
+      {% if item.estado == "pagado" %}<span class="badge b-ok">Pagado</span>
+      {% elif item.estado == "cotizacion" %}<span class="badge b-bajo">Cotización</span>
       {# "vendida" (28/09/2026): "Guardar venta" — confirmada, el cobro
          vive en el kanban de Odoo, igual que las cotizaciones de servicio. #}
-      {% elif v.estado == "vendida" %}<span class="badge b-ok">Venta</span>
-      {% elif v.estado == "cancelada" %}<span class="badge b-neutro">Cancelada</span>
-      {% else %}<span class="badge b-critico">{{ v.etiqueta_estado }}</span>{% endif %}
+      {% elif item.estado == "vendida" %}<span class="badge b-ok">Venta</span>
+      {% else %}<span class="badge b-critico">{{ item.etiqueta_estado }}</span>{% endif %}
     </div>
-    {% if v.ultimo_error %}
-    <div class="error-venta">Último intento: {{ v.ultimo_error }}</div>
+    {% if item.ultimo_error %}
+    <div class="error-venta">Último intento: {{ item.ultimo_error }}</div>
     {% endif %}
     <div class="venta-acciones">
       <span>
-        {% if v.estado == "cotizacion" %}
+        {% if item.estado == "cotizacion" %}
           {# Facturar/Pagado + el PDF de la cotización (dueño, 30/09/2026:
              "pon compartir al lado de facturar y pon facturar/pagado") —
              reemplaza el "Solo Facturar" del 23/09/2026. La pantalla destino
@@ -121,13 +129,12 @@
              usan las tarjetas hermanas (data-pdf: en iPhone abre la hoja
              nativa de compartir.js, en Android/computadora descarga en
              pestaña nueva con el nombre calculado en Python). #}
-          <a href="/venta/cobrar/{{ v.n }}">Facturar / Pagado</a>
-          · <a href="/venta/{{ v.n }}/cotizacion.pdf" target="_blank" rel="noopener" download="{{ v.nombre_cotizacion_pdf }}" data-pdf>Descargar / Compartir (PDF)</a>
-          <form class="forma-cancelar" method="post" action="/venta/cancelar/{{ v.n }}"
-                onsubmit="return confirm('Cancela la cotización {{ v.orden }} también en Odoo y no tiene marcha atrás desde la app: para revivirla habría que crear la venta de nuevo. ¿Cancelar?')">
-            <button type="submit" class="enlace-sub">Cancelar</button>
-          </form>
-        {% elif v.estado == "vendida" %}
+          <a href="/venta/cobrar/{{ item.n }}">Facturar / Pagado</a>
+          · <a href="/venta/{{ item.n }}/cotizacion.pdf" target="_blank" rel="noopener" download="{{ item.nombre_cotizacion_pdf }}" data-pdf>Descargar / Compartir (PDF)</a>
+          · {% with form_action="/venta/cancelar/" + item.n|string,
+                    form_confirm="Cancela la cotización " + (item.orden or "sin número") + " también en Odoo y no tiene marcha atrás desde la app: para revivirla habría que crear la venta de nuevo. ¿Cancelar?",
+                    form_boton="Cancelar" %}{% include "_vender_cancelar.html" %}{% endwith %}
+        {% elif item.estado == "vendida" %}
           {# Sin Facturar/Reintentar: esta orden no sigue el pipeline local
              de cobro. El pago se registra en el kanban de Odoo.
              target="_blank" + download (28/09/2026, la misma regla de
@@ -138,8 +145,8 @@
              de compartir.js); en Android y computadora descarga normal
              en pestaña nueva, y desde ahí se comparte igual. El botón
              Compartir aparte se retiró. #}
-          <a href="/venta/{{ v.n }}/cotizacion.pdf" target="_blank" rel="noopener" download="{{ v.nombre_cotizacion_pdf }}" data-pdf>Descargar / Compartir (PDF)</a>
-        {% elif v.estado == "pagado" %}
+          <a href="/venta/{{ item.n }}/cotizacion.pdf" target="_blank" rel="noopener" download="{{ item.nombre_cotizacion_pdf }}" data-pdf>Descargar / Compartir (PDF)</a>
+        {% elif item.estado == "pagado" %}
           {# REGLA NUEVA (Abraham, 28/09/2026), que reemplaza la del
              22/09/2026: antes el PDF NO abría pestaña nueva para no dejar
              una "ventana sin poder salir" en el celular. Pero sin pestaña
@@ -153,47 +160,48 @@
              Factura — al lado vive «Mandar factura» y sin ella no se
              entendería qué PDF es. El botón Compartir aparte se retiró:
              en iPhone este mismo enlace abre la hoja nativa (data-pdf). #}
-          <a href="/venta/{{ v.n }}/factura.pdf" target="_blank" rel="noopener" download="{{ v.nombre_factura_pdf }}" data-pdf>Descargar / Compartir factura</a>
-          {% if v.whatsapp %}
-          <a class="enlace-sub" href="{{ v.whatsapp }}" target="_blank" rel="noopener">Mandar factura</a>
+          <a href="/venta/{{ item.n }}/factura.pdf" target="_blank" rel="noopener" download="{{ item.nombre_factura_pdf }}" data-pdf>Descargar / Compartir factura</a>
+          {% if item.whatsapp %}
+          <a class="enlace-sub" href="{{ item.whatsapp }}" target="_blank" rel="noopener">Mandar factura</a>
           {% endif %}
-        {% elif v.estado != "cancelada" %}
-          <a href="/venta/cobrar/{{ v.n }}">Reintentar</a>
+        {% else %}
+          <a href="/venta/cobrar/{{ item.n }}">Reintentar</a>
         {% endif %}
       </span>
-      <span class="venta-monto">{{ v.total | dinero }}</span>
+      <span class="venta-monto">{{ item.total | dinero }}</span>
     </div>
   </div>
-  {% endfor %}
-
-  {% if cotizaciones_servicio %}
-  <div class="seccion-titulo" style="margin-top:16px">Cotizaciones de servicios</div>
-  {% for c in cotizaciones_servicio %}
+  {% else %}
   {# El id ancla la tarjeta: al volver de editar, la lista queda aquí. #}
-  <div class="venta-item cotizacion" id="cot-{{ c.n }}">
+  <div class="venta-item cotizacion" id="cot-{{ item.n }}">
     <div class="fila1">
       <div>
-        <b class="titulo">{{ c.orden }} · {{ c.cliente }}{% if c.celular %} <span class="cel-titulo">· {{ c.celular }}</span>{% endif %}</b>
-        <small>{{ c.fecha_texto }} · {{ c.etiqueta_tipo }}</small>
+        {% with item=item %}{% include "_vender_titulo.html" %}{% endwith %}
+        <small>{{ item.fecha_texto }} · {{ item.etiqueta_tipo }}</small>
       </div>
       {# El estado REAL en Odoo (una consulta para toda la lista). Editar
-         solo mientras siga en cotización: facturada, ni el botón. #}
-      {% if c.facturada %}<span class="badge b-ok">Facturado</span>
-      {% elif c.cancelada %}<span class="badge b-neutro">Cancelada</span>
+         y Quitar solo mientras siga en cotización: facturada, ni los
+         botones — y cancelada nunca llega aquí (main._lista_vender la
+         filtra antes de armar la lista). #}
+      {% if item.facturada %}<span class="badge b-ok">Facturado</span>
       {% else %}<span class="badge b-bajo">Cotización</span>{% endif %}
     </div>
     <div class="venta-acciones">
       {# UN solo control (Abraham, 30/09/2026): «Descargar / Compartir»
          — el botón Compartir aparte se retiró; en iPhone este mismo
          enlace abre la hoja nativa (el intercept de `data-pdf`). #}
-      <span><a href="/venta/servicio/{{ c.n }}/propuesta.pdf" target="_blank" rel="noopener" download="{{ c.nombre_pdf }}" data-pdf>Descargar / Compartir (PDF)</a>
-        {% if c.editable %}
-        · <a href="/venta/servicio/{{ c.n }}/editar">Editar</a>{% endif %}</span>
-      <span class="venta-monto">{{ c.total | dinero }}</span>
+      <span><a href="/venta/servicio/{{ item.n }}/propuesta.pdf" target="_blank" rel="noopener" download="{{ item.nombre_pdf }}" data-pdf>Descargar / Compartir (PDF)</a>
+        {% if item.editable %}
+        · <a href="/venta/servicio/{{ item.n }}/editar">Editar</a>
+        · {% with form_action="/venta/servicio/" + item.n|string + "/cancelar",
+                  form_confirm="Quita la cotización " + item.orden + " también en Odoo y no tiene marcha atrás desde la app: para recuperarla habría que crearla de nuevo. ¿Quitar?",
+                  form_boton="Quitar" %}{% include "_vender_cancelar.html" %}{% endwith %}
+        {% endif %}</span>
+      <span class="venta-monto">{{ item.total | dinero }}</span>
     </div>
   </div>
-  {% endfor %}
   {% endif %}
+  {% endfor %}
 </main>
 
 {# El navbar compartido de la app (antes este menú era propio y le faltaba

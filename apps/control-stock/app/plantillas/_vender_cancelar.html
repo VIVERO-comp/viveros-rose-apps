@@ -1,0 +1,14 @@
+{# El botón que cancela una orden en Odoo, con su confirm(): mismo control
+   para "Cancelar" (venta de planta) y "Quitar" (cotización de servicio,
+   dueño 30/09/2026) — visualmente pueden decir cosas distintas, pero las
+   dos llaman al MISMO camino a Odoo (ventas._cancelar_en_odoo), nunca dos
+   lógicas separadas para lo mismo.
+
+   Variables (con {% with %} antes del include):
+   - form_action    la URL del POST
+   - form_confirm   el texto del confirm()
+   - form_boton     el texto del botón (Cancelar | Quitar) #}
+<form class="forma-cancelar" method="post" action="{{ form_action }}"
+      onsubmit="return confirm('{{ form_confirm }}')">
+  <button type="submit" class="enlace-sub">{{ form_boton }}</button>
+</form>
