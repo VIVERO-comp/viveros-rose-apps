@@ -1079,4 +1079,113 @@ input.campo.cmp-mini{width:72px;padding:7px 8px;text-align:right}
      caber. */
   .modal input.campo.cmp-mini{width:64px;padding:11px 7px;text-align:right}
   .cmp-tabla td{padding:7px 3px}
+/* ---------- pestaña Pedidos: los tiquetes de trabajo (30/09/2026) ----------
+   La maqueta que aprobó Abraham, traducida a la piel del proyecto (neutros
+   zinc, acción en negro): tarjeta blanca con FRANJA de color a la izquierda,
+   nombre del cliente en serif, la plata con el saldo en rojo, chips chicos,
+   la línea de corte perforada y el pie con la fecha editable y el
+   responsable con su inicial.
+
+   El serif va con la pila del sistema a propósito: cargar una tipografía
+   nueva sería una petición más en cada pintada de una pantalla que se
+   refresca sola cada minuto.
+
+   La franja la pinta el SERVIDOR en --tiq-franja (el color del tipo de
+   actividad, el mismo del calendario); el ámbar de «falta agendar» es la
+   única regla que vive acá, porque es un estado de la pantalla y no un
+   tipo. */
+.tiq-zona{
+  flex:1;min-height:0;overflow-y:auto;scrollbar-width:thin;
+  background:var(--crema-2);border:1px solid var(--borde);border-radius:14px;
+  padding:2px 14px 16px;
+}
+.tiq-sello{font-size:11px;font-weight:600;color:var(--muy-suave);white-space:nowrap}
+
+/* el rótulo de cada grupo */
+.tiq-grupo{display:flex;align-items:baseline;gap:10px;margin:20px 0 10px}
+.tiq-grupo:first-child{margin-top:12px}
+.tiq-grupo .t{font-size:11.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;white-space:nowrap}
+.tiq-grupo .n{font-size:11px;font-weight:700;color:var(--muy-suave);white-space:nowrap}
+.tiq-grupo .linea{flex:1;height:1px;background:var(--borde)}
+.tiq-grupo.urge .t{color:var(--bajo)}
+.tiq-grupo.hoy .t{color:var(--ok)}
+
+/* el tiquete */
+.tiq-tiras{display:grid;grid-template-columns:repeat(auto-fill,minmax(276px,1fr));gap:12px}
+.tiq{
+  --tiq-franja:var(--muy-suave);
+  position:relative;overflow:hidden;display:flex;flex-direction:column;
+  background:var(--lienzo);border:1px solid var(--borde);border-radius:11px;
+  box-shadow:var(--sombra-2);
+}
+.tiq::before{content:'';position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--tiq-franja)}
+.tiq.tiq-urge{--tiq-franja:var(--bajo)}
+.tiq-cab{padding:11px 13px 7px 17px}
+.tiq .quien{
+  display:block;font-family:Georgia,'Times New Roman',serif;font-weight:700;
+  font-size:17px;line-height:1.2;color:var(--texto);text-decoration:none;
+}
+.tiq .quien:hover{text-decoration:underline;text-underline-offset:2px}
+.tiq .donde{color:var(--muy-suave);font-size:12px;margin-top:2px}
+.tiq .tiq-tel{color:var(--suave);font-weight:600;text-decoration:none}
+.tiq .tiq-tel:hover{text-decoration:underline;text-underline-offset:2px}
+.tiq-cuerpo{padding:0 13px 9px 17px;flex:1}
+.tiq .que{margin:6px 0 0;font-size:13px;color:var(--suave)}
+.tiq .plata{display:flex;align-items:baseline;gap:14px;margin-top:8px;font-size:12.5px}
+.tiq .plata .et{display:block;font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--muy-suave)}
+.tiq .plata b{display:block;font-size:14.5px;font-variant-numeric:tabular-nums}
+.tiq .plata .saldo b{color:var(--critico)}
+.tiq .tiq-orden{margin-left:auto;align-self:flex-end;font-size:10.5px;font-weight:700;color:var(--muy-suave);font-variant-numeric:tabular-nums}
+/* "no sé" nunca se parece a "no hay plata": sin dato va el motivo escrito,
+   jamás un $0.00. */
+.tiq .tiq-sin-plata{margin:8px 0 0;font-size:11.5px;color:var(--muy-suave);font-style:italic}
+.tiq-chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+.tiq-chip{
+  font-size:10.2px;font-weight:800;border-radius:999px;padding:2px 8px;
+  border:1px solid var(--borde);background:var(--crema-2);color:var(--suave);
+  white-space:nowrap;
+}
+.tiq-c-pago{background:#f0fdf4;border-color:#bbf7d0;color:#15803d}
+.tiq-c-interes{background:var(--crema-2);border-color:var(--borde);color:var(--muy-suave)}
+.tiq-c-toca{background:#fef2f2;border-color:#fecaca;color:var(--critico)}
+.tiq-c-hace{background:#fffbeb;border-color:#fde68a;color:var(--bajo)}
+
+/* la línea de corte: las dos muescas se comen el borde de la tarjeta, así
+   que llevan el color del FONDO de la zona, no el de la tarjeta. */
+.tiq-corte{
+  position:relative;height:1px;margin:0 0 0 12px;
+  background:repeating-linear-gradient(90deg,var(--borde) 0 5px,transparent 5px 10px);
+}
+.tiq-corte::before,.tiq-corte::after{
+  content:'';position:absolute;top:-6px;width:12px;height:12px;
+  border-radius:50%;background:var(--crema-2);
+}
+.tiq-corte::before{left:-18px}
+.tiq-corte::after{right:-6px}
+
+.tiq-pie{padding:9px 13px 10px 17px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.tiq-pie .fecha{display:flex;align-items:center;gap:7px;font-weight:800;font-size:13px;white-space:nowrap}
+.tiq-pie .fecha.falta{color:var(--bajo)}
+.tiq-pie .lapiz{
+  font-weight:600;font-size:11.5px;color:var(--suave);text-decoration:none;
+  border:1px solid var(--borde);border-radius:7px;padding:2px 7px;
+}
+.tiq-pie a.lapiz:hover{border-color:var(--texto);color:var(--texto);background:var(--crema-2)}
+.tiq-pie .lapiz.apagado{opacity:.45;cursor:not-allowed}
+.tiq-pie .resp{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muy-suave);min-width:0}
+.tiq-pie .resp .av{
+  width:19px;height:19px;border-radius:50%;flex:0 0 auto;
+  background:var(--crema-2);border:1px solid var(--borde);
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:800;color:var(--suave);
+}
+
+/* En el teléfono la página vuelve a scrollear sola (body{overflow:auto} del
+   media query de arriba): si la zona siguiera con su propio scroll quedarían
+   dos scrolls encimados y el pulgar nunca sabría cuál mueve. */
+@media (max-width:860px){
+  .tiq-zona{overflow:visible;border:0;background:transparent;padding:0 0 10px}
+  .tiq-corte::before,.tiq-corte::after{background:var(--fondo)}
+  .tiq-tiras{grid-template-columns:1fr}
+  .tiq-sello{display:none}
 }

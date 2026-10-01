@@ -28,8 +28,8 @@ from . import (acceso_google, agenda, altas, avisos, calculos, calendario,
                calendario_google, colores, compras,
                calendario_ics, conteos, control, cot_lead, cotizaciones,
                coworkers, crm_twenty, datos, fichas, fotos,
-               linear_leads, mantenimiento, resumen, seguridad, vehiculos,
-               ventas, wa_autor)
+               linear_leads, mantenimiento, resumen, seguridad, tiquetes,
+               vehiculos, ventas, wa_autor)
 
 app = FastAPI(title="Control Viverorose")
 
@@ -3288,6 +3288,97 @@ async def compras_nueva(request: Request):
     return _compras_vuelve(
         aviso=f"{nueva['ref']} anotada en «Por pedir»{detalle}.",
         ancla=compras.ancla_de_compra(nueva["ref"]))
+
+
+# ---------------------------------------------------------------------------
+# La pestaña Pedidos (30/09/2026): el trabajo ya pagado, en tiquetes.
+#
+# No guarda nada propio: el estado y el responsable salen del issue del
+# equipo LEAD, la fecha de la actividad del calendario y la plata de la
+# orden real de Odoo. Poner o cambiar la fecha va por el MISMO camino del
+# calendario (agenda.agendar / agenda.reprogramar), así que la fecha es UNA
+# sola se vea donde se vea. Toda la decisión vive en `app/tiquetes.py`.
+# ---------------------------------------------------------------------------
+
+@app.get("/pedidos")
+def pedidos_pantalla(request: Request):
+    """Los tiquetes: «Falta agendar» arriba y después cada día con los suyos.
+
+    Se recarga sola cada minuto (tiquetes.js), así que la pintada no espera
+    a Odoo: la plata sale de una caché de 60 s que se refresca por detrás.
+    """
+    empleada = request.state.empleada
+    alc = control.alcance(empleada, _es_admin(empleada))
+    puede_escribir = (linear_leads.escritura_activa()
+                      or not linear_leads.configurado())
+    tablero = tiquetes.tablero(
+        alc, refrescar=request.query_params.get("refrescar") == "1",
+        puede_escribir=puede_escribir)
+    # El ✎ de un tiquete: el modal de la fecha. `para_editar` devuelve None
+    # si esta sesión no puede tocar ese lead — el candado es del servidor,
+    # no del botón que no se pinta.
+    editando = tiquetes.para_editar(
+        request.query_params.get("fecha", ""), alc, puede_escribir)
+    return plantillas.TemplateResponse(request, "tiquetes.html", {
+        "empleada": empleada,
+        "modo": linear_leads.modo(),
+        "alc": alc,
+        "tablero": tablero,
+        "editando": editando,
+        "puede_escribir": puede_escribir,
+        "aviso": request.query_params.get("aviso"),
+        "error": request.query_params.get("error"),
+    })
+
+
+def _pedidos_vuelve(aviso="", error="", abrir=""):
+    """De vuelta al tablero. Con `abrir` el modal de la fecha queda ABIERTO:
+    es lo que corresponde cuando algo falló — así no hay que volver a buscar
+    el tiquete en la lista para reintentar (mismo criterio que
+    `/calendario/agendar`)."""
+    partes = []
+    if abrir:
+        partes.append("fecha=" + quote(abrir))
+    if aviso:
+        partes.append("aviso=" + quote(aviso))
+    if error:
+        partes.append("error=" + quote(error))
+    return RedirectResponse(
+        "/pedidos" + ("?" + "&".join(partes) if partes else ""),
+        status_code=303)
+
+
+@app.post("/pedidos/fecha")
+async def pedidos_fecha(request: Request):
+    """La fecha del tiquete: crea la actividad del calendario o la mueve.
+
+    El candado del servidor es `tiquetes.para_editar`, que ya verifica que
+    el lead exista, que sea un pedido por hacer y que esta sesión lo pueda
+    tocar: un POST se puede mandar a mano, así que no basta con no pintar
+    el ✎.
+    """
+    form = await request.form()
+    ref = form.get("ref", "")
+    empleada = request.state.empleada
+    alc = control.alcance(empleada, _es_admin(empleada))
+    if not (linear_leads.escritura_activa() or not linear_leads.configurado()):
+        return _pedidos_vuelve(error="Esta instancia mira el tablero real "
+                                     "pero no escribe en Linear.")
+    if tiquetes.para_editar(ref, alc) is None:
+        lead = linear_leads.uno(ref)
+        if lead is None:
+            return _pedidos_vuelve(error=linear_leads.mensaje_lead_ausente(ref))
+        return _pedidos_vuelve(
+            error=f"Ese pedido es de {lead.get('resp') or 'nadie'}: "
+                  f"no le ponés fecha vos.")
+    autor = empleada.get("nombre") or empleada["id"]
+    aviso, error = tiquetes.poner_fecha(
+        ref, form.get("fecha", ""), tipo=form.get("tipo", ""),
+        resp=form.get("resp", ""), autor=autor)
+    if error:
+        return _pedidos_vuelve(error=error, abrir=ref)
+    calendario_google.sincronizar_en_fondo()
+    return _pedidos_vuelve(aviso=aviso)
 
 
 # ---------------------------------------------------------------------------
