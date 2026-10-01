@@ -118,6 +118,43 @@ Traducción a Odoo, que el empleado no ve:
 | Programado | `commitment_date` del pedido + petición aceptada |
 | Entregado | «Hecha» en el calendario sigue siendo el gatillo; en M2, al marcar Hecha, Orquesta además valida la salida (`done`) en Odoo para que los dos coincidan. [KORTO 1/10] |
 
+### Etiquetas de tipo: una sola lista [KORTO 1/10]
+
+**Regla:** una sola lista de etiquetas de tipo de servicio/interés, igual en Linear, Odoo (cotizaciones y contactos) y WhatsApp. **Manda la lista de Linear**; Odoo y WhatsApp copian los mismos nombres. **Alquiler = Evento = Boda → una sola etiqueta: Eventos.**
+
+**La lista canónica (grupo Interés de Linear, hoy):** Plantas · Eventos · Paisajismo · Mantenimiento · Mayorista. (Los 11 tipos del negocio se traducen a estos 5 solo para la etiqueta — `LABEL_INTERES`; el vocabulario largo sigue en chips y selectores.)
+
+**Inventario medido el 1/10 [VERIFICADO M0]:**
+
+| Dónde | Etiquetas que existen | Uso |
+|---|---|---|
+| `crm.tag` (leads y órdenes) | LOCAL · RETAIL VENTA · RENTAL · MANTENIMIENTO · BODA · SERVICIO · PROYECTO | RETAIL VENTA 30 leads · SERVICIO 5 leads · RENTAL 3 leads + 1 orden · LOCAL 5 órdenes · PROYECTO 1 orden · MANTENIMIENTO y BODA 0 |
+| `res.partner.category` (contactos) | Retail · Renta/Alquiler · Mantenimiento · Proyecto · Boda · CLIENTE · Tienda web · Repartidor · Admin · + 3 de Super Extra (Supermercado 39, Ventas a Supermercados, Admin supermercado) | Retail 6 · Proyecto 3 · Tienda web 4 · Renta/Alquiler 1 · Repartidor 1 · Admin 1 · resto 0 |
+| Linear (equipo LEAD, grupo Interés) | Plantas · Eventos · Paisajismo · Mantenimiento · Mayorista | la lista que manda |
+| WhatsApp (familia Interés, verde) | Plantas · Eventos · Paisajismo · Mantenimiento · Mayorista | ya coincide con Linear |
+
+**Quién las crea/pone [VERIFICADO M0, código 5d244f8]:** `cotizaciones.py` define `etiqueta_orden` por tipo de servicio (RENTAL · BODA · EVENTO · MANTENIMIENTO · PAISAJISMO · PROYECTO · INSTALACION) y `_etiquetar_orden()` la escribe en la orden (`:341`), en la oportunidad (`:346`) y la categoría en el contacto (`:330`) — y **si el `crm.tag` no existe, LO CREA (`:335-336`)**: lo contrario de la regla de Linear («las etiquetas nunca se crean solas»). `ventas.py:1132,1230` pone `VENTA_TAG_LOCAL` (LOCAL) a las ventas locales. `colores.py:172-192` pinta los chips.
+
+**Mapeo propuesto viejo → nuevo** (nada se cambia ahora; el cambio va en **M2, primero en pruebas, código y Odoo juntos**):
+
+| Viejo (Odoo) | Nuevo (lista de Linear) |
+|---|---|
+| RENTAL · BODA · EVENTO · Renta/Alquiler · Boda | **Eventos** |
+| RETAIL VENTA · Retail | **Plantas** |
+| PAISAJISMO · PROYECTO (tag de interés) | **Paisajismo** |
+| MANTENIMIENTO · Mantenimiento | **Mantenimiento** |
+| (ninguna hoy) | **Mayorista** |
+| SERVICIO (5 leads) | repartir a mano entre los 5 al migrar (son 5 leads) |
+| INSTALACION | según el mapeo de `LABEL_INTERES` (leerlo del frontend en M2); sugerencia: Plantas |
+| LOCAL · Tienda web | NO son interés: son **canal de venta** — se quedan aparte con ese papel (decisión al margen si se renombran) |
+| Proyecto (categoría de contacto) | se queda: es la etiqueta de C12 que agrupa, no un interés |
+| CLIENTE (0 usos) | se borra en M2 |
+| Supermercado · Ventas a Supermercados · Admin supermercado | salen con el retiro de Super Extra (archivar, no borrar) |
+| Repartidor · Admin | son de ACCESO, no de interés: se quedan |
+
+**Regla nueva para M2 [REC]:** Odoo pasa a la misma disciplina de Linear — el código **solo busca** la etiqueta por nombre; si falta, error en el log y se sigue sin ella. Las crea Korto.
+
+
 ---
 
 ## 4. Permisos
