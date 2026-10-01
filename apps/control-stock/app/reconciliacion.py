@@ -47,6 +47,11 @@ Reglas que este módulo NO negocia:
   etiqueta de pago) vive en Linear, que ya es el único tablero. Si Linear
   no está configurado —en pruebas los tokens arrancan con `CLAVE` y eso
   cuenta como ausencia— la fuente entera reporta «sin datos».
+- La sección «Creado hoy fuera de Orquesta» (`creado_hoy`) lista todo
+  pedido, factura de cliente y pago nacido HOY en hora de Panamá, con
+  quién lo creó, y marca SOSPECHAS de duplicado (mismo cliente, monto
+  parecido). Sospecha = texto que se muestra; jamás una conclusión ni
+  una acción.
 
 La pantalla consume `informe_datos()` (el contrato exacto está en su
 docstring). La línea de comandos es
@@ -339,6 +344,118 @@ def _fuera_de_alcance():
             "nombre": DIARIO_FUERA_DE_ALCANCE}, None
 
 
+def _ventana_hoy_utc():
+    """(desde, hasta) del día de HOY en Panamá, como texto UTC para un
+    dominio de Odoo — el mismo cuidado de zona que `_fecha_panama` pero al
+    revés (y el mismo criterio que `resumen._ventana_utc`): la medianoche
+    se toma en Panamá y se CONVIERTE, nunca se suman horas a mano."""
+    dia = datetime.now(ZONA_PANAMA).date()
+    inicio = datetime(dia.year, dia.month, dia.day, tzinfo=ZONA_PANAMA)
+    fin = inicio + timedelta(days=1)
+    fmt = "%Y-%m-%d %H:%M:%S"
+    return (inicio.astimezone(timezone.utc).strftime(fmt),
+            fin.astimezone(timezone.utc).strftime(fmt))
+
+
+def _creado_hoy_vacio():
+    return {"ordenes": [], "facturas": [], "pagos": [], "total_ordenes": 0.0}
+
+
+def _quien_creo(fila):
+    """El nombre del usuario de Odoo que creó el registro (`create_uid`
+    viene como [id, nombre]). «—» si Odoo no lo trae: no se inventa."""
+    uid = fila.get("create_uid")
+    if isinstance(uid, (list, tuple)) and len(uid) > 1:
+        return uid[1] or "—"
+    return "—"
+
+
+def _cliente_de(fila):
+    partner = fila.get("partner_id")
+    if isinstance(partner, (list, tuple)) and len(partner) > 1:
+        return partner[0], (partner[1] or "")
+    return None, ""
+
+
+def _sospecha_duplicado(orden_hoy, universo):
+    """La SOSPECHA de duplicado de un pedido creado hoy: otro pedido NO
+    cancelado del MISMO cliente (mismos últimos 8 dígitos del teléfono)
+    con monto parecido (|diferencia| ≤ máx(1% del monto, $1)). Es una
+    sospecha que se MUESTRA, nunca una conclusión ni una acción: aquí no
+    se decide nada y mucho menos se toca Odoo. Si hay varias parecidas se
+    nombra la primera por número de orden."""
+    partner_id, _ = _cliente_de(orden_hoy)
+    partner = universo["partners"].get(partner_id) or {}
+    telefono = _ultimos8(partner.get("phone") or "")
+    if not telefono:
+        return ""
+    monto = float(orden_hoy.get("amount_total") or 0)
+    tolerancia = max(abs(monto) * 0.01, 1.0)
+    parecidas = []
+    for otra in universo["ordenes"]:
+        if otra.get("id") == orden_hoy.get("id"):
+            continue
+        if (otra.get("state") or "") == "cancel":
+            continue
+        otro_partner = universo["partners"].get(
+            (otra.get("partner_id") or [0])[0]) or {}
+        if _ultimos8(otro_partner.get("phone") or "") != telefono:
+            continue
+        if abs(float(otra.get("amount_total") or 0) - monto) <= tolerancia:
+            parecidas.append(otra.get("name") or "")
+    if not parecidas:
+        return ""
+    return (f"posible duplicado de {sorted(parecidas)[0]} "
+            "(mismo cliente, monto parecido)")
+
+
+def _creado_hoy(universo):
+    """(dict, hueco): todo lo que nació HOY (hora de Panamá) en Odoo —
+    pedidos, facturas de cliente (out_invoice y out_refund, en cualquier
+    estado) y pagos — y QUIÉN lo creó. Existe para ver de un vistazo lo
+    que otra mano (u otra sesión) metió al Odoo de producción antes de
+    correr la reconciliación contra él. Solo lectura, como todo el módulo:
+    se mira y se reporta, no se concluye ni se corrige."""
+    desde, hasta = _ventana_hoy_utc()
+    de_hoy = [["create_date", ">=", desde], ["create_date", "<", hasta]]
+    try:
+        ordenes_hoy = _leer(
+            "sale.order", "search_read", [list(de_hoy)],
+            {"fields": ["name", "partner_id", "amount_total", "state",
+                        "create_uid"], "order": "id asc"})
+        facturas_hoy = _leer(
+            "account.move", "search_read",
+            [list(de_hoy) + [["move_type", "in",
+                              ["out_invoice", "out_refund"]]]],
+            {"fields": ["name", "partner_id", "amount_total", "state",
+                        "create_uid"], "order": "id asc"})
+        pagos_hoy = _leer(
+            "account.payment", "search_read", [list(de_hoy)],
+            {"fields": ["name", "partner_id", "amount", "state",
+                        "create_uid"], "order": "id asc"})
+    except Exception as fallo:
+        return _creado_hoy_vacio(), ("La sección «Creado hoy» no se pudo "
+                                     f"leer: {_error(fallo)}")
+
+    def _renglon(fila, monto, sospecha=""):
+        return {"nombre": fila.get("name") or "",
+                "cliente": _cliente_de(fila)[1],
+                "monto": round(float(monto or 0), 2),
+                "estado": fila.get("state") or "",
+                "creado_por": _quien_creo(fila),
+                # La sospecha solo aplica a los pedidos; en facturas y
+                # pagos va "" (el contrato lo fija así).
+                "sospecha": sospecha}
+
+    ordenes = [_renglon(o, o.get("amount_total"),
+                        _sospecha_duplicado(o, universo))
+               for o in ordenes_hoy]
+    facturas = [_renglon(f, f.get("amount_total")) for f in facturas_hoy]
+    pagos = [_renglon(p, p.get("amount")) for p in pagos_hoy]
+    return {"ordenes": ordenes, "facturas": facturas, "pagos": pagos,
+            "total_ordenes": round(sum(o["monto"] for o in ordenes), 2)}, None
+
+
 def _leer_universo():
     """Todo lo que hace falta de Odoo, en un dict: órdenes (vivas y
     canceladas recientes), sus clientes, facturas, salidas y la etapa del
@@ -556,6 +673,7 @@ def _informe_vacio(huecos):
             "ventas": [],
             "fuera_de_alcance": {"n": 0, "total": 0.0, "detalle": [],
                                  "nombre": DIARIO_FUERA_DE_ALCANCE},
+            "creado_hoy": _creado_hoy_vacio(),
             "huecos": huecos}
 
 
@@ -572,6 +690,13 @@ def informe_datos():
       de los contadores.
     - `fuera_de_alcance`: {"n", "total", "detalle", "nombre"} del diario
       «Ventas Super Extra».
+    - `creado_hoy`: lo que nació HOY (hora de Panamá) en Odoo, venga de
+      donde venga — {"ordenes": [...], "facturas": [...], "pagos": [...],
+      "total_ordenes": float}; cada lista trae dicts {nombre, cliente,
+      monto, estado, creado_por, sospecha}. `sospecha` solo aplica a los
+      pedidos (posible duplicado por mismo cliente y monto parecido); en
+      facturas y pagos va "". Es información para mirar, nunca una
+      conclusión.
     - `huecos`: lista de str con las fuentes que no contestaron. Un hueco
       no es un cero: lo que no se sabe se dice.
     """
@@ -590,6 +715,9 @@ def informe_datos():
     if hueco:
         huecos.append(hueco)
     fuera, hueco = _fuera_de_alcance()
+    if hueco:
+        huecos.append(hueco)
+    creado_hoy, hueco = _creado_hoy(universo)
     if hueco:
         huecos.append(hueco)
 
@@ -747,7 +875,8 @@ def informe_datos():
 
     contadores["rojo"] = contadores["F"] + contadores["G"] + contadores["H"]
     return {"contadores": contadores, "ventas": filas,
-            "fuera_de_alcance": fuera, "huecos": huecos}
+            "fuera_de_alcance": fuera, "creado_hoy": creado_hoy,
+            "huecos": huecos}
 
 
 # ---------------------------------------------------------------------------
@@ -799,6 +928,23 @@ def _cli(argv=None):
     for clase, nombre in CLASES.items():
         print(f"  {clase} {nombre}: {datos['contadores'][clase]}")
     print(f"  Rojo (F+G+H): {datos['contadores']['rojo']}")
+    hoy_creado = datos["creado_hoy"]
+    print("  Creado hoy fuera de Orquesta: "
+          f"{len(hoy_creado['ordenes'])} pedidos · "
+          f"{len(hoy_creado['facturas'])} facturas · "
+          f"{len(hoy_creado['pagos'])} pagos")
+    for familia, etiqueta in (("ordenes", "Pedido"), ("facturas", "Factura"),
+                              ("pagos", "Pago")):
+        for r in hoy_creado[familia]:
+            renglon = (f"    {etiqueta} {r['nombre']} · "
+                       f"{r['cliente'] or '—'} · ${r['monto']:,.2f} · "
+                       f"{r['estado'] or '—'} · creado por {r['creado_por']}")
+            if r["sospecha"]:
+                renglon += f" — {r['sospecha']}"
+            print(renglon)
+    if hoy_creado["ordenes"]:
+        print("    Total de pedidos creados hoy: "
+              f"${hoy_creado['total_ordenes']:,.2f}")
     canceladas = sum(1 for v in datos["ventas"] if v["clase"] == "CANCELADA")
     if canceladas:
         print(f"  Canceladas (informativas, últimos {DIAS_CANCELADAS} "

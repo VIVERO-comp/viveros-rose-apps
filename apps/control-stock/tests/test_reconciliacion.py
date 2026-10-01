@@ -62,13 +62,15 @@ class OdooReconcilia:
         self.ordenes = {}
         self.facturas = {}
         self.salidas = {}
+        self.pagos = {}
         self.oportunidades = {}
         self.diarios = {}      # id -> nombre
         self.datos_modelo = []  # filas de ir.model.data
         self.llamadas = []
         self.fallar = False
         self._ids = {"partner": 100, "orden": 9000, "factura": 5000,
-                     "salida": 7000, "oportunidad": 300, "diario": 40}
+                     "salida": 7000, "oportunidad": 300, "diario": 40,
+                     "pago": 8000}
 
     # -- armado del mundo ---------------------------------------------------
 
@@ -98,16 +100,35 @@ class OdooReconcilia:
 
     def agregar_factura(self, amount_total, amount_residual, state="posted",
                         move_type="out_invoice", diario=("VEN", "Ventas"),
-                        payment_state="paid", name=None):
+                        payment_state="paid", name=None, create_date=None,
+                        creado_por="Admin Odoo", partner_id=None):
         fid = self._nuevo("factura")
+        partner = ([partner_id, self.partners[partner_id]["name"]]
+                   if partner_id else False)
         self.facturas[fid] = {
             "id": fid, "name": name or f"FAC/{fid}", "move_type": move_type,
             "state": state, "amount_total": amount_total,
             "amount_residual": amount_residual,
             "payment_state": payment_state, "invoice_date": _fecha_hace(1),
             "journal_id": list(diario) if diario else False,
+            "partner_id": partner,
+            "create_date": create_date or _hace(2),
+            "create_uid": [9, creado_por],
         }
         return fid
+
+    def agregar_pago(self, amount, partner_id=None, state="paid",
+                     name=None, create_date=None, creado_por="Admin Odoo"):
+        pid = self._nuevo("pago")
+        partner = ([partner_id, self.partners[partner_id]["name"]]
+                   if partner_id else False)
+        self.pagos[pid] = {
+            "id": pid, "name": name or f"PBNK/{pid}", "amount": amount,
+            "state": state, "partner_id": partner,
+            "create_date": create_date or _hace(2),
+            "create_uid": [9, creado_por],
+        }
+        return pid
 
     def agregar_salida(self, state="assigned"):
         sid = self._nuevo("salida")
@@ -124,7 +145,8 @@ class OdooReconcilia:
 
     def agregar_orden(self, partner_id, name, state="draft", dias_atras=1,
                       amount_total=0.0, validity_date=None, facturas=(),
-                      salidas=(), oportunidad=None):
+                      salidas=(), oportunidad=None, create_date=None,
+                      creado_por="Admin Odoo"):
         oid = self._nuevo("orden")
         self.ordenes[oid] = {
             "id": oid, "name": name, "state": state,
@@ -138,6 +160,11 @@ class OdooReconcilia:
                                if oportunidad else False),
             "client_order_ref": False,
             "tag_ids": [],
+            # Si nadie lo dice, la orden se creó cuando dice su fecha:
+            # ayer por defecto, así las pruebas viejas no caen en la
+            # sección «Creado hoy» sin pedirlo.
+            "create_date": create_date or _hace(dias_atras),
+            "create_uid": [9, creado_por],
         }
         return oid
 
@@ -171,6 +198,9 @@ class OdooReconcilia:
             elif op == ">=":
                 if not (actual and str(actual) >= str(valor)):
                     return False
+            elif op == "<":
+                if not (actual and str(actual) < str(valor)):
+                    return False
             elif op == "in":
                 if actual not in valor:
                     return False
@@ -201,6 +231,11 @@ class OdooReconcilia:
     def account_move_search_read(self, args, kw):
         filas = [f for f in self.facturas.values()
                  if self._coincide(f, args[0])]
+        return self._proyectar(filas, kw.get("fields", []))
+
+    def account_payment_search_read(self, args, kw):
+        filas = [p for p in self.pagos.values()
+                 if self._coincide(p, args[0])]
         return self._proyectar(filas, kw.get("fields", []))
 
     def stock_picking_read(self, args, kw):
@@ -616,9 +651,11 @@ def test_csv_presente_se_lee(monkeypatch, tmp_path):
 def test_contrato_exacto_de_informe_datos(odoo):
     p = odoo.agregar_partner("Contrato", "6166-1111")
     odoo.agregar_orden(p, "S00123", state="draft", amount_total=10.0)
+    odoo.agregar_orden(p, "S00199", state="draft", amount_total=5.0,
+                       create_date=_hace(0))
     datos = reconciliacion.informe_datos()
     assert set(datos) == {"contadores", "ventas", "fuera_de_alcance",
-                          "huecos"}
+                          "creado_hoy", "huecos"}
     assert set(datos["contadores"]) == set("ABCDEFGH") | {"rojo"}
     assert set(datos["fuera_de_alcance"]) == {"n", "total", "detalle", "nombre"}
     venta = datos["ventas"][0]
@@ -628,6 +665,12 @@ def test_contrato_exacto_de_informe_datos(odoo):
         "entregado_calendario", "fuentes_odoo", "fuentes_otras"}
     assert isinstance(venta["fuentes_odoo"], list)
     assert isinstance(venta["fuentes_otras"], list)
+    hoy_creado = datos["creado_hoy"]
+    assert set(hoy_creado) == {"ordenes", "facturas", "pagos",
+                               "total_ordenes"}
+    assert set(hoy_creado["ordenes"][0]) == {
+        "nombre", "cliente", "monto", "estado", "creado_por", "sospecha"}
+    assert isinstance(hoy_creado["total_ordenes"], float)
 
 
 def test_rojo_suma_f_g_h(odoo, monkeypatch):
@@ -678,6 +721,101 @@ def test_varias_cotizaciones_del_mismo_lead_no_son_anomalia(odoo, monkeypatch):
     assert ventas_["S00079"]["clase"] == "A"
     assert ventas_["S00081"]["clase"] == "A"
     assert datos["contadores"]["H"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Creado hoy fuera de Orquesta (solo lectura, con quién lo creó)
+# ---------------------------------------------------------------------------
+
+def test_creado_hoy_aparece_con_su_creador(odoo):
+    p = odoo.agregar_partner("De Hoy", "6211-1111")
+    odoo.agregar_orden(p, "S00130", state="sale", amount_total=500.0,
+                       create_date=_hace(0), creado_por="Sesión Externa")
+    odoo.agregar_factura(500.0, 0.0, create_date=_hace(0), partner_id=p,
+                         creado_por="Sesión Externa", name="FAC/HOY")
+    odoo.agregar_pago(500.0, p, create_date=_hace(0),
+                      creado_por="Sesión Externa", name="PAGO/HOY")
+    # Y una orden de AYER, que NO es de esta sección:
+    odoo.agregar_orden(p, "S00131", state="draft", amount_total=20.0,
+                       dias_atras=1)
+    hoy_creado = reconciliacion.informe_datos()["creado_hoy"]
+    assert [o["nombre"] for o in hoy_creado["ordenes"]] == ["S00130"]
+    assert hoy_creado["ordenes"][0]["creado_por"] == "Sesión Externa"
+    assert hoy_creado["ordenes"][0]["cliente"] == "De Hoy"
+    assert [f["nombre"] for f in hoy_creado["facturas"]] == ["FAC/HOY"]
+    assert hoy_creado["facturas"][0]["sospecha"] == ""
+    assert [g["nombre"] for g in hoy_creado["pagos"]] == ["PAGO/HOY"]
+    assert hoy_creado["pagos"][0]["monto"] == 500.0
+    assert hoy_creado["pagos"][0]["sospecha"] == ""
+    assert hoy_creado["total_ordenes"] == 500.0
+
+
+def test_limite_de_creado_hoy_es_la_medianoche_de_panama(odoo):
+    # Una creación 1/10 03:00 UTC es 30/09 22:00 en Panamá: NO es de hoy.
+    # La de las 05:00 UTC es exactamente la medianoche de Panamá: SÍ.
+    hoy_pma = datetime.now(datos.ZONA_PANAMA).date()
+    p = odoo.agregar_partner("Madrugadora", "6211-2222")
+    odoo.agregar_orden(p, "S00132", state="draft", amount_total=10.0,
+                       create_date=f"{hoy_pma} 03:00:00")
+    odoo.agregar_orden(p, "S00133", state="draft", amount_total=900.0,
+                       create_date=f"{hoy_pma} 05:00:00")
+    hoy_creado = reconciliacion.informe_datos()["creado_hoy"]
+    nombres = [o["nombre"] for o in hoy_creado["ordenes"]]
+    assert "S00132" not in nombres
+    assert "S00133" in nombres
+
+
+def test_sospecha_duplicado_con_monto_igual_y_con_1_por_ciento(odoo):
+    p = odoo.agregar_partner("Repetida", "6211-3333")
+    # La vieja (no cancelada) contra la que se sospecha:
+    odoo.agregar_orden(p, "S00140", state="sale", amount_total=100.0,
+                       dias_atras=3)
+    # Creada hoy con el MISMO monto:
+    odoo.agregar_orden(p, "S00141", state="draft", amount_total=100.0,
+                       create_date=_hace(0))
+    # Creada hoy con 1% de diferencia (|101 − 100| ≤ máx(1% de 101, $1)):
+    odoo.agregar_orden(p, "S00142", state="draft", amount_total=101.0,
+                       create_date=_hace(0))
+    hoy_creado = reconciliacion.informe_datos()["creado_hoy"]
+    por_nombre = {o["nombre"]: o for o in hoy_creado["ordenes"]}
+    assert por_nombre["S00141"]["sospecha"] == (
+        "posible duplicado de S00140 (mismo cliente, monto parecido)")
+    assert por_nombre["S00142"]["sospecha"] == (
+        "posible duplicado de S00140 (mismo cliente, monto parecido)")
+
+
+def test_sospecha_no_dispara_sin_motivo(odoo):
+    p1 = odoo.agregar_partner("Una", "6211-4444")
+    p2 = odoo.agregar_partner("Otra", "6211-5555")
+    odoo.agregar_orden(p1, "S00143", state="sale", amount_total=100.0,
+                       dias_atras=3)
+    # Mismo cliente, monto lejos: no es sospecha.
+    odoo.agregar_orden(p1, "S00144", state="draft", amount_total=150.0,
+                       create_date=_hace(0))
+    # Mismo monto, OTRO cliente: tampoco.
+    odoo.agregar_orden(p2, "S00145", state="draft", amount_total=100.0,
+                       create_date=_hace(0))
+    # Y una cancelada del mismo cliente y monto no cuenta como "otra".
+    odoo.agregar_orden(p2, "S00146", state="cancel", dias_atras=2,
+                       amount_total=100.0)
+    hoy_creado = reconciliacion.informe_datos()["creado_hoy"]
+    por_nombre = {o["nombre"]: o for o in hoy_creado["ordenes"]}
+    assert por_nombre["S00144"]["sospecha"] == ""
+    assert por_nombre["S00145"]["sospecha"] == ""
+
+
+def test_creado_hoy_no_toca_el_dinero_de_las_clases(odoo):
+    # La sección es informativa: una orden de hoy se clasifica igual que
+    # cualquier otra, y un pago de hoy NO le pone plata a nadie (el
+    # pagado sigue saliendo de las facturas de cada orden).
+    p = odoo.agregar_partner("Hoy Sin Plata", "6211-6666")
+    odoo.agregar_orden(p, "S00147", state="sale", amount_total=200.0,
+                       create_date=_hace(0))
+    odoo.agregar_pago(200.0, p, create_date=_hace(0))
+    datos_informe = reconciliacion.informe_datos()
+    venta = _ventas_por_nombre(datos_informe)["S00147"]
+    assert venta["pagado"] == 0.0 and venta["debe"] == 200.0
+    assert len(datos_informe["creado_hoy"]["pagos"]) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -737,13 +875,24 @@ def test_la_puerta_leer_rechaza_metodos_vetados(odoo):
 def test_cli_informe_imprime_y_escribe_csv(odoo, tmp_path, capsys):
     p = odoo.agregar_partner("Para El CSV", "6199-2222")
     odoo.agregar_orden(p, "S00129", state="draft", amount_total=35.0)
+    odoo.agregar_orden(p, "S00134", state="draft", amount_total=35.0,
+                       create_date=_hace(0), creado_por="Sesión Externa")
     salida = reconciliacion._cli(["informe", "--salida", str(tmp_path)])
     assert salida == 0
     impreso = capsys.readouterr().out
-    assert "A Cotizada: 1" in impreso
+    assert "A Cotizada: 2" in impreso
     assert "Rojo (F+G+H): 0" in impreso
+    # La sección de lo creado hoy, con quién lo creó, la sospecha y el
+    # total para comparar contra lo que otra sesión reporte.
+    assert ("Creado hoy fuera de Orquesta: 1 pedidos · 0 facturas · "
+            "0 pagos") in impreso
+    assert "creado por Sesión Externa" in impreso
+    assert "posible duplicado de S00129" in impreso
+    assert "Total de pedidos creados hoy: $35.00" in impreso
     archivos = list(tmp_path.glob("reconciliacion_*.csv"))
     assert len(archivos) == 1
     contenido = archivos[0].read_text(encoding="utf-8")
     assert "S00129" in contenido
+    # El CSV no cambia con la extensión: mismas columnas de siempre.
     assert contenido.splitlines()[0].startswith("clase,orden,cliente,total")
+    assert "creado_por" not in contenido.splitlines()[0]
