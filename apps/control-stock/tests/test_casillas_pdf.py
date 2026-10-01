@@ -1,10 +1,15 @@
-"""Las dos casillas del PDF (dueño, 28/09/2026): «Pago 50% abono / 50%
-contra entrega» e «Incluir garantía». La venta normal nace DESMARCADA y el
-personalizado MARCADO; se cambian en cada cotización y al editar quedan
-como se guardaron. Las banderas viven en la orden de Odoo (pago_50_50,
-con_garantia, addon v19.0.1.56.0, nacen en True allá) y la propuesta
-decide con ellas AL IMPRIMIR — por eso las cotizaciones viejas salen
-igual que siempre. Sin 50/50, la tarjeta de Control no pide el abono."""
+"""La casilla del PDF «Incluir garantía» (dueño, 28/09/2026). [1/10/2026:
+la casilla «Pago 50% abono / 50% contra entrega» se retiró de Vender por
+decisión del dueño — las cotizaciones nuevas ya no prometen pago en dos
+partes, así que no hay nada que elegir ahí. Vender ya NO manda
+`pago_50_50` a Odoo en ningún camino; sin escribirlo, el campo queda en
+su default (False) para las órdenes nuevas, y una orden vieja que ya lo
+tenga prendido NO se toca al editar — nunca se manda, nunca se pisa.] La
+venta normal nace desmarcada (garantía) y el personalizado marcado; se
+cambia en cada cotización y al editar queda como se guardó. `cot_lead.py`
+y la ficha de Control siguen leyendo `pago_50_50` de la orden tal cual
+(fuera del alcance de este cambio): sin el 50/50, la tarjeta no pide el
+abono, que sigue probado abajo sin tocar ese archivo."""
 
 import pytest
 
@@ -13,8 +18,8 @@ from test_ventas import OdooFalso, _agregar
 
 
 class OdooEspia(OdooFalso):
-    """El OdooFalso de siempre, guardando también las banderas del PDF
-    (como hace el real) para poder releerlas al editar."""
+    """El OdooFalso de siempre, guardando también la bandera del PDF
+    (como hace el real) para poder releerla al editar."""
 
     # Lo mínimo del espejo CRM que crear_personalizada toca después de
     # crear la orden (no es lo que se prueba acá).
@@ -54,7 +59,10 @@ class OdooEspia(OdooFalso):
     def sale_order_create(self, args, kw):
         vals = dict(args[0])
         nuevo = super().sale_order_create(args, kw)
-        self.ordenes[nuevo]["pago_50_50"] = vals.get("pago_50_50", True)
+        # El addon real nace con los dos campos en False; la ausencia de
+        # "pago_50_50" en vals (Vender ya no lo manda) tiene que quedar en
+        # False, nunca heredar el True de antes del 1/10/2026.
+        self.ordenes[nuevo]["pago_50_50"] = vals.get("pago_50_50", False)
         self.ordenes[nuevo]["con_garantia"] = vals.get("con_garantia", True)
         self.ordenes[nuevo]["opportunity_id"] = False
         self.ordenes[nuevo]["vals_crear"] = vals
@@ -92,86 +100,108 @@ def cliente_venta(cliente, odoo):
 
 # --- La decisión, en Python -------------------------------------------------
 
-def test_sin_marcador_rigen_los_defaults_de_la_pantalla():
+def test_sin_marcador_rige_el_default_de_la_pantalla():
     """Un formulario o borrador de antes del cambio no trae "casillas":
-    venta normal desmarcadas, personalizado marcadas."""
-    assert ventas.banderas_de({}, False) == {
-        "pago_50_50": False, "con_garantia": False}
-    assert ventas.banderas_de({}, True) == {
-        "pago_50_50": True, "con_garantia": True}
+    venta normal desmarcada, personalizado marcada. Ya no hay nada de
+    pago_50_50 en el resultado: no hay ninguna casilla que lo pinte."""
+    assert ventas.banderas_de({}, False) == {"con_garantia": False}
+    assert ventas.banderas_de({}, True) == {"con_garantia": True}
 
 
-def test_con_marcador_mandan_las_casillas():
+def test_con_marcador_manda_la_casilla():
     form = {"casillas": "1", "pago_50_50": "1"}
-    assert ventas.banderas_de(form, True) == {
-        "pago_50_50": True, "con_garantia": False}
-    assert ventas.banderas_de({"casillas": "1"}, True) == {
-        "pago_50_50": False, "con_garantia": False}
+    # Aunque un formulario viejo (o un ataque) mande "pago_50_50" en el
+    # POST, banderas_de ya no lo lee: solo existe "con_garantia".
+    assert ventas.banderas_de(form, True) == {"con_garantia": False}
+    assert ventas.banderas_de({"casillas": "1", "con_garantia": "1"}, True) == {
+        "con_garantia": True}
 
 
-# --- La venta normal: desmarcadas de fábrica --------------------------------
+# --- La venta normal: ya no hay casilla de 50/50, y Odoo no la recibe -------
 
-def test_la_cotizacion_de_venta_nace_sin_50_50_ni_garantia(cliente_venta, odoo):
+def test_la_cotizacion_de_venta_no_manda_pago_50_50(cliente_venta, odoo):
     _agregar(cliente_venta, 501)
     r = cliente_venta.post("/venta/cotizar",
                            data={"cliente": "Marta", "casillas": "1"},
                            follow_redirects=False)
     assert r.status_code == 200
     vals = list(odoo.ordenes.values())[-1]["vals_crear"]
-    assert vals["pago_50_50"] is False and vals["con_garantia"] is False
+    assert "pago_50_50" not in vals
+    assert vals["con_garantia"] is False
+    # Y la orden en Odoo queda en su default (False), sin que nadie se lo
+    # haya pedido.
+    orden = list(odoo.ordenes.values())[-1]
+    assert orden["pago_50_50"] is False
 
 
-def test_las_casillas_marcadas_viajan_a_la_orden(cliente_venta, odoo):
+def test_marcar_garantia_no_resucita_el_pago_50_50(cliente_venta, odoo):
     _agregar(cliente_venta, 501)
     cliente_venta.post("/venta/cotizar",
                        data={"cliente": "Marta", "casillas": "1",
-                             "pago_50_50": "1", "con_garantia": "1"},
+                             "con_garantia": "1"},
                        follow_redirects=False)
     vals = list(odoo.ordenes.values())[-1]["vals_crear"]
-    assert vals["pago_50_50"] is True and vals["con_garantia"] is True
+    assert "pago_50_50" not in vals
+    assert vals["con_garantia"] is True
 
 
-def test_la_pantalla_de_venta_nace_desmarcada(cliente_venta, odoo):
+def test_la_pantalla_de_venta_ya_no_tiene_la_casilla_del_50_50(cliente_venta, odoo):
     _agregar(cliente_venta, 501)
     r = cliente_venta.get("/venta/nueva")
-    assert 'name="pago_50_50"' in r.text and 'name="con_garantia"' in r.text
+    assert 'name="pago_50_50"' not in r.text
+    assert "50%" not in r.text and "50/50" not in r.text
+    assert 'name="con_garantia"' in r.text
     import re
-    for campo in ("pago_50_50", "con_garantia"):
-        caja = re.search(rf'<input[^>]*name="{campo}"[^>]*>', r.text).group(0)
-        assert "checked" not in caja
+    caja = re.search(r'<input[^>]*name="con_garantia"[^>]*>', r.text).group(0)
+    assert "checked" not in caja
 
 
-# --- El personalizado: marcadas de fábrica ----------------------------------
+# --- El personalizado: la garantía nace marcada; el 50/50 ya no existe ------
 
-def test_el_personalizado_nace_marcado(cliente_venta, odoo):
+def test_el_personalizado_nace_con_garantia_marcada(cliente_venta, odoo):
     r = cliente_venta.get("/venta/servicio-personalizada")
+    assert 'name="pago_50_50"' not in r.text
+    assert "50%" not in r.text and "50/50" not in r.text
     import re
-    for campo in ("pago_50_50", "con_garantia"):
-        caja = re.search(rf'<input[^>]*name="{campo}"[^>]*>', r.text).group(0)
-        assert "checked" in caja
-    # Y al crear sin tocar nada (formulario viejo, sin marcador): marcadas.
+    caja = re.search(r'<input[^>]*name="con_garantia"[^>]*>', r.text).group(0)
+    assert "checked" in caja
+    # Y al crear sin tocar nada (formulario viejo, sin marcador): marcada.
     cliente_venta.post("/venta/servicio-personalizada",
                        data={"cliente": "Ana", "servicios": "1",
                              "servicio_texto": "Arreglo", "servicio_monto": "10"},
                        follow_redirects=False)
     vals = list(odoo.ordenes.values())[-1]["vals_crear"]
-    assert vals["pago_50_50"] is True and vals["con_garantia"] is True
+    assert "pago_50_50" not in vals
+    assert vals["con_garantia"] is True
 
 
-def test_desmarcar_en_el_personalizado_apaga_las_banderas(cliente_venta, odoo):
+def test_desmarcar_garantia_en_el_personalizado_la_apaga(cliente_venta, odoo):
     cliente_venta.post("/venta/servicio-personalizada",
                        data={"cliente": "Ana", "servicios": "1",
                              "servicio_texto": "Arreglo", "servicio_monto": "10",
-                             "casillas": "1", "con_garantia": "1"},
+                             "casillas": "1"},
                        follow_redirects=False)
     vals = list(odoo.ordenes.values())[-1]["vals_crear"]
-    assert vals["pago_50_50"] is False and vals["con_garantia"] is True
+    assert "pago_50_50" not in vals
+    assert vals["con_garantia"] is False
 
 
-# --- Editar: quedan como se guardaron ---------------------------------------
+# --- Ninguna plantilla de Vender imprime "50%" (red de seguridad) ----------
 
-def test_al_editar_las_casillas_vuelven_como_se_guardaron(cliente_venta, odoo,
-                                                          monkeypatch):
+def test_ninguna_plantilla_de_vender_imprime_el_50_50(cliente_venta, odoo):
+    _agregar(cliente_venta, 501)
+    pantallas = ("/venta/nueva", "/venta/servicio-personalizada")
+    for ruta in pantallas:
+        r = cliente_venta.get(ruta)
+        assert "50%" not in r.text, f"{ruta} todavía habla del 50%"
+        assert "50/50" not in r.text, f"{ruta} todavía habla del 50/50"
+        assert "pago_50_50" not in r.text, f"{ruta} todavía manda pago_50_50"
+
+
+# --- Editar: la garantía queda como se guardó; el 50/50 viejo NO se toca ----
+
+def test_al_editar_la_garantia_vuelve_como_se_guardo(cliente_venta, odoo,
+                                                      monkeypatch):
     # El espejo del CRM no es lo que se prueba acá (y el OdooFalso chico
     # no trae ir.model.data ni crm.lead).
     monkeypatch.setattr(cotizaciones, "_oportunidad_espejada",
@@ -179,24 +209,49 @@ def test_al_editar_las_casillas_vuelven_como_se_guardaron(cliente_venta, odoo,
     registro = cotizaciones.crear_personalizada(
         {"id": "genesis", "nombre": "Génesis"}, "Ana", "",
         servicios=[{"texto": "Arreglo", "monto": "10", "descripcion": ""}],
-        banderas={"pago_50_50": False, "con_garantia": True})
+        banderas={"con_garantia": True})
     datos = cotizaciones.cargar_para_editar(registro["n"])
-    assert datos["banderas"] == {"pago_50_50": False, "con_garantia": True}
-    # Guardar la edición con las casillas cambiadas las escribe en Odoo.
+    assert datos["banderas"] == {"con_garantia": True}
+    # Guardar la edición con la casilla cambiada la escribe en Odoo.
     cotizaciones.editar_cotizacion(
         registro["n"], [{"texto": "Arreglo", "monto": "12", "descripcion": ""}],
-        [], banderas={"pago_50_50": True, "con_garantia": False})
+        [], banderas={"con_garantia": False})
     orden = odoo.ordenes[registro["orden_id"]]
-    assert orden["pago_50_50"] is True and orden["con_garantia"] is False
-    # Y un guardado SIN casillas (los otros tipos de servicio) no las toca.
+    assert orden["con_garantia"] is False
+    assert "pago_50_50" not in orden["vals_crear"]
+    # Y un guardado SIN casillas (los otros tipos de servicio) no la toca.
     cotizaciones.editar_cotizacion(
         registro["n"], [{"texto": "Arreglo", "monto": "12", "descripcion": ""}],
         [], banderas=None)
     orden = odoo.ordenes[registro["orden_id"]]
-    assert orden["pago_50_50"] is True and orden["con_garantia"] is False
+    assert orden["con_garantia"] is False
 
 
-# --- La tarjeta de Control no pide abono sin el 50/50 -----------------------
+def test_editar_nunca_toca_el_pago_50_50_de_una_orden_vieja(cliente_venta, odoo,
+                                                             monkeypatch):
+    """Las 21 órdenes reales que nacieron con el 50/50 prendido (antes del
+    1/10/2026) no cambian al editarlas: el dueño pidió «solo quítalo para
+    que no pase en las próximas». Como editar_cotizacion ya nunca manda
+    "pago_50_50", una orden que lo tenga en True se queda en True pase lo
+    que pase con su garantía."""
+    monkeypatch.setattr(cotizaciones, "_oportunidad_espejada",
+                        lambda *a, **k: None)
+    registro = cotizaciones.crear_personalizada(
+        {"id": "genesis", "nombre": "Génesis"}, "Ana", "",
+        servicios=[{"texto": "Arreglo", "monto": "10", "descripcion": ""}],
+        banderas={"con_garantia": True})
+    # Simula una orden "vieja": el 50/50 quedó prendido desde antes.
+    odoo.ordenes[registro["orden_id"]]["pago_50_50"] = True
+    cotizaciones.editar_cotizacion(
+        registro["n"], [{"texto": "Arreglo", "monto": "20", "descripcion": ""}],
+        [], banderas={"con_garantia": False})
+    orden = odoo.ordenes[registro["orden_id"]]
+    assert orden["pago_50_50"] is True
+    assert orden["con_garantia"] is False
+
+
+# --- La tarjeta de Control no pide abono sin el 50/50 (cot_lead.py, sin
+#     tocar ni probar su archivo: solo se confirma el comportamiento) ------
 
 def _fila_orden(pago_50_50):
     return {
@@ -219,6 +274,8 @@ def test_sin_50_50_la_tarjeta_no_pide_abono(monkeypatch, db_limpia):
 
 
 def test_con_50_50_el_abono_sigue_saliendo(monkeypatch, db_limpia):
+    """Una orden vieja que ya tenga pago_50_50=True (nadie la apaga)
+    sigue mostrando el abono en la ficha, como siempre."""
     monkeypatch.setattr(
         ventas, "_ejecutar",
         lambda modelo, metodo, args, kw=None: [_fila_orden(True)])
