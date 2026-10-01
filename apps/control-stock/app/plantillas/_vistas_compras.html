@@ -1,0 +1,28 @@
+{# Las DOS vistas de la pestaña Compras: el tablero y los proveedores.
+
+   Es el MISMO `.segmento` de Control («Por estado» / «Por empleado»): dos
+   vistas sobre el mismo trabajo se cambian con un segmento, no con un
+   botón de volver — ese lenguaje ya existe en la app y no se inventa otro.
+   Por eso esto reemplazó al «← Compras» que la pantalla de proveedores
+   traía: eran dos formas distintas de la misma cosa, y una sola es mejor.
+
+   Y no gasta el botón negro, que en Compras ya es «+ Compra» (un solo
+   botón negro por pantalla).
+
+   Se incluye DOS VECES en cada pantalla, que es el patrón que ya usó el
+   calendario con sus leads por agendar (29/09/2026): la copia de la
+   `.barra` sirve a la computadora, y la de `vc_clase='seg-movil'` al
+   teléfono — porque bajo 768px la `.barra` entera está `display:none` y
+   sin la segunda copia no habría forma de pasar de una vista a la otra en
+   el celular. El CSS decide cuál se ve; Python y el HTML no deciden nada.
+
+   Variables (con {% with %} antes del include):
+   - vc_activa   'tablero' | 'proveedores' — cuál de las dos se está viendo
+   - vc_clase    clase extra (hoy solo 'seg-movil' para la copia del
+                 teléfono); vacío para la de la barra #}
+<div class="segmento {{ vc_clase or '' }}">
+  <a class="{{ 'on' if vc_activa == 'tablero' }}" href="/compras"
+     {{ 'aria-current="page"' if vc_activa == 'tablero' }}>Tablero</a>
+  <a class="{{ 'on' if vc_activa == 'proveedores' }}" href="/compras/proveedores"
+     {{ 'aria-current="page"' if vc_activa == 'proveedores' }}>Proveedores</a>
+</div>

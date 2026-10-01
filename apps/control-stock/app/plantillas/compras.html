@@ -60,12 +60,18 @@
     {% with bm_titulo='Compras', bm_sub='Lo que le compramos al proveedor',
             bm_accion_url=('/compras?nueva=1' if puede_mover else ''),
             bm_accion_texto='+ Compra' %}{% include '_barra_movil.html' %}{% endwith %}
+    {# La copia del teléfono del segmento de vistas: bajo 768px la `.barra`
+       está escondida, y sin esto no habría cómo llegar a Proveedores desde
+       el celular. #}
+    {% with vc_activa='tablero', vc_clase='seg-movil' %}{% include '_vistas_compras.html' %}{% endwith %}
     <div class="barra">
       <button class="btn icono hamb" type="button" aria-label="Mostrar u ocultar el menú"
               aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
       <h3>Compras</h3>
+      {# Las dos vistas de esta pestaña, con el segmento de Control. #}
+      {% with vc_activa='tablero' %}{% include '_vistas_compras.html' %}{% endwith %}
       <span class="crece"></span>
       <span class="tenue" style="font-size:12px">
         {% if alc.admin %}Arrastra para corregir la columna
@@ -138,6 +144,11 @@
             </span>
             <span class="t-sub ctl-pie-tarjeta">
               {% if c.proveedor %}<span class="cmp-prov">{{ c.proveedor }}</span>{% endif %}
+              {# Cómo llega: sirve para ver de un vistazo si hay que mandar
+                 a alguien a buscarla. El texto lo arma Python
+                 (`compras.texto_llegada`); vacío cuando nadie lo dijo, y
+                 entonces no se pinta nada. #}
+              {% if c.llegada %}<span class="cmp-llega">{{ c.llegada }}</span>{% endif %}
               {% if c.orden_compra %}<span class="cmp-orden">{{ c.orden_compra }}</span>{% endif %}
               <span class="{{ 'hace-alerta' if c.hace_alerta }}">{{ c.hace }}</span>
               {% if c.resp %}<span class="chip-est">{{ c.resp }}</span>
@@ -199,6 +210,11 @@
   {% if abierta.proveedor %}
   <div class="dato"><b>Proveedor</b><span>{{ abierta.proveedor }}</span></div>
   {% endif %}
+  {# «Todavía no se dijo» se escribe, no se esconde: en el panel la
+     pregunta importa (¿hay que ir a buscarla?) y un renglón ausente se
+     lee como si no hiciera falta. En la tarjeta sí se omite, que es donde
+     el espacio manda. #}
+  <div class="dato"><b>Cómo llega</b><span>{{ abierta.llegada or 'Todavía no se dijo' }}</span></div>
   <div class="dato"><b>Responsable</b><span>{{ abierta.resp or 'Sin asignar' }}</span></div>
   {% if abierta.orden_compra %}
   <div class="dato"><b>Orden</b><span>{{ abierta.orden_compra }}</span></div>
@@ -275,12 +291,18 @@
       productos van abajo.</span>
   </div>
 
+  {# ---------- El proveedor ----------
+     Sigue siendo UN campo de texto con sugerencias y no un selector: la
+     lista de proveedores de Odoo está corta y un <select> no dejaría
+     anotar el nombre de uno nuevo. Lo que cambió (01/10/2026) es que lo
+     escrito ya no se pierde: si no calza con ninguno, abajo sale el botón
+     de CREARLO, y recién entonces nace el contacto en Odoo.
+
+     Quién calza y quién no lo decide Python (`proveedor_calza` /
+     `proveedor_nuevo`), no la plantilla: así un error de Odoo no se puede
+     leer nunca como «ese proveedor no existe». #}
   <div class="campo-caja">
     <label for="cp-prov">Proveedor</label>
-    {# UN campo de texto con sugerencias, no un selector: hoy Odoo no tiene
-       ni un proveedor marcado, y un <select> vacío no deja anotar nada. Lo
-       escrito se casa por nombre exacto contra los contactos de Odoo para
-       guardar su id; lo que no calce queda como nombre libre. #}
     <input class="campo" id="cp-prov" name="proveedor" maxlength="120"
            list="cp-proveedores" autocomplete="off"
            placeholder="Ej: Agroservicios del Istmo"
@@ -288,10 +310,61 @@
     <datalist id="cp-proveedores">
       {% for p in proveedores %}<option value="{{ p.nombre }}"></option>{% endfor %}
     </datalist>
+    {% if proveedor_calza %}
+    {# Los renglones de abajo cuidan a propósito que las frases que
+       importan no las corte un salto de línea: hay pruebas que las buscan
+       tal cual, y una frase partida en dos no calza con ninguna. #}
+    <span class="pie-nota">✓ <b>{{ proveedor_calza.nombre }}</b>
+      <span>ya está en Odoo{% if proveedor_calza.telefono %} · {{ proveedor_calza.telefono }}{% endif %}.</span>
+      La compra queda amarrada a él.</span>
+    {% elif proveedor_nuevo %}
+    {# El teléfono SOLO aparece acá: es lo único que se le pregunta de más
+       a quien va a crear el contacto, y pedirlo cuando el proveedor ya
+       existe sería pedir un dato que no se va a usar. #}
+    <input class="campo" id="cp-prov-tel" name="proveedor_tel" maxlength="40"
+           type="tel" inputmode="tel" autocomplete="off"
+           placeholder="Teléfono del proveedor (opcional)"
+           value="{{ borrador.proveedor_tel }}">
+    <div class="acciones">
+      <button class="btn" type="submit" formaction="/compras/borrador"
+              formnovalidate name="accion" value="crear_proveedor"
+              data-guardando="Creando…">Crear este proveedor</button>
+    </div>
+    <span class="pie-nota">
+      <span>«{{ borrador.proveedor }}» no está entre los proveedores de Odoo.</span>
+      Creándolo, la próxima compra lo sugiere sola y se puede saber cuánto se
+      le compró. <b>No se crea solo</b>: si el nombre tiene un dedo
+      resbalado, corregilo arriba antes de apretar.</span>
+    {% endif %}
     {% if proveedores_error %}
     <span class="err">No se pudo leer los proveedores de Odoo: {{ proveedores_error }}.
-      Se puede escribir el nombre igual.</span>
+      Se puede escribir el nombre igual, y crearlo cuando Odoo vuelva.</span>
     {% endif %}
+  </div>
+
+  {# ---------- ¿Cómo llega? ----------
+     Para saber si hay que mandar a alguien a buscarla. Las cuatro
+     opciones salen de `compras.FORMAS_LLEGADA` — camión y mula son las
+     palabras del dueño («ahora yo traigo por camión o mula»).
+
+     El «todavía no se sabe» es un radio de verdad y no la ausencia de
+     radios: sin él, un grupo marcado por error no se puede desmarcar. #}
+  <div class="campo-caja">
+    <label>¿Cómo llega?</label>
+    <div class="cmp-ops">
+      <label class="cmp-op">
+        <input type="radio" name="como_llega" value=""
+               {{ 'checked' if not borrador.como_llega }}>
+        <span class="tenue">Todavía no se sabe</span>
+      </label>
+      {% for f in formas_llegada %}
+      <label class="cmp-op">
+        <input type="radio" name="como_llega" value="{{ f.clave }}"
+               {{ 'checked' if borrador.como_llega == f.clave }}>
+        <span>{{ f.titulo }}</span>
+      </label>
+      {% endfor %}
+    </div>
   </div>
 
   {# ---------- Los productos de la compra ----------
@@ -356,6 +429,10 @@
       <button class="btn" type="submit" formaction="/compras/borrador"
               formnovalidate name="accion" value="buscar">Buscar</button>
     </div>
+    {# El marcador escondido de «lo que está bajo»: va DENTRO del formulario
+       para que cualquier submit (buscar, agregar, quitar) la deje abierta.
+       Mismo patrón que `casillas` en Vender. #}
+    {% if ver_bajos %}<input type="hidden" name="bajos" value="1">{% endif %}
     {% if buscador_error %}
     <span class="err">No se pudo buscar en Odoo: {{ buscador_error }}. Se puede
       anotar la compra igual y agregar los productos después.</span>
@@ -365,7 +442,11 @@
       <tbody>
         {% for p in resultados %}
         <tr>
-          <td><b>{{ p.nombre }}</b><span class="cmp-orden">{{ p.sku }}</span></td>
+          <td><b>{{ p.nombre }}</b><span class="cmp-orden">{{ p.sku }}</span>
+            {# Cuánto hay de esto, que es lo que hace falta para decidir si
+               comprarlo. El texto lo arma Python (`compras.con_stock`):
+               **un stock que no se sabe dice que no se sabe, nunca 0**. #}
+            <span class="cmp-stock {{ 'cmp-sin' if p.stock_cero }}">{{ p.stock_texto }}</span></td>
           <td class="cmp-num">{{ p.precio | dinero }}</td>
           <td>
             {# El id y el nombre viajan escondidos con el SKU en su nombre:
@@ -395,6 +476,68 @@
     <span class="pie-nota">Se crea en Odoo y volvés acá con el producto ya
       agregado y todo lo que escribiste en su sitio. Vale para los tres:
       planta, maceta e insumo.</span>
+    {% endif %}
+  </div>
+
+  {# ---------- Lo que está bajo o en cero ----------
+     Elegir sin escribir: lo que se está acabando es justo lo que se va a
+     comprar. Qué es «bajo» NO lo decide esta pantalla — es el mismo umbral
+     global de Stock, con la misma regla (`compras.bajos`).
+
+     Nace cerrada: son dos botones y no un interruptor porque sin
+     JavaScript el formulario no sabe alternar nada, y cada uno dice qué
+     quiere. El marcador escondido de arriba la deja abierta mientras se
+     agregan varios seguidos. #}
+  <div class="campo-caja" id="cp-bajos">
+    {% if not ver_bajos %}
+    <div class="acciones">
+      <button class="btn" type="submit" formaction="/compras/borrador"
+              formnovalidate name="accion" value="bajos">Ver lo que está bajo</button>
+    </div>
+    <span class="pie-nota">Lo que se está acabando o ya se acabó, para
+      agregarlo sin escribir el nombre.</span>
+    {% else %}
+    <div class="acciones">
+      <label class="crece"><b>Lo que está bajo o en cero</b></label>
+      <button class="btn chico" type="submit" formaction="/compras/borrador"
+              formnovalidate name="accion" value="ocultar_bajos">Ocultar</button>
+    </div>
+    {% if not bajos.ok %}
+    <span class="err">No se pudo leer el inventario: {{ bajos.error }}. Se
+      puede buscar el producto por su nombre arriba.</span>
+    {% elif not bajos.productos %}
+    <span class="pie-nota">Nada está bajo ahora mismo: todo pasa de
+      {{ bajos.umbral * 2 }} unidades.</span>
+    {% else %}
+    <table class="cmp-tabla">
+      <tbody>
+        {% for p in bajos.productos %}
+        <tr>
+          <td><b>{{ p.nombre }}</b><span class="cmp-orden">{{ p.sku }}</span>
+            <span class="cmp-stock {{ 'cmp-sin' if p.stock_cero }}">{{ p.stock_texto }}</span></td>
+          <td>
+            {# Solo el nombre viaja escondido: el inventario no trae el id de
+               `product.product`. Lo resuelve el servidor al agregar, con una
+               consulta a Odoo por ESE producto; si no contesta, la línea se
+               guarda con su SKU, que es lo durable. #}
+            <input type="hidden" name="nom-{{ p.sku }}" value="{{ p.nombre }}">
+            <button class="btn chico" type="submit"
+                    formaction="/compras/borrador" formnovalidate
+                    name="agregar" value="{{ p.sku }}"
+                    aria-label="Agregar {{ p.nombre }}">+ Agregar</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <span class="pie-nota">
+      {% if bajos.sobran %}Son {{ bajos.cuantos }} en total; se muestran los
+      {{ bajos.productos | length }} más vacíos.{% else %}{{ bajos.cuantos }}
+      producto{{ '' if bajos.cuantos == 1 else 's' }} bajo el doble del umbral
+      ({{ bajos.umbral }}).{% endif %}
+      Lo que no aparezca acá se busca por su nombre arriba.
+    </span>
+    {% endif %}
     {% endif %}
   </div>
 

@@ -210,7 +210,8 @@ def test_la_tabla_compra_no_guarda_ni_estado_ni_plata():
             "PRAGMA table_info(compra)")}
     assert columnas == {"ref", "que_compro", "proveedor_id",
                         "proveedor_nombre", "orden_compra_id",
-                        "orden_compra_nombre", "lead_ref", "creada"}
+                        "orden_compra_nombre", "lead_ref", "como_llega",
+                        "creada"}
     assert "estado" not in columnas
     assert "total" not in columnas and "pagado" not in columnas
 

@@ -539,6 +539,11 @@ a{color:inherit}
    el "+" flotante. Todo lo demás de la pantalla grande (barra, chips,
    buscador, vistas, sidebar) se esconde. */
 .movil,.fab,body>nav,.barra-m{display:none}
+/* La copia del teléfono del segmento de vistas de Compras (tablero /
+   proveedores, 01/10/2026). En computadora no se ve: ahí manda la copia
+   que vive dentro de la `.barra`. Mismo reparto que los leads por agendar
+   del calendario, que también se pintan dos veces y los decide el CSS. */
+.segmento.seg-movil{display:none}
 
 @media (max-width:767.98px){
   /* Solo navbar + calendario: fuera la barra de controles, los chips, la
@@ -548,6 +553,13 @@ a{color:inherit}
      respuesta a lo que la empleada acaba de hacer. */
   .barra,.chips,a.franja,.zona,.lado{display:none}
   .tablero{padding:10px 12px calc(24px + env(safe-area-inset-bottom));gap:10px}
+
+  /* …y por eso el segmento de vistas de Compras aparece acá: la `.barra`
+     que lo lleva en computadora está escondida justo arriba, y sin esta
+     copia no habría cómo pasar del tablero a Proveedores en el celular.
+     Ocupa el ancho entero porque es la única navegación de la pantalla. */
+  .segmento.seg-movil{display:flex;width:100%;justify-content:stretch}
+  .segmento.seg-movil a{flex:1;text-align:center;padding:8px 10px;font-size:12.5px}
 
   /* ---------- la barra única de arriba (artefacto aprobado, 23/09/2026):
      hamburguesa · título · acción. Nada flota sobre el contenido. ---------- */
@@ -1072,6 +1084,26 @@ input.campo.cmp-mini{width:72px;padding:7px 8px;text-align:right}
    (la tarjeta entera ya se ve como algo que se toca). */
 .ret-tarjeta a.eq-texto{text-decoration:none;color:var(--suave)}
 .ret-tarjeta a.eq-texto:hover{text-decoration:underline}
+
+/* Cuánto hay de cada producto, junto a su nombre en el buscador y en la
+   lista de «lo que está bajo» (01/10/2026). Va en su propio renglón bajo
+   el nombre, como el SKU: la columna del nombre es la que tiene ancho.
+   `.cmp-sin` es el cero REAL —medido, no inventado— y por eso se resalta;
+   un stock que no se sabe sale con el color tenue de siempre, porque no
+   es una alarma, es una ausencia de dato. */
+.cmp-stock{display:block;font-size:10.5px;color:var(--suave);margin-top:1px}
+.cmp-stock.cmp-sin{color:var(--critico, #e5484d);font-weight:700}
+
+/* Cómo llega la compra, en la tarjeta: texto tenue como el proveedor, con
+   su tope de ancho para que la tarjeta T2 siga siendo de dos líneas. */
+.cmp-llega{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px}
+
+/* Los radios de «¿cómo llega?»: apilados, con el mismo lenguaje que las
+   opciones de envío de Vender (que viven en styles.css, y esta pantalla no
+   lo carga — de ahí que estén acá y no allá). */
+.cmp-ops{display:flex;flex-direction:column;gap:6px}
+.cmp-op{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
+.cmp-op input{accent-color:var(--dorado, #b8860b);margin:0;flex-shrink:0}
 @media (max-width:767.98px){
   /* En el teléfono el formulario es pantalla completa y sus campos crecen a
      16px (así iOS no hace zoom al enfocar). Los de cantidad y costo se
@@ -1080,3 +1112,36 @@ input.campo.cmp-mini{width:72px;padding:7px 8px;text-align:right}
   .modal input.campo.cmp-mini{width:64px;padding:11px 7px;text-align:right}
   .cmp-tabla td{padding:7px 3px}
 }
+
+/* ---------- Proveedores (30/09/2026): la segunda pantalla de Compras ----------
+   Una grilla de tarjetas, no un tablero: no hay columnas que arrastrar
+   acá, solo lo que de verdad se le compró a cada uno. El color del chip de
+   estado reusa los MISMOS tintes que `.etq.ok/.curso/.urg` (nada nuevo, ni
+   un hex inventado); «Preferido» es la única marca a mano y por eso es la
+   única con el color de acción (negro), no un color de semáforo. */
+.prov-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));
+  gap:10px;overflow-y:auto;padding-bottom:4px;
+}
+.prov-tarjeta{
+  border:1px solid var(--borde);border-radius:13px;background:var(--lienzo);
+  padding:12px 13px;display:flex;flex-direction:column;gap:6px;
+}
+.prov-cab{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.prov-cab b{font-size:13.5px;font-weight:700;line-height:1.3}
+.prov-contacto{display:flex;flex-wrap:wrap;gap:8px;margin:0;font-size:11px;color:var(--muy-suave)}
+.prov-badge.prov-preferido{background:var(--texto);color:#fff;border-color:transparent}
+.prov-badge.prov-activo{background:rgba(46,125,68,.14);color:var(--ok);border-color:transparent}
+.prov-badge.prov-evaluando{background:rgba(168,127,27,.16);color:var(--bajo);border-color:transparent}
+.prov-badge.prov-prospecto{background:var(--crema-2);color:var(--muy-suave);border-color:var(--borde)}
+.prov-badge.prov-pausa{background:rgba(192,91,70,.14);color:var(--critico);border-color:transparent}
+/* La explicación de «todavía no hay proveedores»: el enlace a Compras
+   tiene que leerse como un enlace, no como el resto del párrafo gris. */
+.prov-vacio a{color:var(--texto);font-weight:700;text-decoration:underline;text-underline-offset:2px}
+/* El enlace que abre la ficha del proveedor (el panel con lo que le
+   compramos y su precio, de `product.supplierinfo`). */
+.prov-abrir{display:block;margin-top:2px;font-size:11.5px;font-weight:600;color:var(--suave);text-decoration:none}
+.prov-abrir:hover{text-decoration:underline;text-underline-offset:2px}
+/* Cómo le dice EL PROVEEDOR a la planta, en la ficha: aparte del nombre
+   nuestro, chico y tenue, para leer su factura. */
+.prov-lo-llama{display:block;font-size:10.5px;color:var(--muy-suave);font-weight:500}
