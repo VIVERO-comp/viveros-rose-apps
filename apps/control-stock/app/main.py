@@ -438,7 +438,8 @@ def _resumen_categorias(inventario, umbral):
 
 
 @app.get("/")
-def inicio(request: Request, refrescar: int = 0, crear: str = ""):
+def inicio(request: Request, refrescar: int = 0, crear: str = "",
+           volver: str = ""):
     # Sin pestaña pedida, la app ABRE en el Calendario (dueño, 22/09/2026:
     # "quita inicio y pon calendario de primero" y, al ver que la raíz
     # seguía mostrando el tablero, "todavía inicio está"). El tablero del
@@ -618,8 +619,31 @@ def inicio(request: Request, refrescar: int = 0, crear: str = ""):
             "fichas": fichas.todas(),
             "referencias": fichas.referencias(),
             "sinPublicados": sin_publicados,
+            # A dónde va la pantalla cuando se acaba de crear una planta, y
+            # a dónde hay que devolver la planta nueva. Los DOS los calcula
+            # Python y el JS solo los lee: `app.js` tenía el destino
+            # escrito a mano, que es justo lo que la regla del proyecto no
+            # permite (la decisión en Python, el navegador recibiendo el
+            # resultado). Siempre vienen con valor —el de siempre cuando
+            # nadie está esperando la planta— para que el JS no tenga que
+            # elegir nada.
+            "destinoTrasCrear": _destino_tras_crear_planta(volver),
+            "volverTrasCrear": (volver if _vuelta_del_alta(volver) else ""),
         }, ensure_ascii=False),
     })
+
+
+# A dónde vuelve la pantalla de Stock después de crear una planta. Sin nadie
+# esperándola es la recarga de siempre (la planta nueva tiene que entrar a
+# la lista con su stock); con un `volver` pendiente, a la pantalla que la
+# pidió — hoy el formulario de compra nueva, con la planta ya agregada.
+DESTINO_TRAS_CREAR_PLANTA = "/?refrescar=1&tab=stock&vista=global"
+
+
+def _destino_tras_crear_planta(volver=""):
+    if _vuelta_del_alta(volver) and volver == "compra":
+        return "/compras?nueva=1" + compras.ANCLA_LINEAS
+    return DESTINO_TRAS_CREAR_PLANTA
 
 
 # ---------------------------------------------------------------------------
@@ -670,8 +694,15 @@ async def crear_producto(request: Request):
 
     La planta nace SOLO en Odoo: no entra a la tienda hasta que se regenere
     el catálogo del sitio, así que aparece en Stock global y no en online.
+
+    `volver` dice quién está esperando esta planta (hoy el formulario de
+    compra nueva, que mandó a crearla porque no apareció en su buscador):
+    con él, la planta recién creada se agrega sola como línea de esa compra.
+    El valor sale de la pantalla, que lo recibió de Python — no es una
+    decisión del navegador.
     """
     cuerpo = await request.json()
+    volver = (cuerpo.get("volver") or "").strip()
     nombre = (cuerpo.get("nombre") or "").strip()
     sku = (cuerpo.get("sku") or "").strip().upper() or datos.sku_sugerido(nombre)
     categoria = cuerpo.get("categoria")
@@ -722,8 +753,37 @@ async def crear_producto(request: Request):
             stock = respuesta["resultados"][0]["resultado"]
         except datos.SinConexion:
             stock = "falló"
+    # La planta ya está en Odoo. Si alguien la estaba esperando, se le
+    # agrega ahí mismo: así el empleado vuelve y la encuentra puesta, sin
+    # tener que buscarla otra vez. Va DESPUÉS del alta y del stock, y sin
+    # poder tumbar la respuesta: la planta quedó creada y decir lo contrario
+    # sería mentir.
+    agregada_a = ""
+    if volver == "compra" and _vuelta_del_alta(volver):
+        try:
+            _agregar_planta_a_la_compra(request, sku, nombre)
+            agregada_a = "compra"
+        except Exception as fallo:
+            compras.registro_aviso(
+                f"La planta {sku} se creó pero no se pudo agregar a la "
+                f"compra en curso: {fallo!r}")
     return {"ok": True, "sku": sku, "nombre": nombre, "id": creada.get("id"),
-            "cantidad": cantidad, "stock": stock}
+            "cantidad": cantidad, "stock": stock, "agregadaA": agregada_a}
+
+
+def _agregar_planta_a_la_compra(request, sku, nombre):
+    """La planta recién creada, como línea de la compra que la pidió.
+
+    El id de `product.product` se pide aparte (el alta por el order-api
+    devuelve el del `product.template`, que no es el mismo) y si Odoo no
+    contesta esa consulta **la línea se agrega igual** con su SKU y su
+    nombre, que es lo durable.
+    """
+    producto = compras.producto_por_sku(sku)
+    compras.agregar_al_borrador(
+        request.state.empleada["id"],
+        producto_id=(producto or {}).get("id"),
+        sku=sku, nombre=(producto or {}).get("nombre") or nombre or sku)
 
 
 @app.post("/productos/{sku}/publicacion")
@@ -4168,7 +4228,14 @@ def alta_producto(request: Request, tipo: str = "", creado: str = "",
     escondidos del formulario, así que elegir el tipo no los pierde.
     """
     if tipo == "planta":
-        return RedirectResponse("/?tab=stock&crear=planta", status_code=303)
+        # El `volver` viaja con ella: el modal de Stock es el único alta que
+        # no vive acá, y sin esto la planta nueva no sabría a qué compra
+        # volver (era media solución — el borrador sobrevivía, pero la
+        # planta había que buscarla de nuevo).
+        destino = "/?tab=stock&crear=planta"
+        if _vuelta_del_alta(volver):
+            destino += "&volver=" + quote(volver)
+        return RedirectResponse(destino, status_code=303)
     estados = {t["clave"]: t for t in altas.tipos_para_pantalla()}
     if tipo not in altas.CATEGORIA_DE:
         # `?tipo=` vacío es el selector mandado sin elegir (el navegador lo

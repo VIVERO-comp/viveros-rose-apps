@@ -91,9 +91,11 @@
     <div class="solo-lectura"><b>Solo lectura.</b> Esta instancia mira el
       tablero real pero no escribe en Linear.</div>
     {% endif %}
-    {# Hoy (30/09/2026) el proyecto COMPRAS todavía no existe en Linear: el
-       tablero sale con sus 7 columnas vacías y este renglón lo dice en
-       palabras simples. No es una falla, y el código no lo crea. #}
+    {# Si a Linear le falta el proyecto COMPRAS o alguna de las 7 columnas,
+       el tablero sale vacío y este renglón lo dice en palabras simples: no
+       es una falla, y el código no lo crea. (El proyecto YA existe desde el
+       30/09/2026 de tarde, medido en el proceso vivo; esto se queda para
+       una base nueva o un Odoo/Linear de pruebas.) #}
     {% if falta %}
     <div class="solo-lectura"><b>Falta prepararlo en Linear.</b> {{ falta }}</div>
     {% endif %}
@@ -391,9 +393,8 @@
               formnovalidate name="accion" value="crear_producto">Crear producto «{{ q }}»</button>
     </div>
     <span class="pie-nota">Se crea en Odoo y volvés acá con el producto ya
-      agregado y todo lo que escribiste en su sitio. Si es una PLANTA, el
-      formulario vive en Stock: al volver a Compras tu compra sigue acá y la
-      buscás.</span>
+      agregado y todo lo que escribiste en su sitio. Vale para los tres:
+      planta, maceta e insumo.</span>
     {% endif %}
   </div>
 
