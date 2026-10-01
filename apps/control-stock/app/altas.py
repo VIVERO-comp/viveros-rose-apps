@@ -3,8 +3,9 @@
 El botón negro de Stock dejó de ser "Crear planta": ahora es "Crear
 producto", porque el negocio empieza a vender MACETAS (y ya compraba
 INSUMOS). Cada tipo tiene su formulario y su categoría de Odoo, y el paso de
-elegir el tipo es una pantalla con tres ENLACES —nada de JS:
-/productos/crear?tipo=maceta—.
+elegir el tipo es un SELECTOR que arranca vacío en «— elegir —» (dueño,
+30/09/2026), dentro de un form GET de HTML puro que manda
+/productos/crear?tipo=… — nada de JS.
 
 Las PLANTAS no pasan por aquí: siguen por el camino de siempre (el modal de
 Stock → POST /productos/nuevo → order-api), con su selector de categoría
@@ -546,18 +547,26 @@ def crear(limpio, foto=None):
 # ---------------------------------------------------------------------------
 
 def tipos_para_pantalla():
-    """Los tres tipos con su estado, para la pantalla de elegir.
+    """Los tres tipos con su estado, EN EL ORDEN DEL SELECTOR.
 
-    Planta está SIEMPRE lista: es el formulario de siempre y no depende de
-    ninguna categoría nueva. Maceta e insumo se apagan con su motivo cuando
-    su categoría no está en Odoo (o cuando no se le pudo preguntar).
+    Planta va primera porque es lo que se crea todos los días (131 plantas y
+    0 macetas en el catálogo al escribir esto); el orden del selector es este
+    y cambiarlo es mover estas líneas. Planta está además SIEMPRE lista: es
+    el formulario de siempre y no depende de ninguna categoría nueva. Maceta
+    e insumo se apagan con su motivo cuando su categoría no está en Odoo (o
+    cuando no se le pudo preguntar).
+
+    Nadie trae su URL: el selector manda los tres a /productos/crear?tipo=…
+    y lo que pasa con cada uno —el formulario, o la redirección al modal de
+    la planta— lo decide la ruta (main.alta_producto). Un formulario HTML no
+    puede tener dos destinos sin JavaScript, así que esa regla vive en un
+    solo lugar.
     """
     categorias = categorias_de_producto()
     lista = [{
         "clave": "planta",
         "etiqueta": "Planta",
         "detalle": "Exterior, Interior o Florales · la que va a la tienda",
-        "ruta": "/?tab=stock&crear=planta",
         "listo": True,
         "motivo": "",
     }]
@@ -574,6 +583,5 @@ def tipos_para_pantalla():
         else:
             motivo = ""
         lista.append({"clave": clave, "etiqueta": titulo, "detalle": detalle,
-                      "ruta": f"/productos/crear?tipo={clave}",
                       "listo": not motivo, "motivo": motivo})
     return lista

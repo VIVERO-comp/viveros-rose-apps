@@ -3,8 +3,8 @@
 
 {% block contenido %}
 {# Crear producto (dueño, 30/09/2026): el botón negro de Stock dejó de ser
-   "Crear planta". Primero se elige el TIPO —tres enlaces, sin una línea de
-   JS— y después se llena su formulario:
+   "Crear planta". Primero se elige el TIPO —un selector que arranca vacío,
+   sin una línea de JS— y después se llena su formulario:
 
    · Planta  → el modal de siempre en Stock (/?tab=stock&crear=planta), con
                su selector Exterior / Interior / Florales. No cambió.
@@ -48,23 +48,36 @@
   {% endif %}
 
   {% if not tipo %}
-  {# ---------- Paso 1: elegir el tipo (enlaces, nada de JS) ---------- #}
+  {# ---------- Paso 1: elegir el tipo ----------
+     Un selector que arranca vacío en "— elegir —" (dueño, 30/09/2026: "si
+     Python, pon elegir o maceta, insumo o planta"), igual que el de
+     categoría de la planta. Es un <form method="get"> de HTML puro: manda
+     ?tipo= AL MISMO sitio al que apuntan los enlaces directos, así que no
+     hay una segunda regla que mantener y no hace falta un onchange en
+     JavaScript — de ahí el botón al lado del selector.
+
+     Planta va primero porque es lo que se crea todos los días (131 plantas
+     y 0 macetas en el catálogo); darlo vuelta es cambiar el orden de
+     altas.tipos_para_pantalla(). Un tipo cuya categoría no está en Odoo
+     viene `disabled` y su motivo sale debajo. #}
   <div class="seccion-titulo">¿Qué vas a crear?</div>
-  <div class="tipos-alta">
-    {% for t in tipos %}
-      {% if t.listo %}
-      <a class="tipo-tarjeta" href="{{ t.ruta }}">
-        <b>{{ t.etiqueta }}</b>
-        <span>{{ t.detalle }}</span>
-      </a>
-      {% else %}
-      <div class="tipo-tarjeta apagada" aria-disabled="true">
-        <b>{{ t.etiqueta }}</b>
-        <span>{{ t.motivo }}</span>
+  <form method="get" action="/productos/crear">
+    <div class="form-agregar">
+      <div class="campo">
+        <span>Tipo de producto</span>
+        <select name="tipo" required autofocus>
+          <option value="">— elegir —</option>
+          {% for t in tipos %}
+          <option value="{{ t.clave }}" {{ 'disabled' if not t.listo }}>{{ t.etiqueta }}{{ ' (no disponible)' if not t.listo }}</option>
+          {% endfor %}
+        </select>
+        {% for t in tipos %}
+        <span class="nota-campo">{{ t.etiqueta }}: {{ t.motivo if not t.listo else t.detalle }}</span>
+        {% endfor %}
       </div>
-      {% endif %}
-    {% endfor %}
-  </div>
+    </div>
+    <button class="btn btn-dorado btn-grande" type="submit">CONTINUAR</button>
+  </form>
 
   {% else %}
   {# ---------- Paso 2: el formulario del tipo elegido ---------- #}

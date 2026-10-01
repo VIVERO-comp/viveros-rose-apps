@@ -461,24 +461,10 @@ nav button.on, nav a.on{color:var(--dorado);background:rgba(24,24,27,.06)}
 /* ---------- modal agregar planta ---------- */
 .form-agregar{display:flex;flex-direction:column;gap:11px;margin-bottom:14px}
 
-/* ---------- Crear producto: elegir el tipo (crear_producto.html) ----------
-   Tres tarjetas-enlace, una por tipo. La apagada (su categoría no está en
-   Odoo) no es un enlace: es un div con el motivo, para que no se pueda
-   entrar a un formulario que no podría guardar. */
-.tipos-alta{display:flex;flex-direction:column;gap:10px;margin-bottom:18px}
-.tipo-tarjeta{
-  display:block;padding:15px 16px;border-radius:16px;
-  background:var(--noche-2);border:1.5px solid var(--noche-3);
-  color:var(--texto);text-decoration:none;
-}
-.tipo-tarjeta b{display:block;font-size:15px;font-weight:700;margin-bottom:3px}
-.tipo-tarjeta span{display:block;font-size:11.5px;color:var(--texto-suave)}
-.tipo-tarjeta:active{transform:scale(.99)}
-.tipo-tarjeta.apagada{opacity:.55;border-style:dashed}
-@media (min-width: 900px){
-  .tipos-alta{flex-direction:row}
-  .tipos-alta > *{flex:1 1 0}
-}
+/* Crear producto, paso 1: las tres tarjetas-enlace del tipo se cambiaron por
+   un selector que arranca en "— elegir —" (dueño, 30/09/2026), así que
+   .tipos-alta / .tipo-tarjeta se fueron con ellas: el selector usa el
+   .campo > select y el .form-agregar de siempre. */
 
 /* ---------- modal foto de producto ---------- */
 /* El atributo hidden debe ganar aunque la clase fije display (ej. .btn es

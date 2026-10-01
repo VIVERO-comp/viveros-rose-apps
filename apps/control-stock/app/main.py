@@ -3915,8 +3915,10 @@ def calendario_regenerar_enlace(request: Request):
 # Crear producto: Planta · Maceta · Insumo (dueño, 30/09/2026)
 # ---------------------------------------------------------------------------
 # El botón negro de Stock dejó de ser "Crear planta". Primero se elige el
-# tipo —una pantalla con tres ENLACES, sin JS— y después se llena su
-# formulario. La planta sigue por su camino de siempre (el modal de Stock y
+# tipo —un selector que arranca en "— elegir —" dentro de un form GET, sin
+# JS— y después se llena su formulario. Los enlaces directos
+# (?tipo=maceta) siguen valiendo: el selector llega por la misma puerta.
+# La planta sigue por su camino de siempre (el modal de Stock y
 # POST /productos/nuevo, que pasa por el order-api); maceta e insumo se
 # crean acá, directo en Odoo, con las reglas de app/altas.py: los dos
 # impuestos explícitamente vacíos, la categoría por NOMBRE y la maceta
@@ -3954,16 +3956,27 @@ def alta_producto(request: Request, tipo: str = "", creado: str = ""):
     """Elegir el tipo, o el formulario de maceta / insumo.
 
     El tipo planta no tiene formulario propio acá: manda al de siempre, que
-    vive en la pantalla de Stock. Un tipo raro (o uno cuya categoría no está
-    en Odoo) cae en el paso de elegir, donde se explica qué falta.
+    vive en la pantalla de Stock. Y es el MISMO camino para el selector y
+    para un enlace directo `?tipo=planta`: el formulario de elegir no puede
+    tener dos destinos sin JavaScript, así que la redirección vive acá y hay
+    una sola regla.
+
+    Un tipo raro, el selector mandado sin elegir, o un tipo cuya categoría no
+    está en Odoo caen en el paso de elegir, diciendo qué pasó.
     """
     if tipo == "planta":
         return RedirectResponse("/?tab=stock&crear=planta", status_code=303)
+    estados = {t["clave"]: t for t in altas.tipos_para_pantalla()}
     if tipo not in altas.CATEGORIA_DE:
-        return _pantalla_alta(request, "")
-    if not any(t["clave"] == tipo and t["listo"]
-               for t in altas.tipos_para_pantalla()):
-        return _pantalla_alta(request, "")
+        # `?tipo=` vacío es el selector mandado sin elegir (el navegador lo
+        # frena con `required`, pero un enlace a mano llega igual).
+        return _pantalla_alta(request, "", error=(
+            "Elige qué vas a crear." if "tipo" in request.query_params
+            else None))
+    if not estados[tipo]["listo"]:
+        # Ej.: ?tipo=maceta con la categoría «Macetas» ausente. Se dice QUÉ
+        # falta, no un genérico.
+        return _pantalla_alta(request, "", error=estados[tipo]["motivo"])
     return _pantalla_alta(request, tipo, creado=creado,
                           avisos=request.query_params.getlist("aviso"))
 

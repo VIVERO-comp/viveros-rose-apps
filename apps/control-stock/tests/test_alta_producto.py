@@ -382,17 +382,81 @@ def test_el_boton_de_stock_ahora_lleva_a_elegir_el_tipo(cliente, con_inventario)
     assert "abrirAgregar()" not in html
 
 
-def test_elegir_el_tipo_son_tres_enlaces(cliente, con_inventario, odoo):
+def _opciones_del_selector(html):
+    """Los value= del <select name="tipo">, en orden."""
+    import re
+
+    trozo = html.split('name="tipo"', 1)[1].split("</select>", 1)[0]
+    return re.findall(r'value="([^"]*)"', trozo)
+
+
+def test_elegir_el_tipo_es_un_selector_que_arranca_vacio(
+        cliente, con_inventario, odoo):
+    """Pedido del dueño (30/09/2026): «si Python, pon elegir o maceta, insumo
+    o planta» — el mismo gesto que el selector de categoría de la planta."""
     html = cliente.get("/productos/crear").text
-    assert 'href="/?tab=stock&amp;crear=planta"' in html
-    assert 'href="/productos/crear?tipo=maceta"' in html
-    assert 'href="/productos/crear?tipo=insumo"' in html
+    # Un form GET de HTML puro, al mismo sitio que los enlaces directos.
+    assert 'method="get" action="/productos/crear"' in html
+    # El placeholder vacío va PRIMERO y después los tres tipos, con planta
+    # arriba: es lo que se crea todos los días.
+    assert _opciones_del_selector(html) == ["", "planta", "maceta", "insumo"]
+    assert "— elegir —" in html
+    # Nada de navegar desde el navegador: el botón manda el form.
+    assert "onchange" not in html
+    assert 'type="submit"' in html
+
+
+def test_un_tipo_sin_su_categoria_sale_deshabilitado_con_su_motivo(
+        cliente, con_inventario, odoo):
+    odoo.categorias = {"Insumos": 10}
+    altas.reiniciar_cache()
+    html = cliente.get("/productos/crear").text
+    # Sigue en la lista (para que se vea que existe) pero no se puede elegir.
+    assert _opciones_del_selector(html) == ["", "planta", "maceta", "insumo"]
+    assert 'value="maceta" disabled' in html
+    assert "Falta la categoría «Macetas» en Odoo" in html
 
 
 def test_el_tipo_planta_manda_al_formulario_de_siempre(cliente, con_inventario, odoo):
+    """El selector y un enlace directo llegan por la MISMA puerta: un form
+    HTML no puede tener dos destinos sin JS, así que la redirección al modal
+    de la planta vive en la ruta."""
     r = cliente.get("/productos/crear?tipo=planta", follow_redirects=False)
     assert r.status_code == 303
     assert r.headers["location"] == "/?tab=stock&crear=planta"
+
+
+def test_el_enlace_directo_al_formulario_sigue_valiendo(
+        cliente, con_inventario, odoo):
+    """Quien llega con el tipo ya puesto ve su formulario, sin pasar por el
+    selector."""
+    for tipo, campo in (("maceta", 'name="material"'),
+                        ("insumo", 'name="unidad"')):
+        html = cliente.get(f"/productos/crear?tipo={tipo}").text
+        assert campo in html
+        assert f'<input type="hidden" name="tipo" value="{tipo}">' in html
+        # Y el selector del paso 1 no se pinta.
+        assert "— elegir —" not in html
+
+
+def test_mandar_el_selector_sin_elegir_vuelve_a_preguntar(
+        cliente, con_inventario, odoo):
+    html = cliente.get("/productos/crear?tipo=").text
+    assert "Elige qué vas a crear." in html
+    assert "— elegir —" in html
+    # Llegar sin ?tipo= (la primera vez) no reta a nadie.
+    assert "Elige qué vas a crear." not in cliente.get("/productos/crear").text
+
+
+def test_pedir_un_tipo_que_no_se_puede_crear_dice_que_falta(
+        cliente, con_inventario, odoo):
+    """?tipo=maceta sin la categoría en Odoo: el motivo concreto, no un
+    genérico."""
+    odoo.categorias = {"Insumos": 10}
+    altas.reiniciar_cache()
+    html = cliente.get("/productos/crear?tipo=maceta").text
+    assert "Falta la categoría «Macetas» en Odoo" in html
+    assert 'name="material"' not in html
 
 
 def test_con_crear_planta_el_formulario_llega_abierto(cliente, con_inventario):
