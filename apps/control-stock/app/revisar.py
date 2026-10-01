@@ -77,6 +77,11 @@ def preparar(ventas):
         v["marca_debe"] = (f"Entregado, debe {_dinero(debe)}"
                            if clase == "C" and debe > 0
                            and v.get("entregado_odoo") else None)
+        # Una venta HISTÓRICA (vieja, registrada tarde el 1/10) lleva su
+        # chip gris aparte, pero NUNCA cambia el tono de su clase: una D
+        # histórica sigue verde — no es una advertencia de hoy. Default
+        # False para no romper con un informe que aún no traiga el campo.
+        v["historica"] = bool(v.get("historica") or False)
         listas.append(v)
     return listas
 

@@ -29,7 +29,7 @@ def _informe_base():
              "cliente": "Carla Núñez", "telefono": "6000-0001",
              "total": 150.0, "pagado": 150.0, "debe": 0.0, "clase": "D",
              "motivo": "Pagada completa y al día",
-             "marca_prueba": False,
+             "marca_prueba": False, "historica": False,
              "entregado_odoo": False, "entregado_calendario": False,
              "fuentes_odoo": ["Orden confirmada el 12/09",
                               "Pago completo registrado"],
@@ -38,7 +38,7 @@ def _informe_base():
              "cliente": "Luis Prado", "telefono": "6000-0002",
              "total": 320.5, "pagado": 200.0, "debe": 120.5, "clase": "C",
              "motivo": "La entrega se marcó Hecha y quedó saldo",
-             "marca_prueba": False,
+             "marca_prueba": False, "historica": False,
              "entregado_odoo": True, "entregado_calendario": False,
              "fuentes_odoo": ["Orden confirmada el 15/09"],
              "fuentes_otras": ["Calendario: actividad sin marcar Hecha"]},
@@ -46,10 +46,19 @@ def _informe_base():
              "cliente": "Venta de ensayo", "telefono": "",
              "total": 10.0, "pagado": 10.0, "debe": 0.0, "clase": "F",
              "motivo": "Un pago que el sistema no vio entrar",
-             "marca_prueba": True,
+             "marca_prueba": True, "historica": False,
              "entregado_odoo": False, "entregado_calendario": True,
              "fuentes_odoo": [],
              "fuentes_otras": ["Yappy: aviso de pago sin orden"]},
+            {"orden_id": "S00109", "nombre": "S00109",
+             "cliente": "Marta Ríos", "telefono": "6000-0003",
+             "total": 85.0, "pagado": 85.0, "debe": 0.0, "clase": "D",
+             "motivo": "Pagada completa (venta vieja registrada el 1/10); "
+                       "la entrega se regulariza en M2",
+             "marca_prueba": False, "historica": True,
+             "entregado_odoo": False, "entregado_calendario": False,
+             "fuentes_odoo": ["Orden registrada el 01/10"],
+             "fuentes_otras": []},
         ],
         "fuera_de_alcance": {"n": 29, "total": 3109.85, "detalle": [],
                              "nombre": "Ventas Super Extra"},
@@ -173,6 +182,45 @@ def test_ninguna_palabra_prohibida(admin, informe_falso):
         bajo = texto.lower()
         for palabra in ("picking", "payment_state", "backorder", "sale order"):
             assert palabra not in bajo, f"se escapó «{palabra}»"
+
+
+def test_el_chip_historica_aparece_en_lista_y_detalle(admin, informe_falso):
+    """Una venta histórica lleva su chip gris JUNTO al de su clase, en la
+    lista y en el detalle — y el tono sigue siendo el de la clase."""
+    lista = admin.get("/revisar").text
+    # Solo la S00109 lo lleva: una vez en toda la lista.
+    assert lista.count("HISTÓRICA · 1/10") == 1
+    tarjeta = lista.split('id="orden-S00109"')[1].split("prov-abrir")[0]
+    assert "HISTÓRICA · 1/10" in tarjeta
+    # El tono es el de su clase: una D histórica sigue verde, con su
+    # chip «Pagado» — el chip histórico es gris, nunca una advertencia.
+    assert "rv-verde" in tarjeta and "Pagado" in tarjeta
+    assert "rv-rojo" not in tarjeta and "rv-dorado" not in tarjeta
+    # Y el motivo se pinta tal cual llega, sin texto inventado de hoy.
+    assert "venta vieja registrada el 1/10" in tarjeta
+    assert "se regulariza en M2" in tarjeta
+
+    detalle = admin.get("/revisar?abrir=S00109").text
+    panel = detalle.split("panel-der")[1]
+    assert "HISTÓRICA · 1/10" in panel
+    assert "rv-verde" in panel
+
+
+def test_el_chip_historica_no_aparece_para_las_demas(admin, informe_falso):
+    lista = admin.get("/revisar").text
+    for orden in ("S00077", "S00078", "S00099"):
+        tarjeta = lista.split(f'id="orden-{orden}"')[1].split("prov-abrir")[0]
+        assert "HISTÓRICA" not in tarjeta, f"el chip se coló en {orden}"
+    detalle = admin.get("/revisar?abrir=S00077").text
+    assert "HISTÓRICA" not in detalle.split("panel-der")[1]
+
+
+def test_preparar_sin_el_campo_historica_no_rompe():
+    """Un informe viejo que todavía no trae `historica`: default False."""
+    from app import revisar
+
+    (venta,) = revisar.preparar([{"clase": "D", "debe": 0.0}])
+    assert venta["historica"] is False
 
 
 # ---------------------------------------------------------------------------

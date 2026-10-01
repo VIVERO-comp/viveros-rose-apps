@@ -108,6 +108,25 @@ DIARIO_FUERA_DE_ALCANCE = "Ventas Super Extra"
 MODULO_ADDON = "vivero_rose_pedidos"
 ETAPAS_FLUJO = ("cotizado", "facturado", "abono", "pagado")
 
+# La tanda de ventas VIEJAS que la sesión de «ventas externas» registró en
+# el Odoo de producción el 1/10/2026: nueve órdenes (S00109–S00117) más la
+# factura y el pago de S00078 (Emiraf). Sus facturas y pagos llevan la
+# fecha fiscal REAL (25/08–28/09); solo el `date_order` de las nueve quedó
+# con la fecha de ese día. Declaradas históricas por Korto tras
+# verificarlo en el Odoo real. LISTA CERRADA A PROPÓSITO, nada de
+# heurística por fecha ni por creador: S00107 (Sofia) y S00090 (Ilayda)
+# son ventas reales de ese mismo día y NO entran. Si otro día aparece
+# otra tanda, la declara Korto y se suma aquí a mano.
+ORDENES_HISTORICAS = {"S00078", "S00109", "S00110", "S00111", "S00112",
+                      "S00113", "S00114", "S00115", "S00116", "S00117"}
+
+# Los textos de la marca histórica (el contrato y las pruebas los citan).
+# La clase NO cambia nunca por ser histórica: el dinero está bien; solo
+# el motivo deja de sonar a pendiente de hoy.
+SUFIJO_HISTORICA = "Histórica registrada el 1/10"
+TEXTO_D_HISTORICA = ("Pagada completa (venta vieja registrada el 1/10); "
+                     "la entrega se regulariza en M2")
+
 # Las DOS etiquetas automáticas de Linear que solo nacen de un pago real
 # en Odoo (las escribe el addon al entrar la plata). Si el lead las lleva
 # y Odoo dice $0, eso es una anomalía (clase H): la etiqueta no pudo nacer
@@ -437,18 +456,21 @@ def _creado_hoy(universo):
         return _creado_hoy_vacio(), ("La sección «Creado hoy» no se pudo "
                                      f"leer: {_error(fallo)}")
 
-    def _renglon(fila, monto, sospecha=""):
+    def _renglon(fila, monto, sospecha="", historica=False):
         return {"nombre": fila.get("name") or "",
                 "cliente": _cliente_de(fila)[1],
                 "monto": round(float(monto or 0), 2),
                 "estado": fila.get("state") or "",
                 "creado_por": _quien_creo(fila),
                 # La sospecha solo aplica a los pedidos; en facturas y
-                # pagos va "" (el contrato lo fija así).
-                "sospecha": sospecha}
+                # pagos va "" (el contrato lo fija así). Igual la marca
+                # histórica: solo un pedido puede llevarla en True.
+                "sospecha": sospecha,
+                "historica": historica}
 
     ordenes = [_renglon(o, o.get("amount_total"),
-                        _sospecha_duplicado(o, universo))
+                        _sospecha_duplicado(o, universo),
+                        (o.get("name") or "") in ORDENES_HISTORICAS)
                for o in ordenes_hoy]
     facturas = [_renglon(f, f.get("amount_total")) for f in facturas_hoy]
     pagos = [_renglon(p, p.get("amount")) for p in pagos_hoy]
@@ -684,7 +706,10 @@ def informe_datos():
     - `contadores`: {"A"…"H": n, "rojo": F+G+H}.
     - `ventas`: lista de dicts con orden_id, nombre, cliente, telefono,
       total, pagado, debe, clase, motivo, marca_prueba, entregado_odoo,
-      entregado_calendario (True/False/None = sin datos), fuentes_odoo
+      entregado_calendario (True/False/None = sin datos), historica
+      (True solo para la tanda cerrada `ORDENES_HISTORICAS`: ventas
+      viejas registradas tarde el 1/10, con la clase intacta y el motivo
+      marcado), fuentes_odoo
       (lista de str) y fuentes_otras (lista de str). Las canceladas de los
       últimos 30 días van con clase "CANCELADA", solo informativas, fuera
       de los contadores.
@@ -693,10 +718,11 @@ def informe_datos():
     - `creado_hoy`: lo que nació HOY (hora de Panamá) en Odoo, venga de
       donde venga — {"ordenes": [...], "facturas": [...], "pagos": [...],
       "total_ordenes": float}; cada lista trae dicts {nombre, cliente,
-      monto, estado, creado_por, sospecha}. `sospecha` solo aplica a los
-      pedidos (posible duplicado por mismo cliente y monto parecido); en
-      facturas y pagos va "". Es información para mirar, nunca una
-      conclusión.
+      monto, estado, creado_por, sospecha, historica}. `sospecha` solo
+      aplica a los pedidos (posible duplicado por mismo cliente y monto
+      parecido); en facturas y pagos va "". `historica` marca los pedidos
+      de `ORDENES_HISTORICAS` (en facturas y pagos va False). Es
+      información para mirar, nunca una conclusión.
     - `huecos`: lista de str con las fuentes que no contestaron. Un hueco
       no es un cero: lo que no se sabe se dice.
     """
@@ -834,6 +860,7 @@ def informe_datos():
         if pago_externo is not None:
             fuentes_otras.append(TEXTO_PAGO_EXTERNO)
 
+        historica = (orden.get("name") or "") in ORDENES_HISTORICAS
         if cancelada:
             clase = "CANCELADA"
             motivo = (f"Cancelada en Odoo (últimos {DIAS_CANCELADAS} días) "
@@ -854,6 +881,15 @@ def informe_datos():
             })
             contadores[clase] += 1
 
+        # Una histórica conserva su CLASE tal cual (el dinero está bien);
+        # solo el motivo dice que es la tanda vieja. En D el motivo entero
+        # cambia para que no suene a entrega pendiente de hoy.
+        if historica:
+            if clase == "D":
+                motivo = TEXTO_D_HISTORICA
+            else:
+                motivo += f" · {SUFIJO_HISTORICA}"
+
         filas.append({
             "orden_id": orden.get("id"),
             "nombre": orden.get("name") or "",
@@ -869,6 +905,7 @@ def informe_datos():
             "marca_prueba": "prueba" in cliente.lower(),
             "entregado_odoo": entregado_odoo,
             "entregado_calendario": entregado_calendario,
+            "historica": historica,
             "fuentes_odoo": fuentes_odoo,
             "fuentes_otras": fuentes_otras,
         })
@@ -941,6 +978,8 @@ def _cli(argv=None):
                        f"{r['estado'] or '—'} · creado por {r['creado_por']}")
             if r["sospecha"]:
                 renglon += f" — {r['sospecha']}"
+            if r["historica"]:
+                renglon += " — histórica registrada el 1/10"
             print(renglon)
     if hoy_creado["ordenes"]:
         print("    Total de pedidos creados hoy: "

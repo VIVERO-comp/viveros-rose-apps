@@ -335,13 +335,13 @@ def test_clase_b_con_validity_date_no_anota_ese_motivo(odoo):
 
 def test_limite_13_dias_vigente_14_vencida(odoo):
     p = odoo.agregar_partner("Al Límite", "6111-3333")
-    odoo.agregar_orden(p, "S00113", state="draft", dias_atras=13,
+    odoo.agregar_orden(p, "S00213", state="draft", dias_atras=13,
                        amount_total=10.0)
-    odoo.agregar_orden(p, "S00114", state="draft", dias_atras=14,
+    odoo.agregar_orden(p, "S00214", state="draft", dias_atras=14,
                        amount_total=10.0)
     ventas_ = _ventas_por_nombre(reconciliacion.informe_datos())
-    assert ventas_["S00113"]["clase"] == "A"
-    assert ventas_["S00114"]["clase"] == "B"
+    assert ventas_["S00213"]["clase"] == "A"
+    assert ventas_["S00214"]["clase"] == "B"
 
 
 def test_b_sigue_vencida_con_nota_si_el_cliente_volvio(odoo, monkeypatch):
@@ -402,11 +402,11 @@ def test_clase_e_pagada_y_entregada(odoo, monkeypatch):
 def test_e_con_linear_sin_cerrar(odoo, monkeypatch):
     p = odoo.agregar_partner("Linear Atrasado", "6111-9999")
     f = odoo.agregar_factura(60.0, 0.0)
-    odoo.agregar_orden(p, "S00109", state="sale", amount_total=60.0,
+    odoo.agregar_orden(p, "S00209", state="sale", amount_total=60.0,
                        facturas=[f],
                        salidas=[odoo.agregar_salida(state="done")])
     _con_leads(monkeypatch, _lead("6111-9999", "AGENDADO", pago="Pagado 100%"))
-    venta = _ventas_por_nombre(reconciliacion.informe_datos())["S00109"]
+    venta = _ventas_por_nombre(reconciliacion.informe_datos())["S00209"]
     # Odoo validó: sigue E, con la nota — nunca G.
     assert venta["clase"] == "E"
     assert reconciliacion.TEXTO_LINEAR_SIN_CERRAR in venta["motivo"]
@@ -416,9 +416,9 @@ def test_clase_f_por_etapa_manual_del_flujo(odoo):
     etapas = odoo.con_etapas_flujo()
     p = odoo.agregar_partner("Pagó Afuera", "6122-1111")
     oportunidad = odoo.agregar_oportunidad(etapas["abono"])
-    odoo.agregar_orden(p, "S00110", state="sale", amount_total=90.0,
+    odoo.agregar_orden(p, "S00210", state="sale", amount_total=90.0,
                        oportunidad=oportunidad)
-    venta = _ventas_por_nombre(reconciliacion.informe_datos())["S00110"]
+    venta = _ventas_por_nombre(reconciliacion.informe_datos())["S00210"]
     # Regla 3: etapa MANUAL + $0 en Odoo = F, con su texto fijo.
     assert venta["clase"] == "F"
     assert venta["motivo"] == reconciliacion.TEXTO_F
@@ -428,10 +428,10 @@ def test_clase_f_por_etapa_manual_del_flujo(odoo):
 
 def test_clase_f_por_ventas_locales(odoo, monkeypatch):
     p = odoo.agregar_partner("Local Dice Pagada", "6122-2222")
-    oid = odoo.agregar_orden(p, "S00111", state="sale", amount_total=40.0)
+    oid = odoo.agregar_orden(p, "S00211", state="sale", amount_total=40.0)
     monkeypatch.setattr(reconciliacion, "_ventas_locales",
                         lambda: ({oid: "vendida"}, None))
-    venta = _ventas_por_nombre(reconciliacion.informe_datos())["S00111"]
+    venta = _ventas_por_nombre(reconciliacion.informe_datos())["S00211"]
     assert venta["clase"] == "F"
     assert venta["motivo"] == reconciliacion.TEXTO_F
 
@@ -439,11 +439,11 @@ def test_clase_f_por_ventas_locales(odoo, monkeypatch):
 def test_clase_g_entrega_sin_confirmar(odoo, monkeypatch):
     p = odoo.agregar_partner("Entregó El Calendario", "6122-3333")
     f = odoo.agregar_factura(55.0, 0.0)
-    odoo.agregar_orden(p, "S00112", state="sale", amount_total=55.0,
+    odoo.agregar_orden(p, "S00212", state="sale", amount_total=55.0,
                        facturas=[f], salidas=[odoo.agregar_salida()])
     _con_leads(monkeypatch,
                _lead("6122-3333", "ENTREGADO", pago="Pagado 100%"))
-    venta = _ventas_por_nombre(reconciliacion.informe_datos())["S00112"]
+    venta = _ventas_por_nombre(reconciliacion.informe_datos())["S00212"]
     assert venta["clase"] == "G"
     assert venta["entregado_calendario"] is True
     assert venta["entregado_odoo"] is False
@@ -451,10 +451,10 @@ def test_clase_g_entrega_sin_confirmar(odoo, monkeypatch):
 
 def test_clase_h_etiqueta_automatica_sin_plata(odoo, monkeypatch):
     p = odoo.agregar_partner("Pago Fantasma", "6122-4444")
-    odoo.agregar_orden(p, "S00115", state="sale", amount_total=70.0)
+    odoo.agregar_orden(p, "S00215", state="sale", amount_total=70.0)
     _con_leads(monkeypatch,
                _lead("6122-4444", "POR_AGENDAR", pago="Pagado 100%"))
-    venta = _ventas_por_nombre(reconciliacion.informe_datos())["S00115"]
+    venta = _ventas_por_nombre(reconciliacion.informe_datos())["S00215"]
     # Regla 2: la etiqueta AUTOMÁTICA solo nace de un pago real — con $0
     # en Odoo es anomalía (H), no F.
     assert venta["clase"] == "H"
@@ -465,14 +465,14 @@ def test_desempate_h_gana_a_f_y_g(odoo, monkeypatch):
     etapas = odoo.con_etapas_flujo()
     p = odoo.agregar_partner("Todo A La Vez", "6122-5555")
     oportunidad = odoo.agregar_oportunidad(etapas["pagado"])
-    odoo.agregar_orden(p, "S00116", state="sale", amount_total=100.0,
+    odoo.agregar_orden(p, "S00216", state="sale", amount_total=100.0,
                        oportunidad=oportunidad,
                        salidas=[odoo.agregar_salida()])
     # H (etiqueta automática + $0), F (etapa manual + $0) y G (lead
     # Entregado, salida sin validar) a la vez: gana H.
     _con_leads(monkeypatch,
                _lead("6122-5555", "ENTREGADO", pago="Abono 50%"))
-    venta = _ventas_por_nombre(reconciliacion.informe_datos())["S00116"]
+    venta = _ventas_por_nombre(reconciliacion.informe_datos())["S00216"]
     assert venta["clase"] == "H"
 
 
@@ -480,12 +480,12 @@ def test_desempate_f_gana_a_g(odoo, monkeypatch):
     etapas = odoo.con_etapas_flujo()
     p = odoo.agregar_partner("Efe Contra Ge", "6122-6666")
     oportunidad = odoo.agregar_oportunidad(etapas["abono"])
-    odoo.agregar_orden(p, "S00117", state="sale", amount_total=100.0,
+    odoo.agregar_orden(p, "S00217", state="sale", amount_total=100.0,
                        oportunidad=oportunidad,
                        salidas=[odoo.agregar_salida()])
     # Sin etiqueta de pago en Linear (no hay H): F y G a la vez → F.
     _con_leads(monkeypatch, _lead("6122-6666", "ENTREGADO"))
-    venta = _ventas_por_nombre(reconciliacion.informe_datos())["S00117"]
+    venta = _ventas_por_nombre(reconciliacion.informe_datos())["S00217"]
     assert venta["clase"] == "F"
 
 
@@ -662,14 +662,16 @@ def test_contrato_exacto_de_informe_datos(odoo):
     assert set(venta) == {
         "orden_id", "nombre", "cliente", "telefono", "total", "pagado",
         "debe", "clase", "motivo", "marca_prueba", "entregado_odoo",
-        "entregado_calendario", "fuentes_odoo", "fuentes_otras"}
+        "entregado_calendario", "historica", "fuentes_odoo",
+        "fuentes_otras"}
     assert isinstance(venta["fuentes_odoo"], list)
     assert isinstance(venta["fuentes_otras"], list)
     hoy_creado = datos["creado_hoy"]
     assert set(hoy_creado) == {"ordenes", "facturas", "pagos",
                                "total_ordenes"}
     assert set(hoy_creado["ordenes"][0]) == {
-        "nombre", "cliente", "monto", "estado", "creado_por", "sospecha"}
+        "nombre", "cliente", "monto", "estado", "creado_por", "sospecha",
+        "historica"}
     assert isinstance(hoy_creado["total_ordenes"], float)
 
 
@@ -744,9 +746,11 @@ def test_creado_hoy_aparece_con_su_creador(odoo):
     assert hoy_creado["ordenes"][0]["cliente"] == "De Hoy"
     assert [f["nombre"] for f in hoy_creado["facturas"]] == ["FAC/HOY"]
     assert hoy_creado["facturas"][0]["sospecha"] == ""
+    assert hoy_creado["facturas"][0]["historica"] is False
     assert [g["nombre"] for g in hoy_creado["pagos"]] == ["PAGO/HOY"]
     assert hoy_creado["pagos"][0]["monto"] == 500.0
     assert hoy_creado["pagos"][0]["sospecha"] == ""
+    assert hoy_creado["pagos"][0]["historica"] is False
     assert hoy_creado["total_ordenes"] == 500.0
 
 
@@ -816,6 +820,66 @@ def test_creado_hoy_no_toca_el_dinero_de_las_clases(odoo):
     venta = _ventas_por_nombre(datos_informe)["S00147"]
     assert venta["pagado"] == 0.0 and venta["debe"] == 200.0
     assert len(datos_informe["creado_hoy"]["pagos"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# La tanda histórica (ORDENES_HISTORICAS): clase intacta, motivo marcado
+# ---------------------------------------------------------------------------
+
+def test_historica_clase_d_cambia_el_motivo_entero(odoo):
+    # Una de la tanda vieja, pagada completa con la salida sin validar:
+    # sigue siendo D (el dinero está bien), pero el motivo ya no suena a
+    # entrega pendiente de hoy.
+    p = odoo.agregar_partner("Venta Vieja", "6222-1111")
+    f = odoo.agregar_factura(300.0, 0.0)
+    odoo.agregar_orden(p, "S00113", state="sale", amount_total=300.0,
+                       facturas=[f], salidas=[odoo.agregar_salida()])
+    venta = _ventas_por_nombre(reconciliacion.informe_datos())["S00113"]
+    assert venta["clase"] == "D"
+    assert venta["historica"] is True
+    assert venta["motivo"] == reconciliacion.TEXTO_D_HISTORICA
+
+
+def test_historica_de_otra_clase_gana_el_sufijo(odoo):
+    # Emiraf (S00078): confirmada con saldo — C de siempre, con la marca.
+    p = odoo.agregar_partner("Emiraf", "6222-2222")
+    odoo.agregar_orden(p, "S00078", state="sale", amount_total=3420.0)
+    venta = _ventas_por_nombre(reconciliacion.informe_datos())["S00078"]
+    assert venta["clase"] == "C"
+    assert venta["historica"] is True
+    assert venta["motivo"].endswith(reconciliacion.SUFIJO_HISTORICA)
+
+
+def test_venta_real_de_hoy_no_lleva_la_marca(odoo):
+    # S00107 (Sofia) es venta real: la lista es cerrada, no heurística —
+    # ni la fecha ni el creador la vuelven histórica.
+    p = odoo.agregar_partner("Sofia", "6222-3333")
+    f = odoo.agregar_factura(80.0, 0.0)
+    odoo.agregar_orden(p, "S00107", state="sale", amount_total=80.0,
+                       facturas=[f], salidas=[odoo.agregar_salida()],
+                       create_date=_hace(0), creado_por="Sesión Externa")
+    venta = _ventas_por_nombre(reconciliacion.informe_datos())["S00107"]
+    assert venta["clase"] == "D"
+    assert venta["historica"] is False
+    assert venta["motivo"] == "Pagada completa en Odoo; salida sin validar"
+
+
+def test_creado_hoy_marca_las_historicas(odoo, tmp_path, capsys):
+    p = odoo.agregar_partner("Externa Vieja", "6222-4444")
+    odoo.agregar_orden(p, "S00116", state="sale", amount_total=50.0,
+                       create_date=_hace(0), creado_por="Sesión Externa")
+    odoo.agregar_orden(p, "S00290", state="sale", amount_total=999.0,
+                       create_date=_hace(0))
+    por_nombre = {o["nombre"]: o for o in
+                  reconciliacion.informe_datos()["creado_hoy"]["ordenes"]}
+    assert por_nombre["S00116"]["historica"] is True
+    assert por_nombre["S00290"]["historica"] is False
+    assert reconciliacion._cli(["informe", "--salida", str(tmp_path)]) == 0
+    impreso = capsys.readouterr().out
+    assert "S00116" in impreso and "— histórica registrada el 1/10" in impreso
+    # La normal de hoy no gana la marca en el renglón del CLI.
+    renglon_normal = next(l for l in impreso.splitlines() if "S00290" in l)
+    assert "histórica" not in renglon_normal
 
 
 # ---------------------------------------------------------------------------
