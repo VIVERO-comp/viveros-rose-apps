@@ -212,6 +212,51 @@ def iniciar_tablas():
                 creada TEXT NOT NULL DEFAULT ''
             )
         """)
+        # QUÉ productos se compran y cuántos. Apoyo de pantalla, igual que
+        # la tabla `compra`: el estado sigue en Linear y el dinero en Odoo.
+        # Cuando la compra llegue a «Pedido a proveedor» (otra tanda) estas
+        # líneas se vuelven la orden de compra de Odoo.
+        #
+        # `sku` y `nombre` se guardan COPIADOS a propósito: son lo durable.
+        # `producto_id` es el id de `product.product` y puede quedar NULL
+        # (Odoo no contestó al agregar la línea, o el producto acaba de
+        # nacer): la línea no se pierde por eso, y el SKU alcanza para
+        # volver a encontrar el producto.
+        #
+        # `costo` es OPCIONAL y NULL significa «no se sabe», nunca 0 — un 0
+        # inventado es la trampa de siempre.
+        #
+        # El `ref` de una compra a medio llenar es `borrador:<usuario>` (ver
+        # `_clave_borrador`): así el carrito del formulario y las líneas de
+        # una compra ya creada son LA MISMA tabla y el MISMO código, y
+        # crear la compra es re-rotular las filas. Un identifier de Linear
+        # nunca lleva ':', así que no hay colisión posible.
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS compra_linea (
+                n INTEGER PRIMARY KEY AUTOINCREMENT,
+                ref TEXT NOT NULL,
+                producto_id INTEGER,
+                sku TEXT NOT NULL DEFAULT '',
+                nombre TEXT NOT NULL DEFAULT '',
+                cantidad REAL NOT NULL DEFAULT 1,
+                costo REAL
+            )
+        """)
+        con.execute("CREATE INDEX IF NOT EXISTS compra_linea_ref "
+                    "ON compra_linea (ref)")
+        # El formulario a medio llenar, por empleado: sobrevive al viaje a
+        # «Crear producto» y vuelta. Mismo patrón que `venta_borrador` de
+        # ventas.py. Los PRODUCTOS del borrador no viven acá: viven en
+        # `compra_linea` bajo `borrador:<usuario>`.
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS compra_borrador (
+                usuario TEXT PRIMARY KEY,
+                que_compro TEXT NOT NULL DEFAULT '',
+                proveedor TEXT NOT NULL DEFAULT '',
+                resp TEXT NOT NULL DEFAULT '',
+                lead_ref TEXT NOT NULL DEFAULT ''
+            )
+        """)
 
 
 def _guardar_fila(ref, que_compro="", proveedor_id=None, proveedor_nombre="",
@@ -237,6 +282,414 @@ def _filas_locales():
     with _db() as con:
         filas = con.execute("SELECT * FROM compra").fetchall()
     return {f["ref"]: dict(f) for f in filas}
+
+
+# ---------------------------------------------------------------------------
+# Las líneas: QUÉ productos se compran y cuántos
+#
+# Una compra necesita decir qué productos entran, y eso faltaba: el
+# formulario solo pedía el texto libre de «qué se compra». Ese texto SE
+# QUEDA —es el título del issue, y no todo lo que se compra es un producto
+# del catálogo (una herramienta, un flete)—; las líneas son adicionales.
+#
+# Las líneas del formulario a medio llenar y las de una compra ya creada
+# son la MISMA tabla: el borrador usa `borrador:<usuario>` como ref y
+# crear la compra es re-rotular esas filas con su `VIV-XX`. Un solo
+# camino, un solo juego de funciones.
+# ---------------------------------------------------------------------------
+
+_REF_BORRADOR = "borrador:"
+
+# Tope de líneas por compra: ni el formulario ni la tarjeta están pensados
+# para cientos, y un POST repetido no debería poder engordar la tabla sin
+# fin. Es un límite de pantalla, no una regla del negocio.
+MAX_LINEAS = 60
+
+
+def _clave_borrador(usuario):
+    """El `ref` con el que las líneas del formulario de `usuario` viven en
+    `compra_linea` mientras la compra todavía no existe."""
+    return _REF_BORRADOR + str(usuario or "")
+
+
+def es_borrador(ref):
+    return str(ref or "").startswith(_REF_BORRADOR)
+
+
+def _cantidad(valor, defecto=1.0):
+    """Una cantidad que se pueda comprar: positiva y con tope. Lo ilegible
+    cae en `defecto` en vez de reventar el formulario."""
+    numero = ventas._num_positivo(valor, defecto=None)
+    if numero is None or numero <= 0:
+        return defecto
+    return min(numero, 100000.0)
+
+
+def _costo(valor):
+    """El costo unitario, o None. **None es «no se sabe» y no 0**: una
+    compra se puede anotar antes de saber el precio, y pintar $0.00 ahí
+    sería inventar un número."""
+    crudo = str(valor if valor is not None else "").strip()
+    if not crudo:
+        return None
+    numero = ventas._num_positivo(crudo, defecto=None, permitir_cero=True)
+    if numero is None:
+        return None
+    return round(numero, 2)
+
+
+def _linea(fila):
+    costo = fila["costo"]
+    return {
+        "n": fila["n"], "ref": fila["ref"],
+        "producto_id": fila["producto_id"], "sku": fila["sku"] or "",
+        "nombre": fila["nombre"] or "", "cantidad": fila["cantidad"],
+        "costo": costo,
+        # El subtotal solo existe si el costo existe: sin costo no se pinta
+        # nada, nunca un 0.
+        "importe": (None if costo is None
+                    else round(fila["cantidad"] * costo, 2)),
+        # Lo que va en los campos del formulario, ya con formato: `3` y no
+        # `3.0`, y vacío cuando el costo no se sabe. Lo decide Python, como
+        # todo lo que se pinta.
+        "cantidad_texto": _cantidad_bonita(fila["cantidad"]),
+        "costo_texto": "" if costo is None else f"{costo:.2f}",
+    }
+
+
+def lineas_de(ref):
+    """Las líneas de esa compra (o del borrador), en el orden en que se
+    agregaron."""
+    iniciar_tablas()
+    with _db() as con:
+        filas = con.execute(
+            "SELECT * FROM compra_linea WHERE ref = ? ORDER BY n",
+            (str(ref or ""),)).fetchall()
+    return [_linea(f) for f in filas]
+
+
+def lineas_de_varias(refs):
+    """{ref: [líneas]} en UNA consulta — el tablero trae varias compras y
+    no se le hace una consulta por tarjeta (la misma regla que
+    `_filas_locales`)."""
+    refs = [r for r in {str(r or "") for r in refs} if r]
+    if not refs:
+        return {}
+    iniciar_tablas()
+    marcas = ",".join("?" * len(refs))
+    with _db() as con:
+        filas = con.execute(
+            f"SELECT * FROM compra_linea WHERE ref IN ({marcas}) ORDER BY n",
+            refs).fetchall()
+    por_ref = {}
+    for fila in filas:
+        por_ref.setdefault(fila["ref"], []).append(_linea(fila))
+    return por_ref
+
+
+def resumen_de_lineas(lineas, cuantos=2):
+    """El renglón de la tarjeta: «3 productos · Tierra negra, Abono +1».
+
+    Lo arma Python y no la plantilla, como el resto de lo que se pinta.
+    """
+    lineas = list(lineas or ())
+    if not lineas:
+        return ""
+    nombres = [l["nombre"] or l["sku"] for l in lineas]
+    visibles = nombres[:cuantos]
+    sobran = len(nombres) - len(visibles)
+    texto = ", ".join(visibles) + (f" +{sobran}" if sobran else "")
+    cuenta = f"{len(lineas)} producto" + ("s" if len(lineas) != 1 else "")
+    return f"{cuenta} · {texto}"
+
+
+def total_de_lineas(lineas):
+    """Lo que se sabe que va a costar: la suma de las líneas CON costo.
+
+    `{"total", "sin_costo"}`. `sin_costo` es cuántas líneas no tienen
+    costo todavía, para que la pantalla pueda decir «al menos» en vez de
+    dar un total como si estuviera completo.
+    """
+    lineas = list(lineas or ())
+    total = sum(l["importe"] for l in lineas if l["importe"] is not None)
+    return {"total": round(total, 2),
+            "sin_costo": sum(1 for l in lineas if l["costo"] is None)}
+
+
+def agregar_linea(ref, producto_id=None, sku="", nombre="", cantidad=1,
+                  costo=None):
+    """Una línea más. Devuelve ("aviso", "error").
+
+    Un producto que ya está en la lista no se duplica: se le SUMA la
+    cantidad. Agregar dos veces el mismo saco de tierra queriendo decir
+    «dos sacos» es lo natural, y dos renglones iguales en la orden de
+    compra de Odoo serían un error para alguien después.
+    """
+    ref = str(ref or "")
+    sku = (sku or "").strip()
+    nombre = (nombre or "").strip()
+    if not ref:
+        return "", "No llegó a qué compra agregar el producto."
+    if not sku and not nombre:
+        return "", "Elegí un producto de la lista."
+    cantidad = _cantidad(cantidad)
+    iniciar_tablas()
+    with _db() as con:
+        gemela = None
+        if sku:
+            gemela = con.execute(
+                "SELECT * FROM compra_linea WHERE ref = ? AND sku = ?",
+                (ref, sku)).fetchone()
+        if gemela is not None:
+            nueva = _cantidad(gemela["cantidad"] + cantidad)
+            con.execute("UPDATE compra_linea SET cantidad = ? WHERE n = ?",
+                        (nueva, gemela["n"]))
+            return (f"{gemela['nombre'] or sku}: "
+                    f"{_cantidad_bonita(nueva)} en total."), ""
+        cuantas = con.execute(
+            "SELECT count(*) FROM compra_linea WHERE ref = ?",
+            (ref,)).fetchone()[0]
+        if cuantas >= MAX_LINEAS:
+            return "", (f"Esta compra ya tiene {MAX_LINEAS} productos, que es "
+                        f"el tope de la pantalla. Anotá el resto en otra "
+                        f"compra.")
+        con.execute(
+            "INSERT INTO compra_linea (ref, producto_id, sku, nombre, "
+            "cantidad, costo) VALUES (?, ?, ?, ?, ?, ?)",
+            (ref, producto_id, sku, nombre or sku, cantidad, _costo(costo)))
+    return f"{nombre or sku} agregado.", ""
+
+
+def quitar_linea(ref, n):
+    """Saca esa línea. Devuelve ("aviso", "error")."""
+    ref = str(ref or "")
+    try:
+        n = int(n)
+    except (TypeError, ValueError):
+        return "", "No llegó cuál producto quitar."
+    iniciar_tablas()
+    with _db() as con:
+        fila = con.execute(
+            "SELECT * FROM compra_linea WHERE ref = ? AND n = ?",
+            (ref, n)).fetchone()
+        if fila is None:
+            return "", "Ese producto ya no está en la lista."
+        con.execute("DELETE FROM compra_linea WHERE n = ?", (n,))
+    return f"{fila['nombre'] or fila['sku']} quitado.", ""
+
+
+def guardar_cantidades(ref, cantidades=None, costos=None):
+    """Las cantidades y los costos que el empleado escribió en la lista.
+
+    Las dos llegan como `{n: valor}`. **Un `n` que no sea de esta compra se
+    ignora**: el formulario manda lo que tiene en pantalla y un POST a mano
+    no puede tocar las líneas de otra.
+    """
+    ref = str(ref or "")
+    if not ref or not (cantidades or costos):
+        return
+    iniciar_tablas()
+    with _db() as con:
+        mios = {f["n"]: f for f in con.execute(
+            "SELECT * FROM compra_linea WHERE ref = ?", (ref,)).fetchall()}
+        for clave, valor in (cantidades or {}).items():
+            fila = mios.get(_entero(clave))
+            if fila is None:
+                continue
+            con.execute("UPDATE compra_linea SET cantidad = ? WHERE n = ?",
+                        (_cantidad(valor, defecto=fila["cantidad"]), fila["n"]))
+        for clave, valor in (costos or {}).items():
+            fila = mios.get(_entero(clave))
+            if fila is None:
+                continue
+            con.execute("UPDATE compra_linea SET costo = ? WHERE n = ?",
+                        (_costo(valor), fila["n"]))
+
+
+def _entero(valor):
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        return None
+
+
+def _cantidad_bonita(numero):
+    """`3` y no `3.0`; `2.5` se queda en `2.5`."""
+    numero = float(numero or 0)
+    return str(int(numero)) if numero == int(numero) else f"{numero:g}"
+
+
+# ---------------------------------------------------------------------------
+# El borrador: la compra a medio llenar sobrevive al viaje a «Crear producto»
+#
+# El empleado busca una planta, no está, se va a crearla y vuelve: TODO lo
+# que había escrito tiene que seguir ahí, más el producto nuevo ya agregado.
+# Eso es «sin sacarlo de la misma pestaña» (dueño, 30/09/2026).
+#
+# Se resuelve sin una línea de JavaScript: el formulario se guarda en el
+# servidor antes de cada viaje (POST que redirige), igual que
+# `venta_borrador` en ventas.py.
+# ---------------------------------------------------------------------------
+
+CAMPOS_BORRADOR = ("que_compro", "proveedor", "resp", "lead_ref")
+
+LARGO_BORRADOR = {"que_compro": 250, "proveedor": 120, "resp": 60,
+                  "lead_ref": 30}
+
+
+def guardar_borrador(usuario, datos=None, cantidades=None, costos=None):
+    """Lo que hay escrito en el formulario ahora mismo.
+
+    `datos` en None deja los campos como estaban (hay POSTs que solo tocan
+    las cantidades). Las líneas no se tocan acá: tienen sus propias
+    funciones.
+    """
+    iniciar_tablas()
+    if datos is not None:
+        limpio = {campo: (str(datos.get(campo) or "").strip()
+                          [:LARGO_BORRADOR[campo]])
+                  for campo in CAMPOS_BORRADOR}
+        with _db() as con:
+            con.execute(
+                "INSERT INTO compra_borrador (usuario, que_compro, proveedor,"
+                " resp, lead_ref) VALUES (?,?,?,?,?)"
+                " ON CONFLICT(usuario) DO UPDATE SET que_compro=excluded.que_compro,"
+                " proveedor=excluded.proveedor, resp=excluded.resp,"
+                " lead_ref=excluded.lead_ref",
+                (str(usuario), limpio["que_compro"], limpio["proveedor"],
+                 limpio["resp"], limpio["lead_ref"]))
+    guardar_cantidades(_clave_borrador(usuario), cantidades, costos)
+
+
+def borrador_de(usuario):
+    """{que_compro, proveedor, resp, lead_ref, lineas, total} del formulario
+    en curso. Siempre devuelve el dict completo, vacío si no hay nada."""
+    iniciar_tablas()
+    with _db() as con:
+        fila = con.execute(
+            "SELECT * FROM compra_borrador WHERE usuario = ?",
+            (str(usuario),)).fetchone()
+    datos = {campo: ((fila[campo] or "") if fila else "")
+             for campo in CAMPOS_BORRADOR}
+    lineas = lineas_de(_clave_borrador(usuario))
+    return {**datos, "lineas": lineas, "total": total_de_lineas(lineas)}
+
+
+def borrador_con_algo(usuario):
+    """¿Hay una compra a medio llenar?
+
+    Decide si la pantalla abre el formulario sola: quien volvió de crear un
+    producto —o de cualquier otra pestaña— tiene que encontrar su trabajo,
+    no el tablero. Lo descarta «Mejor no».
+    """
+    borrador = borrador_de(usuario)
+    return bool(borrador["lineas"]
+                or any(borrador[campo] for campo in CAMPOS_BORRADOR))
+
+
+def agregar_al_borrador(usuario, producto_id=None, sku="", nombre="",
+                        cantidad=1, costo=None):
+    return agregar_linea(_clave_borrador(usuario), producto_id=producto_id,
+                         sku=sku, nombre=nombre, cantidad=cantidad,
+                         costo=costo)
+
+
+def quitar_del_borrador(usuario, n):
+    return quitar_linea(_clave_borrador(usuario), n)
+
+
+def descartar_borrador(usuario):
+    """Tira el formulario a medio llenar, líneas incluidas."""
+    iniciar_tablas()
+    clave = _clave_borrador(usuario)
+    with _db() as con:
+        con.execute("DELETE FROM compra_borrador WHERE usuario = ?",
+                    (str(usuario),))
+        con.execute("DELETE FROM compra_linea WHERE ref = ?", (clave,))
+
+
+def _mudar_lineas_del_borrador(usuario, ref):
+    """Las líneas del borrador pasan a ser las de la compra `ref`.
+
+    Re-rotular en vez de copiar y borrar: no hay un instante en el que las
+    líneas estén en los dos lados ni en ninguno, y los `n` se conservan.
+    """
+    iniciar_tablas()
+    with _db() as con:
+        con.execute("UPDATE compra_linea SET ref = ? WHERE ref = ?",
+                    (str(ref), _clave_borrador(usuario)))
+
+
+# ---------------------------------------------------------------------------
+# El buscador de productos del formulario
+#
+# Tiene que encontrar PLANTAS, MACETAS e INSUMOS: las tres cosas que el
+# vivero le compra a un proveedor. El camino es el MISMO que usa Vender
+# (`ventas.buscar_productos`, XML-RPC contra `product.product`), con otros
+# dos argumentos — no un segundo buscador.
+# ---------------------------------------------------------------------------
+
+# Los tres prefijos de SKU del catálogo (`altas.PREFIJO_DE` + el PL- de las
+# plantas, que es de siempre). Hoy el inventario trae 116 SKU entre los
+# tres.
+PREFIJOS_COMPRA = ("PL-", "MC-", "IN-")
+
+# `sale_ok` NO se le pide al buscador de compras: un insumo que se compra
+# no tiene por qué estar a la venta, y filtrarlo lo esconderia justo de la
+# pantalla que lo necesita.
+SOLO_VENDIBLES_EN_COMPRAS = False
+
+
+def buscar_productos(texto):
+    """Plantas, macetas e insumos por nombre o SKU.
+
+    `{"ok": True, "productos": [...]}`, o `{"ok": False, "error": …}` si
+    Odoo no contestó. **Una lista vacía es «no hay», nunca «no sé»**: la
+    diferencia tiene que llegar a la pantalla, que es la que ofrece «Crear
+    producto» cuando de verdad no hay.
+    """
+    texto = (texto or "").strip()
+    if not texto:
+        return {"ok": True, "error": "", "productos": []}
+    if not ventas.configurado():
+        return {"ok": True, "error": "", "productos": _muestra_buscar(texto)}
+    try:
+        productos = ventas.buscar_productos(
+            texto, prefijos=PREFIJOS_COMPRA,
+            solo_vendibles=SOLO_VENDIBLES_EN_COMPRAS)
+    except Exception as error:
+        return {"ok": False, "error": _error(error), "productos": []}
+    return {"ok": True, "error": "", "productos": productos}
+
+
+def producto_por_sku(sku):
+    """{id, sku, nombre, precio} del producto recién creado, o None.
+
+    Se usa al volver de «Crear producto»: el alta devuelve el id del
+    `product.template` y las líneas guardan el de `product.product`, que no
+    es el mismo. Si Odoo no contesta, **None no pierde la línea**: quien
+    llama la agrega con el SKU y el nombre, que es lo durable.
+    """
+    sku = (sku or "").strip()
+    if not sku:
+        return None
+    if not ventas.configurado():
+        return next((p for p in _CATALOGO_MUESTRA if p["sku"] == sku), None)
+    try:
+        filas = ventas._ejecutar(
+            "product.product", "search_read", [[["default_code", "=", sku]]],
+            {"fields": ["default_code", "name", "list_price"], "limit": 1,
+             "context": {"active_test": False}})
+    except Exception as error:
+        registro_aviso(f"No se pudo leer en Odoo el producto {sku} recién "
+                       f"creado: {_error(error)}")
+        return None
+    if not filas:
+        return None
+    fila = filas[0]
+    return {"id": fila["id"], "sku": fila.get("default_code") or sku,
+            "nombre": fila.get("name") or "",
+            "precio": fila.get("list_price") or 0.0}
 
 
 # ---------------------------------------------------------------------------
@@ -607,7 +1060,28 @@ def mensaje_compra_ausente(ref):
     return f"La compra {ref} ya no está en Linear."
 
 
-def _tarjeta(compra, plata_por_ref):
+# Los anclas de la pantalla, en UN solo lugar. Quien redirige los pide
+# por nombre y la plantilla los pinta como `id=`: si algún día cambian,
+# cambian en los dos lados a la vez.
+ANCLA_LINEAS = "#cp-lineas"      # la lista de productos del formulario
+ANCLA_BUSCADOR = "#cp-buscar"    # el buscador de productos
+ANCLA_TABLERO = "#cp-tablero"    # las 7 columnas
+
+
+def ancla_de_compra(ref):
+    """`#c-VIV-204` para traer esa tarjeta a la vista al volver, o el
+    tablero si el ref no es uno sano.
+
+    Se filtra el ref a propósito: llega de un POST y va PEGADO a la URL del
+    redirect, así que un valor raro no puede colarse ahí.
+    """
+    ref = (ref or "").strip()
+    if ref and all(c.isalnum() or c == "-" for c in ref):
+        return "#c-" + ref
+    return ANCLA_TABLERO
+
+
+def _tarjeta(compra, plata_por_ref, lineas_por_ref=None):
     """La compra lista para la tarjeta: lo que se ve y nada más.
 
     El «hace N días» en ámbar lo decide Python y no la plantilla, con el
@@ -618,9 +1092,27 @@ def _tarjeta(compra, plata_por_ref):
     módulo no lo necesita para nada más.
     """
     from . import control
+    lineas = (lineas_por_ref or {}).get(compra["ref"]) or []
     return dict(compra, **{
         "hace_alerta": control.hace_alerta(compra.get("dias")),
         "plata": plata_por_ref.get(compra["ref"]),
+        "lineas": lineas,
+        "cuantas_lineas": len(lineas),
+        "lineas_resumen": resumen_de_lineas(lineas),
+        "lineas_total": total_de_lineas(lineas),
+    })
+
+
+def con_lineas(compra):
+    """Una compra con sus líneas, para el panel que las muestra. None si no
+    hay tal compra."""
+    if compra is None:
+        return None
+    lineas = lineas_de(compra["ref"])
+    return dict(compra, **{
+        "lineas": lineas, "cuantas_lineas": len(lineas),
+        "lineas_resumen": resumen_de_lineas(lineas),
+        "lineas_total": total_de_lineas(lineas),
     })
 
 
@@ -633,7 +1125,9 @@ def tablero(lista=None):
     todas = sorted(lista if lista is not None else listar(),
                    key=lambda c: -c["dias"])
     plata_por_ref = plata_de_varias(todas)
-    todas = [_tarjeta(c, plata_por_ref) for c in todas]
+    # Las líneas de TODAS las tarjetas en una consulta, no una por tarjeta.
+    lineas_por_ref = lineas_de_varias([c["ref"] for c in todas])
+    todas = [_tarjeta(c, plata_por_ref, lineas_por_ref) for c in todas]
     columnas = []
     for estado in ESTADOS:
         columnas.append({
@@ -682,8 +1176,13 @@ def _descripcion(proveedor, lead_ref, autor):
 
 
 def crear(que_compro, proveedor_nombre="", proveedor_id=None, resp="",
-          lead_ref="", autor=""):
+          lead_ref="", autor="", usuario_borrador=""):
     """Una compra nueva, en «Por pedir». Devuelve {"ref", "url", "id"}.
+
+    `usuario_borrador` es de quién son las líneas que la compra se lleva:
+    las del formulario a medio llenar pasan a ser las de esta compra y el
+    borrador se descarta. Se hace **al final y solo si Linear aceptó**: una
+    compra que no nació no puede quedarse con el trabajo del empleado.
 
     El responsable va por etiqueta `Resp: <nombre>` y el assignee es
     Abraham (`LINEAR_ASSIGNEE_ID`), nunca el bot: son dos cosas distintas
@@ -779,6 +1278,9 @@ def crear(que_compro, proveedor_nombre="", proveedor_id=None, resp="",
     _guardar_fila(nueva["ref"], que_compro=que_compro,
                   proveedor_id=proveedor_id,
                   proveedor_nombre=proveedor_nombre, lead_ref=lead_ref)
+    if usuario_borrador:
+        _mudar_lineas_del_borrador(usuario_borrador, nueva["ref"])
+        descartar_borrador(usuario_borrador)
     if issue_nuevo is not None:
         _insertar_en_cache(_normalizar(issue_nuevo, _filas_locales()))
     refrescar()
@@ -1041,6 +1543,31 @@ def plata_de_varias(lista):
 # candado de «las etiquetas nunca se crean solas» y hay que poder probarlo
 # sin Linear. Mismo truco que `linear_leads._MUESTRA_SENALES_EXISTENTES`.
 _MUESTRA_RESP_EN_VIV = {"Abraham", "Mary"}
+
+# El catálogo de muestra del buscador: los TRES tipos que el vivero compra,
+# para que el formulario y las pruebas vean los tres caminos sin Odoo. Los
+# SKU llevan los prefijos de verdad (`PREFIJOS_COMPRA`).
+_CATALOGO_MUESTRA = [
+    {"id": 101, "sku": "PL-PALMA-ARECA", "nombre": "Palma Areca",
+     "precio": 15.0},
+    {"id": 102, "sku": "PL-CROTON-PETRA", "nombre": "Croton Petra",
+     "precio": 5.5},
+    {"id": 103, "sku": "MC-MACETA-BARRO-30", "nombre": "Maceta barro 30 cm",
+     "precio": 18.0},
+    {"id": 104, "sku": "IN-TIERRA-NEGRA", "nombre": "Tierra negra",
+     "precio": 4.25},
+    {"id": 105, "sku": "IN-ABONO-ORGANICO", "nombre": "Abono orgánico",
+     "precio": 7.0},
+]
+
+
+def _muestra_buscar(texto):
+    """El mismo filtro del buscador real —nombre o SKU, sin distinguir
+    mayúsculas ni tildes— hecho en Python sobre el catálogo de muestra."""
+    buscado = _sin_acentos(texto)
+    return [dict(p) for p in _CATALOGO_MUESTRA
+            if buscado in _sin_acentos(p["nombre"])
+            or buscado in _sin_acentos(p["sku"])]
 
 _SEMILLA = [
     # ref, qué se compra, proveedor, resp, orden, total, pagado, lead, días

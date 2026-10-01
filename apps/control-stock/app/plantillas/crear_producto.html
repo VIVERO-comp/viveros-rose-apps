@@ -14,11 +14,16 @@
    Todo se decide en Python (app/altas.py): qué tipos están disponibles, qué
    campos guarda este Odoo y qué avisos salen. La plantilla solo recorre lo
    que le llega. #}
-{% with bm_titulo='Crear producto', bm_volver='/?tab=stock' %}
+{# `volver` (hoy solo "compra") es de quien llegó desde otra pantalla: el
+   destino de vuelta lo decide Python (main.VUELTAS_DEL_ALTA, una lista de
+   permitidos) y acá solo se pinta. Atraviesa los DOS pasos como campo
+   escondido de cada formulario, así que elegir el tipo no lo pierde. #}
+{% with bm_titulo='Crear producto', bm_volver=(volver_url or '/?tab=stock') %}
   {% include '_barra_movil.html' %}
 {% endwith %}
 <header class="cabecera-venta">
-  <a class="volver volver-cabecera" href="/?tab=stock">← Volver a Stock</a>
+  <a class="volver volver-cabecera" href="{{ volver_url or '/?tab=stock' }}">←
+    Volver {{ volver_texto or 'a Stock' }}</a>
   <div class="brand">
     <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
     <div>
@@ -62,6 +67,8 @@
      viene `disabled` y su motivo sale debajo. #}
   <div class="seccion-titulo">¿Qué vas a crear?</div>
   <form method="get" action="/productos/crear">
+    {% if volver %}<input type="hidden" name="volver" value="{{ volver }}">{% endif %}
+    {% if previo.nombre %}<input type="hidden" name="nombre" value="{{ previo.nombre }}">{% endif %}
     <div class="form-agregar">
       <div class="campo">
         <span>Tipo de producto</span>
@@ -83,6 +90,7 @@
   {# ---------- Paso 2: el formulario del tipo elegido ---------- #}
   <form method="post" action="/productos/crear" enctype="multipart/form-data">
     <input type="hidden" name="tipo" value="{{ tipo }}">
+    {% if volver %}<input type="hidden" name="volver" value="{{ volver }}">{% endif %}
     <div class="form-agregar">
 
       <div class="campo">
@@ -176,7 +184,12 @@
   </form>
 
   <p class="nota-campo" style="margin-top:14px">
-    <a class="volver" href="/productos/crear">← Elegir otro tipo</a>
+    <a class="volver" href="/productos/crear{% if volver %}?volver={{ volver }}{% endif %}">←
+      Elegir otro tipo</a>
+    {% if volver %}
+    <br>Al crearlo volvés {{ volver_texto }} y el producto queda agregado;
+    lo que ya habías escrito sigue ahí.
+    {% endif %}
   </p>
   {% endif %}
 

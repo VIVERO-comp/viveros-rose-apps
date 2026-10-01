@@ -79,11 +79,14 @@
     </div>
 
     {# La X del banner: un aviso vive en el query y sin ella se queda hasta
-       la próxima navegación. Es un enlace a la misma vista sin el query. #}
+       la próxima navegación. Es un enlace a la misma vista sin el query, y
+       vuelve A DONDE ESTABA, no al tope: con el formulario abierto, al
+       formulario; con el tablero, al tablero. #}
+    {% set sin_banner = ('/compras?nueva=1#cp-lineas' if nueva else '/compras#cp-tablero') %}
     {% if error %}<div class="franja"><b>Ups.</b> <span>{{ error }}</span>
-      <a class="cierra-banner" href="/compras" aria-label="Cerrar el aviso">×</a></div>{% endif %}
+      <a class="cierra-banner" href="{{ sin_banner }}" aria-label="Cerrar el aviso">×</a></div>{% endif %}
     {% if aviso %}<div class="aviso-ok">{{ aviso }}
-      <a class="cierra-banner" href="/compras" aria-label="Cerrar el aviso">×</a></div>{% endif %}
+      <a class="cierra-banner" href="{{ sin_banner }}" aria-label="Cerrar el aviso">×</a></div>{% endif %}
     {% if modo == 'lectura' %}
     <div class="solo-lectura"><b>Solo lectura.</b> Esta instancia mira el
       tablero real pero no escribe en Linear.</div>
@@ -100,9 +103,14 @@
       ninguna compra es tuya para mover.</div>
     {% endif %}
 
-    <div class="ret-tablero">
+    {# Los `id` del tablero, de la columna y de la tarjeta son los ANCLAS a
+       los que vuelven los redirects (`compras.ancla_de_compra`): es lo que
+       hace que mover una compra no tire al empleado para arriba. Como el
+       tablero scrollea de lado, traer la tarjeta a la vista también corre
+       la columna sola — sin una línea de JavaScript. #}
+    <div class="ret-tablero" id="cp-tablero">
       {% for col in columnas %}
-      <div class="ret-col">
+      <div class="ret-col" id="col-{{ col.clave }}">
         <div class="ret-cab">
           <span class="pt-leyenda" style="background:{{ col.color }}"></span>
           <b>{{ col.titulo }}</b><span class="crece"></span>
@@ -120,7 +128,7 @@
              sin eso el navegador arrastra el ENLACE, el drop postea sin
              ref y el servidor contesta un error que no pasó (la lección
              del 29/09/2026 en Control). #}
-          <div class="ret-tarjeta ctl-tarjeta"
+          <div class="ret-tarjeta ctl-tarjeta" id="c-{{ c.ref }}"
                draggable="{{ 'true' if puede_mover and (alc.admin or (alc.resp_propio and c.resp == alc.resp_propio)) else 'false' }}"
                data-ref="{{ c.ref }}">
             <span class="ctl-zona">
@@ -145,6 +153,15 @@
                  href="/control?abrir={{ c.lead_ref | urlencode }}"
                  aria-label="Ver el lead {{ c.lead_ref }}">{{ c.lead_ref }}</a>{% endif %}
             </span>
+            {# QUÉ se compra en productos, cuando la compra trae líneas. El
+               renglón lo arma Python (`compras.resumen_de_lineas`) y abre el
+               panel con la lista completa; el ancla devuelve a ESTA tarjeta
+               al cerrarlo. #}
+            {% if c.cuantas_lineas %}
+            <a class="eq-texto" draggable="false"
+               href="/compras?abrir={{ c.ref | urlencode }}#c-{{ c.ref }}"
+               aria-label="Ver los productos de {{ c.ref }}">{{ c.lineas_resumen }}</a>
+            {% endif %}
           </div>
           {% endfor %}
         </div>
@@ -163,21 +180,97 @@
 
 {% set activa = 'compras' %}{% include '_nav.html' %}
 
+{% if abierta %}
+{# Los productos de una compra ya anotada, en solo lectura: la tabla
+   `compra_linea` es apoyo de pantalla y la orden de compra de Odoo (donde
+   estos renglones se vuelven plata) es otra tanda. Mismo panel de la ficha
+   de Control (.panel-der + .telon), sin JS. Cerrar vuelve a SU tarjeta. #}
+{% set vuelta = '/compras#c-' ~ abierta.ref %}
+<a class="telon" href="{{ vuelta }}" aria-label="Cerrar"></a>
+<aside class="panel-der">
+  <div class="cab-panel">
+    <div><span class="tenue">{{ abierta.ref }}</span>
+      <h4>{{ abierta.que_compro }}</h4></div>
+    <a class="btn chico" href="{{ vuelta }}">Cerrar</a>
+  </div>
+  <div class="dato"><b>Columna</b><span>{{ abierta.estado_ficha.titulo }}</span></div>
+  {% if abierta.proveedor %}
+  <div class="dato"><b>Proveedor</b><span>{{ abierta.proveedor }}</span></div>
+  {% endif %}
+  <div class="dato"><b>Responsable</b><span>{{ abierta.resp or 'Sin asignar' }}</span></div>
+  {% if abierta.orden_compra %}
+  <div class="dato"><b>Orden</b><span>{{ abierta.orden_compra }}</span></div>
+  {% endif %}
+
+  <div class="campo-caja">
+    <label>Productos ({{ abierta.cuantas_lineas }})</label>
+    {% if abierta.lineas %}
+    <table class="cmp-tabla">
+      <tbody>
+        {% for l in abierta.lineas %}
+        <tr>
+          <td><b>{{ l.nombre }}</b>
+            {% if l.sku %}<span class="cmp-orden">{{ l.sku }}</span>{% endif %}</td>
+          <td class="cmp-num">{{ l.cantidad_texto }}</td>
+          {# Sin costo no se pinta nada: un $0.00 inventado es la trampa de
+             siempre. #}
+          <td class="cmp-num">{% if l.importe is not none %}{{ l.importe | dinero }}{% else %}<span class="tenue">sin costo</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if abierta.lineas_total.total %}
+    <p class="pie-nota">
+      {% if abierta.lineas_total.sin_costo %}Al menos{% else %}Son{% endif %}
+      <b>{{ abierta.lineas_total.total | dinero }}</b>{% if abierta.lineas_total.sin_costo %},
+      y {{ abierta.lineas_total.sin_costo }} sin costo todavía{% endif %}.
+    </p>
+    {% endif %}
+    {% else %}
+    <p class="pie-nota">Esta compra se anotó sin productos: lo que se compra
+      está en su título.</p>
+    {% endif %}
+  </div>
+  <p class="pie-nota">Los productos se eligen al anotar la compra. Cuando
+    pase a «Pedido» se vuelven la orden de compra de Odoo, y ahí vive la
+    plata.</p>
+</aside>
+{% endif %}
+
 {% if nueva %}
 {# Una compra a mano: nace en «Por pedir». Mismo modal del motivo de
-   Control (.modal + .telon), sin JS. #}
-<a class="telon" href="/compras" aria-label="Cerrar"></a>
+   Control (.modal + .telon), sin JS.
+
+   TODO el formulario es UN solo <form>, y sus botones mandan a distintos
+   sitios con `formaction`. Eso es lo que hace que buscar un producto,
+   agregarlo, quitarlo o irse a crear uno GUARDE primero lo que había
+   escrito (POST /compras/borrador) y vuelva al mismo lugar: «sin sacarlo
+   de la misma pestaña», sin una línea de JavaScript.
+
+   Los botones que no son «Anotar la compra» llevan `formnovalidate`: sin
+   eso, el `required` de «¿Qué se compra?» le impediría buscar un producto
+   antes de escribir el título. La validación de verdad vive en Python
+   (`compras.crear`), que es la que cuenta. #}
+<a class="telon" href="/compras?cerrar=1" aria-label="Cerrar"></a>
 <form class="modal" method="post" action="/compras/nueva">
   <div class="cab-panel">
     <div><span class="tenue">COMPRA NUEVA</span>
       <h4>Nace en «Por pedir»</h4></div>
-    <a class="btn chico" href="/compras">Cerrar</a>
+    {# Cerrar DESCARTA el borrador: mientras haya uno, la pantalla abre el
+       formulario sola, así que un enlace que solo quitara el `?nueva=1` no
+       cerraría nada. #}
+    <button class="btn chico" type="submit" formaction="/compras/borrador"
+            formnovalidate name="accion" value="descartar">Cerrar</button>
   </div>
 
   <div class="campo-caja">
     <label for="cp-que">¿Qué se compra?</label>
     <input class="campo" id="cp-que" name="que_compro" required maxlength="250"
-           autocomplete="off" placeholder="Ej: 50 sacos de tierra negra">
+           autocomplete="off" placeholder="Ej: 50 sacos de tierra negra"
+           value="{{ borrador.que_compro }}">
+    <span class="pie-nota">Es el título de la tarjeta. No todo lo que se
+      compra es un producto del catálogo (un flete, una herramienta): los
+      productos van abajo.</span>
   </div>
 
   <div class="campo-caja">
@@ -188,7 +281,8 @@
        guardar su id; lo que no calce queda como nombre libre. #}
     <input class="campo" id="cp-prov" name="proveedor" maxlength="120"
            list="cp-proveedores" autocomplete="off"
-           placeholder="Ej: Agroservicios del Istmo">
+           placeholder="Ej: Agroservicios del Istmo"
+           value="{{ borrador.proveedor }}">
     <datalist id="cp-proveedores">
       {% for p in proveedores %}<option value="{{ p.nombre }}"></option>{% endfor %}
     </datalist>
@@ -198,12 +292,117 @@
     {% endif %}
   </div>
 
+  {# ---------- Los productos de la compra ----------
+     Cantidad y costo se escriben en la lista; el costo es OPCIONAL (una
+     compra se anota antes de saber el precio) y vacío significa «no se
+     sabe», nunca 0. Los dos campos viajan con el número del renglón en su
+     nombre (`cant-7`, `costo-7`), porque un formulario sin JavaScript no
+     puede mandar una lista de objetos. #}
+  <div class="campo-caja" id="cp-lineas">
+    <label>Productos de esta compra</label>
+    {% if borrador.lineas %}
+    <table class="cmp-tabla">
+      <tbody>
+        {% for l in borrador.lineas %}
+        <tr>
+          <td><b>{{ l.nombre }}</b>
+            {% if l.sku %}<span class="cmp-orden">{{ l.sku }}</span>{% endif %}</td>
+          <td><input class="campo cmp-mini" type="number" inputmode="decimal"
+                     min="0" step="any" name="cant-{{ l.n }}"
+                     value="{{ l.cantidad_texto }}"
+                     aria-label="Cuántos de {{ l.nombre }}"></td>
+          <td><input class="campo cmp-mini" type="number" inputmode="decimal"
+                     min="0" step="0.01" name="costo-{{ l.n }}"
+                     value="{{ l.costo_texto }}" placeholder="costo"
+                     aria-label="Costo de cada {{ l.nombre }}"></td>
+          {# El nombre del botón lleva el NÚMERO del renglón: un submit
+             manda un solo par nombre/valor y cada renglón tiene que poder
+             decir cuál es. #}
+          <td><button class="btn chico" type="submit"
+                      formaction="/compras/borrador" formnovalidate
+                      name="quitar" value="{{ l.n }}"
+                      aria-label="Quitar {{ l.nombre }}">✕</button></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if borrador.total.total %}
+    <span class="pie-nota">
+      {% if borrador.total.sin_costo %}Al menos{% else %}Son{% endif %}
+      <b>{{ borrador.total.total | dinero }}</b>{% if borrador.total.sin_costo %},
+      y {{ borrador.total.sin_costo }} sin costo todavía{% endif %}.
+      El total que vale es el de la orden de compra de Odoo.
+    </span>
+    {% endif %}
+    {% else %}
+    <span class="pie-nota">Todavía no agregaste ninguno. Buscalo abajo —
+      plantas, macetas e insumos.</span>
+    {% endif %}
+  </div>
+
+  {# ---------- El buscador ----------
+     Encuentra los TRES tipos (PL-, MC-, IN-) por el MISMO camino que usa
+     Vender (`ventas.buscar_productos`, con otros dos argumentos). Lo
+     buscado viaja en el query, así que recargar repite la búsqueda y nada
+     más. #}
+  <div class="campo-caja" id="cp-buscar">
+    <label for="cp-q">Agregar un producto</label>
+    <div class="acciones">
+      <input class="campo crece" id="cp-q" name="q" maxlength="120"
+             autocomplete="off" value="{{ q }}"
+             placeholder="Nombre o referencia — planta, maceta o insumo">
+      <button class="btn" type="submit" formaction="/compras/borrador"
+              formnovalidate name="accion" value="buscar">Buscar</button>
+    </div>
+    {% if buscador_error %}
+    <span class="err">No se pudo buscar en Odoo: {{ buscador_error }}. Se puede
+      anotar la compra igual y agregar los productos después.</span>
+    {% endif %}
+    {% if resultados %}
+    <table class="cmp-tabla">
+      <tbody>
+        {% for p in resultados %}
+        <tr>
+          <td><b>{{ p.nombre }}</b><span class="cmp-orden">{{ p.sku }}</span></td>
+          <td class="cmp-num">{{ p.precio | dinero }}</td>
+          <td>
+            {# El id y el nombre viajan escondidos con el SKU en su nombre:
+               así agregar no le cuesta ni una consulta más a Odoo, y sigue
+               funcionando si Odoo se cayó entre la búsqueda y el clic. #}
+            <input type="hidden" name="pid-{{ p.sku }}" value="{{ p.id }}">
+            <input type="hidden" name="nom-{{ p.sku }}" value="{{ p.nombre }}">
+            <button class="btn chico" type="submit"
+                    formaction="/compras/borrador" formnovalidate
+                    name="agregar" value="{{ p.sku }}"
+                    aria-label="Agregar {{ p.nombre }}">+ Agregar</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    {# Buscó y no hay: ES el momento de ofrecer crearlo. Lo decide Python
+       (`sin_resultados`), para que un error de Odoo nunca se lea como «no
+       existe». #}
+    {% if sin_resultados %}
+    <span class="pie-nota">No hay ningún producto que diga «{{ q }}».</span>
+    <div class="acciones">
+      <button class="btn" type="submit" formaction="/compras/borrador"
+              formnovalidate name="accion" value="crear_producto">Crear producto «{{ q }}»</button>
+    </div>
+    <span class="pie-nota">Se crea en Odoo y volvés acá con el producto ya
+      agregado y todo lo que escribiste en su sitio. Si es una PLANTA, el
+      formulario vive en Stock: al volver a Compras tu compra sigue acá y la
+      buscás.</span>
+    {% endif %}
+  </div>
+
   <div class="campo-caja">
     <label for="cp-resp">Responsable</label>
     <select class="sel ancho" id="cp-resp" name="resp">
       <option value="">Sin asignar</option>
       {% for r in responsables %}
-      <option value="{{ r }}" {{ 'selected' if r == resp_sugerido }}>{{ r }}</option>
+      <option value="{{ r }}" {{ 'selected' if r == (borrador.resp or resp_sugerido) }}>{{ r }}</option>
       {% endfor %}
     </select>
   </div>
@@ -213,14 +412,17 @@
     <select class="sel ancho" id="cp-lead" name="lead_ref">
       <option value="">No, es para el vivero</option>
       {% for l in leads %}
-      <option value="{{ l.ref }}">{{ l.ref }} · {{ l.nombre }}</option>
+      <option value="{{ l.ref }}" {{ 'selected' if l.ref == borrador.lead_ref }}>{{ l.ref }} · {{ l.nombre }}</option>
       {% endfor %}
     </select>
   </div>
 
   <div class="acciones">
+    {# El único botón negro del formulario, y el único SIN
+       `formnovalidate`: es el que crea la compra de verdad. #}
     <button class="btn oro" type="submit" data-guardando="Anotando…">Anotar la compra</button>
-    <a class="btn" href="/compras">Mejor no</a>
+    <button class="btn" type="submit" formaction="/compras/borrador"
+            formnovalidate name="accion" value="descartar">Mejor no</button>
   </div>
   <p class="pie-nota">Se crea el issue en el proyecto COMPRAS de Linear, con
     la etiqueta <b>Resp:</b> del responsable. La orden de compra y los pagos

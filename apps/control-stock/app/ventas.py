@@ -474,15 +474,41 @@ def lineas_de_renglones_planta(renglones):
 # Catálogo: búsqueda en vivo y fotos cacheadas en disco
 # ---------------------------------------------------------------------------
 
-def buscar_productos(texto):
-    """Productos PL- por nombre o SKU, con precio de Odoo (máx. 20)."""
+PREFIJO_PLANTA = "PL-"
+
+
+def dominio_de_busqueda(texto, prefijos=(PREFIJO_PLANTA,), solo_vendibles=True):
+    """El dominio de Odoo del buscador de productos.
+
+    Separado de `buscar_productos` para que las pruebas lo miren sin simular
+    media Odoo, y porque **hay dos pantallas que lo usan con filtros
+    distintos**: Vender busca PL- vendibles (lo de siempre) y Compras busca
+    los tres prefijos sin pedir `sale_ok` — un insumo que se compra no tiene
+    por qué estar a la venta.
+
+    Con UN solo prefijo el dominio sale IDÉNTICO al de siempre (hay una
+    prueba que lo amarra): generalizarlo no le cambió nada a Vender.
+    """
+    dominio = []
+    # Notación prefija de Odoo: N prefijos piden N-1 "|" delante.
+    dominio += ["|"] * (len(prefijos) - 1)
+    dominio += [["default_code", "like", p] for p in prefijos]
+    if solo_vendibles:
+        dominio.append(["sale_ok", "=", True])
+    dominio += ["|", ["name", "ilike", texto],
+                ["default_code", "ilike", texto]]
+    return dominio
+
+
+def buscar_productos(texto, prefijos=(PREFIJO_PLANTA,), solo_vendibles=True):
+    """Productos por nombre o SKU, con precio de Odoo (máx. 20).
+
+    Por defecto, las plantas vendibles: el buscador de Vender, sin cambios.
+    """
     texto = (texto or "").strip()
     if not texto:
         return []
-    dominio = [
-        ["default_code", "like", "PL-"], ["sale_ok", "=", True],
-        "|", ["name", "ilike", texto], ["default_code", "ilike", texto],
-    ]
+    dominio = dominio_de_busqueda(texto, prefijos, solo_vendibles)
     filas = _ejecutar("product.product", "search_read", [dominio],
                       {"fields": ["default_code", "name", "list_price"],
                        "limit": 20, "order": "name"})
