@@ -342,13 +342,10 @@ def quitar_real(orden_id):
 
 def _plata_de_orden(real):
     """La plata de UNA orden ya legible (`_orden_legible`), en la forma que
-    muestran la ficha de Control y el tiquete de Pedidos.
+    muestra la ficha de Control.
 
-    Aparte a propósito: hay dos caminos que necesitan exactamente este
-    cálculo —la ficha de un lead (`plata_de_la_real`, una consulta) y el
-    tablero de tiquetes (`plata_de_las_reales`, una sola consulta para
-    todos)— y la regla del abono del 50% no puede vivir escrita dos veces:
-    el día que cambie, cambiaría en una pantalla y no en la otra.
+    Aparte a propósito: la regla del abono del 50% no puede vivir escrita
+    dos veces, así que este cálculo es el único lugar donde se decide.
     """
     total = real["total"]
     return {
@@ -377,43 +374,6 @@ def plata_de_la_real(lead):
     if real is None:
         return {"ok": True, "error": None, "hay_real": False}
     return _plata_de_orden(real)
-
-
-def plata_de_las_reales():
-    """`{"ok", "error", "plata": {PP-XXXXX: la plata de su orden real}}` de
-    TODAS las órdenes marcadas como la real, en UNA consulta.
-
-    Es lo que necesita un tablero con varios leads a la vez (los tiquetes de
-    Pedidos): con una docena de tarjetas en pantalla y una pintada por
-    minuto, una consulta por tarjeta serían doce viajes de XML-RPC cada vez.
-    Son un puñado de órdenes en este negocio, así que traerlas todas y
-    buscar por PP sale más barato que filtrar por lead — y el resultado se
-    puede cachear entero sin que la próxima pantalla reciba un mapa
-    recortado a los leads de la anterior.
-
-    El casamiento va en Python, comparando el `lead_ref` en MAYÚSCULAS: el
-    `in` de un dominio de Odoo es sensible a mayúsculas y un `lead_ref`
-    escrito a mano en minúsculas quedaría fuera sin que nadie se enterara
-    (`ordenes_del_lead` usa `=ilike` justo por eso).
-
-    Un lead sin orden real simplemente no aparece en el mapa: eso es "no
-    hay". `ok: False` es "no sé" — quien muestre tiene que poder decir "no
-    se pudo leer Odoo" en vez de pintar un tiquete sin plata.
-    """
-    try:
-        filas = ventas._ejecutar(
-            "sale.order", "search_read",
-            [[["lead_real", "=", True]]],
-            {"fields": CAMPOS_ORDEN + ["lead_ref"], "order": "date_order desc"})
-    except Exception as error:
-        return {"ok": False, "error": _error(error), "plata": {}}
-    plata = {}
-    for fila in filas:
-        pp = (fila.get("lead_ref") or "").strip().upper()
-        if not pp.startswith("PP-") or pp in plata:
-            continue  # `order: date_order desc`: la primera es la más nueva
-        plata[pp] = _plata_de_orden(_orden_legible(fila))
-    return {"ok": True, "error": None, "plata": plata}
 
 
 # ---------------------------------------------------------------------------

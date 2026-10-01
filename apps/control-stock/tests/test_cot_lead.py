@@ -93,8 +93,8 @@ class OdooCotLead:
                 if str(actual or "").strip().lower() != str(valor or "").strip().lower():
                     return False
             elif op == "=":
-                # `plata_de_las_reales` pide las órdenes con lead_real en
-                # True: una hoja de igualdad, sin comodines.
+                # Igualdad sin comodines, para dominios que filtran por un
+                # campo exacto (por ejemplo lead_real).
                 if actual != valor:
                     return False
             elif op == "!=":
@@ -483,72 +483,3 @@ def test_pdf_de_orden_envuelve_el_error(monkeypatch):
     with pytest.raises(RuntimeError, match="No se pudo generar el PDF"):
         cot_lead.pdf_de_orden(90)
 
-
-# ---------------------------------------------------------------------------
-# La plata de VARIOS leads en UNA consulta (30/09/2026, el tablero de
-# Pedidos). La regla que esto cuida: el abono del 50% se calcula en UN solo
-# lugar (`_plata_de_orden`), así que la ficha de un lead y el tiquete del
-# tablero nunca pueden decir dos cosas distintas.
-# ---------------------------------------------------------------------------
-
-def test_plata_de_las_reales_una_sola_consulta(odoo, monkeypatch):
-    partner = odoo.agregar_partner("Tamara", "6552-0966")
-    odoo.agregar_orden(partner, "S00079", amount_total=787.0,
-                       total_pagado=393.5, etapa_cobro="abono",
-                       lead_ref="PP-70211", lead_real=True)
-    # Conectada al mismo lead pero NO real: no es la que manda.
-    odoo.agregar_orden(partner, "S00081", amount_total=1525.0,
-                       lead_ref="PP-70211")
-    otro = odoo.agregar_partner("Juan Carlos", "6033-2211")
-    odoo.agregar_orden(otro, "S00080", amount_total=340.0, total_pagado=340.0,
-                       etapa_cobro="pagado", lead_ref="PP-70208",
-                       lead_real=True)
-
-    viajes = []
-    original = ventas._ejecutar
-    monkeypatch.setattr(ventas, "_ejecutar",
-                        lambda *a, **k: (viajes.append(a[:2]), original(*a, **k))[1])
-
-    resultado = cot_lead.plata_de_las_reales()
-
-    assert len(viajes) == 1, "una consulta para todos los leads, no una por lead"
-    assert resultado["ok"] is True
-    assert set(resultado["plata"]) == {"PP-70211", "PP-70208"}
-    tamara = resultado["plata"]["PP-70211"]
-    assert tamara["orden"] == "S00079"
-    assert tamara["total"] == 787.0
-    assert tamara["abono_50"] == 393.5
-    assert tamara["saldo"] == 393.5
-    assert resultado["plata"]["PP-70208"]["saldo"] == 0.0
-
-
-def test_plata_de_las_reales_casa_el_pp_sin_mirar_mayusculas(odoo):
-    """Un `lead_ref` escrito a mano en minúsculas en Odoo tiene que casar
-    igual: el `in` de un dominio sí distingue mayúsculas, y por eso el
-    casamiento va en Python (la misma razón por la que `ordenes_del_lead`
-    usa `=ilike`)."""
-    partner = odoo.agregar_partner("Ximena", "")
-    odoo.agregar_orden(partner, "S00099", amount_total=100.0,
-                       lead_ref="pp-70203", lead_real=True)
-    resultado = cot_lead.plata_de_las_reales()
-    assert "PP-70203" in resultado["plata"]
-
-
-def test_plata_de_las_reales_sin_odoo_dice_que_no_sabe(odoo):
-    odoo.fallar = True
-    resultado = cot_lead.plata_de_las_reales()
-    assert resultado["ok"] is False
-    assert resultado["plata"] == {}
-    assert "Odoo no contesta" in resultado["error"]
-
-
-def test_plata_de_las_reales_respeta_el_5050_apagado(odoo):
-    """Sin la casilla del 50/50 no se pide abono: el tiquete y la ficha
-    tienen que coincidir (`_plata_de_orden` es uno solo)."""
-    partner = odoo.agregar_partner("Emiraf", "")
-    oid = odoo.agregar_orden(partner, "S00100", amount_total=210.0,
-                             lead_ref="PP-70300", lead_real=True)
-    odoo.ordenes[oid]["pago_50_50"] = False
-    plata = cot_lead.plata_de_las_reales()["plata"]["PP-70300"]
-    assert plata["pide_abono"] is False
-    assert plata["abono_50"] is None
