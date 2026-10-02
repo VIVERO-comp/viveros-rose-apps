@@ -97,7 +97,7 @@
   width:22px;height:22px;border-radius:50%;background:var(--d-verde-fondo);
   color:var(--d-verde);display:inline-grid;place-items:center;flex-shrink:0;
 }
-.vd-acts{display:flex;align-items:center;gap:4px 10px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end}
+.vd-acts{display:flex;align-items:center;gap:4px 10px;flex-shrink:1;min-width:0;flex-wrap:wrap;justify-content:flex-end}
 .vd-ob{
   display:inline-flex;align-items:center;height:28px;padding:0 12px;
   border:1px solid var(--d-tinta);border-radius:14px;background:#fff;
@@ -183,7 +183,7 @@
 
 /* ---------- el resumen lateral (pantalla 09) ---------- */
 .vd-lienzo{display:flex;gap:12px;align-items:flex-start}
-.vd-tablero{flex:1;min-width:0}
+.vd-tablero{flex:1;min-width:0;overflow-x:auto;padding-bottom:4px}
 .vd-res{display:none}
 .vd-tile{
   border:1.5px solid #5DBB8C;border-radius:var(--d-radio-col);
