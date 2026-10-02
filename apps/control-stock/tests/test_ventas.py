@@ -110,6 +110,12 @@ class OdooFalso:
             return []
         return [i for i, n in self.partners.items() if n.lower() == str(valor).lower()]
 
+    def res_partner_read(self, args, kw):
+        # La puerta única B.2 lee el nombre del cliente que calzó antes de
+        # decidir si reusa, avisa o confirma.
+        return [{"id": i, "name": self.partners[i]}
+                for i in args[0] if i in self.partners]
+
     def res_partner_create(self, args, kw):
         nuevo = self._nuevo_id()
         self.partners[nuevo] = args[0]["name"]
@@ -803,7 +809,13 @@ def test_la_vista_previa_reusa_una_sola_orden_por_empleada(cliente_venta, odoo, 
     llamadas = _pdf_falso(monkeypatch)
     _agregar(cliente_venta, 501)
     cliente_venta.post("/venta/vista-previa", data={"cliente": "Marta"})
-    cliente_venta.post("/venta/vista-previa", data={"cliente": "Marta", "envio": "5"})
+    # B.2-R3 (2/10/2026): el primer vistazo ya creó a Marta en Odoo, así
+    # que el segundo encuentra su nombre y pide la decisión; "usar-<id>"
+    # es lo que la empleada marcaría en el aviso.
+    marta = next(i for i, n in odoo.partners.items() if n == "Marta")
+    cliente_venta.post("/venta/vista-previa",
+                       data={"cliente": "Marta", "envio": "5",
+                             "cliente_decision": f"usar-{marta}"})
     previas = [i for i, o in odoo.ordenes.items()
                if (o.get("client_order_ref") or "").startswith(ventas.REF_VISTA_PREVIA)]
     assert len(previas) == 1

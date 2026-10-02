@@ -1135,15 +1135,22 @@ def _fecha_venta(iso):
     return momento.strftime("%d/%m/%Y ") + hora
 
 
-def _redirigir_venta(error=None, nueva=False, conflicto=None):
+def _redirigir_venta(error=None, nueva=False, conflicto=None, fiscal=None):
     destino = ("/venta/nueva" if nueva else "/venta") + \
         (f"?error={quote(error)}" if error else "")
     if conflicto:
-        # El aviso de «ese teléfono ya es de otro cliente» (B.2): el id y
-        # el nombre viajan en la URL para que /venta/nueva pinte las dos
-        # opciones (usar ese cliente o crear uno nuevo) junto al error.
+        # El aviso de cliente ajeno (B.2, por teléfono o por nombre): el
+        # id, el nombre y el motivo viajan en la URL para que /venta/nueva
+        # pinte las dos opciones (usar ese cliente o crear uno nuevo).
         destino += (f"&conflicto={conflicto['id']}"
-                    f"&conflicto_nombre={quote(conflicto['nombre'])}")
+                    f"&conflicto_nombre={quote(conflicto['nombre'])}"
+                    f"&conflicto_motivo={conflicto['motivo']}")
+    if fiscal:
+        # La confirmación R2 (guardar un dato fiscal en un cliente
+        # existente elegido a sabiendas): qué dato y en qué cliente.
+        destino += (f"&fiscal={fiscal['id']}"
+                    f"&fiscal_nombre={quote(fiscal['nombre'])}"
+                    f"&fiscal_detalle={quote(fiscal['detalle'])}")
     return RedirectResponse(destino, status_code=303)
 
 
@@ -1347,7 +1354,9 @@ def _resultados_con_stock(resultados):
 
 @app.get("/venta/nueva")
 def venta_nueva(request: Request, q: str = "", error: str = "",
-                conflicto: str = "", conflicto_nombre: str = ""):
+                conflicto: str = "", conflicto_nombre: str = "",
+                conflicto_motivo: str = "", fiscal: str = "",
+                fiscal_nombre: str = "", fiscal_detalle: str = ""):
     # El formulario de la venta: cliente (nombre y celular), buscador en
     # vivo para añadir plantas, la lista con cantidades y el total.
     usuario = request.state.empleada["id"]
@@ -1368,8 +1377,15 @@ def venta_nueva(request: Request, q: str = "", error: str = "",
         # bloque Cliente pinta las dos opciones (usar ese cliente o crear
         # uno nuevo) y el POST siguiente viaja con cliente_decision.
         "conflicto_cliente": ({"id": int(conflicto),
-                               "nombre": conflicto_nombre.strip()[:120]}
+                               "nombre": conflicto_nombre.strip()[:120],
+                               "motivo": ("nombre" if conflicto_motivo == "nombre"
+                                          else "telefono")}
                               if conflicto.isdigit() else None),
+        # La confirmación R2 tras el redirect de un ConfirmarDatoFiscal.
+        "confirmar_fiscal": ({"id": int(fiscal),
+                              "nombre": fiscal_nombre.strip()[:120],
+                              "detalle": fiscal_detalle.strip()[:400]}
+                             if fiscal.isdigit() else None),
     }
     if contexto["ventas_activo"]:
         try:
@@ -1451,9 +1467,24 @@ def _decision_cliente_del_form(form):
     return decision if re.fullmatch(r"nuevo|usar-\d+", decision) else None
 
 
+def _confirmar_fiscal_del_form(form):
+    """La confirmación R2 («sí, guarda ese dato en ese cliente»): "si" o
+    "no". Cualquier otra cosa cuenta como sin confirmar — el aviso vuelve
+    a salir, nunca se asume."""
+    valor = (form.get("confirmar_fiscal") or "").strip()
+    return valor if valor in ("si", "no") else None
+
+
 def _conflicto_de(error):
     """El dict que pinta el aviso con las dos opciones en _cliente.html."""
-    return {"id": error.partner_id, "nombre": error.nombre_existente}
+    return {"id": error.partner_id, "nombre": error.nombre_existente,
+            "motivo": error.motivo}
+
+
+def _fiscal_de(error):
+    """El dict que pinta la confirmación R2 en _cliente.html."""
+    return {"id": error.partner_id, "nombre": error.nombre_existente,
+            "detalle": error.detalle}
 
 
 def _leads_para_elegir():
@@ -1676,10 +1707,14 @@ async def venta_vista_previa(request: Request):
             empleada, form.get("cliente", ""), form.get("celular", ""),
             datos_cliente, _cargos_del_form(form),
             banderas=ventas.banderas_de(form, False),
-            decision_cliente=_decision_cliente_del_form(form))
+            decision_cliente=_decision_cliente_del_form(form),
+            confirmar_fiscal=_confirmar_fiscal_del_form(form))
     except ventas.ClienteAjeno as error:
         return _redirigir_venta(str(error), nueva=True,
                                 conflicto=_conflicto_de(error))
+    except ventas.ConfirmarDatoFiscal as error:
+        return _redirigir_venta(str(error), nueva=True,
+                                fiscal=_fiscal_de(error))
     except ValueError as error:
         return _redirigir_venta(str(error), nueva=True)
     except Exception as error:
@@ -1721,10 +1756,14 @@ async def venta_cotizar(request: Request):
             request.state.empleada, form.get("cliente", ""), form.get("celular", ""),
             _datos_cliente_del_form(form), _cargos_del_form(form),
             banderas=ventas.banderas_de(form, False),
-            decision_cliente=_decision_cliente_del_form(form))
+            decision_cliente=_decision_cliente_del_form(form),
+            confirmar_fiscal=_confirmar_fiscal_del_form(form))
     except ventas.ClienteAjeno as error:
         return _redirigir_venta(str(error), nueva=True,
                                 conflicto=_conflicto_de(error))
+    except ventas.ConfirmarDatoFiscal as error:
+        return _redirigir_venta(str(error), nueva=True,
+                                fiscal=_fiscal_de(error))
     except ValueError as error:
         return _redirigir_venta(str(error), nueva=True)
     except Exception as error:
@@ -1756,10 +1795,14 @@ async def venta_vender(request: Request):
             request.state.empleada, form.get("cliente", ""), form.get("celular", ""),
             _datos_cliente_del_form(form), _cargos_del_form(form), confirmar=True,
             banderas=ventas.banderas_de(form, False),
-            decision_cliente=_decision_cliente_del_form(form))
+            decision_cliente=_decision_cliente_del_form(form),
+            confirmar_fiscal=_confirmar_fiscal_del_form(form))
     except ventas.ClienteAjeno as error:
         return _redirigir_venta(str(error), nueva=True,
                                 conflicto=_conflicto_de(error))
+    except ventas.ConfirmarDatoFiscal as error:
+        return _redirigir_venta(str(error), nueva=True,
+                                fiscal=_fiscal_de(error))
     except ValueError as error:
         return _redirigir_venta(str(error), nueva=True)
     except Exception as error:
@@ -1855,11 +1898,18 @@ async def venta_servicio_crear(request: Request, tipo: str):
             request.state.empleada, tipo, form.get("cliente", ""),
             form.get("celular", ""), servicios, lineas_catalogo, datos_cliente,
             cargos=_cargos_del_form(form), cobro=cobro,
-            decision_cliente=_decision_cliente_del_form(form))
+            decision_cliente=_decision_cliente_del_form(form),
+            confirmar_fiscal=_confirmar_fiscal_del_form(form))
     except ventas.ClienteAjeno as error:
         contexto = _contexto_servicio(request, tipo, error=str(error),
                                       servicios=servicios)
         contexto["conflicto_cliente"] = _conflicto_de(error)
+        return plantillas.TemplateResponse(
+            request, "venta_servicio.html", contexto, status_code=200)
+    except ventas.ConfirmarDatoFiscal as error:
+        contexto = _contexto_servicio(request, tipo, error=str(error),
+                                      servicios=servicios)
+        contexto["confirmar_fiscal"] = _fiscal_de(error)
         return plantillas.TemplateResponse(
             request, "venta_servicio.html", contexto, status_code=200)
     except ValueError as error:
@@ -1952,12 +2002,20 @@ async def venta_personalizada_crear(request: Request):
             _datos_cliente_del_form(form), servicios,
             cargos=_cargos_del_form(form),
             banderas=ventas.banderas_de(form, True),
-            decision_cliente=_decision_cliente_del_form(form))
+            decision_cliente=_decision_cliente_del_form(form),
+            confirmar_fiscal=_confirmar_fiscal_del_form(form))
     except ventas.ClienteAjeno as error:
         contexto = _contexto_personalizada(request, error=str(error),
                                            renglones=renglones,
                                            servicios=servicios)
         contexto["conflicto_cliente"] = _conflicto_de(error)
+        return plantillas.TemplateResponse(
+            request, "venta_personalizada.html", contexto)
+    except ventas.ConfirmarDatoFiscal as error:
+        contexto = _contexto_personalizada(request, error=str(error),
+                                           renglones=renglones,
+                                           servicios=servicios)
+        contexto["confirmar_fiscal"] = _fiscal_de(error)
         return plantillas.TemplateResponse(
             request, "venta_personalizada.html", contexto)
     except ValueError as error:
@@ -2201,10 +2259,14 @@ async def venta_pagar(request: Request):
             request.state.empleada, form.get("cliente", ""), form.get("celular", ""),
             _datos_cliente_del_form(form), _cargos_del_form(form),
             banderas=ventas.banderas_de(form, False),
-            decision_cliente=_decision_cliente_del_form(form))
+            decision_cliente=_decision_cliente_del_form(form),
+            confirmar_fiscal=_confirmar_fiscal_del_form(form))
     except ventas.ClienteAjeno as error:
         return _redirigir_venta(str(error), nueva=True,
                                 conflicto=_conflicto_de(error))
+    except ventas.ConfirmarDatoFiscal as error:
+        return _redirigir_venta(str(error), nueva=True,
+                                fiscal=_fiscal_de(error))
     except ValueError as error:
         return _redirigir_venta(str(error), nueva=True)
     except Exception as error:

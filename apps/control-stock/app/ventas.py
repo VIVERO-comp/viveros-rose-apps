@@ -635,7 +635,8 @@ def iniciar_tablas():
                 servicios TEXT,             -- JSON de los renglones de servicio
                 renglones TEXT,             -- JSON de los renglones libres (personalizada)
                 extra TEXT,                 -- JSON de los datos opcionales del cliente
-                cobro TEXT                  -- 'total' | 'planta' (alquiler)
+                cobro TEXT,                 -- 'total' | 'planta' (alquiler)
+                cliente_anterior TEXT       -- JSON: filtro del eco (B.2-R1)
             );
             CREATE TABLE IF NOT EXISTS ventas_locales (
                 n INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -673,6 +674,10 @@ def iniciar_tablas():
         # Migración suave: cómo se cobra el alquiler (23/09/2026).
         if "cobro" not in columnas_borrador:
             con.execute("ALTER TABLE venta_borrador ADD COLUMN cobro TEXT")
+        # Migración suave: el filtro del eco del cliente anterior (B.2-R1,
+        # 2/10/2026) — ver _sin_datos_del_cliente_anterior.
+        if "cliente_anterior" not in columnas_borrador:
+            con.execute("ALTER TABLE venta_borrador ADD COLUMN cliente_anterior TEXT")
         # Migración suave: la tabla pudo nacer sin la columna celular.
         columnas = [fila[1] for fila in con.execute("PRAGMA table_info(ventas_locales)")]
         if "celular" not in columnas:
@@ -726,33 +731,89 @@ COBRO_PLANTA = "planta"
 COBROS = (COBRO_TOTAL, COBRO_PLANTA)
 
 
-def _sin_fiscales_heredados(usuario, nombre, datos):
-    """La regla B.2 sobre el borrador: el borrador es UNA fila por empleada
-    y sobrevivía al cambio de cliente, así que un cliente nuevo nacía con
-    el RUC/cédula del anterior. Cuando el nombre digitado deja de ser el
-    mismo cliente (nombres_compatibles contra el guardado), los campos
-    fiscales que vengan ARRASTRADOS se vacían:
+def _es_otro_cliente(nombre_guardado, celular_guardado, nombre, celular):
+    """«Cambió el cliente» (B.2-R1, 2/10/2026), definido así: el nombre
+    difiere tras normalizar (teniendo los DOS algo), o el teléfono difiere
+    en sus últimos 8 dígitos (teniendo los DOS un número completo, 8+
+    dígitos). Un campo a medio teclear —vacío de un lado, o un teléfono
+    todavía corto— no cuenta como cambio: puede ser el mismo cliente que
+    apenas se está escribiendo (venta.js guarda a cada tecla)."""
+    na, nb = _normalizar_nombre(nombre_guardado), _normalizar_nombre(nombre)
+    if na and nb and na != nb:
+        return True
+    da = re.sub(r"\D", "", celular_guardado or "")
+    db = re.sub(r"\D", "", celular or "")
+    return len(da) >= 8 and len(db) >= 8 and da[-8:] != db[-8:]
 
-    - `datos` en None (el formulario no trajo los campos): se devuelve un
-      dict que vacía SOLO los fiscales del borrador, conservando el resto
-      (cargos, correo…) como hasta hoy.
-    - `datos` con el MISMO valor fiscal que ya estaba guardado: es el eco
-      del prellenado, no algo tecleado ahora — se vacía.
-    - `datos` con un valor fiscal DISTINTO al guardado: se tecleó en esta
-      venta, se respeta.
-    """
-    fila = borrador_de(usuario)
-    if not fila["nombre"] or nombres_compatibles(nombre, fila["nombre"]):
-        return datos
-    fiscales_form = ("ruc", "cedula")
+
+def _fila_borrador(usuario):
+    """La fila cruda del borrador (extra y filtro del eco como dicts), para
+    la regla del cliente anterior. {"nombre","celular","extra","anterior"}."""
+    with _db() as con:
+        fila = con.execute(
+            "SELECT nombre, celular, extra, cliente_anterior"
+            " FROM venta_borrador WHERE usuario=?", (usuario,)).fetchone()
+    if not fila:
+        return {"nombre": "", "celular": "", "extra": {}, "anterior": None}
+    return {"nombre": fila["nombre"], "celular": fila["celular"],
+            "extra": _json_o_defecto(fila["extra"], {}),
+            "anterior": _json_o_defecto(fila["cliente_anterior"], {}) or None}
+
+
+def _sin_datos_del_cliente_anterior(usuario, nombre, celular, datos):
+    """La regla B.2-R1 sobre el borrador: el borrador es UNA fila por
+    empleada y sobrevivía al cambio de cliente, así que un cliente nuevo
+    nacía con los datos del anterior. Cuando el cliente del formulario
+    cambió (_es_otro_cliente contra lo guardado), el borrador deja de
+    aportar TODO dato de cliente (ruc, cédula, correo, dirección —
+    CAMPOS_CLIENTE; el nombre y el celular ya se pisan siempre con lo que
+    llega). Los cargos de envío/instalación y los renglones NO son datos
+    del cliente y sobreviven.
+
+    Como venta.js reenvía el formulario completo a cada tecla —con los
+    valores del cliente anterior todavía EN PANTALLA—, vaciar una sola vez
+    no alcanza: el eco volvería en el POST siguiente. Por eso el borrador
+    guarda un filtro (`cliente_anterior`): los valores que tenía el
+    cliente anterior. Todo valor entrante IGUAL al del filtro es eco del
+    prellenado, no algo tecleado para ESTE cliente, y se vacía; un valor
+    distinto se tecleó ahora y se respeta. El filtro se encadena si hay
+    dos cambios seguidos sin recargar, y vive hasta que el borrador se
+    limpia (venta creada) — deliberadamente no se levanta al "volver" al
+    cliente anterior: mejor reteclear una cédula que pegársela a otro.
+
+    Devuelve (datos, anterior): lo que se guarda como extra y lo que se
+    guarda como filtro."""
+    fila = _fila_borrador(usuario)
+    anterior = fila["anterior"]
+    if _es_otro_cliente(fila["nombre"], fila["celular"], nombre, celular):
+        anterior = {campo: fila["extra"].get(campo) or (anterior or {}).get(campo) or ""
+                    for campo in CAMPOS_CLIENTE}
+        anterior["nombre"], anterior["celular"] = fila["nombre"], fila["celular"]
+        if datos is None:
+            # El formulario no trajo los campos (la vía de herencia del
+            # COALESCE): se reescribe el extra con los datos de cliente en
+            # blanco, conservando los cargos tal como estaban.
+            datos = {**fila["extra"], **{campo: "" for campo in CAMPOS_CLIENTE}}
+    if anterior and datos is not None:
+        datos = {**datos,
+                 **{campo: "" for campo in CAMPOS_CLIENTE
+                    if (datos.get(campo) or "").strip()
+                    and (datos.get(campo) or "").strip()
+                    == (anterior.get(campo) or "").strip()}}
+    return datos, anterior
+
+
+def datos_del_cliente_actual(usuario, nombre, celular, datos):
+    """El mismo filtro del eco, para el momento de CREAR o previsualizar:
+    si la empleada cambió el nombre y creó SIN que la página se recargara,
+    el formulario todavía manda los datos del cliente anterior que siguen
+    pintados en pantalla — y esos no se teclearon para este cliente. No
+    escribe el borrador; solo filtra."""
     if datos is None:
-        if not any(fila.get(campo) for campo in fiscales_form):
-            return None
-        return {**{campo: fila.get(campo) or "" for campo in CAMPOS_EXTRA},
-                **{campo: "" for campo in fiscales_form}}
-    return {**datos, **{campo: "" for campo in fiscales_form
-                        if (datos.get(campo) or "") == (fila.get(campo) or "")
-                        and (fila.get(campo) or "")}}
+        return None
+    filtrado, _anterior = _sin_datos_del_cliente_anterior(
+        usuario, nombre, celular, datos)
+    return filtrado
 
 
 def guardar_borrador(usuario, nombre, celular, servicios=None, datos=None,
@@ -760,23 +821,24 @@ def guardar_borrador(usuario, nombre, celular, servicios=None, datos=None,
     """El formulario en curso (nombre, celular, los datos opcionales del
     cliente y los renglones que ya escribió): sobrevive a los reloads de
     agregar/quitar plantas (venta.js lo manda mientras se escribe). Los
-    argumentos en None dejan lo guardado como estaba — salvo los campos
-    fiscales cuando cambió el cliente (ver _sin_fiscales_heredados)."""
-    datos = _sin_fiscales_heredados(usuario, nombre, datos)
+    argumentos en None dejan lo guardado como estaba — salvo los datos de
+    cliente cuando cambió el cliente (ver _sin_datos_del_cliente_anterior)."""
+    datos, anterior = _sin_datos_del_cliente_anterior(usuario, nombre, celular, datos)
     crudo = None if servicios is None else json.dumps(servicios, ensure_ascii=False)
     libres = None if renglones is None else json.dumps(renglones, ensure_ascii=False)
     extra = None if datos is None else json.dumps(
         {campo: (datos.get(campo) or "") for campo in CAMPOS_EXTRA},
         ensure_ascii=False)
+    filtro = json.dumps(anterior, ensure_ascii=False) if anterior else None
     with _db() as con:
         con.execute(
             "INSERT INTO venta_borrador (usuario, nombre, celular, servicios,"
-            " renglones, extra) VALUES (?,?,?,?,?,?)"
+            " renglones, extra, cliente_anterior) VALUES (?,?,?,?,?,?,?)"
             " ON CONFLICT (usuario) DO UPDATE SET nombre=?, celular=?,"
             " servicios=COALESCE(?, servicios), renglones=COALESCE(?, renglones),"
-            " extra=COALESCE(?, extra)",
-            (usuario, nombre, celular, crudo, libres, extra,
-             nombre, celular, crudo, libres, extra))
+            " extra=COALESCE(?, extra), cliente_anterior=?",
+            (usuario, nombre, celular, crudo, libres, extra, filtro,
+             nombre, celular, crudo, libres, extra, filtro))
 
 
 def _json_o_defecto(crudo, defecto):
@@ -1132,21 +1194,50 @@ def nombres_compatibles(a, b):
 
 
 class ClienteAjeno(ValueError):
-    """El teléfono digitado ya es de un cliente existente con OTRO nombre.
+    """El cliente digitado choca con uno existente y nadie decidió aún.
 
-    No se reusa en silencio (el pedido saldría a nombre de otra persona) ni
-    se crea un duplicado a ciegas: la empleada decide — el formulario
-    muestra el aviso con las dos opciones (usar ese cliente, o crear uno
-    nuevo) y reenvía con `cliente_decision`. Subclase de ValueError para
-    que cualquier ruta vieja que solo atrape ValueError muestre al menos
-    el aviso en vez de un error 500."""
+    Dos motivos (B.2): "telefono" —el teléfono ya es de un cliente con
+    OTRO nombre— y "nombre" —sin teléfono que desempate, ya existe un
+    cliente con ese mismo nombre (R3, 2/10/2026: el nombre solo tampoco
+    reusa en silencio). En ningún caso se reusa ni se crea un duplicado a
+    ciegas: la empleada decide — el formulario muestra el aviso con las
+    dos opciones (usar ese cliente, o crear uno nuevo), SIN ninguna
+    preseleccionada, y reenvía con `cliente_decision`. Subclase de
+    ValueError para que cualquier ruta vieja que solo atrape ValueError
+    muestre al menos el aviso en vez de un error 500."""
 
-    def __init__(self, partner_id, nombre_existente):
+    def __init__(self, partner_id, nombre_existente, motivo="telefono"):
         self.partner_id = int(partner_id)
         self.nombre_existente = str(nombre_existente or "")
+        self.motivo = motivo if motivo in ("telefono", "nombre") else "telefono"
+        encabezado = ("Ese teléfono ya es de otro cliente"
+                      if self.motivo == "telefono"
+                      else "Ya existe un cliente con ese nombre")
         super().__init__(
-            f"Ese teléfono ya es de otro cliente (id {self.partner_id}: "
-            f"{self.nombre_existente}). Marca si es el mismo cliente o uno nuevo.")
+            f"{encabezado} (id {self.partner_id}: {self.nombre_existente}). "
+            "Marca si es el mismo cliente o uno nuevo.")
+
+
+class ConfirmarDatoFiscal(ValueError):
+    """Hay un RUC/cédula tecleado en ESTA venta y la empleada eligió usar
+    un cliente existente (`usar-<id>`): antes de escribirle un dato fiscal
+    hay que decirle exactamente QUÉ se va a guardar y EN QUÉ cliente, y
+    que lo confirme (B.2-R2, 2/10/2026). `detalles` trae un renglón por
+    dato: "guardar el …" si el cliente no lo tiene, o "REEMPLAZAR el …
+    que tiene («viejo») por «nuevo»" si ya tiene otro — nunca se pisa en
+    silencio. El formulario responde con `confirmar_fiscal=si|no` (sin
+    opción por defecto): con "no", la venta sigue y lo fiscal no se
+    toca. El autocompletado SIN esta elección + confirmación sigue
+    prohibido (completar_cliente excluye vat/ref siempre)."""
+
+    def __init__(self, partner_id, nombre_existente, detalles):
+        self.partner_id = int(partner_id)
+        self.nombre_existente = str(nombre_existente or "")
+        self.detalles = list(detalles)
+        self.detalle = ("Se va a " + "; y se va a ".join(self.detalles)
+                        + f" del cliente id {self.partner_id} "
+                        f"({self.nombre_existente}).")
+        super().__init__(self.detalle + " Marca sí o no.")
 
 
 def _variantes_telefono(digitos):
@@ -1168,8 +1259,51 @@ def _dominio_telefono(digitos):
     return ["|"] * (len(condiciones) - 1) + condiciones
 
 
+_NOMBRE_FISCAL = {"vat": "RUC/Tax ID", "ref": "cédula (referencia)"}
+
+
+def _fiscales_con_confirmacion(partner_id, nombre_existente, valores_extra,
+                               confirmar):
+    """B.2-R2: la ÚNICA puerta por la que un vat/ref llega a un cliente
+    existente, y solo tras elección explícita (`usar-<id>`) + confirmación
+    explícita. Sin `confirmar` levanta ConfirmarDatoFiscal con el detalle
+    exacto (qué dato, en qué cliente, y si REEMPLAZA uno distinto); con
+    "si" escribe; con "no" no toca nada fiscal y la venta sigue."""
+    fiscales = {campo: valor for campo, valor in valores_extra.items()
+                if campo in CAMPOS_FISCALES}
+    if not fiscales or confirmar == "no":
+        return
+    actual = _ejecutar("res.partner", "read", [[partner_id]],
+                       {"fields": list(CAMPOS_FISCALES)})[0]
+    pendientes = {campo: valor for campo, valor in fiscales.items()
+                  if (actual.get(campo) or "") != valor}
+    if not pendientes:
+        return
+    if confirmar == "si":
+        _ejecutar("res.partner", "write", [[partner_id], pendientes])
+        return
+    detalles = []
+    for campo, valor in pendientes.items():
+        tenia = actual.get(campo) or ""
+        if tenia:
+            detalles.append(f"REEMPLAZAR el {_NOMBRE_FISCAL[campo]} que tiene "
+                            f"(«{tenia}») por «{valor}»")
+        else:
+            detalles.append(f"guardar el {_NOMBRE_FISCAL[campo]} «{valor}»")
+    raise ConfirmarDatoFiscal(partner_id, nombre_existente, detalles)
+
+
+def _usar_existente(partner_id, nombre_existente, valores_extra, confirmar):
+    """Reusar un cliente elegido a sabiendas: lo no-fiscal rellena solo
+    huecos (completar_cliente), lo fiscal pasa por la confirmación R2."""
+    completar_cliente(partner_id, valores_extra)
+    _fiscales_con_confirmacion(partner_id, nombre_existente, valores_extra,
+                               confirmar)
+    return partner_id
+
+
 def buscar_o_crear_cliente(nombre, celular="", datos=None, decision=None,
-                           celular_tal_cual=False):
+                           celular_tal_cual=False, confirmar_fiscal=None):
     """LA única puerta para resolver el cliente de una orden (B.2,
     2/10/2026) — la usan Nueva Venta, las cotizaciones de servicio y la
     personalizada, para que la regla sea UNA:
@@ -1177,13 +1311,19 @@ def buscar_o_crear_cliente(nombre, celular="", datos=None, decision=None,
     - El teléfono BUSCA y SUGIERE, no identifica solo: si los últimos 8
       dígitos calzan con un cliente existente, se reusa SOLO si el nombre
       digitado es el mismo tras normalizar (nombres_compatibles). Con otro
-      nombre se levanta ClienteAjeno y decide la empleada.
-    - `decision` viene del formulario tras ese aviso: "usar-<id>" reutiliza
-      ese cliente a sabiendas; "nuevo" crea un cliente aparte (sí, con el
-      mismo teléfono: dos personas pueden compartirlo) sin fundirlo con
-      nadie.
-    - Reusar un cliente nunca le escribe vat/ref (completar_cliente los
-      excluye); crear uno nuevo lleva SOLO lo tecleado en esta venta.
+      nombre se levanta ClienteAjeno("telefono") y decide la empleada.
+    - Sin teléfono que calce, un NOMBRE que coincida con un cliente
+      existente tampoco reusa solo (R3): levanta ClienteAjeno("nombre") y
+      decide la empleada — usar ese, o crear uno aparte.
+    - `decision` viene del formulario tras esos avisos: "usar-<id>"
+      reutiliza ese cliente a sabiendas (el id debe ser el del aviso);
+      "nuevo" crea un cliente aparte (sí, con el mismo teléfono o el mismo
+      nombre: dos personas pueden compartirlos) sin fundirlo con nadie.
+    - Reusar un cliente nunca le escribe vat/ref por autocompletado
+      (completar_cliente los excluye). La única excepción es la elección
+      explícita `usar-<id>` + la confirmación R2 (`confirmar_fiscal`),
+      que dice exactamente qué se guarda y dónde. Crear uno nuevo lleva
+      SOLO lo tecleado en esta venta.
     - `celular_tal_cual` guarda el phone como lo digitó la empleada (Nueva
       Venta, histórico con guion); sin él se guardan solo los dígitos
       (cotizaciones de servicio, histórico también).
@@ -1204,16 +1344,21 @@ def buscar_o_crear_cliente(nombre, celular="", datos=None, decision=None,
                 completar_cliente(ids[0], valores_extra)
                 return ids[0]
             if decision == f"usar-{ids[0]}":
-                completar_cliente(ids[0], valores_extra)
-                return ids[0]
+                return _usar_existente(ids[0], existente.get("name"),
+                                       valores_extra, confirmar_fiscal)
             if not crear_aparte:
-                raise ClienteAjeno(ids[0], existente.get("name"))
+                raise ClienteAjeno(ids[0], existente.get("name"),
+                                   motivo="telefono")
     if nombre and not crear_aparte:
         ids = _ejecutar("res.partner", "search",
                         [[["name", "=ilike", nombre]]], {"limit": 1})
         if ids:
-            completar_cliente(ids[0], valores_extra)
-            return ids[0]
+            existente = _ejecutar("res.partner", "read", [[ids[0]]],
+                                  {"fields": ["name"]})[0]
+            if decision == f"usar-{ids[0]}":
+                return _usar_existente(ids[0], existente.get("name"),
+                                       valores_extra, confirmar_fiscal)
+            raise ClienteAjeno(ids[0], existente.get("name"), motivo="nombre")
     valores = {"name": nombre, "customer_rank": 1, "company_type": "person",
                **valores_extra}
     if digitos:
@@ -1223,7 +1368,8 @@ def buscar_o_crear_cliente(nombre, celular="", datos=None, decision=None,
     return _ejecutar("res.partner", "create", [valores])
 
 
-def _cliente_id(nombre, celular="", datos=None, decision=None):
+def _cliente_id(nombre, celular="", datos=None, decision=None,
+                confirmar_fiscal=None):
     """El partner para la orden de Nueva Venta: el genérico "Cliente Local"
     si no dieron nombre; si lo dieron, la puerta única
     (buscar_o_crear_cliente), con el phone tal cual lo digitó la empleada."""
@@ -1231,7 +1377,8 @@ def _cliente_id(nombre, celular="", datos=None, decision=None):
     if not nombre:
         return _id_config("VENTA_CLIENTE_LOCAL")
     return buscar_o_crear_cliente(nombre, celular, datos, decision,
-                                  celular_tal_cual=True)
+                                  celular_tal_cual=True,
+                                  confirmar_fiscal=confirmar_fiscal)
 
 
 def _linea_de_planta(linea):
@@ -1247,7 +1394,7 @@ def _linea_de_planta(linea):
 
 def crear_cotizacion(empleada, nombre_cliente, celular="", datos=None,
                      cargos=None, confirmar=False, banderas=None,
-                     decision_cliente=None):
+                     decision_cliente=None, confirmar_fiscal=None):
     """Crea el sale.order (etiqueta LOCAL, diario de ventas normal) y el
     registro local. Devuelve el registro. El carrito, los renglones libres
     y el borrador se limpian solo si Odoo aceptó la orden.
@@ -1268,7 +1415,11 @@ def crear_cotizacion(empleada, nombre_cliente, celular="", datos=None,
     if not lineas and not lineas_libres:
         raise ValueError("Agrega al menos una planta a la venta.")
     extras = lineas_de_cargos(cargos)
-    partner = _cliente_id(nombre_cliente, celular, datos, decision_cliente)
+    # B.2-R1: el formulario puede traer todavía en pantalla los datos del
+    # cliente anterior (ver datos_del_cliente_actual) — ese eco no viaja.
+    datos = datos_del_cliente_actual(usuario, nombre_cliente, celular, datos)
+    partner = _cliente_id(nombre_cliente, celular, datos, decision_cliente,
+                          confirmar_fiscal)
     # El PP-XXXXX del lead pendiente (si hay): se resuelve ANTES de crear
     # la orden y ANTES de que _espejar_en_crm consuma el lead pendiente.
     pp_lead = _pp_del_lead_pendiente(usuario)
@@ -1378,7 +1529,7 @@ def _orden_vista_previa(usuario, partner, lineas, banderas=None):
 
 
 def pdf_vista_previa(empleada, nombre_cliente, celular="", datos=None, cargos=None,
-                     banderas=None, decision_cliente=None):
+                     banderas=None, decision_cliente=None, confirmar_fiscal=None):
     """El PDF de la cotización tal como saldría, sin crear la venta.
 
     Mismas líneas que crear_cotizacion —las plantas del carrito con el
@@ -1391,7 +1542,9 @@ def pdf_vista_previa(empleada, nombre_cliente, celular="", datos=None, cargos=No
     lineas_libres = lineas_de_renglones_planta(renglones_planta_de(usuario))
     if not lineas and not lineas_libres:
         raise ValueError("Agrega al menos una planta para ver la cotización.")
-    partner = _cliente_id(nombre_cliente, celular, datos, decision_cliente)
+    datos = datos_del_cliente_actual(usuario, nombre_cliente, celular, datos)
+    partner = _cliente_id(nombre_cliente, celular, datos, decision_cliente,
+                          confirmar_fiscal)
     orden = _orden_vista_previa(usuario, partner, [
         _linea_de_planta(l) for l in lineas]
         + lineas_libres + lineas_de_cargos(cargos), banderas)

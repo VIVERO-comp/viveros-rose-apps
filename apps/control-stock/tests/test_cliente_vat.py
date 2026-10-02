@@ -172,11 +172,15 @@ def test_cliente_sin_vat_tampoco_recibe_el_de_otro_por_autocompletado(odoo):
     assert odoo.partners[7]["email"] == "ana@jardines.com"
 
 
-def test_reusar_con_decision_tampoco_escribe_fiscales(odoo):
+def test_reusar_con_decision_tampoco_escribe_fiscales_sin_confirmar(odoo):
+    # R2 (2/10/2026): la elección usar-<id> con una cédula tecleada ya no
+    # descarta en silencio NI escribe en silencio — pide confirmación
+    # (ConfirmarDatoFiscal, probado abajo). Sin ella, nada fiscal se toca.
     odoo.partners[7] = {"name": "Zoila González", "phone": "6567-3062"}
-    ventas.buscar_o_crear_cliente("Beto Mendoza", "6567-3062",
-                                  decision="usar-7",
-                                  datos={"cedula": "8-123-4567"})
+    with pytest.raises(ventas.ConfirmarDatoFiscal):
+        ventas.buscar_o_crear_cliente("Beto Mendoza", "6567-3062",
+                                      decision="usar-7",
+                                      datos={"cedula": "8-123-4567"})
     assert not odoo.partners[7].get("vat")
     assert not odoo.partners[7].get("ref")
 
@@ -301,3 +305,217 @@ def test_el_formulario_pinta_las_dos_opciones_del_conflicto(cliente, odoo, monke
     assert 'value="usar-7"' in pagina
     assert 'value="nuevo"' in pagina
     assert "Zoila González" in pagina
+
+
+# --- R1 (2/10/2026): el borrador no aporta NADA del cliente anterior ---------
+
+def test_correo_y_direccion_tampoco_se_heredan_al_cambiar_de_cliente(db_limpia):
+    # Cambió el cliente y el formulario no trajo los campos: el borrador
+    # deja TODO dato de cliente en blanco; los cargos (envío) no son dato
+    # del cliente y sobreviven.
+    ventas.guardar_borrador("genesis", "Ana Vega", "6567-3062",
+                            datos={"ruc": "155712345-2-2021",
+                                   "cedula": "8-111-2222",
+                                   "correo": "ana@jardines.com",
+                                   "direccion": "Vía España",
+                                   "envio": "10"})
+    ventas.guardar_borrador("genesis", "Beto Mendoza", "", datos=None)
+    borrador = ventas.borrador_de("genesis")
+    for campo in ("ruc", "cedula", "correo", "direccion"):
+        assert borrador[campo] == "", campo
+    assert borrador["envio"] == "10"  # el cargo no es dato del cliente
+
+
+def test_el_eco_no_vuelve_en_los_posts_siguientes(db_limpia):
+    # venta.js reenvía el formulario completo a cada tecla, con los datos
+    # del cliente anterior todavía pintados en pantalla: el filtro
+    # (cliente_anterior) tiene que aguantar el SEGUNDO y el TERCER eco,
+    # no solo el primero.
+    eco = {"ruc": "155712345-2-2021", "cedula": "8-111-2222",
+           "correo": "ana@jardines.com", "direccion": "Vía España"}
+    ventas.guardar_borrador("genesis", "Ana Vega", "6567-3062", datos=eco)
+    ventas.guardar_borrador("genesis", "B", "6567-3062", datos=eco)
+    ventas.guardar_borrador("genesis", "Beto", "6567-3062", datos=eco)
+    ventas.guardar_borrador("genesis", "Beto Mendoza", "6567-3062", datos=eco)
+    borrador = ventas.borrador_de("genesis")
+    for campo in ("ruc", "cedula", "correo", "direccion"):
+        assert borrador[campo] == "", campo
+
+
+def test_telefono_completo_distinto_tambien_cuenta_como_cambio(db_limpia):
+    ventas.guardar_borrador("genesis", "Ana Vega", "6567-3062",
+                            datos={"ruc": "155712345-2-2021"})
+    ventas.guardar_borrador("genesis", "Ana Vega", "6400-1122",
+                            datos={"ruc": "155712345-2-2021"})
+    assert ventas.borrador_de("genesis")["ruc"] == ""
+
+
+def test_telefono_a_medio_teclear_no_es_cambio(db_limpia):
+    # El mismo cliente con el celular apenas empezado (venta.js guarda a
+    # cada tecla): nada se pierde.
+    ventas.guardar_borrador("genesis", "Ana Vega", "6567-3062",
+                            datos={"ruc": "155712345-2-2021"})
+    ventas.guardar_borrador("genesis", "Ana Vega", "64",
+                            datos={"ruc": "155712345-2-2021"})
+    assert ventas.borrador_de("genesis")["ruc"] == "155712345-2-2021"
+
+
+def test_crear_sin_recargar_tampoco_lleva_el_eco_a_odoo(db_limpia):
+    # La otra puerta del eco: cambiar el nombre y CREAR sin que la página
+    # se recargue — el formulario manda los datos del cliente anterior
+    # directo a la creación, sin pasar por el borrador.
+    ventas.guardar_borrador("genesis", "Ana Vega", "6567-3062",
+                            datos={"ruc": "155712345-2-2021",
+                                   "correo": "ana@jardines.com"})
+    filtrado = ventas.datos_del_cliente_actual(
+        "genesis", "Beto Mendoza", "6400-1122",
+        {"ruc": "155712345-2-2021", "cedula": "8-999-0000",
+         "correo": "ana@jardines.com"})
+    assert filtrado["ruc"] == ""                 # eco de Ana
+    assert filtrado["correo"] == ""              # eco de Ana
+    assert filtrado["cedula"] == "8-999-0000"    # tecleado para Beto
+
+
+# --- R2: dato fiscal en cliente existente solo con confirmación --------------
+
+def test_usar_cliente_sin_vat_con_cedula_pide_confirmacion(odoo):
+    odoo.partners[7] = {"name": "Zoila González", "phone": "6567-3062"}
+    with pytest.raises(ventas.ConfirmarDatoFiscal) as cayo:
+        ventas.buscar_o_crear_cliente("Beto Mendoza", "6567-3062",
+                                      decision="usar-7",
+                                      datos={"cedula": "8-123-4567"})
+    assert cayo.value.partner_id == 7
+    assert "guardar" in str(cayo.value)
+    assert "8-123-4567" in str(cayo.value)
+    assert "id 7" in str(cayo.value) and "Zoila González" in str(cayo.value)
+    # Sin confirmar, nada fiscal se escribió.
+    assert not odoo.partners[7].get("vat")
+    assert not odoo.partners[7].get("ref")
+
+
+def test_confirmar_si_guarda_el_dato_en_ese_cliente(odoo):
+    odoo.partners[7] = {"name": "Zoila González", "phone": "6567-3062"}
+    pid = ventas.buscar_o_crear_cliente("Beto Mendoza", "6567-3062",
+                                        decision="usar-7",
+                                        datos={"cedula": "8-123-4567"},
+                                        confirmar_fiscal="si")
+    assert pid == 7
+    assert odoo.partners[7]["vat"] == "8-123-4567"
+    assert odoo.partners[7]["ref"] == "8-123-4567"
+
+
+def test_confirmar_no_sigue_la_venta_sin_tocar_lo_fiscal(odoo):
+    odoo.partners[7] = {"name": "Zoila González", "phone": "6567-3062"}
+    pid = ventas.buscar_o_crear_cliente("Beto Mendoza", "6567-3062",
+                                        decision="usar-7",
+                                        datos={"cedula": "8-123-4567"},
+                                        confirmar_fiscal="no")
+    assert pid == 7
+    assert not odoo.partners[7].get("vat")
+    assert not odoo.partners[7].get("ref")
+
+
+def test_vat_distinto_pide_confirmacion_aparte_y_no_pisa_sin_ella(odoo):
+    odoo.partners[7] = {"name": "Zoila González", "phone": "6567-3062",
+                        "vat": "RUC-VIEJO", "ref": "RUC-VIEJO"}
+    with pytest.raises(ventas.ConfirmarDatoFiscal) as cayo:
+        ventas.buscar_o_crear_cliente("Beto Mendoza", "6567-3062",
+                                      decision="usar-7",
+                                      datos={"cedula": "8-123-4567"})
+    # El aviso dice que REEMPLAZA y muestra el valor que ya tiene.
+    assert "REEMPLAZAR" in str(cayo.value)
+    assert "RUC-VIEJO" in str(cayo.value)
+    assert odoo.partners[7]["vat"] == "RUC-VIEJO"  # intacto sin confirmar
+    pid = ventas.buscar_o_crear_cliente("Beto Mendoza", "6567-3062",
+                                        decision="usar-7",
+                                        datos={"cedula": "8-123-4567"},
+                                        confirmar_fiscal="si")
+    assert pid == 7
+    assert odoo.partners[7]["vat"] == "8-123-4567"  # pisado SOLO con el sí
+
+
+def test_vat_ya_igual_no_pide_nada(odoo):
+    odoo.partners[7] = {"name": "Zoila González", "phone": "6567-3062",
+                        "vat": "8-123-4567", "ref": "8-123-4567"}
+    pid = ventas.buscar_o_crear_cliente("Beto Mendoza", "6567-3062",
+                                        decision="usar-7",
+                                        datos={"cedula": "8-123-4567"})
+    assert pid == 7
+
+
+def test_sin_eleccion_explicita_lo_fiscal_sigue_prohibido(odoo):
+    # La reutilización AUTOMÁTICA (teléfono + nombre compatible) no pasa
+    # por R2: el autocompletado fiscal sigue excluido del todo.
+    odoo.partners[7] = {"name": "Beto Mendoza", "phone": "6567-3062"}
+    pid = ventas.buscar_o_crear_cliente("Beto Mendoza", "6567-3062",
+                                        datos={"cedula": "8-123-4567"},
+                                        confirmar_fiscal="si")
+    assert pid == 7
+    assert not odoo.partners[7].get("vat")
+    assert not odoo.partners[7].get("ref")
+
+
+# --- R3: sin teléfono, el nombre no reutiliza en silencio --------------------
+
+def test_sin_telefono_el_nombre_que_casa_no_se_reusa_solo(odoo):
+    odoo.partners[7] = {"name": "María López", "phone": ""}
+    with pytest.raises(ventas.ClienteAjeno) as cayo:
+        ventas.buscar_o_crear_cliente("maría lópez", "")
+    assert cayo.value.partner_id == 7
+    assert cayo.value.motivo == "nombre"
+    assert "Ya existe un cliente con ese nombre" in str(cayo.value)
+    assert len(odoo.partners) == 1  # nada creado sin la decisión
+
+
+def test_sin_telefono_usar_id_reusa_y_nuevo_crea_aparte(odoo):
+    odoo.partners[7] = {"name": "María López", "phone": ""}
+    assert ventas.buscar_o_crear_cliente("María López", "",
+                                         decision="usar-7") == 7
+    nuevo = ventas.buscar_o_crear_cliente("María López", "",
+                                          decision="nuevo")
+    assert nuevo != 7
+    assert len(odoo.partners) == 2
+
+
+def test_cotizaciones_tambien_avisa_por_nombre_sin_telefono(odoo):
+    odoo.partners[7] = {"name": "María López", "phone": ""}
+    with pytest.raises(ventas.ClienteAjeno):
+        cotizaciones._cliente_id("María López", "")
+
+
+# --- R4: ninguna opción viene preseleccionada ---------------------------------
+
+def test_los_radios_del_conflicto_no_traen_checked():
+    import pathlib
+
+    from app import main as app_main
+    plantilla = (pathlib.Path(app_main.__file__).parent
+                 / "plantillas" / "_cliente.html").read_text()
+    assert 'name="cliente_decision"' in plantilla
+    assert 'name="confirmar_fiscal"' in plantilla
+    assert "checked" not in plantilla
+
+
+def test_la_confirmacion_fiscal_se_pinta_sin_preseleccion(cliente, odoo, monkeypatch):
+    monkeypatch.delenv("LINEAR_API_KEY", raising=False)
+    for variable in ("ODOO_URL", "ODOO_DB", "ODOO_USER", "ODOO_PASSWORD"):
+        monkeypatch.setenv(variable, "prueba")
+    ventas.reiniciar_cache()
+
+    def partners_nada_mas(modelo, metodo, args, kw=None):
+        if modelo == "res.partner":
+            return OdooClientes().ejecutar(modelo, metodo, args, kw)
+        return []
+
+    monkeypatch.setattr(ventas, "_ejecutar", partners_nada_mas)
+    pagina = cliente.get("/venta/nueva", params={
+        "error": "x", "fiscal": "7", "fiscal_nombre": "Zoila González",
+        "fiscal_detalle": "Se va a guardar el RUC/Tax ID «8-123-4567» del "
+                          "cliente id 7 (Zoila González)."}).text
+    assert 'name="confirmar_fiscal"' in pagina
+    assert 'value="si"' in pagina and 'value="no"' in pagina
+    assert 'value="usar-7"' in pagina          # la elección viaja de vuelta
+    assert "8-123-4567" in pagina
+    bloque = pagina[pagina.index('id="confirmar-fiscal"'):]
+    bloque = bloque[:bloque.index("</div>")]
+    assert "checked" not in bloque

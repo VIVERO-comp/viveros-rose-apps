@@ -10,12 +10,15 @@
    pestaña Proyectos el 24/09/2026. #}
 <div class="seccion-titulo">Cliente</div>
 {% if conflicto_cliente %}
-{# El aviso B.2: el teléfono digitado ya es de otro cliente. Nada se funde
-   en silencio — la empleada marca una de las dos opciones y vuelve a
-   mandar el formulario (el POST viaja con cliente_decision). Mínimo y
+{# El aviso B.2: el cliente digitado choca con uno existente (por teléfono
+   o por nombre — R3). Nada se funde en silencio — la empleada marca una
+   de las dos opciones y vuelve a mandar el formulario (el POST viaja con
+   cliente_decision). NINGUNA viene preseleccionada (R4). Mínimo y
    funcional a propósito: el diseño fino viene en el lote de forms. #}
 <div class="aviso-error" id="conflicto-cliente">
-  <p style="margin:0 0 6px">Ese teléfono ya es de otro cliente
+  <p style="margin:0 0 6px">
+    {% if conflicto_cliente.motivo == "nombre" %}Ya existe un cliente con
+    ese nombre{% else %}Ese teléfono ya es de otro cliente{% endif %}
     (id {{ conflicto_cliente.id }}: {{ conflicto_cliente.nombre }}).</p>
   <label style="display:block">
     <input type="radio" name="cliente_decision" form="{{ form_cliente }}"
@@ -26,6 +29,28 @@
     <input type="radio" name="cliente_decision" form="{{ form_cliente }}"
            value="nuevo">
     Es otro cliente: crear uno nuevo con este nombre
+  </label>
+</div>
+{% endif %}
+{% if confirmar_fiscal %}
+{# La confirmación R2: ya se eligió usar un cliente existente y hay un
+   RUC/cédula tecleado en esta venta. El aviso dice exactamente QUÉ se va
+   a guardar y EN QUÉ cliente; sin confirmación no se escribe nada fiscal.
+   NINGUNA opción viene preseleccionada (R4). El hidden conserva la
+   elección usar-<id> para el reenvío. #}
+<div class="aviso-error" id="confirmar-fiscal">
+  <p style="margin:0 0 6px">{{ confirmar_fiscal.detalle }}</p>
+  <input type="hidden" name="cliente_decision" form="{{ form_cliente }}"
+         value="usar-{{ confirmar_fiscal.id }}">
+  <label style="display:block">
+    <input type="radio" name="confirmar_fiscal" form="{{ form_cliente }}"
+           value="si">
+    Sí: guardar ese dato en el cliente {{ confirmar_fiscal.nombre }}
+  </label>
+  <label style="display:block">
+    <input type="radio" name="confirmar_fiscal" form="{{ form_cliente }}"
+           value="no">
+    No: dejar al cliente como está (la venta sigue igual)
   </label>
 </div>
 {% endif %}

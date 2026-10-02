@@ -265,12 +265,13 @@ _variantes_telefono = ventas._variantes_telefono
 _dominio_telefono = ventas._dominio_telefono
 
 
-def _cliente_id(nombre, celular, datos=None, decision=None):
+def _cliente_id(nombre, celular, datos=None, decision=None, confirmar=None):
     # Sin celular_tal_cual: este módulo guarda el phone solo en dígitos (a
     # diferencia de Nueva Venta, que lo guarda tal cual lo digitó la
     # empleada): así un buscar_clientes posterior por cualquiera de las dos
     # variantes lo encuentra sin ambigüedad.
-    return ventas.buscar_o_crear_cliente(nombre, celular, datos, decision)
+    return ventas.buscar_o_crear_cliente(nombre, celular, datos, decision,
+                                         confirmar_fiscal=confirmar)
 
 
 def buscar_clientes(texto):
@@ -566,7 +567,8 @@ def _lineas_por_tipo(tipo, servicios, lineas_catalogo, cobro=None):
 
 def crear_cotizacion(empleada, tipo, nombre, celular, servicios,
                      lineas_catalogo=None, datos_cliente=None,
-                     cargos=None, cobro=None, decision_cliente=None):
+                     cargos=None, cobro=None, decision_cliente=None,
+                     confirmar_fiscal=None):
     """Crea la cotización de servicio en Odoo: cliente (por teléfono o
     nombre; se crea si no existe), sale.order con la plantilla del tipo y
     las líneas armadas con los servicios que la empleada describió (cada
@@ -584,7 +586,11 @@ def crear_cotizacion(empleada, tipo, nombre, celular, servicios,
     # líneas normales de la orden, así salen en la propuesta y la factura.
     lineas += ventas.lineas_de_cargos(cargos)
 
-    partner = _cliente_id(nombre, celular, datos_cliente, decision_cliente)
+    # B.2-R1: el eco del cliente anterior que siga en pantalla no viaja.
+    datos_cliente = ventas.datos_del_cliente_actual(
+        empleada["id"], nombre, celular, datos_cliente)
+    partner = _cliente_id(nombre, celular, datos_cliente, decision_cliente,
+                          confirmar_fiscal)
     # La orden nace primero y la oportunidad se resuelve después, con lo
     # que diga el espejo del CRM (¿cliente ya conocido?).
     oportunidad_id = None
@@ -783,7 +789,8 @@ def _lineas_personalizada(servicios, renglones, lineas_catalogo):
 
 def crear_personalizada(empleada, nombre, celular, lineas_catalogo=None,
                         renglones=None, datos_cliente=None, servicios=None,
-                        cargos=None, banderas=None, decision_cliente=None):
+                        cargos=None, banderas=None, decision_cliente=None,
+                        confirmar_fiscal=None):
     """La cotización personalizada: todo lo escribe la empleada. Va en tres
     secciones separadas, como las plantillas de los otros tipos (pedido del
     dueño 17/09/2026): las plantas y materiales del catálogo (con el precio
@@ -797,7 +804,11 @@ def crear_personalizada(empleada, nombre, celular, lineas_catalogo=None,
     lineas = _lineas_personalizada(servicios, renglones, lineas_catalogo)
     # Los cargos opcionales (envío a domicilio, instalación) al final.
     lineas += ventas.lineas_de_cargos(cargos)
-    partner = _cliente_id(nombre, celular, datos_cliente, decision_cliente)
+    # B.2-R1: el eco del cliente anterior que siga en pantalla no viaja.
+    datos_cliente = ventas.datos_del_cliente_actual(
+        empleada["id"], nombre, celular, datos_cliente)
+    partner = _cliente_id(nombre, celular, datos_cliente, decision_cliente,
+                          confirmar_fiscal)
     valores = {
         "partner_id": partner,
         "tipo_servicio": "general",
