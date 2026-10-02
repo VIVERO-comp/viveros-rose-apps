@@ -1,0 +1,273 @@
+/* Diseño Orquesta — la piel de la pestaña COMPRAS (pantallas 12, 13, 28 y
+   29 de docs/diseno-orquesta/). Solo el ASPECTO: ningún botón cambia de
+   función, ninguna ruta cambia; el DOM es el mismo de compras.html,
+   compras_recibir.html y _vistas_compras.html con la clase `cpd` en el
+   <body> como interruptor.
+
+   Se carga DESPUÉS de calendario.css y de diseno-base.css: los selectores
+   van todos bajo `body.cpd` (el prefijo propio de esta rama), así que no
+   le cambian nada a Control, Calendario, Proveedores ni a las otras ramas
+   que tocan los mismos CSS compartidos — este archivo es solo de Compras.
+
+   Los tokens neutros vienen de diseno-base.css (--d-*). El color de cada
+   columna/tarjeta NO vive acá: lo pone el servidor desde paleta.json
+   (compras.ESTADOS → col.color / col.chip) como variable inline
+   `--cpd-col` y como estilo del contador — acá no hay ni un hex de
+   estado puesto a mano. */
+
+/* ==================== la barra de arriba (pantalla 12) ================= */
+
+body.cpd .tablero{padding:18px 28px 24px;gap:12px}
+body.cpd .barra{border-bottom:0;padding-bottom:2px;gap:12px}
+body.cpd .barra h3{font-size:22px;font-weight:600;letter-spacing:-.01em}
+/* La hamburguesa: botón cuadrado de 44px como el diseño. */
+body.cpd .barra .hamb{
+  width:44px;height:44px;justify-content:center;padding:0;
+  border:1px solid var(--d-borde-boton);border-radius:var(--d-radio-boton);
+  background:#fff;
+}
+/* El segmento Tablero · Proveedores: la píldora partida del lienzo
+   (borde #CFCFCF, radio 18, la vista activa en gris). */
+body.cpd .segmento{
+  background:#fff;border:1px solid var(--d-borde-campo);
+  border-radius:18px;padding:0;gap:0;overflow:hidden;
+}
+body.cpd .segmento a{
+  height:36px;display:inline-flex;align-items:center;padding:0 16px;
+  font-size:14px;font-weight:400;color:var(--d-tinta);border-radius:0;
+}
+body.cpd .segmento a.on{
+  background:var(--d-gris-activo);color:var(--d-tinta);
+  font-weight:700;box-shadow:none;
+}
+/* El único botón negro: «+ Anotar compra», en píldora (h36, radio 18). */
+body.cpd .barra .btn.oro{
+  height:36px;padding:0 16px;border-radius:18px;font-size:14px;
+  font-weight:600;background:var(--d-tinta);border-color:var(--d-tinta);
+}
+/* Los botones grises de la barra (← Compras en Recibir). */
+body.cpd .barra .btn:not(.oro):not(.hamb){
+  height:36px;padding:0 14px;border-radius:var(--d-radio-boton);
+  border-color:var(--d-borde-campo);font-size:13px;
+}
+
+/* ==================== el tablero (pantalla 12) ========================= */
+
+body.cpd .ret-tablero{gap:12px}
+body.cpd .ret-col{
+  flex:0 0 276px;background:var(--d-col);border:none;
+  border-radius:var(--d-radio-col);padding:8px;gap:0;
+}
+body.cpd .ret-cab{border-bottom:0;padding:2px 2px 0;gap:0}
+body.cpd .ret-cab b{
+  font-size:14px;font-weight:700;text-transform:none;letter-spacing:0;
+  color:var(--d-tinta);
+}
+/* El puntito de color del título sobra: el color vive en el contador y en
+   el canto de las tarjetas (así lo pinta el lienzo). El markup se queda —
+   es quien documenta el color de la columna — y el CSS lo esconde. */
+body.cpd .ret-cab .pt-leyenda{display:none}
+/* El contador: pastilla de 22px con el pastel de la paleta (el estilo
+   inline lo pone el servidor con col.chip). */
+body.cpd .ret-cuenta{
+  display:inline-grid;place-items:center;min-width:22px;height:22px;
+  padding:0 6px;margin-left:6px;border:0;border-radius:11px;
+  font-size:12px;font-weight:600;
+}
+/* El pie de la columna sube a ser el hint bajo el título (en el HTML ya
+   va justo después de la cabecera). */
+body.cpd .ret-pie{padding:2px 2px 0;font-size:12.5px;color:var(--d-suave)}
+body.cpd .ret-lista{padding:8px 0 0;gap:8px}
+body.cpd .ret-lista.dropok{border-radius:var(--d-radio-tarjeta)}
+
+/* La tarjeta: blanca, radio 14, borde #EAEAEA y el canto izquierdo de
+   3px con el color de SU columna (--cpd-col, inline desde paleta.json).
+   Todas del mismo alto mínimo (78px, el alto fijo del lienzo; acá es
+   mínimo porque una compra puede traer más renglones y nada se recorta). */
+body.cpd .ret-tarjeta{
+  background:#fff;border:1px solid var(--d-borde-tarjeta);
+  border-left:3px solid var(--cpd-col,var(--d-borde-tarjeta));
+  border-radius:var(--d-radio-tarjeta);padding:9px 10px;min-height:78px;
+  display:flex;flex-direction:column;justify-content:space-between;gap:4px;
+}
+body.cpd .ret-tarjeta .t-cab b{font-size:13.5px;font-weight:600;line-height:1.3}
+body.cpd .ret-tarjeta .t-sub{gap:6px;margin-top:2px;font-size:12px;color:var(--d-suave)}
+/* Los chips de la tarjeta, redondos de 22px como los del lienzo. */
+body.cpd .chip-est{
+  display:inline-flex;align-items:center;height:22px;padding:0 8px;
+  border:0;border-radius:11px;background:var(--d-gris-activo);
+  color:#3F3F3F;font-size:11.5px;font-weight:600;line-height:1;
+}
+body.cpd .chip-est.chip-nadie{
+  background:transparent;border:1px dashed var(--d-borde-campo);
+  color:var(--d-suave);
+}
+/* «falta la orden en Odoo»: el chip rojo de la familia debe. */
+body.cpd .ret-tarjeta a.cmp-falta{
+  display:inline-flex;align-items:center;height:22px;padding:0 8px;
+  border-radius:11px;background:var(--d-rojo-fondo);color:var(--d-rojo);
+  font-size:11.5px;font-weight:600;text-decoration:none;
+}
+body.cpd .ret-tarjeta a.cmp-falta:hover{text-decoration:underline;text-underline-offset:2px}
+body.cpd .cmp-plata{font-size:11.5px;color:var(--d-tinta);font-weight:600}
+body.cpd .ret-tarjeta .eq-texto{font-size:12px;color:var(--d-suave)}
+body.cpd .hace-alerta{color:var(--d-rojo)}
+
+/* Los avisos, con los radios del diseño. */
+body.cpd .solo-lectura,body.cpd .aviso-ok,body.cpd .franja{border-radius:var(--d-radio-pil)}
+
+/* ==================== la compra abierta (pantalla 13) ================== */
+
+body.cpd .telon{background:rgba(17,17,17,.35)}
+body.cpd .panel-der{
+  width:min(480px,94vw);padding:20px 24px;gap:12px;
+  border-left:1px solid var(--d-borde);box-shadow:none;
+}
+body.cpd .panel-der .cab-panel{
+  top:-20px;margin:-20px -24px 0;padding:20px 24px 12px;
+  box-shadow:0 8px 10px -10px rgba(17,17,17,.3);
+}
+body.cpd .panel-der h4{font-size:20px;font-weight:700;line-height:1.2}
+body.cpd .panel-der .tenue{font-size:12.5px;font-weight:600;color:var(--d-suave)}
+/* La X del panel: botón cuadrado de 36px (mismo dibujo del lienzo). El
+   enlace es el «Cerrar» de siempre, solo que ahora es un icono. */
+body.cpd .cpd-x{
+  display:grid;place-items:center;width:36px;height:36px;flex:0 0 auto;
+  border:1px solid var(--d-borde-boton);border-radius:var(--d-radio-boton);
+  background:#fff;color:var(--d-tinta);text-decoration:none;padding:0;
+  font-size:0;
+}
+body.cpd .cpd-x:hover{background:var(--d-gris-activo)}
+/* Los renglones Columna / Proveedor / Cómo llega / Responsable / Orden:
+   la clave gris a la izquierda y el valor a la derecha, sin rayas. */
+body.cpd .panel-der .dato{
+  display:flex;justify-content:space-between;align-items:baseline;gap:16px;
+  border-bottom:0;padding:3px 0;font-size:14px;
+}
+body.cpd .panel-der .dato b{
+  font-size:13px;font-weight:400;color:var(--d-suave);
+  text-transform:none;letter-spacing:0;flex-shrink:0;
+}
+body.cpd .panel-der .dato span{text-align:right;min-width:0}
+/* Los títulos de sección (PRODUCTOS, ORDEN DE COMPRA…): mayúscula chica
+   con su raya arriba, como .d-sec del lienzo. */
+body.cpd .panel-der .campo-caja{gap:8px}
+body.cpd .panel-der .campo-caja > label{
+  font-size:12px;font-weight:600;letter-spacing:.08em;color:var(--d-suave);
+  border-top:1px solid var(--d-borde);padding-top:12px;
+}
+body.cpd .cmp-tabla{font-size:13px}
+body.cpd .cmp-tabla td{padding:6px 2px}
+/* La acción del panel («Crear la orden en Odoo» / «Registrar lo que
+   llegó»): el botón negro grande del lienzo — dentro del panel es EL paso
+   que toca ahora. */
+body.cpd .panel-der .btn.oro{
+  width:100%;height:52px;justify-content:center;font-size:16px;
+  font-weight:600;border-radius:var(--d-radio-pil);
+  background:var(--d-tinta);border-color:var(--d-tinta);
+}
+body.cpd .panel-der .acciones{gap:8px}
+body.cpd .panel-der .acciones form{display:block;width:100%}
+body.cpd .panel-der .btn:not(.oro):not(.cpd-x){
+  height:40px;padding:0 14px;border:1px solid var(--d-borde-campo);
+  border-radius:var(--d-radio-boton);font-size:13.5px;
+}
+body.cpd .panel-der .pie-nota{font-size:12.5px;color:var(--d-suave)}
+body.cpd .panel-der .err{font-size:12.5px}
+
+/* ==================== Recibir (la hoja de «Lo que llegó») ============== */
+
+body.cpd .cmp-hoja .campo-caja > label{
+  font-size:12px;font-weight:600;letter-spacing:.08em;color:var(--d-suave);
+}
+body.cpd .cmp-hoja .dato{border-bottom:0;padding:3px 0;font-size:14px;
+  display:flex;justify-content:space-between;gap:16px}
+body.cpd .cmp-hoja .dato b{
+  font-size:13px;font-weight:400;color:var(--d-suave);
+  text-transform:none;letter-spacing:0;flex-shrink:0;
+}
+body.cpd .cmp-hoja .dato span{text-align:right}
+body.cpd .cmp-hoja .btn.oro{
+  height:52px;padding:0 22px;font-size:15px;font-weight:600;
+  border-radius:var(--d-radio-pil);background:var(--d-tinta);
+  border-color:var(--d-tinta);
+}
+body.cpd .cmp-hoja .acciones .btn:not(.oro){
+  height:52px;padding:0 16px;border-radius:var(--d-radio-boton);
+  border-color:var(--d-borde-campo);font-size:13.5px;
+}
+
+/* ==================== el formulario de Anotar compra =================== */
+/* (No tiene pantalla propia en el lienzo: hereda la regla de formularios —
+   campos con el radio y el borde del diseño, botón negro al pie.) */
+
+body.cpd .modal{border-radius:var(--d-radio-col)}
+body.cpd .modal input.campo,body.cpd .modal select.sel{
+  border-color:var(--d-borde-campo);border-radius:var(--d-radio-boton);
+}
+body.cpd .modal .btn.oro{
+  height:48px;padding:0 20px;font-size:15px;font-weight:600;
+  border-radius:var(--d-radio-pil);background:var(--d-tinta);
+  border-color:var(--d-tinta);
+}
+
+/* ==================== el teléfono (pantallas 28 y 29) ================== */
+
+@media (max-width:767.98px){
+  /* Campos de escritura a 16px SIEMPRE (regla de la tanda: así iOS no hace
+     zoom al enfocar) — también los de la hoja de Recibir, que no viven ni
+     en .modal ni en .panel-der y se quedaban en 12.5px. */
+  body.cpd input.campo,body.cpd select.sel,body.cpd textarea.campo{
+    font-size:16px;padding:12px;
+  }
+  body.cpd input.campo.cmp-mini{width:76px;padding:12px 8px}
+
+  /* El segmento Tablero · Proveedores del teléfono, como la fila de
+     filtros de la pantalla 28: píldoras sueltas de 40px, la activa con el
+     borde negro de 2px. */
+  body.cpd .segmento.seg-movil{
+    background:none;border:0;border-radius:0;padding:0;gap:8px;
+    overflow:visible;justify-content:flex-start;
+  }
+  body.cpd .segmento.seg-movil a{
+    flex:0 1 auto;height:40px;display:inline-flex;align-items:center;
+    justify-content:center;padding:0 13px;font-size:14px;
+    border:1px solid var(--d-borde-campo);border-radius:20px;
+    background:#fff;color:var(--d-tinta);box-shadow:none;
+  }
+  body.cpd .segmento.seg-movil a.on{
+    border:2px solid var(--d-tinta);font-weight:700;background:#fff;
+  }
+
+  /* Las secciones apiladas: el título de columna en mayúscula chica con
+     su conteo, como «PEDIDAS, POR LLEGAR · 2». */
+  body.cpd .ret-tablero{gap:14px}
+  /* flex:0 0 auto deshace el 276px de computadora: acá el tablero es una
+     columna y esa base se volvía ALTO — cada sección medía 276px aunque
+     tuviera una sola tarjeta. */
+  body.cpd .ret-col{flex:0 0 auto;background:none;border-radius:0;padding:0}
+  body.cpd .ret-cab{padding:0 2px}
+  body.cpd .ret-cab b{
+    font-size:12px;font-weight:600;text-transform:uppercase;
+    letter-spacing:.08em;color:var(--d-suave);
+  }
+  body.cpd .ret-pie{padding:2px 2px 0}
+  body.cpd .ret-tarjeta{
+    border:1px solid #E4E4E4;
+    border-left:3px solid var(--cpd-col,#E4E4E4);
+    border-radius:12px;padding:10px 12px;min-height:0;
+  }
+
+  /* La barra única de arriba: el botón negro del teléfono, con el alto
+     táctil del lienzo. */
+  body.cpd .bm-negro{border-radius:var(--d-radio-boton);font-size:13px}
+
+  /* La compra abierta a pantalla completa (pantalla 29): el ancho de
+     480px es de computadora — acá el panel ocupa TODO (sin esto ganaba el
+     min(480px,94vw) de arriba y quedaba una tira de telón a la
+     izquierda); la X de 44px para el dedo. */
+  body.cpd .panel-der{width:100%;padding:16px;gap:12px}
+  body.cpd .panel-der .cab-panel{top:-16px;margin:-16px -16px 0;padding:16px 16px 10px}
+  body.cpd .cpd-x{width:44px;height:44px;border-radius:var(--d-radio-pil)}
+  body.cpd .panel-der .btn:not(.oro):not(.cpd-x){height:44px}
+}
