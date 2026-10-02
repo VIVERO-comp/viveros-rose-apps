@@ -1174,10 +1174,13 @@ def test_el_umbral_del_hace_lo_decide_python():
 
 def test_la_tarjeta_es_de_dos_lineas_sin_chip_de_interes(cliente, de_dueno):
     cuerpo = cliente.get("/control", params={"vista": "estado"}).text
-    # El interés dejó de ser chip: va como texto al inicio de la meta.
+    # T2 sigue en pie: el interés no es un chip-est de estado. Desde el
+    # diseño Orquesta (2/10/2026) va como su propio chip pastel
+    # (dc-chip-interes), con el color de su familia en paleta.json que
+    # compone Python (colores.chip_interes) — nunca un hex en la plantilla.
     assert '"chip-est">Plantas</span>' not in cuerpo
     t91 = cuerpo[cuerpo.index('data-ref="LEAD-91"'):][:1400]
-    assert "Plantas · " in t91
+    assert 'class="dc-chip-interes"' in t91 and ">Plantas</span>" in t91
     # El ref salió de la tarjeta (vive en la ficha) y el chat es 💬 solo.
     assert "LEAD-91 ·" not in t91
     assert 'aria-label="Abrir chat"' in t91 and "💬" in t91
