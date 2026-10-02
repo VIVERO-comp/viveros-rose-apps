@@ -17,6 +17,10 @@
    días de la vista, la posición de cada bloque, los solapes, las celdas del
    mes y hasta el enlace de cada control. La plantilla solo recorre. #}
 <link rel="stylesheet" href="/static/calendario.css?v={{ v_estaticos }}">
+{# Diseño Orquesta (2/10/2026): tipografía Geist y la capa base del
+   menú nuevo, DESPUÉS de calendario.css para ganar por orden. #}
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/diseno-base.css?v={{ v_estaticos }}">
 {# Cambiar de pestaña como una app (22/09/2026): pre-render al apoyar el
    dedo o pasar el mouse; Safari lo ignora sin romper nada. #}
 <script type="speculationrules">

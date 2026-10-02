@@ -26,6 +26,10 @@
    hay, cuánto se pidió, cuánto se recibió ya, si la entrada está cerrada y
    qué dañado hay anotado (`app/compra_odoo.py`). #}
 <link rel="stylesheet" href="/static/calendario.css?v={{ v_estaticos }}">
+{# Diseño Orquesta (2/10/2026): tipografía Geist y la capa base del
+   menú nuevo, DESPUÉS de calendario.css para ganar por orden. #}
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/diseno-base.css?v={{ v_estaticos }}">
 </head>
 <body class="{{ 'menu-oculto' if request.cookies.get('menu') == '0' }}">
 
