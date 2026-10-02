@@ -197,7 +197,7 @@ const desglose = document.getElementById("desglose");
 function envioEnVivo() {
   const marcado = document.querySelector('input[name="envio_opcion"]:checked');
   const campo = document.querySelector('.dato-cliente[name="envio"]');
-  const escrito = campo ? Math.max(parseFloat(campo.value) || 0, 0) : 0;
+  const escrito = campo ? Math.max(numeroDe(campo, 0), 0) : 0;
   if (!marcado) return { monto: escrito, nombre: "Envío a domicilio" };
   if (!marcado.value) return { monto: 0, nombre: "Envío a domicilio" };
   if (marcado.value === "personalizado") {
@@ -227,7 +227,7 @@ function pintarDesglose() {
       if (fila) fila.querySelector("span").textContent = envio.nombre;
     } else {
       const campo = document.querySelector(`.dato-cliente[name="${clave}"]`);
-      monto = campo ? Math.max(parseFloat(campo.value) || 0, 0) : 0;
+      monto = campo ? Math.max(numeroDe(campo, 0), 0) : 0;
     }
     if (fila) {
       fila.style.display = monto > 0 ? "" : "none";

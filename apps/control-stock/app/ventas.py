@@ -222,11 +222,21 @@ def opcion_envio(clave):
 
 
 def _monto_escrito(form):
+    """El monto de envío escrito a mano: vacío vale 0 (sin cargo). Un
+    texto o un negativo se RECHAZAN con aviso — antes caían a $0 en
+    silencio y la cotización salía sin el envío que se quiso cobrar
+    (2/10/2026). La coma es separador decimal, como en todos lados."""
     crudo = str(form.get("envio") or "").strip().replace(",", ".")
-    try:
-        return max(float(crudo), 0.0) if crudo else 0.0
-    except ValueError:
+    if not crudo:
         return 0.0
+    try:
+        valor = float(crudo)
+    except ValueError:
+        raise ValueError("El monto del envío no se entiende: "
+                         "escribe un número, como 12.50 o 12,50.")
+    if valor < 0:
+        raise ValueError("El monto del envío no puede ser negativo.")
+    return valor
 
 
 def resolver_envio(form):
@@ -240,14 +250,16 @@ def resolver_envio(form):
     if "envio_opcion" not in form:
         return {"envio": _monto_escrito(form)}
     eleccion = str(form.get("envio_opcion") or "").strip()
-    escrito = _monto_escrito(form)
     if eleccion == "personalizado":
         nota = str(form.get("envio_nota") or "").strip()[:120]
-        return {"envio": escrito, "envio_opcion": "personalizado",
-                "envio_nota": nota}
+        return {"envio": _monto_escrito(form),
+                "envio_opcion": "personalizado", "envio_nota": nota}
     if not opcion_envio(eleccion):
-        # Sin envío, o un valor que no existe: no se cobra nada.
+        # Sin envío, o un valor que no existe: no se cobra nada, y el
+        # campo del monto se ignora entero (ni se valida: con «Sin
+        # envío» lo escrito ahí no viaja a ninguna parte).
         return {"envio": 0.0, "envio_opcion": "", "envio_nota": ""}
+    escrito = _monto_escrito(form)
     monto = escrito if escrito > 0 else precios_envio()[eleccion]
     return {"envio": monto, "envio_opcion": eleccion, "envio_nota": ""}
 

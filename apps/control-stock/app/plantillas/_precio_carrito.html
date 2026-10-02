@@ -13,7 +13,7 @@
      que comprarla, así que el precio de venta no sirve ni de base ni de
      referencia (por eso tampoco va el ↺ de volver al de Odoo). #}
   <input class="monto{% if linea.precio_editado %} cambiado{% endif %}"
-         name="precio" type="number" min="0" step="0.01" inputmode="decimal"
+         name="precio" type="text" inputmode="decimal"
          value="{% if alquiler and not linea.precio_editado %}{% else %}{{ '%.2f' | format(linea.precio) }}{% endif %}"
          placeholder="0.00"
          aria-label="{{ 'Precio de alquiler por planta' if alquiler else 'Precio por unidad' }}"

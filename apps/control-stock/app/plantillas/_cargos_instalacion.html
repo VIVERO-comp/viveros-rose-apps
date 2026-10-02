@@ -9,7 +9,7 @@
   <div class="campo">
     <span>{{ cargo.nombre }} ($)</span>
     <input class="dato-cliente" name="{{ cargo.clave }}" form="{{ form_cargos }}"
-           value="{{ cargos[cargo.clave] or '' }}" type="number" step="0.01" min="0"
+           value="{{ cargos[cargo.clave] or '' }}" type="text"
            inputmode="decimal" placeholder="0.00" autocomplete="off"
            onfocus="this.select()">
   </div>

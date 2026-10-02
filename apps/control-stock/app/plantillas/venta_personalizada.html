@@ -129,8 +129,8 @@
                 >{{ sv.descripcion }}</textarea>
       <div class="servicio-pie">
         <label class="servicio-monto">Monto
-          <input name="servicio_monto" form="form-servicio" type="number"
-                 step="0.01" min="0" inputmode="decimal" placeholder="0.00"
+          <input name="servicio_monto" form="form-servicio" type="text"
+                 inputmode="decimal" placeholder="0.00"
                  value="{{ sv.monto }}">
         </label>
         <button class="quitar-servicio" type="button">Quitar</button>
@@ -163,12 +163,12 @@
       <div class="servicio-pie">
         <label class="servicio-monto">Cant
           <input class="servicio-cantidad" name="renglon_cantidad" form="form-servicio"
-                 type="number" step="1" min="1" inputmode="numeric"
+                 type="text" inputmode="decimal"
                  placeholder="1" value="{{ r.cantidad }}">
         </label>
         <label class="servicio-monto">Precio
-          <input name="renglon_precio" form="form-servicio" type="number"
-                 step="0.01" min="0" inputmode="decimal" placeholder="0.00"
+          <input name="renglon_precio" form="form-servicio" type="text"
+                 inputmode="decimal" placeholder="0.00"
                  value="{{ r.precio }}">
         </label>
         <button class="quitar-servicio" type="button">Quitar</button>
