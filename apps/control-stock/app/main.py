@@ -1207,6 +1207,7 @@ def venta(request: Request, error: str = "", lead: str = "",
                        + len(ventas.renglones_planta_de(usuario)))
         except Exception:
             pass
+    lista, aviso_lista = _lista_vender(request)
     return plantillas.TemplateResponse(request, "venta.html", {
         "lead_pendiente": ventas.lead_pendiente(usuario),
         # El menu de abajo muestra Fichas con la misma regla del principal.
@@ -1216,7 +1217,8 @@ def venta(request: Request, error: str = "", lead: str = "",
         "en_curso": en_curso,
         "tipos_servicio": [(t, cotizaciones.etiqueta_para_cotizar(t))
                           for t in cotizaciones.ORDEN_TIPOS],
-        "vender_lista": _lista_vender(request),
+        "vender_lista": lista,
+        "aviso_lista": aviso_lista,
     })
 
 
@@ -1259,37 +1261,46 @@ def _fila_venta(request, v):
 
 
 def _lista_vender(request):
-    """Ventas locales + cotizaciones de servicio, en UNA sola lista,
-    ordenada por número de orden de mayor a menor (la más nueva arriba).
+    """(filas, aviso): ventas locales + cotizaciones de servicio, en UNA
+    sola lista, ordenada por número de orden de mayor a menor (la más
+    nueva arriba) — y el aviso honesto si Odoo no contestó al armarla.
 
     Una CANCELADA no se pinta (dueño, 30/09/2026): el dato se queda
     intacto en Odoo (y en la tabla local, para una venta), solo deja de
     aparecer aquí. Un renglón sin número (todavía no llegó a Odoo) cae al
     fondo por construcción: `_numero_de_orden` devuelve None y la clave de
     orden lo trata como el más chico de todos, nunca intercalado."""
+    servicios, aviso = _cotizaciones_con_estado()
     filas = (
         [_fila_venta(request, v) for v in ventas.ventas_todas()
          if v["estado"] != "cancelada"]
-        + [{**c, "tipo": "servicio"} for c in _cotizaciones_con_estado()
+        + [{**c, "tipo": "servicio"} for c in servicios
            if not c["cancelada"]]
     )
     filas.sort(key=lambda f: (_numero_de_orden(f["orden"]) is not None,
                               _numero_de_orden(f["orden"]) or 0),
               reverse=True)
-    return filas
+    return filas, aviso
 
 
 def _cotizaciones_con_estado():
-    """Las cotizaciones locales con su estado REAL en Odoo (una sola
-    consulta para todas): facturada, cancelada o todavía cotización, y de
-    ahí si se puede editar. Si Odoo no contesta, la lista sale como
-    siempre, sin botón Editar (mejor sin botón que un botón que rompe)."""
+    """(filas, aviso): las cotizaciones locales con su estado REAL en Odoo
+    (una sola consulta para todas): facturada, cancelada o todavía
+    cotización, y de ahí si se puede editar. Si Odoo no contesta, la lista
+    sale como siempre, sin botón Editar (mejor sin botón que un botón que
+    rompe) — pero CON el aviso que lo dice: antes el `except` mudo dejaba
+    todas las cotizaciones «raras», sin Editar ni Quitar y sin una palabra
+    de por qué (2/10/2026)."""
     filas = cotizaciones.cotizaciones_todas()
     estados = {}
+    aviso = ""
     try:
         estados = cotizaciones.estados_en_odoo([c["orden_id"] for c in filas])
     except Exception:
-        pass
+        if any(c.get("orden_id") for c in filas):
+            aviso = ("Odoo no contesta en este momento: Editar y Quitar de "
+                     "las cotizaciones no están disponibles por ahora. "
+                     "Recarga en un rato.")
     resultado = []
     for c in filas:
         estado = estados.get(c["orden_id"])
@@ -1301,7 +1312,7 @@ def _cotizaciones_con_estado():
             "editable": bool(estado and estado["editable"]),
             "nombre_pdf": ventas.nombre_de_pdf(c["orden"].replace("/", "-"), c["cliente"]),
         })
-    return resultado
+    return resultado, aviso
 
 
 @app.post("/venta/lead/quitar")

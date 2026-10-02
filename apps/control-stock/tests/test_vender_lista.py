@@ -231,3 +231,43 @@ def test_quitar_reusa_el_mismo_camino_que_cancelar(monkeypatch):
     monkeypatch.setattr(ventas, "_actualizar_venta", lambda n, **kw: None)
     ventas.cancelar(1)
     assert llamadas == [999, 999]
+
+
+# ---------------------------------------------------------------------------
+# Nº4 (2/10/2026): Odoo caído al armar la lista NO deja mudo al empleado
+# ---------------------------------------------------------------------------
+
+def test_odoo_caido_avisa_que_editar_y_quitar_no_estan(cliente, monkeypatch):
+    """Antes el `except Exception: pass` dejaba todas las cotizaciones de
+    servicio sin Editar/Quitar sin una palabra: el empleado creía que la
+    cotización «estaba rara». Ahora la lista sale igual (sin los botones,
+    mejor sin botón que un botón que rompe) pero CON el aviso honesto."""
+    _insertar_servicio(601, "S00049", cliente="ServicioSinBotones")
+
+    def revienta(_ids):
+        raise RuntimeError("Odoo no contesta")
+
+    monkeypatch.setattr(cotizaciones, "estados_en_odoo", revienta)
+    pagina = cliente.get("/venta").text
+    assert "ServicioSinBotones" in pagina          # la lista no se rompe
+    assert "Odoo no contesta en este momento" in pagina
+    assert "Editar y Quitar" in pagina
+
+
+def test_con_odoo_sano_no_sale_el_aviso(cliente, odoo):
+    _insertar_servicio(601, "S00049")
+    odoo.ordenes[601] = {"state": "sale", "invoice_ids": []}
+    pagina = cliente.get("/venta").text
+    assert "Odoo no contesta en este momento" not in pagina
+
+
+def test_sin_cotizaciones_no_hay_aviso_aunque_odoo_este_caido(cliente,
+                                                              monkeypatch):
+    """Sin ni una cotización con orden no hay botones que perder: el aviso
+    sería ruido."""
+    def revienta(_ids):
+        raise RuntimeError("Odoo no contesta")
+
+    monkeypatch.setattr(cotizaciones, "estados_en_odoo", revienta)
+    pagina = cliente.get("/venta").text
+    assert "Odoo no contesta en este momento" not in pagina
