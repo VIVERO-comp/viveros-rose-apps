@@ -1135,9 +1135,15 @@ def _fecha_venta(iso):
     return momento.strftime("%d/%m/%Y ") + hora
 
 
-def _redirigir_venta(error=None, nueva=False):
+def _redirigir_venta(error=None, nueva=False, conflicto=None):
     destino = ("/venta/nueva" if nueva else "/venta") + \
         (f"?error={quote(error)}" if error else "")
+    if conflicto:
+        # El aviso de «ese teléfono ya es de otro cliente» (B.2): el id y
+        # el nombre viajan en la URL para que /venta/nueva pinte las dos
+        # opciones (usar ese cliente o crear uno nuevo) junto al error.
+        destino += (f"&conflicto={conflicto['id']}"
+                    f"&conflicto_nombre={quote(conflicto['nombre'])}")
     return RedirectResponse(destino, status_code=303)
 
 
@@ -1340,7 +1346,8 @@ def _resultados_con_stock(resultados):
 
 
 @app.get("/venta/nueva")
-def venta_nueva(request: Request, q: str = "", error: str = ""):
+def venta_nueva(request: Request, q: str = "", error: str = "",
+                conflicto: str = "", conflicto_nombre: str = ""):
     # El formulario de la venta: cliente (nombre y celular), buscador en
     # vivo para añadir plantas, la lista con cantidades y el total.
     usuario = request.state.empleada["id"]
@@ -1357,6 +1364,12 @@ def venta_nueva(request: Request, q: str = "", error: str = ""):
         # desde Retail aterriza directo en este formulario (23/09/2026).
         "lead_pendiente": ventas.lead_pendiente(usuario),
         "error_venta": error or None,
+        # El aviso B.2 tras el redirect de un ClienteAjeno: con esto el
+        # bloque Cliente pinta las dos opciones (usar ese cliente o crear
+        # uno nuevo) y el POST siguiente viaja con cliente_decision.
+        "conflicto_cliente": ({"id": int(conflicto),
+                               "nombre": conflicto_nombre.strip()[:120]}
+                              if conflicto.isdigit() else None),
     }
     if contexto["ventas_activo"]:
         try:
@@ -1428,6 +1441,19 @@ def _datos_cliente_del_form(form):
         return None
     return {campo: (form.get(campo) or "").strip()[:120]
             for campo in ventas.CAMPOS_EXTRA}
+
+
+def _decision_cliente_del_form(form):
+    """La elección de la empleada tras el aviso de «ese teléfono ya es de
+    otro cliente» (B.2): "usar-<id>" o "nuevo". Cualquier otra cosa cuenta
+    como sin decidir — el aviso vuelve a salir, nunca se adivina."""
+    decision = (form.get("cliente_decision") or "").strip()
+    return decision if re.fullmatch(r"nuevo|usar-\d+", decision) else None
+
+
+def _conflicto_de(error):
+    """El dict que pinta el aviso con las dos opciones en _cliente.html."""
+    return {"id": error.partner_id, "nombre": error.nombre_existente}
 
 
 def _leads_para_elegir():
@@ -1649,7 +1675,11 @@ async def venta_vista_previa(request: Request):
         pdf = ventas.pdf_vista_previa(
             empleada, form.get("cliente", ""), form.get("celular", ""),
             datos_cliente, _cargos_del_form(form),
-            banderas=ventas.banderas_de(form, False))
+            banderas=ventas.banderas_de(form, False),
+            decision_cliente=_decision_cliente_del_form(form))
+    except ventas.ClienteAjeno as error:
+        return _redirigir_venta(str(error), nueva=True,
+                                conflicto=_conflicto_de(error))
     except ValueError as error:
         return _redirigir_venta(str(error), nueva=True)
     except Exception as error:
@@ -1690,7 +1720,11 @@ async def venta_cotizar(request: Request):
         registro = ventas.crear_cotizacion(
             request.state.empleada, form.get("cliente", ""), form.get("celular", ""),
             _datos_cliente_del_form(form), _cargos_del_form(form),
-            banderas=ventas.banderas_de(form, False))
+            banderas=ventas.banderas_de(form, False),
+            decision_cliente=_decision_cliente_del_form(form))
+    except ventas.ClienteAjeno as error:
+        return _redirigir_venta(str(error), nueva=True,
+                                conflicto=_conflicto_de(error))
     except ValueError as error:
         return _redirigir_venta(str(error), nueva=True)
     except Exception as error:
@@ -1721,7 +1755,11 @@ async def venta_vender(request: Request):
         registro = ventas.crear_cotizacion(
             request.state.empleada, form.get("cliente", ""), form.get("celular", ""),
             _datos_cliente_del_form(form), _cargos_del_form(form), confirmar=True,
-            banderas=ventas.banderas_de(form, False))
+            banderas=ventas.banderas_de(form, False),
+            decision_cliente=_decision_cliente_del_form(form))
+    except ventas.ClienteAjeno as error:
+        return _redirigir_venta(str(error), nueva=True,
+                                conflicto=_conflicto_de(error))
     except ValueError as error:
         return _redirigir_venta(str(error), nueva=True)
     except Exception as error:
@@ -1816,7 +1854,14 @@ async def venta_servicio_crear(request: Request, tipo: str):
         registro = cotizaciones.crear_cotizacion(
             request.state.empleada, tipo, form.get("cliente", ""),
             form.get("celular", ""), servicios, lineas_catalogo, datos_cliente,
-            cargos=_cargos_del_form(form), cobro=cobro)
+            cargos=_cargos_del_form(form), cobro=cobro,
+            decision_cliente=_decision_cliente_del_form(form))
+    except ventas.ClienteAjeno as error:
+        contexto = _contexto_servicio(request, tipo, error=str(error),
+                                      servicios=servicios)
+        contexto["conflicto_cliente"] = _conflicto_de(error)
+        return plantillas.TemplateResponse(
+            request, "venta_servicio.html", contexto, status_code=200)
     except ValueError as error:
         return plantillas.TemplateResponse(
             request, "venta_servicio.html",
@@ -1906,7 +1951,15 @@ async def venta_personalizada_crear(request: Request):
             form.get("celular", ""), lineas_catalogo, renglones,
             _datos_cliente_del_form(form), servicios,
             cargos=_cargos_del_form(form),
-            banderas=ventas.banderas_de(form, True))
+            banderas=ventas.banderas_de(form, True),
+            decision_cliente=_decision_cliente_del_form(form))
+    except ventas.ClienteAjeno as error:
+        contexto = _contexto_personalizada(request, error=str(error),
+                                           renglones=renglones,
+                                           servicios=servicios)
+        contexto["conflicto_cliente"] = _conflicto_de(error)
+        return plantillas.TemplateResponse(
+            request, "venta_personalizada.html", contexto)
     except ValueError as error:
         return plantillas.TemplateResponse(
             request, "venta_personalizada.html",
@@ -2147,7 +2200,11 @@ async def venta_pagar(request: Request):
         registro = ventas.crear_cotizacion(
             request.state.empleada, form.get("cliente", ""), form.get("celular", ""),
             _datos_cliente_del_form(form), _cargos_del_form(form),
-            banderas=ventas.banderas_de(form, False))
+            banderas=ventas.banderas_de(form, False),
+            decision_cliente=_decision_cliente_del_form(form))
+    except ventas.ClienteAjeno as error:
+        return _redirigir_venta(str(error), nueva=True,
+                                conflicto=_conflicto_de(error))
     except ValueError as error:
         return _redirigir_venta(str(error), nueva=True)
     except Exception as error:

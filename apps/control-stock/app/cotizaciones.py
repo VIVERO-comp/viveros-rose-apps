@@ -257,49 +257,20 @@ def _id_producto_personalizado():
 # siquiera está en el modelo res.partner).
 # ---------------------------------------------------------------------------
 
-def _variantes_telefono(digitos):
-    """"65673062" -> {"65673062", "6567-3062"}: sin acceso a SQL crudo por
-    XML-RPC (a diferencia de _buscar_o_crear_cliente del addon, que sí lo
-    tiene y normaliza con regexp_replace), un simple ilike no encuentra un
-    número guardado con guion si se busca sin él. Cubre las dos formas en
-    que hoy quedan los teléfonos en Odoo: tal cual lo digitó la empleada
-    (Nueva Venta, con guion) o solo dígitos (lo que este módulo guarda)."""
-    ultimos = digitos[-8:]
-    variantes = {ultimos}
-    if len(ultimos) == 8:
-        variantes.add(f"{ultimos[:4]}-{ultimos[4:]}")
-    return variantes
+# La lógica vive en ventas.buscar_o_crear_cliente desde el B.2 (2/10/2026):
+# UNA sola puerta para Nueva Venta, las cotizaciones de servicio y la
+# personalizada. Los alias se quedan porque cot_lead.py (el amarre
+# lead <-> orden) arma sus variantes de teléfono con este nombre.
+_variantes_telefono = ventas._variantes_telefono
+_dominio_telefono = ventas._dominio_telefono
 
 
-def _dominio_telefono(digitos):
-    condiciones = [["phone", "ilike", variante] for variante in _variantes_telefono(digitos)]
-    return ["|"] * (len(condiciones) - 1) + condiciones
-
-
-def _cliente_id(nombre, celular, datos=None):
-    nombre = (nombre or "").strip()
-    valores_extra = ventas.valores_de_cliente(datos)
-    digitos = re.sub(r"\D", "", celular or "")
-    if digitos:
-        ids = ventas._ejecutar(
-            "res.partner", "search", [_dominio_telefono(digitos)], {"limit": 1})
-        if ids:
-            ventas.completar_cliente(ids[0], valores_extra)
-            return ids[0]
-    if nombre:
-        ids = ventas._ejecutar(
-            "res.partner", "search", [[["name", "=ilike", nombre]]], {"limit": 1})
-        if ids:
-            ventas.completar_cliente(ids[0], valores_extra)
-            return ids[0]
-    valores = {"name": nombre, "customer_rank": 1, "company_type": "person",
-               **valores_extra}
-    if digitos:
-        # Solo dígitos (a diferencia de Nueva Venta, que guarda tal cual lo
-        # digitó la empleada): así un buscar_clientes posterior por
-        # cualquiera de las dos variantes lo encuentra sin ambigüedad.
-        valores["phone"] = digitos
-    return ventas._ejecutar("res.partner", "create", [valores])
+def _cliente_id(nombre, celular, datos=None, decision=None):
+    # Sin celular_tal_cual: este módulo guarda el phone solo en dígitos (a
+    # diferencia de Nueva Venta, que lo guarda tal cual lo digitó la
+    # empleada): así un buscar_clientes posterior por cualquiera de las dos
+    # variantes lo encuentra sin ambigüedad.
+    return ventas.buscar_o_crear_cliente(nombre, celular, datos, decision)
 
 
 def buscar_clientes(texto):
@@ -595,7 +566,7 @@ def _lineas_por_tipo(tipo, servicios, lineas_catalogo, cobro=None):
 
 def crear_cotizacion(empleada, tipo, nombre, celular, servicios,
                      lineas_catalogo=None, datos_cliente=None,
-                     cargos=None, cobro=None):
+                     cargos=None, cobro=None, decision_cliente=None):
     """Crea la cotización de servicio en Odoo: cliente (por teléfono o
     nombre; se crea si no existe), sale.order con la plantilla del tipo y
     las líneas armadas con los servicios que la empleada describió (cada
@@ -613,7 +584,7 @@ def crear_cotizacion(empleada, tipo, nombre, celular, servicios,
     # líneas normales de la orden, así salen en la propuesta y la factura.
     lineas += ventas.lineas_de_cargos(cargos)
 
-    partner = _cliente_id(nombre, celular, datos_cliente)
+    partner = _cliente_id(nombre, celular, datos_cliente, decision_cliente)
     # La orden nace primero y la oportunidad se resuelve después, con lo
     # que diga el espejo del CRM (¿cliente ya conocido?).
     oportunidad_id = None
@@ -812,7 +783,7 @@ def _lineas_personalizada(servicios, renglones, lineas_catalogo):
 
 def crear_personalizada(empleada, nombre, celular, lineas_catalogo=None,
                         renglones=None, datos_cliente=None, servicios=None,
-                        cargos=None, banderas=None):
+                        cargos=None, banderas=None, decision_cliente=None):
     """La cotización personalizada: todo lo escribe la empleada. Va en tres
     secciones separadas, como las plantillas de los otros tipos (pedido del
     dueño 17/09/2026): las plantas y materiales del catálogo (con el precio
@@ -826,7 +797,7 @@ def crear_personalizada(empleada, nombre, celular, lineas_catalogo=None,
     lineas = _lineas_personalizada(servicios, renglones, lineas_catalogo)
     # Los cargos opcionales (envío a domicilio, instalación) al final.
     lineas += ventas.lineas_de_cargos(cargos)
-    partner = _cliente_id(nombre, celular, datos_cliente)
+    partner = _cliente_id(nombre, celular, datos_cliente, decision_cliente)
     valores = {
         "partner_id": partner,
         "tipo_servicio": "general",

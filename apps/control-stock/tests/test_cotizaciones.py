@@ -481,13 +481,27 @@ def test_a_un_cliente_existente_solo_se_le_llenan_los_huecos(odoo):
 
 
 def test_cliente_se_busca_primero_por_telefono(odoo):
-    odoo.partners[55] = {"name": "Nombre viejo", "phone": "6567-3062", "category_id": []}
+    # B.2 (2/10/2026): el teléfono BUSCA, pero con el MISMO nombre (tras
+    # normalizar) reusa; con otro nombre ya no reusa en silencio — eso lo
+    # cubren las pruebas de tests/test_cliente_vat.py.
+    odoo.partners[55] = {"name": "José Pérez", "phone": "6567-3062", "category_id": []}
     registro = cotizaciones.crear_cotizacion(
-        {"id": "g", "nombre": "Génesis"}, "mantenimiento", "Otro nombre",
+        {"id": "g", "nombre": "Génesis"}, "mantenimiento", "  jose  perez ",
         "6567-3062", [{"texto": "Contrato mensual", "monto": "250"}], [])
     orden = odoo.ordenes[registro["orden_id"]]
     assert orden["vals"]["partner_id"] == 55
     assert len(odoo.partners) == 1  # no creó un cliente nuevo
+    assert odoo.partners[55]["name"] == "José Pérez"  # no se renombra
+
+
+def test_telefono_de_otro_cliente_no_se_reusa_en_silencio(odoo):
+    odoo.partners[55] = {"name": "Nombre viejo", "phone": "6567-3062", "category_id": []}
+    with pytest.raises(ventas.ClienteAjeno, match="otro cliente"):
+        cotizaciones.crear_cotizacion(
+            {"id": "g", "nombre": "Génesis"}, "mantenimiento", "Otro nombre",
+            "6567-3062", [{"texto": "Contrato mensual", "monto": "250"}], [])
+    assert not odoo.ordenes  # ni orden ni cliente nuevo sin la decisión
+    assert len(odoo.partners) == 1
 
 
 def test_cliente_nuevo_se_etiqueta_por_tipo(odoo):

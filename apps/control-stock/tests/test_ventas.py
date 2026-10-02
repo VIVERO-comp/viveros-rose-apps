@@ -100,8 +100,15 @@ class OdooFalso:
 
     # ---- partners ----
     def res_partner_search(self, args, kw):
-        nombre = args[0][0][2].lower()
-        return [i for i, n in self.partners.items() if n.lower() == nombre]
+        # Desde el B.2 la puerta única busca PRIMERO por teléfono (dominio
+        # OR con "|"); este fake guarda solo nombres, así que esa búsqueda
+        # no encuentra a nadie y el flujo sigue al nombre, como antes.
+        if args[0] and args[0][0] == "|":
+            return []
+        campo, _op, valor = args[0][0]
+        if campo != "name":
+            return []
+        return [i for i, n in self.partners.items() if n.lower() == str(valor).lower()]
 
     def res_partner_create(self, args, kw):
         nuevo = self._nuevo_id()

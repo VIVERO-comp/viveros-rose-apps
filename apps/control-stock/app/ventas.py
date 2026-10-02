@@ -726,12 +726,43 @@ COBRO_PLANTA = "planta"
 COBROS = (COBRO_TOTAL, COBRO_PLANTA)
 
 
+def _sin_fiscales_heredados(usuario, nombre, datos):
+    """La regla B.2 sobre el borrador: el borrador es UNA fila por empleada
+    y sobrevivía al cambio de cliente, así que un cliente nuevo nacía con
+    el RUC/cédula del anterior. Cuando el nombre digitado deja de ser el
+    mismo cliente (nombres_compatibles contra el guardado), los campos
+    fiscales que vengan ARRASTRADOS se vacían:
+
+    - `datos` en None (el formulario no trajo los campos): se devuelve un
+      dict que vacía SOLO los fiscales del borrador, conservando el resto
+      (cargos, correo…) como hasta hoy.
+    - `datos` con el MISMO valor fiscal que ya estaba guardado: es el eco
+      del prellenado, no algo tecleado ahora — se vacía.
+    - `datos` con un valor fiscal DISTINTO al guardado: se tecleó en esta
+      venta, se respeta.
+    """
+    fila = borrador_de(usuario)
+    if not fila["nombre"] or nombres_compatibles(nombre, fila["nombre"]):
+        return datos
+    fiscales_form = ("ruc", "cedula")
+    if datos is None:
+        if not any(fila.get(campo) for campo in fiscales_form):
+            return None
+        return {**{campo: fila.get(campo) or "" for campo in CAMPOS_EXTRA},
+                **{campo: "" for campo in fiscales_form}}
+    return {**datos, **{campo: "" for campo in fiscales_form
+                        if (datos.get(campo) or "") == (fila.get(campo) or "")
+                        and (fila.get(campo) or "")}}
+
+
 def guardar_borrador(usuario, nombre, celular, servicios=None, datos=None,
                      renglones=None):
     """El formulario en curso (nombre, celular, los datos opcionales del
     cliente y los renglones que ya escribió): sobrevive a los reloads de
     agregar/quitar plantas (venta.js lo manda mientras se escribe). Los
-    argumentos en None dejan lo guardado como estaba."""
+    argumentos en None dejan lo guardado como estaba — salvo los campos
+    fiscales cuando cambió el cliente (ver _sin_fiscales_heredados)."""
+    datos = _sin_fiscales_heredados(usuario, nombre, datos)
     crudo = None if servicios is None else json.dumps(servicios, ensure_ascii=False)
     libres = None if renglones is None else json.dumps(renglones, ensure_ascii=False)
     extra = None if datos is None else json.dumps(
@@ -1055,10 +1086,25 @@ def valores_de_cliente(datos):
     return valores
 
 
+# Los campos FISCALES de res.partner (Tax ID y la referencia donde viaja
+# la cédula). Regla B.2 (2/10/2026): estos dos NUNCA se escriben por
+# autocompletado silencioso sobre un cliente existente — solo nacen con un
+# cliente nuevo, desde lo tecleado en la venta en curso. Un vat/ref pegado
+# al cliente equivocado es un dato fiscal de OTRA persona en su factura.
+CAMPOS_FISCALES = ("vat", "ref")
+
+
 def completar_cliente(partner_id, valores):
     """Rellena en Odoo SOLO los campos que estén vacíos: lo que Odoo ya
     tiene manda (es la fuente de verdad) y nunca se sobreescribe con lo que
-    se digitó en la app."""
+    se digitó en la app.
+
+    Los campos fiscales (vat, ref) quedan FUERA aunque vengan en `valores`
+    y estén vacíos en Odoo (regla B.2): un RUC/cédula solo se escribe al
+    CREAR el cliente — nunca "se le completa" a uno existente, porque el
+    dato pudo quedar arrastrado en el formulario desde otro cliente."""
+    valores = {campo: valor for campo, valor in (valores or {}).items()
+               if campo not in CAMPOS_FISCALES}
     if not valores:
         return
     actual = _ejecutar("res.partner", "read", [[partner_id]],
@@ -1069,25 +1115,123 @@ def completar_cliente(partner_id, valores):
         _ejecutar("res.partner", "write", [[partner_id], faltantes])
 
 
-def _cliente_id(nombre, celular="", datos=None):
-    """El partner para la orden: el genérico "Cliente Local" si no dieron
-    nombre; si lo dieron, se busca por nombre exacto y se crea si no existe
-    (con el celular y los datos opcionales que hayan llenado)."""
+def _normalizar_nombre(nombre):
+    """Para comparar nombres de cliente: sin acentos, en minúsculas, sin
+    espacios dobles ni de orilla. "  José  Pérez " == "jose perez"."""
+    plano = unicodedata.normalize("NFD", str(nombre or ""))
+    plano = "".join(c for c in plano if not unicodedata.combining(c))
+    return " ".join(plano.lower().split())
+
+
+def nombres_compatibles(a, b):
+    """Iguales tras normalizar — NADA de parecidos ni parciales (regla
+    B.2): cualquier otra diferencia es "no compatible" y no se reusa en
+    silencio."""
+    na, nb = _normalizar_nombre(a), _normalizar_nombre(b)
+    return bool(na) and na == nb
+
+
+class ClienteAjeno(ValueError):
+    """El teléfono digitado ya es de un cliente existente con OTRO nombre.
+
+    No se reusa en silencio (el pedido saldría a nombre de otra persona) ni
+    se crea un duplicado a ciegas: la empleada decide — el formulario
+    muestra el aviso con las dos opciones (usar ese cliente, o crear uno
+    nuevo) y reenvía con `cliente_decision`. Subclase de ValueError para
+    que cualquier ruta vieja que solo atrape ValueError muestre al menos
+    el aviso en vez de un error 500."""
+
+    def __init__(self, partner_id, nombre_existente):
+        self.partner_id = int(partner_id)
+        self.nombre_existente = str(nombre_existente or "")
+        super().__init__(
+            f"Ese teléfono ya es de otro cliente (id {self.partner_id}: "
+            f"{self.nombre_existente}). Marca si es el mismo cliente o uno nuevo.")
+
+
+def _variantes_telefono(digitos):
+    """"65673062" -> {"65673062", "6567-3062"}: sin acceso a SQL crudo por
+    XML-RPC (a diferencia de _buscar_o_crear_cliente del addon, que sí lo
+    tiene y normaliza con regexp_replace), un simple ilike no encuentra un
+    número guardado con guion si se busca sin él. Cubre las dos formas en
+    que hoy quedan los teléfonos en Odoo: tal cual lo digitó la empleada
+    (Nueva Venta, con guion) o solo dígitos (cotizaciones de servicio)."""
+    ultimos = digitos[-8:]
+    variantes = {ultimos}
+    if len(ultimos) == 8:
+        variantes.add(f"{ultimos[:4]}-{ultimos[4:]}")
+    return variantes
+
+
+def _dominio_telefono(digitos):
+    condiciones = [["phone", "ilike", variante] for variante in _variantes_telefono(digitos)]
+    return ["|"] * (len(condiciones) - 1) + condiciones
+
+
+def buscar_o_crear_cliente(nombre, celular="", datos=None, decision=None,
+                           celular_tal_cual=False):
+    """LA única puerta para resolver el cliente de una orden (B.2,
+    2/10/2026) — la usan Nueva Venta, las cotizaciones de servicio y la
+    personalizada, para que la regla sea UNA:
+
+    - El teléfono BUSCA y SUGIERE, no identifica solo: si los últimos 8
+      dígitos calzan con un cliente existente, se reusa SOLO si el nombre
+      digitado es el mismo tras normalizar (nombres_compatibles). Con otro
+      nombre se levanta ClienteAjeno y decide la empleada.
+    - `decision` viene del formulario tras ese aviso: "usar-<id>" reutiliza
+      ese cliente a sabiendas; "nuevo" crea un cliente aparte (sí, con el
+      mismo teléfono: dos personas pueden compartirlo) sin fundirlo con
+      nadie.
+    - Reusar un cliente nunca le escribe vat/ref (completar_cliente los
+      excluye); crear uno nuevo lleva SOLO lo tecleado en esta venta.
+    - `celular_tal_cual` guarda el phone como lo digitó la empleada (Nueva
+      Venta, histórico con guion); sin él se guardan solo los dígitos
+      (cotizaciones de servicio, histórico también).
+    """
     nombre = (nombre or "").strip()
     valores_extra = valores_de_cliente(datos)
-    if not nombre:
-        return _id_config("VENTA_CLIENTE_LOCAL")
-    ids = _ejecutar("res.partner", "search", [[["name", "=ilike", nombre]]], {"limit": 1})
-    if ids:
-        completar_cliente(ids[0], valores_extra)
-        return ids[0]
+    digitos = re.sub(r"\D", "", celular or "")
+    crear_aparte = decision == "nuevo"
+    if digitos:
+        ids = _ejecutar(
+            "res.partner", "search", [_dominio_telefono(digitos)], {"limit": 1})
+        if ids:
+            existente = _ejecutar("res.partner", "read", [[ids[0]]],
+                                  {"fields": ["name"]})[0]
+            if nombres_compatibles(nombre, existente.get("name")):
+                # El mismo cliente: se reusa con SU nombre de Odoo tal cual
+                # (no se renombra con lo digitado — lo guardado manda).
+                completar_cliente(ids[0], valores_extra)
+                return ids[0]
+            if decision == f"usar-{ids[0]}":
+                completar_cliente(ids[0], valores_extra)
+                return ids[0]
+            if not crear_aparte:
+                raise ClienteAjeno(ids[0], existente.get("name"))
+    if nombre and not crear_aparte:
+        ids = _ejecutar("res.partner", "search",
+                        [[["name", "=ilike", nombre]]], {"limit": 1})
+        if ids:
+            completar_cliente(ids[0], valores_extra)
+            return ids[0]
     valores = {"name": nombre, "customer_rank": 1, "company_type": "person",
                **valores_extra}
-    if (celular or "").strip():
+    if digitos:
         # "phone" y no "mobile": este Odoo no tiene el campo mobile en
         # res.partner (crear con mobile reventaba la venta con cliente nuevo).
-        valores["phone"] = celular.strip()
+        valores["phone"] = (celular or "").strip() if celular_tal_cual else digitos
     return _ejecutar("res.partner", "create", [valores])
+
+
+def _cliente_id(nombre, celular="", datos=None, decision=None):
+    """El partner para la orden de Nueva Venta: el genérico "Cliente Local"
+    si no dieron nombre; si lo dieron, la puerta única
+    (buscar_o_crear_cliente), con el phone tal cual lo digitó la empleada."""
+    nombre = (nombre or "").strip()
+    if not nombre:
+        return _id_config("VENTA_CLIENTE_LOCAL")
+    return buscar_o_crear_cliente(nombre, celular, datos, decision,
+                                  celular_tal_cual=True)
 
 
 def _linea_de_planta(linea):
@@ -1102,7 +1246,8 @@ def _linea_de_planta(linea):
 
 
 def crear_cotizacion(empleada, nombre_cliente, celular="", datos=None,
-                     cargos=None, confirmar=False, banderas=None):
+                     cargos=None, confirmar=False, banderas=None,
+                     decision_cliente=None):
     """Crea el sale.order (etiqueta LOCAL, diario de ventas normal) y el
     registro local. Devuelve el registro. El carrito, los renglones libres
     y el borrador se limpian solo si Odoo aceptó la orden.
@@ -1123,7 +1268,7 @@ def crear_cotizacion(empleada, nombre_cliente, celular="", datos=None,
     if not lineas and not lineas_libres:
         raise ValueError("Agrega al menos una planta a la venta.")
     extras = lineas_de_cargos(cargos)
-    partner = _cliente_id(nombre_cliente, celular, datos)
+    partner = _cliente_id(nombre_cliente, celular, datos, decision_cliente)
     # El PP-XXXXX del lead pendiente (si hay): se resuelve ANTES de crear
     # la orden y ANTES de que _espejar_en_crm consuma el lead pendiente.
     pp_lead = _pp_del_lead_pendiente(usuario)
@@ -1233,7 +1378,7 @@ def _orden_vista_previa(usuario, partner, lineas, banderas=None):
 
 
 def pdf_vista_previa(empleada, nombre_cliente, celular="", datos=None, cargos=None,
-                     banderas=None):
+                     banderas=None, decision_cliente=None):
     """El PDF de la cotización tal como saldría, sin crear la venta.
 
     Mismas líneas que crear_cotizacion —las plantas del carrito con el
@@ -1246,7 +1391,7 @@ def pdf_vista_previa(empleada, nombre_cliente, celular="", datos=None, cargos=No
     lineas_libres = lineas_de_renglones_planta(renglones_planta_de(usuario))
     if not lineas and not lineas_libres:
         raise ValueError("Agrega al menos una planta para ver la cotización.")
-    partner = _cliente_id(nombre_cliente, celular, datos)
+    partner = _cliente_id(nombre_cliente, celular, datos, decision_cliente)
     orden = _orden_vista_previa(usuario, partner, [
         _linea_de_planta(l) for l in lineas]
         + lineas_libres + lineas_de_cargos(cargos), banderas)
