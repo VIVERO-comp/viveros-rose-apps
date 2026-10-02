@@ -118,3 +118,69 @@ def test_servicio_con_odoo_caido_el_banner_de_arriba_sigue(cliente,
     }).text
     assert '<div class="aviso-error">' in pagina
     assert 'class="error-campo"' not in pagina
+
+
+# ---------------------------------------------------------------------------
+# Nueva venta (/venta/cotizar y /venta/vender: el POST redirige, el campo
+# viaja en la URL y el GET pinta el error debajo del campo)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def odoo_vacio(monkeypatch):
+    """Vender encendido con un Odoo que contesta vacío: suficiente para
+    pintar /venta/nueva sin red y sin tumbar el formulario."""
+    monkeypatch.setattr(ventas, "configurado", lambda: True)
+    monkeypatch.setattr(ventas, "_ejecutar", lambda *a, **k: [])
+
+
+def test_nueva_venta_cargo_ilegible_redirige_con_su_campo(cliente,
+                                                          odoo_vacio):
+    respuesta = cliente.post("/venta/cotizar", data={
+        "cliente": "Ana", "celular": "", "instalacion": "12x",
+    }, follow_redirects=False)
+    assert respuesta.status_code == 303
+    destino = respuesta.headers["location"]
+    assert destino.startswith("/venta/nueva?error=")
+    assert "campo=instalacion" in destino
+
+
+def test_nueva_venta_el_error_sale_debajo_del_campo_y_conserva_el_borrador(
+        cliente, odoo_vacio):
+    """El viaje completo: el beacon ya había guardado el borrador (como en
+    la pantalla real), el POST rebota y el GET repinta lo escrito con el
+    error debajo de «Instalación» — sin banner arriba. La venta lleva un
+    renglón de planta personalizada: sin nada en el carrito la sección de
+    cargos ni se pinta."""
+    ventas.agregar_renglon_planta("genesis", "Croton de otro vivero", "1", "5")
+    cliente.post("/venta/borrador", data={
+        "cliente": "Ana", "celular": "6677-8899", "instalacion": "12x"})
+    respuesta = cliente.post("/venta/cotizar", data={
+        "cliente": "Ana", "celular": "6677-8899", "instalacion": "12x",
+    }, follow_redirects=True)
+    texto = respuesta.text
+    assert 'value="12x"' in texto                # lo tecleado sigue
+    assert 'value="Ana"' in texto
+    assert 'class="error-campo"' in texto
+    assert "Instalación" in texto and "no se entiende" in texto
+    tramo = texto[texto.index('name="instalacion"'):]
+    assert "aria-invalid" in tramo[:400]
+    assert '<div class="aviso-error">' not in texto
+
+
+def test_guardar_venta_tambien_viaja_con_su_campo(cliente, odoo_vacio):
+    respuesta = cliente.post("/venta/vender", data={
+        "cliente": "Ana", "celular": "", "mantenimiento": "abc",
+    }, follow_redirects=False)
+    assert respuesta.status_code == 303
+    assert "campo=mantenimiento" in respuesta.headers["location"]
+
+
+def test_nueva_venta_error_sin_campo_conserva_el_banner(cliente, odoo_vacio):
+    """«Agrega al menos una planta» no es de un campo: banner de siempre."""
+    respuesta = cliente.post("/venta/cotizar", data={
+        "cliente": "Ana", "celular": "",
+    }, follow_redirects=True)
+    texto = respuesta.text
+    assert '<div class="aviso-error">' in texto
+    assert "Agrega al menos una planta" in texto
+    assert 'class="error-campo"' not in texto

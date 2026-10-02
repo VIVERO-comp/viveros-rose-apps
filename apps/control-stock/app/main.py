@@ -1135,9 +1135,15 @@ def _fecha_venta(iso):
     return momento.strftime("%d/%m/%Y ") + hora
 
 
-def _redirigir_venta(error=None, nueva=False, conflicto=None, fiscal=None):
+def _redirigir_venta(error=None, nueva=False, conflicto=None, fiscal=None,
+                     campo=""):
     destino = ("/venta/nueva" if nueva else "/venta") + \
         (f"?error={quote(error)}" if error else "")
+    if error and campo:
+        # Regla 5 (2/10/2026): el campo que falló viaja con el error, para
+        # que el GET pinte el mensaje debajo de ese campo y aterrice ahí
+        # (autofocus) en vez del banner en el tope.
+        destino += f"&campo={quote(campo)}"
     if conflicto:
         # El aviso de cliente ajeno (B.2, por teléfono o por nombre): el
         # id, el nombre, el teléfono y el motivo viajan en la URL para que
@@ -1367,7 +1373,7 @@ def _resultados_con_stock(resultados):
 
 
 @app.get("/venta/nueva")
-def venta_nueva(request: Request, q: str = "", error: str = "",
+def venta_nueva(request: Request, q: str = "", error: str = "", campo: str = "",
                 conflicto: str = "", conflicto_nombre: str = "",
                 conflicto_telefono: str = "",
                 conflicto_motivo: str = "", fiscal: str = "",
@@ -1388,6 +1394,9 @@ def venta_nueva(request: Request, q: str = "", error: str = "",
         # desde Retail aterriza directo en este formulario (23/09/2026).
         "lead_pendiente": ventas.lead_pendiente(usuario),
         "error_venta": error or None,
+        # Regla 5: el campo que falló (viajó en el redirect del POST); la
+        # plantilla pinta el error debajo de él y lo enfoca.
+        "campo_error": (campo or "").strip()[:60] if error else "",
         # El aviso B.2 tras el redirect de un ClienteAjeno: con esto el
         # bloque Cliente pinta las dos opciones (usar ese cliente o crear
         # uno nuevo) y el POST siguiente viaja con cliente_decision.
@@ -1810,6 +1819,8 @@ async def venta_cotizar(request: Request):
     except ventas.ConfirmarDatoFiscal as error:
         return _redirigir_venta(str(error), nueva=True,
                                 fiscal=_fiscal_de(error))
+    except ventas.ErrorDeCampo as error:
+        return _redirigir_venta(str(error), nueva=True, campo=error.campo)
     except ValueError as error:
         return _redirigir_venta(str(error), nueva=True)
     except Exception as error:
@@ -1853,6 +1864,8 @@ async def venta_vender(request: Request):
     except ventas.ConfirmarDatoFiscal as error:
         return _redirigir_venta(str(error), nueva=True,
                                 fiscal=_fiscal_de(error))
+    except ventas.ErrorDeCampo as error:
+        return _redirigir_venta(str(error), nueva=True, campo=error.campo)
     except ValueError as error:
         return _redirigir_venta(str(error), nueva=True)
     except Exception as error:
