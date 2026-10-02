@@ -1197,3 +1197,13 @@ input.campo.cmp-mini{width:72px;padding:7px 8px;text-align:right}
 /* El error de la regla 5, debajo del campo que falló (la franja de
    arriba queda para los errores sin campo). */
 .error-campo{margin:4px 0 0;font-size:12.5px;font-weight:600;color:var(--critico);line-height:1.4}
+
+/* ---------- Nº13 (2/10/2026): campos de ESCRITURA a 16px en el teléfono.
+   Bajo 16px, iOS hace zoom al enfocar y descuadra la vista. El bump que ya
+   existía solo cubría .modal y .panel-der: el buscador de la barra y los
+   campos de las tablas de Compras y Recibir (cant-/costo-, llego-/roto-,
+   clase .cmp-mini) quedaban fuera. Solo campos donde se escribe. ---------- */
+@media (max-width:767.98px){
+  .buscador input{font-size:16px}
+  input.campo.cmp-mini{font-size:16px;width:84px}
+}

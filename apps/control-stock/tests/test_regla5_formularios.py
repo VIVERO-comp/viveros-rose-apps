@@ -553,3 +553,26 @@ def test_servicio_y_personalizada_tambien_guardan_el_post(cliente,
         "renglon_texto": ["X"], "renglon_cantidad": ["1"],
         "renglon_precio": ["zz"], "renglon_descripcion": [""]})
     assert ventas.borrador_de("genesis")["nombre"] == "Cliente Pers"
+
+
+# ---------------------------------------------------------------------------
+# Nº13: los campos donde se ESCRIBE van a 16px en el teléfono (si no, iOS
+# hace zoom al enfocar). Mismo estilo de prueba que
+# test_compras_vistas.test_el_css_reparte_las_dos_copias: se lee el CSS.
+# ---------------------------------------------------------------------------
+
+def test_los_campos_de_escritura_van_a_16px_en_movil():
+    css = open("app/static/styles.css").read()
+    movil = css.split("@media (max-width: 899px){")[-1]
+    assert ".fila-planta .precio-unit input.monto{font-size:16px" in movil
+    assert ".fila-planta .qty-mini input.valor{font-size:16px" in movil
+    # El precio del carrito móvil subió de 14px a 16px.
+    assert ".precio-unit input.monto{width:84px;height:36px;font-size:16px}" in css
+    assert ".precio-unit input.monto{width:84px;height:36px;font-size:14px}" not in css
+
+    cal = open("app/static/calendario.css").read()
+    movil = cal.split("@media (max-width:767.98px){")[-1]
+    assert ".buscador input{font-size:16px}" in movil
+    # Cubre cant-/costo- (Compras) y llego-/roto- (Recibir): los cuatro
+    # usan la clase .cmp-mini.
+    assert "input.campo.cmp-mini{font-size:16px" in movil
