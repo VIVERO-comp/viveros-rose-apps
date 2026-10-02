@@ -21,6 +21,10 @@
    menú nuevo, DESPUÉS de calendario.css para ganar por orden. #}
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/diseno-base.css?v={{ v_estaticos }}">
+{# La piel Orquesta de ESTA pantalla (pantallas 01/02/17/18 del lienzo):
+   solo aspecto, cargada al final para ganar por orden. Los colores de los
+   tipos siguen llegando de Python (paleta.json) en estilos en línea. #}
+<link rel="stylesheet" href="/static/diseno-calendario.css?v={{ v_estaticos }}">
 {# Cambiar de pestaña como una app (22/09/2026): pre-render al apoyar el
    dedo o pasar el mouse; Safari lo ignora sin romper nada. #}
 <script type="speculationrules">
@@ -145,11 +149,11 @@
   </aside>
 
   <div class="tablero">
-    {# La barra única del teléfono (artefacto aprobado, 23/09/2026); en
-       computadora el CSS la esconde y manda la .barra de abajo. #}
-    {% with bm_titulo='Calendario',
-            bm_accion_url=(movil.ligas.nueva if puede_escribir else None),
-            bm_accion_texto='+ Actividad' %}{% include '_barra_movil.html' %}{% endwith %}
+    {# La barra única del teléfono; en computadora el CSS la esconde y
+       manda la .barra de abajo. Desde el diseño Orquesta (pantalla 17) el
+       botón negro de crear ya no va aquí: es la barra fija de abajo
+       (.cal-bar-nueva), a lo ancho. #}
+    {% with bm_titulo='Calendario' %}{% include '_barra_movil.html' %}{% endwith %}
     {# Una sola fila de controles: antes eran dos (marca y buscador arriba,
        fechas y vistas abajo) y el calendario empezaba a media pantalla. #}
     <div class="barra">
@@ -214,6 +218,25 @@
       {% endif %}
     </div>
 
+    {# Los 4 filtros de tipos, como chips bajo la barra (diseño Orquesta,
+       pantalla 01). Antes vivían en la columna derecha; son los MISMOS
+       enlaces que arma el servidor con el conjunto de tipos apagados.
+       En el celular la fila se esconde, como se escondían antes. #}
+    <div class="fila-filtros">
+      <span class="ff-rotulo">Ver:</span>
+      <div class="cal-filtros">
+        {% for f in filtros %}
+        <a class="filtro {{ 'off' if not f.encendido }}" href="{{ f.liga }}"
+           style="--c:{{ f.color }}"
+           title="{{ 'Ocultar' if f.encendido else 'Mostrar' }} {{ f.nombre|lower }}">
+          <span class="cbx" style="--c:{{ f.color }}">
+            {% if f.encendido %}<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 12.8 5 5 10-11"/></svg>{% endif %}
+          </span>{{ f.nombre }}
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+
     {% if error %}<div class="franja"><b>Ups.</b> <span>{{ error }}</span></div>{% endif %}
     {% if aviso %}<div class="aviso-ok">{{ aviso }}</div>{% endif %}
 
@@ -255,12 +278,16 @@
       {# La agenda del día lista SOLO las actividades (artefacto aprobado,
          23/09/2026): sin rejilla de horas vacías; el orden lo trae Python. #}
       <div class="mov-lista">
+        {# La tarjeta del diseño (pantalla 17): primera línea en negrita
+           del color del tipo (hora · tipo), debajo el cliente, debajo el
+           detalle tenue. Colores en línea desde Python, como siempre. #}
         {% for a in movil.actividades %}
         <a class="mov-act {{ 'hecha' if a.estado == 'hecha' }} {{ 'cancel' if a.estado == 'cancel' }}"
-           style="border-left-color:{{ a.color }};background:{{ a.fondo }}"
+           style="border-left-color:{{ a.color }}"
            href="{{ ligas.cerrar }}&abrir={{ a.id }}">
-          <span class="mov-tt">{{ cal.nombre_de_tipo(a.tipo) }} — {{ a.cliente }}</span>
-          <span class="mov-det">{{ a.rango }}{% if a.lugar %} · {{ a.lugar }}{% endif %} · {{ a.resp }}</span>
+          <span class="mov-tt" style="color:{{ a.color }}">{{ a.rango }} · {{ cal.nombre_de_tipo(a.tipo) }}</span>
+          <span class="mov-cli">{{ a.cliente }}</span>
+          <span class="mov-det">{% if a.lugar %}{{ a.lugar }} · {% endif %}{{ a.resp }}</span>
           <span class="etiquetas">
             {% if a.atrasada %}<span class="etq at">atrasada</span>{% endif %}
             {% if a.estado == 'hecha' %}<span class="etq ok">terminada</span>{% endif %}
@@ -376,21 +403,8 @@
          Filtros + Leads de servicio + Por entregar viven aquí, no en el
          menú lateral: se ven aunque la hamburguesa esconda el menú. #}
       <aside class="cal-lado">
-        {# Los 4 filtros, como los calendarios de Google Calendar: cada
-           toque es un enlace que el servidor ya armó con el conjunto de
-           tipos apagados que deja. #}
-        <div class="cal-filtros">
-          <div class="leads-tit">Filtros</div>
-          {% for f in filtros %}
-          <a class="filtro {{ 'off' if not f.encendido }}" href="{{ f.liga }}"
-             title="{{ 'Ocultar' if f.encendido else 'Mostrar' }} {{ f.nombre|lower }}">
-            <span class="cbx" style="--c:{{ f.color }}">
-              {% if f.encendido %}<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 12.8 5 5 10-11"/></svg>{% endif %}
-            </span>{{ f.nombre }}
-          </a>
-          {% endfor %}
-        </div>
-
+        {# Los filtros se mudaron a la fila de chips bajo la barra (diseño
+           Orquesta, pantalla 01); aquí quedan las cajas de leads. #}
         {{ pinta_leads_lado() }}
       </aside>
     </div>
@@ -408,6 +422,13 @@
   </div>
 </div>
 
+{# El botón negro de abajo del celular (diseño Orquesta, pantalla 17):
+   + Nueva actividad a lo ancho, fijo. En computadora el CSS lo esconde
+   (ahí manda el de la barra). Es el MISMO enlace de siempre. #}
+{% if puede_escribir %}
+<div class="cal-bar-nueva"><a class="btn" href="{{ movil.ligas.nueva }}">+ Nueva actividad</a></div>
+{% endif %}
+
 {# En el teléfono el menú es el MISMO navbar de abajo que el resto de la
    app (pedido del dueño, 22/09/2026); el CSS lo esconde en computadora,
    donde manda el sidebar .lado de esta pantalla. #}
@@ -417,15 +438,28 @@
    crear actividad es el botón negro de la barra de arriba. #}
 
 {% if abierta %}
-{# Ficha de la actividad: la pinta el servidor y cada acción es un formulario. #}
+{# Ficha de la actividad: la pinta el servidor y cada acción es un
+   formulario. Piel Orquesta (pantallas 02 y 18): en computadora, panel a
+   la derecha con la banda del color del tipo arriba y la X cuadrada; en
+   el celular, pantalla completa con «← Atrás» y la banda en esa barrita.
+   El color viaja en línea desde paleta.json, como todos los tipos. #}
 <a class="telon" href="{{ ligas.cerrar }}" aria-label="Cerrar"></a>
-<aside class="panel-der" role="dialog" aria-label="Ficha de actividad">
-  <div class="cab-panel">
-    <span class="chip on" style="background:{{ cal.color_de(abierta.tipo) }};color:#fff">
-      <span class="pt" style="background:#fff"></span>{{ cal.nombre_de_tipo(abierta.tipo) }}</span>
-    <a class="btn chico" href="{{ ligas.cerrar }}">Cerrar</a>
+<aside class="panel-der" role="dialog" aria-label="Ficha de actividad"
+       style="border-top-color:{{ cal.color_de(abierta.tipo) }}">
+  <div class="pan-atras" style="border-bottom-color:{{ cal.color_de(abierta.tipo) }}">
+    <a class="pan-volver" href="{{ ligas.cerrar }}" aria-label="Atrás"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></a>
+    <span>Actividad</span>
   </div>
-  <h4>{{ abierta.cliente }}</h4>
+  <div class="cab-panel">
+    <div class="pan-tit">
+      <h4>{{ cal.nombre_de_tipo(abierta.tipo) }} · {{ abierta.cliente }}</h4>
+      <div class="pan-meta">
+        <span class="chip-tipo" style="--c:{{ cal.color_de(abierta.tipo) }}">{{ cal.nombre_de_tipo(abierta.tipo) }}</span>
+        <span>{{ cal.dmy(abierta.fecha) }} · {{ abierta.hora }} · {{ (abierta.dur ~ ' min') if abierta.dur < 60 else ((abierta.dur // 60) ~ ' h') }}</span>
+      </div>
+    </div>
+    <a class="pan-x" href="{{ ligas.cerrar }}" aria-label="Cerrar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></a>
+  </div>
   <div class="etiquetas">
     {% if cal.esta_atrasada(abierta, hoy) %}<span class="etq at">atrasada</span>{% endif %}
     <span class="etq {{ 'ok' if abierta.estado == 'hecha' }} {{ 'curso' if abierta.estado == 'curso' }}">
@@ -470,8 +504,10 @@
       </select></div>
     <div class="dato"><b>En Linear</b>
       <span class="mono">{{ abierta.ref }}{% if abierta.url %} · <a href="{{ abierta.url }}" target="_blank" rel="noopener">abrir</a>{% endif %}</span></div>
+    {# Guardar es secundario: el único botón negro de la ficha es terminar
+       (decisión del lote Orquesta, igual que en las otras ramas). #}
     {% if puede_tocar_abierta %}
-    <button class="btn oro" type="submit" style="margin-top:10px" data-guardando="Guardando…">Guardar cambios</button>
+    <button class="btn" type="submit" style="margin-top:10px" data-guardando="Guardando…">Guardar cambios</button>
     {% endif %}
   </form>
 
@@ -511,21 +547,24 @@
   </div>
   {% endif %}
 
+  {# Las acciones, piel Orquesta (pantalla 02): UN botón negro grande —
+     terminar —, las demás en gris, y lo delicado (cancelar) dentro de
+     «Más opciones». Son los MISMOS formularios de siempre. #}
   {% if puede_tocar_abierta %}
   <div class="acciones">
-    {% if abierta.estado == 'hecha' %}
-      <form method="post" action="/calendario/actividad/{{ abierta.id }}/estado?volver={{ volver|urlencode }}">
-        <input type="hidden" name="estado" value="pend">
-        <button class="btn" type="submit">Reabrir</button></form>
-    {% else %}
-      <form method="post" action="/calendario/actividad/{{ abierta.id }}/estado?volver={{ volver|urlencode }}"
+    {% if abierta.estado != 'hecha' %}
+      <form class="f-principal" method="post" action="/calendario/actividad/{{ abierta.id }}/estado?volver={{ volver|urlencode }}"
             {% if lead_abierta and cierra_entrega and lead_abierta.saldo_conocido and lead_abierta.saldo > 0 %}
             data-confirmar="{{ lead_abierta.nombre }} debe {{ lead_abierta.saldo_texto }}.
 
 Marcar Hecha manda el lead a Entregado con la etiqueta «Cobrar saldo»: NO pasa a Ganado hasta que entre ese pago."
             {% endif %}>
         <input type="hidden" name="estado" value="hecha">
-        <button class="btn oro" type="submit">✓ {{ 'Hecha · entregado' if (lead_abierta and cierra_entrega) else 'Marcar terminada' }}</button></form>
+        <button class="btn oro pan-principal" type="submit">✓ {{ 'Hecha · entregado' if (lead_abierta and cierra_entrega) else 'Marcar terminada' }}</button></form>
+    {% else %}
+      <form method="post" action="/calendario/actividad/{{ abierta.id }}/estado?volver={{ volver|urlencode }}">
+        <input type="hidden" name="estado" value="pend">
+        <button class="btn" type="submit">Reabrir</button></form>
     {% endif %}
     {% if abierta.estado not in ('curso', 'hecha') %}
       <form method="post" action="/calendario/actividad/{{ abierta.id }}/estado?volver={{ (volver ~ '&abrir=' ~ abierta.id)|urlencode }}">
@@ -537,12 +576,17 @@ Marcar Hecha manda el lead a Entregado con la etiqueta «Cobrar saldo»: NO pasa
         <input type="hidden" name="estado" value="pend">
         <button class="btn" type="submit">Reactivar</button></form>
     {% else %}
-      <form method="post" action="/calendario/actividad/{{ abierta.id }}/estado?volver={{ volver|urlencode }}"
-            data-confirmar="Cancelar “{{ cal.nombre_de_tipo(abierta.tipo) }} — {{ abierta.cliente }}”.
+      <details class="mas-opciones">
+        <summary>Más opciones</summary>
+        <div>
+          <form method="post" action="/calendario/actividad/{{ abierta.id }}/estado?volver={{ volver|urlencode }}"
+                data-confirmar="Cancelar “{{ cal.nombre_de_tipo(abierta.tipo) }} — {{ abierta.cliente }}”.
 
 No se borra nada: el issue {{ abierta.ref }} queda en Linear marcado como Cancelado, con quién y cuándo. Desaparece de las pendientes, pero se puede reabrir.">
-        <input type="hidden" name="estado" value="cancel">
-        <button class="btn peligro" type="submit">Cancelar actividad</button></form>
+            <input type="hidden" name="estado" value="cancel">
+            <button class="btn peligro" type="submit">Cancelar actividad</button></form>
+        </div>
+      </details>
     {% endif %}
   </div>
 
@@ -555,6 +599,7 @@ No se borra nada: el issue {{ abierta.ref }} queda en Linear marcado como Cancel
   </form>
   {% endif %}
 
+  <div class="sec-tit">Notas</div>
   <div class="notas">
     {% for n in notas %}
     <div class="nota-it"><div class="q">{{ n.quien }} · {{ n.cuando }}</div>{{ n.texto }}</div>
