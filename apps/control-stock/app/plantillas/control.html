@@ -423,6 +423,11 @@
     <a class="tenue" href="{{ abierta.twenty_url }}" target="_blank" rel="noopener">ver en Twenty ↗</a>
     {% endif %}
   </div>
+  {# Twenty caído no es «sin chat»: se dice la verdad (Nº12, 2/10/2026).
+     El hilo igual pinta lo que sí hay (los sucesos vienen de Linear). #}
+  {% if abierta.hilo_error %}
+  <p class="pie-nota" style="margin:0 0 6px;color:var(--critico)">{{ abierta.hilo_error }}</p>
+  {% endif %}
   {% if abierta.hilo %}
   <div class="ficha-hilo">
     {% for b in abierta.hilo %}
@@ -444,7 +449,7 @@
       {% endif %}
     {% endfor %}
   </div>
-  {% else %}
+  {% elif not abierta.hilo_error %}
   <p class="pie-nota" style="margin:0">Sin chat disponible.</p>
   {% endif %}
 

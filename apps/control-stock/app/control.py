@@ -940,6 +940,8 @@ def ficha(ref, buscar_cotizacion=""):
         if lead["estado"] == "RECORDATORIO" else "")
 
     ficha_twenty = crm_twenty.ficha_de_lead(lead) or {}
+    # Twenty caído no es «sin chat»: la ficha lo dice (Nº12, 2/10/2026).
+    abierta["hilo_error"] = ficha_twenty.get("fallo") or ""
     mensajes = ficha_twenty.get("mensajes") or []
     abierta["hilo"] = hilo(mensajes, sucesos, lead.get("nombre") or "")
     abierta["twenty_url"] = ficha_twenty.get("twenty_url") or ""

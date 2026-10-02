@@ -190,8 +190,20 @@ def ficha_de_lead(lead):
         return guardada["dato"]
     try:
         dato = _buscar_ficha(lead)
-    except Exception:  # la ficha es un extra: sin Twenty, se muestra lo de Linear
-        dato = None
+    except Exception as fallo:
+        # La ficha es un extra: sin Twenty se muestra lo de Linear, pero
+        # ya NO en silencio (Nº12 del lote, 2/10/2026) — antes la
+        # conversación salía vacía sin decir por qué y parecía que el
+        # lead no tenía chat. El marcador llega a la pantalla y el motivo
+        # queda en el log; se cachea igual (60 s) para no pagar un
+        # timeout por cada pintada mientras Twenty siga caído.
+        import logging
+        logging.getLogger("control_stock").warning(
+            "La ficha de %s no se pudo leer de Twenty: %r",
+            lead.get("ref") or llave, fallo)
+        dato = {"fallo": ("Twenty no contesta; la conversación no se "
+                          "pudo cargar. Vuelve a abrir la ficha en un "
+                          "rato.")}
     _fichas[llave] = {"en": time.time(), "dato": dato}
     return dato
 

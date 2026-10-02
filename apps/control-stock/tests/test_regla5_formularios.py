@@ -634,3 +634,46 @@ def test_el_logger_de_la_app_escribe_a_stdout_sin_duplicar():
     finally:
         registro.handlers[0].stream = sys.stdout
     assert "Calentamiento de arranque: prueba" in captura.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Nº12 (solo el aviso): Twenty caído no es «sin chat» — la ficha lo dice
+# ---------------------------------------------------------------------------
+
+from app import control, crm_twenty  # noqa: E402
+
+
+def test_twenty_caido_devuelve_el_marcador_y_no_un_none_mudo(monkeypatch,
+                                                             db_limpia):
+    monkeypatch.setenv("TWENTY_API_KEY", "clave-de-prueba")
+    monkeypatch.setenv("TWENTY_URL", "http://twenty-de-prueba")
+    crm_twenty._fichas.clear()
+
+    def revienta(_ruta):
+        raise RuntimeError("Twenty no contesta")
+
+    monkeypatch.setattr(crm_twenty, "_twenty", revienta)
+    dato = crm_twenty.ficha_de_lead({"id": "abc-1", "ref": "LEAD-7"})
+    assert dato and "Twenty no contesta" in dato["fallo"]
+    # Y quedó cacheado (60 s): la siguiente pintada no paga otro timeout.
+    assert crm_twenty.ficha_de_lead({"id": "abc-1", "ref": "LEAD-7"}) is dato
+
+
+def test_la_ficha_dice_que_twenty_no_contesta(cliente, monkeypatch):
+    """La pantalla: antes la conversación salía vacía («Sin chat
+    disponible») y nadie sabía que era Twenty caído."""
+    monkeypatch.delenv("LINEAR_API_KEY", raising=False)
+    monkeypatch.setenv("TWENTY_API_KEY", "clave-de-prueba")
+    monkeypatch.setenv("TWENTY_URL", "http://twenty-de-prueba")
+    linear_leads.reiniciar_muestra()
+    control.iniciar_tablas()
+    crm_twenty._fichas.clear()
+
+    def revienta(_ruta):
+        raise RuntimeError("Twenty no contesta")
+
+    monkeypatch.setattr(crm_twenty, "_twenty", revienta)
+    lead = linear_leads.listar()[0]
+    pagina = cliente.get(f"/control?abrir={lead['ref']}").text
+    assert "Twenty no contesta; la conversación no se pudo cargar" in pagina
+    assert "Sin chat disponible." not in pagina
