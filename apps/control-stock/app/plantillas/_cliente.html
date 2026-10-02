@@ -61,7 +61,9 @@
     <span>Nombre{% if nombre_opcional %} (opcional){% endif %}</span>
     <input id="cliente-nombre" name="cliente" form="{{ form_cliente }}"
            value="{{ borrador.nombre }}" autocomplete="off"
+           {% if campo_error == 'cliente' %}autofocus aria-invalid="true"{% endif %}
            placeholder="{% if nombre_opcional %}Si lo dejas vacío: Cliente Local{% else %}Nombre del cliente{% endif %}">
+    {% with campo = 'cliente' %}{% include '_error_campo.html' %}{% endwith %}
   </div>
   <div class="campo">
     <span>Celular</span>

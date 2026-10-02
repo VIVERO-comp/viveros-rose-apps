@@ -11,7 +11,9 @@
     <input class="dato-cliente" name="{{ cargo.clave }}" form="{{ form_cargos }}"
            value="{{ cargos[cargo.clave] or '' }}" type="text"
            inputmode="decimal" placeholder="0.00" autocomplete="off"
+           {% if campo_error == cargo.clave %}autofocus aria-invalid="true"{% endif %}
            onfocus="this.select()">
+    {% with campo = cargo.clave %}{% include '_error_campo.html' %}{% endwith %}
   </div>
   <div class="campo campo-ancho">
     <span>Qué incluye (sale en la cotización)</span>

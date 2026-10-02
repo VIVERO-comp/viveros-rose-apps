@@ -17,7 +17,9 @@
 <main class="angosto">
   <a class="volver" href="/venta">← Volver a Vender</a>
 
-  {% if error_venta %}
+  {# El banner queda para los errores SIN campo (Odoo caído): el de un
+     campo sale debajo del campo mismo (regla 5, _error_campo.html). #}
+  {% if error_venta and not campo_error %}
   <div class="aviso-error">{{ error_venta }}</div>
   {% endif %}
 
@@ -77,8 +79,10 @@
           <label class="servicio-monto">Monto
             <input name="servicio_monto" form="form-servicio" type="text"
                    inputmode="decimal" placeholder="0.00"
+                   {% if campo_error == 'servicio_monto-' ~ loop.index0 %}autofocus aria-invalid="true"{% endif %}
                    value="{{ s.monto }}">
           </label>
+          {% with campo = 'servicio_monto-' ~ loop.index0 %}{% include '_error_campo.html' %}{% endwith %}
           <button class="quitar-servicio" type="button">Quitar</button>
         </div>
       </div>

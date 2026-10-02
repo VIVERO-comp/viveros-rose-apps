@@ -48,7 +48,9 @@
     <input class="dato-cliente" name="envio" form="{{ form_cargos }}"
            value="{{ cargos['envio'] or '' }}" type="text"
            inputmode="decimal" placeholder="0.00" autocomplete="off"
+           {% if campo_error == 'envio' %}autofocus aria-invalid="true"{% endif %}
            onfocus="this.select()">
+    {% with campo = 'envio' %}{% include '_error_campo.html' %}{% endwith %}
   </div>
   <div class="campo">
     <span>Nota del personalizado (ej. «Chame, 50 min»)</span>

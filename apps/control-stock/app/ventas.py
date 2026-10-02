@@ -232,10 +232,11 @@ def _monto_escrito(form):
     try:
         valor = float(crudo)
     except ValueError:
-        raise ValueError("El monto del envío no se entiende: "
-                         "escribe un número, como 12.50 o 12,50.")
+        raise ErrorDeCampo("El monto del envío no se entiende: "
+                           "escribe un número, como 12.50 o 12,50.", "envio")
     if valor < 0:
-        raise ValueError("El monto del envío no puede ser negativo.")
+        raise ErrorDeCampo("El monto del envío no puede ser negativo.",
+                           "envio")
     return valor
 
 
@@ -398,6 +399,21 @@ def id_producto_personalizada_planta():
         return None
     _id_personalizada_planta["id"] = ids[0]
     return ids[0]
+
+
+class ErrorDeCampo(ValueError):
+    """Un error de validación que sabe QUÉ campo del formulario falló.
+
+    `campo` es el name= del input; para un campo repetido lleva su índice
+    pegado («servicio_monto-2»), que es el loop.index0 con el que la
+    plantilla pinta ese renglón. Es ValueError a propósito: toda ruta que
+    ya atrape ValueError lo sigue mostrando, y las pantallas del lote de
+    formularios (regla 5, 2/10/2026) leen `campo` para pintar el mensaje
+    DEBAJO del campo y enfocar ahí, en vez del banner genérico arriba."""
+
+    def __init__(self, mensaje, campo):
+        super().__init__(mensaje)
+        self.campo = campo
 
 
 def _num_positivo(crudo, defecto=None, permitir_cero=False):

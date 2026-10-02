@@ -1587,10 +1587,11 @@ def _cargos_del_form(form, avisar=True):
                     valor = None
                 if valor is None:
                     if avisar:
-                        raise ValueError(
+                        raise ventas.ErrorDeCampo(
                             f"El monto de «{cargo['nombre']}» no se "
                             "entiende: escribe un número, como 12.50 o "
-                            "12,50 (o déjalo vacío para no cobrarlo).")
+                            "12,50 (o déjalo vacío para no cobrarlo).",
+                            cargo["clave"])
                     valor = 0.0
             cargos[cargo["clave"]] = valor
         parrafo = str(form.get(cargo["clave"] + "_desc") or "").strip()[:600]
@@ -1960,6 +1961,15 @@ async def venta_servicio_crear(request: Request, tipo: str):
         contexto = _contexto_servicio(request, tipo, error=str(error),
                                       servicios=servicios)
         contexto["confirmar_fiscal"] = _fiscal_de(error)
+        return plantillas.TemplateResponse(
+            request, "venta_servicio.html", contexto, status_code=200)
+    except ventas.ErrorDeCampo as error:
+        # Regla 5: el mensaje sale DEBAJO del campo que falló y la
+        # pantalla aterriza ahí (autofocus en la plantilla); lo escrito
+        # se conserva porque el contexto repinta los mismos servicios.
+        contexto = _contexto_servicio(request, tipo, error=str(error),
+                                      servicios=servicios)
+        contexto["campo_error"] = error.campo
         return plantillas.TemplateResponse(
             request, "venta_servicio.html", contexto, status_code=200)
     except ValueError as error:

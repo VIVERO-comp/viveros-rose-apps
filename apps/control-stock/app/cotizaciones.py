@@ -455,7 +455,10 @@ def _renglones_limpios(renglones):
     """Descarta los renglones libres en blanco y avisa de los que tienen
     descripción sin precio, precio ilegible o cantidad inválida."""
     limpios = []
-    for renglon in renglones or []:
+    # El índice del enumerate ES el del renglón en pantalla (la lista
+    # llega entera, con los blancos): con él la plantilla sabe bajo CUÁL
+    # renglón pintar el error (regla 5).
+    for i, renglon in enumerate(renglones or []):
         texto = (renglon.get("texto") or "").strip()
         descripcion = (renglon.get("descripcion") or "").strip()
         crudo_precio = (renglon.get("precio") or "").strip()
@@ -463,18 +466,23 @@ def _renglones_limpios(renglones):
         if not texto and not descripcion and not crudo_precio and not crudo_cantidad:
             continue
         if not texto:
-            raise ValueError("Falta la descripción de un renglón.")
+            raise ventas.ErrorDeCampo("Falta la descripción de un renglón.",
+                                      f"renglon_texto-{i}")
         precio = _monto_servicio(crudo_precio)
         if precio is None:
             if crudo_precio:
-                raise ValueError(
+                raise ventas.ErrorDeCampo(
                     f"El precio del renglón «{_resumen(texto)}» no se "
                     "entiende: escribe un número sin signo (la coma vale "
-                    "como decimal).")
-            raise ValueError(f"Falta el precio del renglón: «{_resumen(texto)}».")
+                    "como decimal).", f"renglon_precio-{i}")
+            raise ventas.ErrorDeCampo(
+                f"Falta el precio del renglón: «{_resumen(texto)}».",
+                f"renglon_precio-{i}")
         cantidad = _cantidad(crudo_cantidad)
         if cantidad is None:
-            raise ValueError(f"Cantidad inválida en el renglón: «{_resumen(texto)}».")
+            raise ventas.ErrorDeCampo(
+                f"Cantidad inválida en el renglón: «{_resumen(texto)}».",
+                f"renglon_cantidad-{i}")
         limpios.append({"texto": texto, "cantidad": cantidad, "precio": precio,
                         "descripcion": descripcion})
     return limpios
@@ -490,7 +498,9 @@ def _servicios_limpios(servicios):
     sin monto o monto ilegible. Una descripción sola tampoco alcanza: sin
     monto no hay renglón que cobrar."""
     limpios = []
-    for renglon in servicios or []:
+    # Mismo criterio que _renglones_limpios: el índice del enumerate es el
+    # del renglón en pantalla, para pintar el error debajo del campo.
+    for i, renglon in enumerate(servicios or []):
         texto = (renglon.get("texto") or "").strip()
         descripcion = (renglon.get("descripcion") or "").strip()
         crudo = (renglon.get("monto") or "").strip()
@@ -499,11 +509,13 @@ def _servicios_limpios(servicios):
             continue
         if monto is None:
             if crudo:
-                raise ValueError(
+                raise ventas.ErrorDeCampo(
                     f"El monto del servicio «{_resumen(texto or descripcion)}» "
                     "no se entiende: escribe un número sin signo (la coma "
-                    "vale como decimal).")
-            raise ValueError(f"Falta el monto del servicio: «{_resumen(texto or descripcion)}».")
+                    "vale como decimal).", f"servicio_monto-{i}")
+            raise ventas.ErrorDeCampo(
+                f"Falta el monto del servicio: "
+                f"«{_resumen(texto or descripcion)}».", f"servicio_monto-{i}")
         limpios.append({"texto": texto, "monto": monto,
                         "descripcion": descripcion})
     return limpios
@@ -595,7 +607,8 @@ def crear_cotizacion(empleada, tipo, nombre, celular, servicios,
         raise ValueError("Tipo de servicio desconocido.")
     nombre = (nombre or "").strip()
     if not nombre:
-        raise ValueError("El nombre del cliente es obligatorio.")
+        raise ventas.ErrorDeCampo("El nombre del cliente es obligatorio.",
+                                  "cliente")
     meta = TIPOS[tipo]
     por_planta = cobra_por_planta(tipo, cobro)
     lineas = _lineas_por_tipo(tipo, servicios, lineas_catalogo, cobro)
@@ -817,7 +830,8 @@ def crear_personalizada(empleada, nombre, celular, lineas_catalogo=None,
     plantilla (tipo_servicio='general')."""
     nombre = (nombre or "").strip()
     if not nombre:
-        raise ValueError("El nombre del cliente es obligatorio.")
+        raise ventas.ErrorDeCampo("El nombre del cliente es obligatorio.",
+                                  "cliente")
     lineas = _lineas_personalizada(servicios, renglones, lineas_catalogo)
     # Los cargos opcionales (envío a domicilio, instalación) al final.
     lineas += ventas.lineas_de_cargos(cargos)
