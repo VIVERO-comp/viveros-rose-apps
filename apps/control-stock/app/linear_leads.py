@@ -75,8 +75,12 @@ class ErrorLeads(Exception):
 ESTADOS = [
     {"clave": "NUEVO", "nombre": "Nuevo",
      "auto": "solo, al nacer el lead"},
+    # Desde el 29/09/2026 esta columna la abre NUESTRA primera respuesta
+    # (caso LEAD-94): el cliente puede escribir diez veces y el lead sigue
+    # en Nuevo con su «Te toca». El pie decía lo contrario y le mentía al
+    # empleado (Nº9 del lote, 2/10/2026).
     {"clave": "HABLANDO", "nombre": "Hablando",
-     "auto": "solo, cuando el cliente escribe"},
+     "auto": "solo, con nuestra primera respuesta"},
     {"clave": "COTIZADO", "nombre": "Cotizado",
      "auto": "solo, al generar la cotización"},
     {"clave": "POR_AGENDAR", "nombre": "Por agendar",

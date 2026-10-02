@@ -496,3 +496,14 @@ def test_un_viaje_del_borrador_tambien_avisa_lo_ilegible(cliente,
     }, follow_redirects=False)
     destino = respuesta.headers["location"]
     assert "error=" in destino and f"campo=costo-{linea['n']}" in destino
+
+
+# ---------------------------------------------------------------------------
+# Nº9: el pie de la columna «Hablando» dice la verdad del 29/09
+# ---------------------------------------------------------------------------
+
+def test_el_pie_de_hablando_dice_quien_la_abre():
+    hablando = next(e for e in linear_leads.ESTADOS
+                    if e["clave"] == "HABLANDO")
+    assert hablando["auto"] == "solo, con nuestra primera respuesta"
+    assert "cliente escribe" not in hablando["auto"]
