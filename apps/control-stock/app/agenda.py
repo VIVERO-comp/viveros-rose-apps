@@ -307,7 +307,7 @@ def agendar(ref_lead, tipo, fecha, hora=None, resp="", dur=None, lugar="",
     if tipo not in POR_CLAVE:
         raise calendario.ErrorCalendario("Ese tipo de actividad no se agenda desde un lead.")
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", fecha or ""):
-        raise calendario.ErrorCalendario("Falta la fecha.")
+        raise calendario.ErrorCalendario("Falta la fecha.", campo="fecha")
     lead = linear_leads.uno(ref_lead)
     if lead is None:
         # Con el ref adentro, y distinguiendo el ref vacío (29/09/2026):

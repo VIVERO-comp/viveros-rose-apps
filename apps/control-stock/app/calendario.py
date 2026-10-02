@@ -48,7 +48,15 @@ DURACION_POR_DEFECTO = 60
 
 
 class ErrorCalendario(Exception):
-    """Falla al hablar con Linear, con el texto que se le muestra al empleado."""
+    """Falla al hablar con Linear, con el texto que se le muestra al empleado.
+
+    `campo` (opcional) es el name= del campo del formulario que falló,
+    cuando el error es de UN campo: la pantalla pinta el mensaje debajo de
+    él (regla 5) en vez de la franja genérica arriba."""
+
+    def __init__(self, mensaje, campo=""):
+        super().__init__(mensaje)
+        self.campo = campo
 
 
 # ---------------------------------------------------------------------------
@@ -617,9 +625,10 @@ def crear(tipo, cliente, fecha, hora=HORA_POR_DEFECTO, dur=DURACION_POR_DEFECTO,
         raise ErrorCalendario("Ese tipo de actividad no existe.")
     cliente = (cliente or "").strip()
     if not cliente:
-        raise ErrorCalendario("Falta el cliente o el nombre del trabajo.")
+        raise ErrorCalendario("Falta el cliente o el nombre del trabajo.",
+                              campo="cliente")
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", fecha or ""):
-        raise ErrorCalendario("Falta la fecha.")
+        raise ErrorCalendario("Falta la fecha.", campo="fecha")
     if not configurado():
         return _muestra_crear(tipo, cliente, fecha, hora, dur, lugar, resp_id,
                               prioridad, nota, lead, resp_lead)

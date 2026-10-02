@@ -2847,6 +2847,9 @@ def calendario_pantalla(request: Request):
         "yo": yo,
         "hoy": dia_hoy,
         "error": error,
+        # Regla 5: el campo que falló (viajó en el redirect del POST).
+        "campo_error": ((request.query_params.get("campo") or "").strip()[:60]
+                        if error else ""),
         "aviso": request.query_params.get("aviso"),
         "titulo_rango": calendario.titulo_de(estado["vista"], ancla),
         "carril": carril,
@@ -3983,6 +3986,10 @@ async def calendario_crear(request: Request):
         if not destino.startswith("/calendario"):
             destino = "/calendario"
         campos = {"nueva": "1", "error": str(fallo)}
+        if getattr(fallo, "campo", ""):
+            # Regla 5: el campo que falló viaja con el error — el GET pinta
+            # el mensaje debajo de ese campo y lo enfoca.
+            campos["campo"] = fallo.campo
         for llave in ("tipo", "cliente", "lugar", "fecha", "hora", "dur",
                       "prioridad", "recogida", "nota", "resp_id", "resp_nombre",
                       "lead"):

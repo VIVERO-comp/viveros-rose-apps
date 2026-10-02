@@ -352,3 +352,42 @@ def test_compra_lead_inexistente_marca_el_selector(cliente, compras_muestra):
         "que_compro": "Tierra", "lead_ref": "LEAD-999",
     }, follow_redirects=False)
     assert "campo=lead_ref" in respuesta.headers["location"]
+
+
+# ---------------------------------------------------------------------------
+# Calendario · Actividad nueva (el POST redirige con lo escrito Y el campo)
+# ---------------------------------------------------------------------------
+
+from app import calendario  # noqa: E402
+
+
+def test_actividad_sin_cliente_viaja_con_su_campo_y_lo_escrito(cliente,
+                                                               db_limpia):
+    dia = calendario.hoy().isoformat()
+    respuesta = cliente.post("/calendario/actividad", data={
+        "tipo": "entrega", "cliente": "", "lugar": "Obarrio",
+        "fecha": dia, "hora": "11:30", "dur": "60",
+    }, follow_redirects=False)
+    assert respuesta.status_code == 303
+    destino = respuesta.headers["location"]
+    assert "error=" in destino and "campo=cliente" in destino
+    assert "lugar=Obarrio" in destino            # lo escrito viaja, como antes
+    pagina = cliente.get(destino).text
+    assert "Falta el cliente o el nombre del trabajo." in pagina
+    assert 'class="error-campo"' in pagina
+    tramo = pagina[pagina.index('id="cliente"'):]
+    assert "aria-invalid" in tramo[:400]
+    assert 'value="Obarrio"' in pagina           # el lugar sigue en pantalla
+    assert "Ups." not in pagina                  # sin franja arriba
+
+
+def test_actividad_sin_fecha_marca_la_fecha(cliente, db_limpia):
+    respuesta = cliente.post("/calendario/actividad", data={
+        "tipo": "entrega", "cliente": "Hotel Bristol", "fecha": "",
+    }, follow_redirects=False)
+    destino = respuesta.headers["location"]
+    assert "campo=fecha" in destino
+    pagina = cliente.get(destino).text
+    assert "Falta la fecha." in pagina
+    tramo = pagina[pagina.index('id="fecha"'):]
+    assert "aria-invalid" in tramo[:400]

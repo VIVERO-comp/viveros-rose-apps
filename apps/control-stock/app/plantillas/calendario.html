@@ -210,7 +210,9 @@
       {% endif %}
     </div>
 
-    {% if error %}<div class="franja"><b>Ups.</b> <span>{{ error }}</span></div>{% endif %}
+    {# La franja queda para errores SIN campo (Linear caído): el de un campo
+     sale debajo del campo mismo (regla 5, _error_campo.html). #}
+  {% if error and not campo_error %}<div class="franja"><b>Ups.</b> <span>{{ error }}</span></div>{% endif %}
     {% if aviso %}<div class="aviso-ok">{{ aviso }}</div>{% endif %}
 
     {# La fila de chips de tipos se quitó entera (dueño, 22/09/2026: "quita
@@ -574,7 +576,9 @@ No se borra nada: el issue {{ abierta.ref }} queda en Linear marcado como Cancel
     <div><span class="tenue">POR AGENDAR · {{ agendando.ref }}</span><h4>Agendar a {{ agendando.nombre }}</h4></div>
     <a class="btn chico" href="{{ ligas.cerrar }}">Cerrar</a>
   </div>
-  {% if error %}<div class="franja"><b>Ups.</b> <span>{{ error }}</span></div>{% endif %}
+  {# La franja queda para errores SIN campo (Linear caído): el de un campo
+     sale debajo del campo mismo (regla 5, _error_campo.html). #}
+  {% if error and not campo_error %}<div class="franja"><b>Ups.</b> <span>{{ error }}</span></div>{% endif %}
 
   {# La plata del lead, arriba: quien agenda sabe con que se va a topar el
      dia de la entrega. #}
@@ -661,7 +665,9 @@ No se borra nada: el issue {{ abierta.ref }} queda en Linear marcado como Cancel
   </div>
   {# Si crear falló, el error se lee AQUÍ (en el celular el formulario tapa
      la pantalla) y los campos vuelven con lo que se había escrito. #}
-  {% if error %}<div class="franja"><b>Ups.</b> <span>{{ error }}</span></div>{% endif %}
+  {# La franja queda para errores SIN campo (Linear caído): el de un campo
+     sale debajo del campo mismo (regla 5, _error_campo.html). #}
+  {% if error and not campo_error %}<div class="franja"><b>Ups.</b> <span>{{ error }}</span></div>{% endif %}
   {# El form corto (29/09/2026, las 4 mejoras que marcó Abraham): arriba lo
      que SIEMPRE se llena (tipo · cliente · fecha · hora · responsable);
      lugar, recogida y nota viven en «Más detalles» — abierto si alguno
@@ -697,14 +703,18 @@ No se borra nada: el issue {{ abierta.ref }} queda en Linear marcado como Cancel
          calendario, sin ninguna consulta al vuelo. Sigue siendo texto
          libre: un cliente nuevo se escribe igual. #}
       <input class="campo" id="cliente" name="cliente" required placeholder="Hotel Bristol"
+             {% if campo_error == 'cliente' %}autofocus aria-invalid="true"{% endif %}
              autocomplete="off" value="{{ pre.cliente }}" list="clientes-conocidos">
+      {% with campo = 'cliente' %}{% include '_error_campo.html' %}{% endwith %}
       <datalist id="clientes-conocidos">
         {% for n in clientes_sugeridos %}<option value="{{ n }}">{% endfor %}
       </datalist>
     </div>
     <div class="campo-caja">
       <label for="fecha">Fecha</label>
-      <input class="campo" type="date" id="fecha" name="fecha" value="{{ pre.fecha }}" required>
+      <input class="campo" type="date" id="fecha" name="fecha" value="{{ pre.fecha }}" required
+             {% if campo_error == 'fecha' %}autofocus aria-invalid="true"{% endif %}>
+      {% with campo = 'fecha' %}{% include '_error_campo.html' %}{% endwith %}
     </div>
     <div class="campo-caja">
       <label for="hora">Hora y duración</label>
