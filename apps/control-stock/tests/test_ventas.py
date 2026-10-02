@@ -324,8 +324,12 @@ def test_boton_venta_visible_en_computadora(cliente_venta):
     no se veía nunca, en ningún ancho. Ahora usa su propia clase
     (.venta-boton-pc), escondida solo en el media query móvil."""
     r = cliente_venta.get("/venta")
-    assert 'class="btn btn-dorado btn-grande venta-boton-pc"' in r.text
-    assert "+ VENTA" in r.text
+    # Diseño Orquesta (2/10/2026): el botón es la píldora negra de la
+    # cabecera (computadora) y el botón de la barra de abajo (teléfono) —
+    # los DOS llevan el enlace a /venta/nueva, y ninguno usa .solo-pc.
+    assert 'class="vd-nueva" href="/venta/nueva"' in r.text
+    assert 'class="vd-btn" href="/venta/nueva"' in r.text
+    assert "Nueva venta" in r.text and "NUEVA VENTA" in r.text
     assert "solo-pc" not in r.text
 
 

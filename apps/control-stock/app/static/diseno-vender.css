@@ -1,0 +1,260 @@
+/* Vender · diseño Orquesta (Korto, 2/10/2026). Archivo PROPIO de la
+   pestaña para no chocar con las ramas de las otras pestañas: aquí solo
+   viven clases vd-* de venta.html. Los tokens compartidos (colores,
+   radios, tipografía) vienen de diseno-base.css. La referencia exacta
+   son los .html de docs/diseno-orquesta: 09/10/11 (Mac) y 25/26/27
+   (celular). */
+
+/* ---------- cabecera ---------- */
+.vd-top{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:18px 28px}
+.vd-top .cab-izq{display:flex;align-items:center;gap:8px}
+.vd-titulo{font-size:22px;font-weight:600;letter-spacing:0}
+.vd-nueva{
+  display:inline-flex;align-items:center;height:36px;padding:0 16px;
+  border:0;border-radius:18px;background:var(--d-tinta);color:#fff;
+  font-size:14px;font-weight:600;text-decoration:none;white-space:nowrap;
+}
+
+/* ---------- avisos ---------- */
+.vd-alerta{
+  border-radius:var(--d-radio-pil);background:var(--d-rojo-fondo);
+  color:var(--d-rojo);font-weight:600;font-size:14px;
+  padding:10px 14px;margin-bottom:12px;
+}
+.vd-aviso-lead{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  background:var(--d-col);border:1px solid var(--d-borde);
+  border-radius:var(--d-radio-pil);padding:10px 14px;font-size:13px;
+  margin-bottom:12px;
+}
+.vd-aviso-lead form{display:inline;margin-left:auto}
+.vd-liga{
+  background:none;border:0;padding:0;font:inherit;font-size:12.5px;
+  font-weight:600;text-decoration:underline;text-underline-offset:2px;
+  cursor:pointer;color:inherit;
+}
+
+/* ---------- Cotizar un servicio (chips de interés) ---------- */
+.vd-pista{font-size:12.5px;color:var(--d-suave)}
+.vd-svc{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.vd-svc .vd-pista{flex-shrink:0}
+.vd-sv{
+  display:inline-flex;align-items:center;height:32px;padding:0 12px;
+  border:1px solid transparent;border-radius:16px;background:var(--d-gris-activo);
+  color:#3F3F3F;font-size:13px;font-weight:600;text-decoration:none;
+  white-space:nowrap;flex-shrink:0;
+}
+
+/* ---------- el tablero ---------- */
+.vd-nada{font-size:13px;color:var(--d-suave);padding:8px 2px}
+.vd-tablero{display:flex;gap:12px;align-items:flex-start}
+.vd-col{
+  flex:1 1 0;min-width:0;background:var(--d-col);
+  border-radius:var(--d-radio-col);padding:8px;
+  display:flex;flex-direction:column;gap:8px;
+}
+.vd-col>.vd-pista{margin:0;padding:0 2px}
+.vd-ch{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:14px;font-weight:700;padding:2px 2px 0}
+.vd-ch-t{min-width:0}
+.vd-cnt{
+  display:inline-grid;place-items:center;min-width:22px;height:22px;
+  padding:0 6px;margin-left:6px;border-radius:11px;background:#E9E9E9;
+  font-size:12px;font-weight:600;
+}
+.vd-tot{font-size:15px;flex-shrink:0}
+.vd-rojo{color:var(--d-rojo)}
+
+/* ---------- la tarjeta (todas del mismo tamaño) ---------- */
+.vd-card{
+  background:#fff;border:1px solid var(--d-borde-tarjeta);
+  border-left:3px solid var(--d-borde-tarjeta);
+  border-radius:var(--d-radio-tarjeta);padding:9px 10px;
+  min-height:78px;display:flex;flex-direction:column;
+  justify-content:space-between;gap:6px;
+}
+.vd-fila{display:flex;justify-content:space-between;align-items:center;gap:6px;min-width:0}
+.vd-abrir{
+  font-weight:700;color:var(--d-tinta);text-decoration:none;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.vd-abrir:hover{text-decoration:underline;text-underline-offset:2px}
+.vd-cel{font-weight:600;color:var(--d-suave);font-size:12.5px}
+.vd-monto{font-weight:700;flex-shrink:0}
+.vd-resumen{font-size:12.5px;color:var(--d-tinta)}
+.vd-error{font-size:12.5px;color:var(--d-rojo);font-weight:600}
+.vd-pie{align-items:center;flex-wrap:wrap;gap:4px 6px;min-height:28px}
+.vd-meta{display:flex;align-items:center;gap:6px;min-width:0;flex-wrap:wrap}
+.vd-hint{font-size:12.5px;color:var(--d-suave)}
+.vd-meta .vd-hint{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vd-chip{
+  display:inline-flex;align-items:center;height:22px;padding:0 8px;
+  border-radius:11px;background:var(--d-gris-activo);color:#3F3F3F;
+  font-size:12px;font-weight:600;white-space:nowrap;flex-shrink:0;
+}
+.vd-chip.vd-ok{background:var(--d-verde-fondo);color:var(--d-verde)}
+.vd-chip.vd-debe{background:var(--d-rojo-fondo);color:var(--d-rojo)}
+.vd-pg{
+  width:22px;height:22px;border-radius:50%;background:var(--d-verde-fondo);
+  color:var(--d-verde);display:inline-grid;place-items:center;flex-shrink:0;
+}
+.vd-acts{display:flex;align-items:center;gap:4px 10px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end}
+.vd-ob{
+  display:inline-flex;align-items:center;height:28px;padding:0 12px;
+  border:1px solid var(--d-tinta);border-radius:14px;background:#fff;
+  font-size:13px;font-weight:600;color:var(--d-tinta);text-decoration:none;
+  white-space:nowrap;
+}
+.vd-ob-debe{border-color:var(--d-rojo-fondo);background:var(--d-rojo-fondo);color:var(--d-rojo)}
+.vd-lnk{
+  background:none;border:0;padding:0;font-size:13px;color:#3F3F3F;
+  text-decoration:underline;text-underline-offset:2px;cursor:pointer;
+}
+/* El botón Cancelar/Quitar (_vender_cancelar.html) se viste de enlace. */
+.vd-acts .forma-cancelar,.vd-p-acts .forma-cancelar{display:inline;margin:0}
+.vd-acts .enlace-sub{
+  background:none;border:0;padding:0;font:inherit;font-size:13px;
+  color:#3F3F3F;text-decoration:underline;text-underline-offset:2px;
+  cursor:pointer;
+}
+
+/* ---------- el panel de la tarjeta abierta (Mac) ---------- */
+.vd-telon{position:fixed;inset:0;background:rgba(17,17,17,.35);z-index:48}
+.vd-panel{
+  position:fixed;top:0;right:0;bottom:0;width:480px;max-width:100%;
+  box-sizing:border-box;background:#fff;border-left:1px solid var(--d-borde);
+  border-top:5px solid var(--d-borde);z-index:49;
+  padding:20px 24px;display:flex;flex-direction:column;gap:12px;
+  overflow-y:auto;overscroll-behavior:contain;
+}
+.vd-p-cab{display:flex;align-items:flex-start;gap:12px}
+.vd-p-volver{display:none}
+.vd-p-tt{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.vd-p-tt>b{font-size:20px;font-weight:700;line-height:1.2}
+.vd-p-sub{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.vd-chip-tipo{
+  display:inline-flex;align-items:center;height:22px;padding:0 8px;
+  border:1px solid transparent;border-radius:11px;font-size:12px;
+  font-weight:600;white-space:nowrap;
+}
+.vd-p-x{
+  width:36px;height:36px;border:1px solid var(--d-borde-boton);
+  border-radius:var(--d-radio-boton);background:#fff;color:var(--d-tinta);
+  display:grid;place-items:center;flex-shrink:0;text-decoration:none;
+}
+.vd-p-ics{display:flex;align-items:center;gap:8px}
+.vd-ic{
+  width:44px;height:44px;border:1px solid var(--d-borde-campo);
+  border-radius:var(--d-radio-boton);background:#fff;color:var(--d-tinta);
+  display:grid;place-items:center;text-decoration:none;
+}
+.vd-c-tel{background:#EDF2FE;border-color:#EDF2FE;color:#3A5BC7}
+.vd-c-wa{background:var(--d-verde-fondo);border-color:var(--d-verde-fondo);color:var(--d-verde)}
+.vd-p-cuerpo{display:flex;flex-direction:column;gap:12px;font-size:15px}
+.vd-sec{
+  font-size:12px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--d-suave);font-weight:600;border-top:1px solid var(--d-borde);
+  padding-top:12px;
+}
+.vd-sec-1{border-top:0;padding-top:0}
+.vd-ln{display:flex;justify-content:space-between;align-items:baseline;gap:16px}
+.vd-p-pie{margin-top:auto;display:flex;flex-direction:column;gap:10px;padding-top:12px}
+.vd-btn{
+  display:flex;align-items:center;justify-content:center;height:52px;
+  border:0;border-radius:var(--d-radio-pil);background:var(--d-tinta);
+  color:#fff;font-size:16px;font-weight:600;text-decoration:none;width:100%;
+  box-sizing:border-box;
+}
+.vd-p-acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.vd-x{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-height:40px;padding:0 14px;border:1px solid var(--d-borde-campo);
+  border-radius:var(--d-radio-boton);background:#fff;font-size:14px;
+  color:var(--d-tinta);text-decoration:none;box-sizing:border-box;
+}
+.vd-x2{flex:2}
+.vd-p-acts .enlace-sub{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-height:40px;padding:0 14px;border:1px solid var(--d-borde-campo);
+  border-radius:var(--d-radio-boton);background:#fff;font:inherit;
+  font-size:14px;color:var(--d-tinta);cursor:pointer;
+}
+.vd-p-nota{text-align:center}
+.num{font-variant-numeric:tabular-nums}
+
+/* ---------- el resumen lateral (pantalla 09) ---------- */
+.vd-lienzo{display:flex;gap:12px;align-items:flex-start}
+.vd-tablero{flex:1;min-width:0}
+.vd-res{display:none}
+.vd-tile{
+  border:1.5px solid #5DBB8C;border-radius:var(--d-radio-col);
+  padding:12px 16px;display:flex;flex-direction:column;gap:2px;background:#fff;
+}
+.vd-tile-k{font-size:13px;font-weight:600}
+.vd-tile-v{font-size:24px;font-weight:700;line-height:1.2}
+.vd-pvs{
+  border:1.5px solid #5DBB8C;border-radius:var(--d-radio-col);
+  padding:12px 16px;display:flex;flex-direction:column;gap:10px;background:#fff;
+}
+.vd-pvs-k{font-size:14px;font-weight:700}
+.vd-pv{display:flex;align-items:baseline;gap:8px;min-width:0}
+.vd-pv-n{flex:1;min-width:0;font-weight:600;font-size:14px}
+
+/* ---------- computadora ---------- */
+@media (min-width: 900px){
+  /* La barra de abajo es solo del teléfono. */
+  .vd-bar{display:none}
+  .vd-main{padding:0 28px 28px}
+  .vd-svc-pc{padding:0}
+}
+@media (min-width: 1200px){
+  /* En pantalla ancha las columnas van a su ancho del diseño (276px) y
+     el resumen lateral ocupa el resto; más angosto, el resumen se guarda
+     y las columnas se reparten el ancho. */
+  .vd-col{flex:0 0 276px}
+  .vd-res{display:flex;flex:1;min-width:0;flex-direction:column;gap:10px}
+}
+
+/* ---------- teléfono ---------- */
+@media (max-width: 899px){
+  .vd-top{display:none}           /* manda la barra única de arriba */
+  .vd-svc-pc{display:none}        /* los chips viven en la barra de abajo */
+  .vd-main{padding:12px 16px 170px}
+  /* Las columnas se apilan como secciones (pantalla 25). */
+  .vd-tablero{flex-direction:column;align-items:stretch;gap:14px}
+  .vd-col{background:none;border-radius:0;padding:0;gap:10px}
+  .vd-ch{border:0;padding:0}
+  .vd-ch-t{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--d-suave)}
+  .vd-ch .vd-cnt{background:var(--d-gris-activo)}
+  .vd-tot{font-size:14px}
+  .vd-card{border-left-width:3px;border-radius:var(--d-radio-pil);padding:10px 12px;min-height:0}
+  /* Dedos: acciones de 44px de alto mínimo. */
+  .vd-ob{min-height:44px;border-radius:var(--d-radio-boton);padding:0 14px}
+  .vd-lnk,.vd-acts .enlace-sub{min-height:32px;display:inline-flex;align-items:center}
+  /* La barra de abajo: chips que se deslizan + el único botón negro. */
+  .vd-bar{
+    position:fixed;left:0;right:0;bottom:0;z-index:30;
+    background:#fff;border-top:1px solid var(--d-borde);
+    padding:10px 16px calc(12px + env(safe-area-inset-bottom));
+    display:flex;flex-direction:column;gap:10px;
+  }
+  .vd-svc-movil{
+    display:flex;flex-wrap:nowrap;overflow-x:auto;margin:0 -16px;
+    padding:0 16px;scrollbar-width:none;margin-bottom:0;
+  }
+  .vd-svc-movil::-webkit-scrollbar{display:none}
+  .vd-svc-movil .vd-sv{height:40px;border-radius:20px;padding:0 14px;font-size:14px}
+  /* La tarjeta abierta es pantalla completa con ← Atrás (pantalla 26). */
+  .vd-telon{display:none}
+  .vd-panel{
+    left:0;width:100%;border-left:0;border-top-width:4px;
+    padding:12px 16px calc(16px + env(safe-area-inset-bottom));
+  }
+  .vd-p-volver{
+    display:grid;place-items:center;width:44px;height:44px;flex-shrink:0;
+    border:1px solid var(--d-borde-boton);border-radius:var(--d-radio-pil);
+    background:#fff;color:var(--d-tinta);text-decoration:none;
+  }
+  .vd-p-x{display:none}
+  .vd-x{min-height:44px}
+  .vd-p-acts .enlace-sub{min-height:44px}
+}

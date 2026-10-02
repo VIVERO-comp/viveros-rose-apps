@@ -188,6 +188,17 @@ def chip_servicio(tipo):
     return chip_estilo(FAMILIA_TIPO_SERVICIO.get(tipo, "gray"))
 
 
+def acento_servicio(tipo):
+    """El color de ACENTO de un tipo de negocio (el borde izquierdo de la
+    tarjeta y el borde superior del panel en Vender, diseño Orquesta): el
+    tono de texto de su familia, el mismo que ya pintan los chips. Gris si
+    el tipo no se conoce. Una venta de plantas (retail) es familia green —
+    el llamador pasa "retail"."""
+    if tipo == "retail":
+        return texto_hex("green")
+    return texto_hex(FAMILIA_TIPO_SERVICIO.get(tipo, "gray"))
+
+
 def chip_etiqueta_orden(nombre_tag):
     """Estilo del chip de un crm.tag de Odoo (gris si no se conoce)."""
     return chip_estilo(FAMILIA_ETIQUETA_ORDEN.get((nombre_tag or "").upper(), "gray"))

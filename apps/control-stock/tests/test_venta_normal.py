@@ -258,8 +258,8 @@ def test_venta_confirmada_y_cotizacion_salen_en_la_lista_de_vender(cliente_venta
     cliente_venta.post("/venta/cotizar", data={"cliente": "Beto", "celular": ""})
     r = cliente_venta.get("/venta")
     assert "Ana" in r.text and "Beto" in r.text
-    assert '<span class="badge b-ok">Venta</span>' in r.text
-    assert '<span class="badge b-bajo">Cotización</span>' in r.text
+    assert '<span class="vd-chip vd-ok">Venta</span>' in r.text
+    assert '<span class="vd-chip">Cotización</span>' in r.text
     # "vendida" no ofrece Facturar/Reintentar: el cobro vive en Odoo.
     assert "Descargar / Compartir (PDF)" in r.text
 

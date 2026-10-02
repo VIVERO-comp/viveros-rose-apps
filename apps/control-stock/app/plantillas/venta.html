@@ -2,209 +2,264 @@
 {% block titulo %}Vender — Control Viverorose{% endblock %}
 
 {% block contenido %}
-<style>
-  /* Los 8 botones de "Cotizar un servicio" van en el gris claro de Retail
-     (--crema), no en negro: queda UN solo botón negro por pantalla
-     (+ NUEVA VENTA). Pedido de Abraham, 22/09/2026. El override vive aquí
-     y no en styles.css para no chocar con la edición en curso de ese
-     archivo; al cerrar esa tanda puede mudarse. */
-  .servicio-boton{background:var(--crema);color:#18181b;border:1px solid var(--noche-3);font-weight:600}
-  /* El aviso "cotizando para el lead X" cuando se llega desde Retail. */
-  .aviso-lead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--crema);border:1px solid var(--noche-3);border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:10px}
-  .aviso-lead form{display:inline;margin-left:auto}
-  .btn-liga{background:none;border:0;padding:0;font:inherit;font-size:12.5px;font-weight:600;text-decoration:underline;text-underline-offset:2px;cursor:pointer;color:inherit}
-  /* El celular al lado del nombre (pedido de Abraham, 23/09/2026): para
-     estar seguro de a quién es la venta cuando los nombres se repiten. */
-  .cel-titulo{font-weight:600;color:var(--texto-suave);font-variant-numeric:tabular-nums}
-</style>
-{# La barra única del teléfono (artefacto aprobado, 23/09/2026): el botón
-   negro de Nueva venta vive aquí; el grande de abajo queda para computadora. #}
-{% with bm_titulo='Vender', bm_sub='Ventas locales del vivero',
-        bm_accion_url=('/venta/nueva' if ventas_activo else None),
-        bm_accion_texto='+ Venta' %}{% include '_barra_movil.html' %}{% endwith %}
-<header>
-  {# La hamburguesa de computadora (28/09/2026) va junto al título, a su
-     izquierda; .cab-izq los agrupa en un solo bloque para que el
-     space-between del header no los separe (el mismo problema que ya
-     resuelve .cabecera-venta en otras pantallas). En el teléfono no
-     existe: ya está la propia en la barra móvil de arriba. #}
+{# Vender con el diseño Orquesta (Korto, 2/10/2026 — docs/diseno-orquesta,
+   pantallas 09/10/11 en Mac y 25/26/27 en celular). SOLO cambió el
+   aspecto: mismas rutas, mismos POST, mismas acciones por tarjeta.
+
+   - La lista única de siempre (número de orden descendente) se pinta
+     agrupada por estado: columnas en computadora, secciones apiladas en
+     el teléfono. La agrupación se decide en Python (main._vender_columnas).
+   - Una tarjeta se abre con ?abrir= (panel a la derecha en Mac, pantalla
+     completa con ← Atrás en celular) y se cierra con un enlace — el mismo
+     patrón servidor-y-enlaces de «Ventas a revisar», sin JS.
+   - Un solo botón negro por pantalla: + Nueva venta (en el teléfono vive
+     en la barra de abajo, pantalla 25). #}
+<link rel="stylesheet" href="/static/diseno-vender.css?v={{ v_estaticos }}">
+
+{# La barra única del teléfono: hamburguesa + título. El botón negro ya no
+   va aquí — el diseño (pantalla 25) lo baja a la barra de abajo. #}
+{% with bm_titulo='Vender', bm_sub='Ventas locales del vivero' %}{% include '_barra_movil.html' %}{% endwith %}
+
+<header class="vd-top">
   <div class="cab-izq">
     <button class="hamb" type="button" aria-label="Mostrar u ocultar el menú"
             aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
     </button>
-    <div class="brand">
-      <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
-      <div>
-        <h1>Vender</h1>
-        <small>Ventas locales del vivero</small>
-      </div>
-    </div>
+    <h1 class="vd-titulo">Vender</h1>
   </div>
+  {% if ventas_activo %}
+  {# El único botón negro de la pantalla (computadora). El "(N en curso)"
+     de siempre no se pierde: viaja dentro del mismo botón. #}
+  <a class="vd-nueva" href="/venta/nueva">+ Nueva venta{% if en_curso %} · {{ en_curso }} en curso{% endif %}</a>
+  {% endif %}
 </header>
 
-<main class="angosto">
+<main class="vd-main">
   {% if error_venta %}
-  <div class="aviso-error">{{ error_venta }}</div>
+  <div class="vd-alerta">{{ error_venta }}</div>
   {% endif %}
 
   {# Vino de la ficha de un lead en Retail: la próxima cotización o venta
      que cree nace amarrada a ese lead (y su tarjeta cae en Cotizado). #}
   {% if lead_pendiente %}
-  <div class="aviso-lead">
+  <div class="vd-aviso-lead">
     <span>La próxima cotización quedará amarrada al lead
       <b>{{ lead_pendiente.ref }}{% if lead_pendiente.nombre %} · {{ lead_pendiente.nombre }}{% endif %}</b>.</span>
     <form method="post" action="/venta/lead/quitar">
-      <button class="btn-liga" type="submit">No es para este lead</button>
+      <button class="vd-liga" type="submit">No es para este lead</button>
     </form>
   </div>
   {% endif %}
 
   {% if not ventas_activo %}
-  <div class="aviso-error">La conexión con Odoo no está configurada en este
+  <div class="vd-alerta">La conexión con Odoo no está configurada en este
     servidor, así que Vender está apagado. Avísale a Abraham.</div>
   {% else %}
-  {# Pantalla simple (pedido del dueño, 22/09/2026): sin textos de ayuda y
-     sin el botón "Ver PDF de ejemplo" con su párrafo. Solo las acciones. #}
-  {# venta-boton-pc, NO .solo-pc: el 28/09/2026 se encontró que .solo-pc
-     queda display:none en TODOS los anchos (solo la reactivan las
-     tarjetas de Stock, dentro de su propio media query de computadora) —
-     este botón llevaba esa clase creyendo que era genérica y no se veía
-     nunca, en ningún ancho. Clase propia, escondida SOLO en el media
-     query móvil de la barra única (styles.css), donde ya vive el mismo
-     patrón para el header y el "← Volver" grandes. #}
-  <a class="btn btn-dorado btn-grande venta-boton-pc" href="/venta/nueva" style="margin-bottom:6px">
-    + VENTA{% if en_curso %} ({{ en_curso }} planta{{ '' if en_curso == 1 else 's' }} en curso){% endif %}
-  </a>
-
-  <div class="seccion-titulo" style="margin-top:16px">Cotizar un servicio</div>
-  <div class="grid-servicios">
+  {# Cotizar un servicio: chips de color según el interés (paleta única,
+     colores.chip_servicio). En el teléfono esta fila vive en la barra de
+     abajo (copia .vd-bar) y esta se esconde — el mismo reparto doble que
+     ya usa el segmento de Compras (seg-movil). #}
+  <div class="vd-svc vd-svc-pc">
+    <span class="vd-pista">Cotizar un servicio</span>
     {% for tipo, etiqueta in tipos_servicio %}
-    {# El color del tipo de negocio (paleta unica, Fase 3): pastel + texto de su familia. #}
-    <a class="servicio-boton" style="{{ colores.chip_servicio(tipo) }}" href="/venta/servicio/{{ tipo }}">+ {{ etiqueta }}</a>
+    <a class="vd-sv" style="{{ colores.chip_servicio(tipo) }}" href="/venta/servicio/{{ tipo }}">+ {{ etiqueta }}</a>
     {% endfor %}
-    <a class="servicio-boton" href="/venta/servicio-personalizada">+ Personalizado</a>
+    <a class="vd-sv" href="/venta/servicio-personalizada">+ Personalizado</a>
   </div>
   {% endif %}
 
-  {# UNA sola lista, ordenada por número de orden (dueño, 30/09/2026:
-     "ponlo en orden de número... pon todo en una fila"). Reemplaza las
-     dos listas separadas de antes ("Ventas y cotizaciones locales" +
-     "Cotizaciones de servicios"). El orden y el filtrado (una cancelada
-     ya NO se pinta, dueño 30/09/2026) se decide en Python
-     (main._lista_vender); aquí solo se recorre y, según item.tipo, se
-     pinta la tarjeta que corresponde — cada tipo conserva sus propias
-     acciones y chips, no se unifica la tarjeta, solo la lista. #}
-  <div class="seccion-titulo" style="margin-top:16px">Ventas y cotizaciones locales</div>
+  {# El tablero: la lista única de siempre (ventas y cotizaciones
+     locales, todas juntas), agrupada por estado. #}
   {% if not vender_lista %}
-  <p class="nada-venta">Aún no hay ventas ni cotizaciones locales.</p>
-  {% endif %}
-  {% for item in vender_lista %}
-  {% if item.tipo == "venta" %}
-  <div class="venta-item {{ 'pagado' if item.estado == 'pagado' else ('cotizacion' if item.estado == 'cotizacion' else ('vendida' if item.estado == 'vendida' else 'parcial')) }}">
-    <div class="fila1">
-      <div>
-        {% with item=item %}{% include "_vender_titulo.html" %}{% endwith %}
-        <small>{{ item.fecha_texto }}{% if item.factura %} · Factura {{ item.factura }}{% endif %}{% if item.metodo %} · {{ "Yappy" if item.metodo == "yappy" else "Efectivo" }}{% endif %}</small>
-        {% if item.resumen %}<small class="compra">{{ item.resumen }}</small>{% endif %}
-      </div>
-      {% if item.estado == "pagado" %}<span class="badge b-ok">Pagado</span>
-      {% elif item.estado == "cotizacion" %}<span class="badge b-bajo">Cotización</span>
-      {# "vendida" (28/09/2026): "Guardar venta" — confirmada, el cobro
-         vive en el kanban de Odoo, igual que las cotizaciones de servicio. #}
-      {% elif item.estado == "vendida" %}<span class="badge b-ok">Venta</span>
-      {% else %}<span class="badge b-critico">{{ item.etiqueta_estado }}</span>{% endif %}
-    </div>
-    {% if item.ultimo_error %}
-    <div class="error-venta">Último intento: {{ item.ultimo_error }}</div>
-    {% endif %}
-    <div class="venta-acciones">
-      <span>
-        {% if item.estado == "cotizacion" %}
-          {# Facturar/Pagado + el PDF de la cotización (dueño, 30/09/2026:
-             "pon compartir al lado de facturar y pon facturar/pagado") —
-             reemplaza el "Solo Facturar" del 23/09/2026. La pantalla destino
-             (/venta/cobrar) sigue siendo la misma, solo cambió el rótulo; y
-             se agrega el mismo control «Descargar / Compartir (PDF)» que ya
-             usan las tarjetas hermanas (data-pdf: en iPhone abre la hoja
-             nativa de compartir.js, en Android/computadora descarga en
-             pestaña nueva con el nombre calculado en Python). #}
-          <a href="/venta/cobrar/{{ item.n }}">Facturar / Pagado</a>
-          · <a href="/venta/{{ item.n }}/cotizacion.pdf" target="_blank" rel="noopener" download="{{ item.nombre_cotizacion_pdf }}" data-pdf>Descargar / Compartir (PDF)</a>
-          · {% with form_action="/venta/cancelar/" + item.n|string,
-                    form_confirm="Cancela la cotización " + (item.orden or "sin número") + " también en Odoo y no tiene marcha atrás desde la app: para revivirla habría que crear la venta de nuevo. ¿Cancelar?",
-                    form_boton="Cancelar" %}{% include "_vender_cancelar.html" %}{% endwith %}
-        {% elif item.estado == "vendida" %}
-          {# Sin Facturar/Reintentar: esta orden no sigue el pipeline local
-             de cobro. El pago se registra en el kanban de Odoo.
-             target="_blank" + download (28/09/2026, la misma regla de
-             Factura de aquí abajo): a esta le faltaba, y es el mismo PDF
-             que atrapa en el celular si se abre en la pantalla actual. #}
-          {# UN solo control (Abraham, 30/09/2026): «Descargar / Compartir»
-             — en iPhone abre la hoja nativa (el intercept de `data-pdf`
-             de compartir.js); en Android y computadora descarga normal
-             en pestaña nueva, y desde ahí se comparte igual. El botón
-             Compartir aparte se retiró. #}
-          <a href="/venta/{{ item.n }}/cotizacion.pdf" target="_blank" rel="noopener" download="{{ item.nombre_cotizacion_pdf }}" data-pdf>Descargar / Compartir (PDF)</a>
-        {% elif item.estado == "pagado" %}
-          {# REGLA NUEVA (Abraham, 28/09/2026), que reemplaza la del
-             22/09/2026: antes el PDF NO abría pestaña nueva para no dejar
-             una "ventana sin poder salir" en el celular. Pero sin pestaña
-             nueva, el PDF se abría en la MISMA pantalla y ahí quedaba
-             trabado igual — sobre todo abriendo la app desde el ícono del
-             inicio, donde no hay barra del navegador para volver. Ahora
-             las dos cosas a la vez: `download` fuerza la descarga (con el
-             nombre que puso el servidor) Y `target="_blank"` lo hace en
-             otra pestaña, así la app nunca queda tapada. #}
-          {# UN solo control (Abraham, 30/09/2026): conserva la palabra
-             Factura — al lado vive «Mandar factura» y sin ella no se
-             entendería qué PDF es. El botón Compartir aparte se retiró:
-             en iPhone este mismo enlace abre la hoja nativa (data-pdf). #}
-          <a href="/venta/{{ item.n }}/factura.pdf" target="_blank" rel="noopener" download="{{ item.nombre_factura_pdf }}" data-pdf>Descargar / Compartir factura</a>
-          {% if item.whatsapp %}
-          <a class="enlace-sub" href="{{ item.whatsapp }}" target="_blank" rel="noopener">Mandar factura</a>
-          {% endif %}
-        {% else %}
-          <a href="/venta/cobrar/{{ item.n }}">Reintentar</a>
-        {% endif %}
-      </span>
-      <span class="venta-monto">{{ item.total | dinero }}</span>
-    </div>
-  </div>
+  <p class="vd-nada">Aún no hay ventas ni cotizaciones locales.</p>
   {% else %}
-  {# El id ancla la tarjeta: al volver de editar, la lista queda aquí. #}
-  <div class="venta-item cotizacion" id="cot-{{ item.n }}">
-    <div class="fila1">
-      <div>
-        {% with item=item %}{% include "_vender_titulo.html" %}{% endwith %}
-        <small>{{ item.fecha_texto }} · {{ item.etiqueta_tipo }}</small>
+  <div class="vd-lienzo">
+  <div class="vd-tablero">
+    {% for col in vender_columnas %}
+    <section class="vd-col">
+      <div class="vd-ch">
+        <span class="vd-ch-t">{{ col.titulo }}<span class="vd-cnt num">{{ col.cuenta }}</span></span>
+        <span class="vd-tot num {{ 'vd-rojo' if col.clave == 'confirmado' }}">{{ col.total | dinero }}</span>
       </div>
-      {# El estado REAL en Odoo (una consulta para toda la lista). Editar
-         y Quitar solo mientras siga en cotización: facturada, ni los
-         botones — y cancelada nunca llega aquí (main._lista_vender la
-         filtra antes de armar la lista). #}
-      {% if item.facturada %}<span class="badge b-ok">Facturado</span>
-      {% else %}<span class="badge b-bajo">Cotización</span>{% endif %}
+      <span class="vd-pista">{{ col.pista }}</span>
+      {% for item in col["items"] %}
+      <article class="vd-card" id="{{ item.ancla }}" style="border-left-color:{{ item.acento }}">
+        <div class="vd-fila">
+          <a class="vd-abrir" href="{{ item.abrir_url }}">{{ item.cliente }}{% if item.celular %} <span class="vd-cel num">· {{ item.celular }}</span>{% endif %}</a>
+          <b class="vd-monto num">{{ item.total | dinero }}</b>
+        </div>
+        {% if item.tipo == "venta" and item.resumen %}<span class="vd-resumen">{{ item.resumen }}</span>{% endif %}
+        {% if item.tipo == "venta" and item.ultimo_error %}
+        <span class="vd-error">Último intento: {{ item.ultimo_error }}</span>
+        {% endif %}
+        <div class="vd-fila vd-pie">
+          <span class="vd-meta">
+            <span class="vd-hint num">{{ item.orden or "—" }} · {{ item.fecha_texto }}</span>
+            {% if item.tipo == "venta" %}
+              {% if item.factura %}<span class="vd-hint">Factura {{ item.factura }}</span>{% endif %}
+              {% if item.metodo %}<span class="vd-hint">{{ "Yappy" if item.metodo == "yappy" else "Efectivo" }}</span>{% endif %}
+              {% if item.estado == "pagado" %}<span class="vd-pg" role="img" aria-label="Pagado" title="Pagado"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span>
+              {% elif item.estado == "cotizacion" %}<span class="vd-chip">Cotización</span>
+              {% elif item.estado == "vendida" %}<span class="vd-chip vd-ok">Venta</span>
+              {% else %}<span class="vd-chip vd-debe">{{ item.etiqueta_estado }}</span>{% endif %}
+            {% else %}
+              {% if item.facturada %}<span class="vd-chip vd-ok">Facturado</span>
+              {% else %}<span class="vd-chip">Cotización</span>{% endif %}
+            {% endif %}
+          </span>
+          <span class="vd-acts">
+            {% if item.tipo == "venta" %}
+              {% if item.estado == "cotizacion" %}
+                <a class="vd-lnk" href="/venta/{{ item.n }}/cotizacion.pdf" target="_blank" rel="noopener" download="{{ item.nombre_cotizacion_pdf }}" data-pdf>Descargar / Compartir (PDF)</a>
+                {% with form_action="/venta/cancelar/" + item.n|string,
+                        form_confirm="Cancela la cotización " + (item.orden or "sin número") + " también en Odoo y no tiene marcha atrás desde la app: para revivirla habría que crear la venta de nuevo. ¿Cancelar?",
+                        form_boton="Cancelar" %}{% include "_vender_cancelar.html" %}{% endwith %}
+                <a class="vd-ob" href="/venta/cobrar/{{ item.n }}">Facturar / Pagado</a>
+              {% elif item.estado == "vendida" %}
+                <a class="vd-lnk" href="/venta/{{ item.n }}/cotizacion.pdf" target="_blank" rel="noopener" download="{{ item.nombre_cotizacion_pdf }}" data-pdf>Descargar / Compartir (PDF)</a>
+              {% elif item.estado == "pagado" %}
+                <a class="vd-lnk" href="/venta/{{ item.n }}/factura.pdf" target="_blank" rel="noopener" download="{{ item.nombre_factura_pdf }}" data-pdf>Descargar / Compartir factura</a>
+                {% if item.whatsapp %}<a class="vd-lnk" href="{{ item.whatsapp }}" target="_blank" rel="noopener">Mandar factura</a>{% endif %}
+              {% else %}
+                <a class="vd-ob vd-ob-debe" href="/venta/cobrar/{{ item.n }}">Reintentar</a>
+              {% endif %}
+            {% else %}
+              <a class="vd-lnk" href="/venta/servicio/{{ item.n }}/propuesta.pdf" target="_blank" rel="noopener" download="{{ item.nombre_pdf }}" data-pdf>Descargar / Compartir (PDF)</a>
+              {% if item.editable %}
+                <a class="vd-lnk" href="/venta/servicio/{{ item.n }}/editar">Editar</a>
+                {% with form_action="/venta/servicio/" + item.n|string + "/cancelar",
+                        form_confirm="Quita la cotización " + item.orden + " también en Odoo y no tiene marcha atrás desde la app: para recuperarla habría que crearla de nuevo. ¿Quitar?",
+                        form_boton="Quitar" %}{% include "_vender_cancelar.html" %}{% endwith %}
+              {% endif %}
+            {% endif %}
+          </span>
+        </div>
+      </article>
+      {% endfor %}
+      {% if not col["items"] %}<span class="vd-hint">Nada por aquí.</span>{% endif %}
+    </section>
+    {% endfor %}
+  </div>
+  {# El resumen lateral (pantalla 09, solo computadora ancha): los mismos
+     totales de las columnas y cómo pagaron las pagadas. Nada se inventa:
+     restata lo que el tablero ya muestra. #}
+  <aside class="vd-res" aria-label="Resumen de ventas">
+    {% for col in vender_columnas %}
+    <div class="vd-tile">
+      <span class="vd-tile-k">{{ col.titulo }}</span>
+      <span class="vd-tile-v num">{{ col.total | dinero }}</span>
+      <span class="vd-hint">{{ col.cuenta }} en el tablero</span>
     </div>
-    <div class="venta-acciones">
-      {# UN solo control (Abraham, 30/09/2026): «Descargar / Compartir»
-         — el botón Compartir aparte se retiró; en iPhone este mismo
-         enlace abre la hoja nativa (el intercept de `data-pdf`). #}
-      <span><a href="/venta/servicio/{{ item.n }}/propuesta.pdf" target="_blank" rel="noopener" download="{{ item.nombre_pdf }}" data-pdf>Descargar / Compartir (PDF)</a>
-        {% if item.editable %}
-        · <a href="/venta/servicio/{{ item.n }}/editar">Editar</a>
-        · {% with form_action="/venta/servicio/" + item.n|string + "/cancelar",
-                  form_confirm="Quita la cotización " + item.orden + " también en Odoo y no tiene marcha atrás desde la app: para recuperarla habría que crearla de nuevo. ¿Quitar?",
-                  form_boton="Quitar" %}{% include "_vender_cancelar.html" %}{% endwith %}
-        {% endif %}</span>
-      <span class="venta-monto">{{ item.total | dinero }}</span>
+    {% endfor %}
+    {% if vender_pagos %}
+    <div class="vd-pvs">
+      <span class="vd-pvs-k">Cómo pagaron</span>
+      {% for pago in vender_pagos %}
+      <div class="vd-pv"><span class="vd-pv-n">{{ pago.nombre }}</span><span class="vd-hint">{{ pago.cuenta }} venta{{ '' if pago.cuenta == 1 else 's' }}</span><span class="num">{{ pago.monto | dinero }}</span></div>
+      {% endfor %}
     </div>
+    {% endif %}
+  </aside>
   </div>
   {% endif %}
-  {% endfor %}
 </main>
 
-{# El navbar compartido de la app (antes este menú era propio y le faltaba
-   Calendario; unificado el 22/09/2026). #}
+{% if ventas_activo %}
+{# La barra de abajo del teléfono (pantalla 25): los chips de Cotizar que
+   se deslizan de lado y el ÚNICO botón negro. En computadora no existe. #}
+<div class="vd-bar">
+  <div class="vd-svc vd-svc-movil">
+    <span class="vd-pista">Cotizar</span>
+    {% for tipo, etiqueta in tipos_servicio %}
+    <a class="vd-sv" style="{{ colores.chip_servicio(tipo) }}" href="/venta/servicio/{{ tipo }}">+ {{ etiqueta }}</a>
+    {% endfor %}
+    <a class="vd-sv" href="/venta/servicio-personalizada">+ Personalizado</a>
+  </div>
+  <a class="vd-btn" href="/venta/nueva">+ NUEVA VENTA{% if en_curso %} · {{ en_curso }} en curso{% endif %}</a>
+</div>
+{% endif %}
+
+{% if abierta %}
+{# La tarjeta abierta (pantallas 10/11 en Mac, 26/27 en celular): panel a
+   la derecha encima del tablero / pantalla completa con ← Atrás. Se
+   cierra con la X, con ← Atrás o tocando afuera — todos enlaces que
+   vuelven al ancla de la tarjeta (no perder el lugar en la lista). #}
+<a class="vd-telon" href="/venta#{{ abierta.ancla }}" aria-label="Cerrar el panel"></a>
+<aside class="vd-panel" style="border-top-color:{{ abierta.acento }}" aria-label="{{ 'Venta' if abierta.tipo == 'venta' and abierta.estado != 'cotizacion' else 'Cotización' }}">
+  <div class="vd-p-cab">
+    <a class="vd-p-volver" href="/venta#{{ abierta.ancla }}" aria-label="Atrás">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    </a>
+    <div class="vd-p-tt">
+      <b>{{ abierta.cliente }}</b>
+      <span class="vd-hint vd-p-sub">
+        <span class="vd-chip-tipo" style="{{ abierta.chip_estilo }}">{{ abierta.chip_texto }}</span>
+        {% if abierta.tipo == "venta" %}{{ abierta.orden or "Sin número" }} · {{ abierta.etiqueta_estado }}
+        {% else %}{{ abierta.orden }} · {{ "Facturado" if abierta.facturada else "Cotización" }}{% endif %}
+      </span>
+    </div>
+    <a class="vd-p-x" href="/venta#{{ abierta.ancla }}" aria-label="Cerrar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </a>
+  </div>
+  {% if abierta.contacto %}
+  <div class="vd-p-ics">
+    <a class="vd-ic vd-c-tel" href="{{ abierta.contacto.tel }}" aria-label="Llamar"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a12 12 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2"/></svg></a>
+    <a class="vd-ic vd-c-wa" href="{{ abierta.contacto.wa }}" target="_blank" rel="noopener" aria-label="WhatsApp"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-4-7.5L21 3l-1 4.5A9 9 0 0121 12z"/><path d="M8.5 10.5c.5 2 2.5 4 4.5 4.5l1.5-1.5 2 1-.5 2c-3.5.5-7.5-3-8.5-6.5l1-1.5 1.5 1z" fill="currentColor" stroke="none"/></svg></a>
+    <span class="vd-hint num">{{ abierta.celular }}</span>
+  </div>
+  {% endif %}
+  <div class="vd-p-cuerpo">
+    <div class="vd-sec vd-sec-1">{{ "Qué se vendió" if abierta.tipo == "venta" and abierta.estado not in ("cotizacion", "vendida") else "Qué se cotizó" }}</div>
+    {% if abierta.tipo == "venta" and abierta.resumen %}<span>{{ abierta.resumen }}</span>{% endif %}
+    <div class="vd-ln"><b>Total</b><b class="num">{{ abierta.total | dinero }}</b></div>
+    <div class="vd-sec">Estado</div>
+    {% if abierta.tipo == "venta" %}
+    <span>{{ abierta.etiqueta_estado }}</span>
+    {% if abierta.factura %}<span class="vd-hint">Factura {{ abierta.factura }}{% if abierta.metodo %} · {{ "Yappy" if abierta.metodo == "yappy" else "Efectivo" }}{% endif %}</span>{% endif %}
+    {% if abierta.estado == "cotizacion" %}<span class="vd-hint">No aparta plantas. El pedido nace cuando el cliente paga o abona.</span>{% endif %}
+    {% if abierta.ultimo_error %}<span class="vd-error">Último intento: {{ abierta.ultimo_error }}</span>{% endif %}
+    {% else %}
+    <span>{{ "Facturado · el cobro vive en el kanban de Odoo" if abierta.facturada else "Cotización · sin facturar" }}</span>
+    {% endif %}
+    <div class="vd-sec">Fecha</div>
+    <span>{{ abierta.fecha_texto }}</span>
+  </div>
+  <div class="vd-p-pie">
+    {% if abierta.tipo == "venta" and abierta.estado == "cotizacion" %}
+    <a class="vd-btn" href="/venta/cobrar/{{ abierta.n }}">FACTURAR / PAGADO</a>
+    <div class="vd-p-acts">
+      <a class="vd-x vd-x2" href="/venta/{{ abierta.n }}/cotizacion.pdf" target="_blank" rel="noopener" download="{{ abierta.nombre_cotizacion_pdf }}" data-pdf>Descargar / Compartir PDF</a>
+      {% with form_action="/venta/cancelar/" + abierta.n|string,
+              form_confirm="Cancela la cotización " + (abierta.orden or "sin número") + " también en Odoo y no tiene marcha atrás desde la app: para revivirla habría que crear la venta de nuevo. ¿Cancelar?",
+              form_boton="Cancelar" %}{% include "_vender_cancelar.html" %}{% endwith %}
+    </div>
+    {% elif abierta.tipo == "venta" and abierta.estado == "vendida" %}
+    <a class="vd-btn" href="/venta/{{ abierta.n }}/cotizacion.pdf" target="_blank" rel="noopener" download="{{ abierta.nombre_cotizacion_pdf }}" data-pdf>DESCARGAR / COMPARTIR PDF</a>
+    {% elif abierta.tipo == "venta" and abierta.estado == "pagado" %}
+    <a class="vd-btn" href="/venta/{{ abierta.n }}/factura.pdf" target="_blank" rel="noopener" download="{{ abierta.nombre_factura_pdf }}" data-pdf>DESCARGAR / COMPARTIR FACTURA</a>
+    {% if abierta.whatsapp %}
+    <div class="vd-p-acts"><a class="vd-x vd-x2" href="{{ abierta.whatsapp }}" target="_blank" rel="noopener">Mandar factura por WhatsApp</a></div>
+    {% endif %}
+    {% elif abierta.tipo == "venta" %}
+    <a class="vd-btn" href="/venta/cobrar/{{ abierta.n }}">REINTENTAR</a>
+    {% else %}
+    <a class="vd-btn" href="/venta/servicio/{{ abierta.n }}/propuesta.pdf" target="_blank" rel="noopener" download="{{ abierta.nombre_pdf }}" data-pdf>DESCARGAR / COMPARTIR PDF</a>
+    {% if abierta.editable %}
+    <div class="vd-p-acts">
+      <a class="vd-x" href="/venta/servicio/{{ abierta.n }}/editar">Editar</a>
+      {% with form_action="/venta/servicio/" + abierta.n|string + "/cancelar",
+              form_confirm="Quita la cotización " + abierta.orden + " también en Odoo y no tiene marcha atrás desde la app: para recuperarla habría que crearla de nuevo. ¿Quitar?",
+              form_boton="Quitar" %}{% include "_vender_cancelar.html" %}{% endwith %}
+    </div>
+    {% endif %}
+    {% endif %}
+    <span class="vd-hint vd-p-nota">Se cierra con la X, con ← Atrás o tocando afuera.</span>
+  </div>
+</aside>
+{% endif %}
+
+{# El navbar compartido de la app. #}
 {% set activa = 'vender' %}{% include '_nav.html' %}
 {% endblock %}
