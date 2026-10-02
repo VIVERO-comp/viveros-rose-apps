@@ -401,6 +401,11 @@
       <div class="crm-nota">
         <small>{{ c.nombre }} · {{ c.cliente }}{% if c.fecha %} · {{ c.fecha | fecha_bonita }}{% endif %}
           · {{ c.total | dinero }}</small>
+        {# La marca de ambigüedad la decide Python (cot_lead): un teléfono
+           que también es de otro lead vivo. Avisa, no bloquea. #}
+        {% if c.ambigua %}
+        <small style="display:block;color:var(--critico);font-weight:600">⚠ {{ c.aviso_ambigua }}</small>
+        {% endif %}
         <form method="post" action="/control/cotizacion/conectar?vista={{ vista }}">
           <input type="hidden" name="ref" value="{{ abierta.ref }}">
           <input type="hidden" name="orden_id" value="{{ c.orden_id }}">

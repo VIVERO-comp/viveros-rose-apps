@@ -483,3 +483,79 @@ def test_pdf_de_orden_envuelve_el_error(monkeypatch):
     with pytest.raises(RuntimeError, match="No se pudo generar el PDF"):
         cot_lead.pdf_de_orden(90)
 
+
+
+# ---------------------------------------------------------------------------
+# La marca de ambigüedad (2/10/2026, OK de Abraham): un teléfono que también
+# es de OTRO lead vivo marca la candidata — avisa, no bloquea, y no toca el
+# amarre automático del espejo (eso es del frontend).
+# ---------------------------------------------------------------------------
+
+def test_telefono_de_dos_leads_vivos_marca_la_candidata(odoo, monkeypatch):
+    monkeypatch.delenv("LINEAR_API_KEY", raising=False)
+    linear_leads.reiniciar_muestra()
+    # En la muestra, el 6552-0966 es de LEAD-91 (Tamara, viva en «Por
+    # agendar»). Se mira OTRO lead con ese mismo teléfono.
+    lead = {"ref": "LEAD-200", "pp": "PP-XX200", "nombre": "Cliente B",
+           "celular": "6552-0966", "url": ""}
+    partner = odoo.agregar_partner("Cliente B", "6552-0966")
+    orden = odoo.agregar_orden(partner, "S00097", dias_atras=1,
+                               amount_total=80.0)
+    resultado = cot_lead.candidatas_del_lead(lead)
+    assert resultado["ok"] is True
+    candidata = next(c for c in resultado["candidatas"]
+                     if c["orden_id"] == orden)
+    assert candidata["ambigua"] is True
+    assert "más de un cliente" in candidata["aviso_ambigua"]
+
+
+def test_telefono_unico_no_lleva_marca(odoo, monkeypatch):
+    monkeypatch.delenv("LINEAR_API_KEY", raising=False)
+    linear_leads.reiniciar_muestra()
+    lead = {"ref": "LEAD-201", "pp": "PP-XX201", "nombre": "Cliente Solo",
+           "celular": "6999-9871", "url": ""}
+    partner = odoo.agregar_partner("Cliente Solo", "6999-9871")
+    orden = odoo.agregar_orden(partner, "S00098", dias_atras=1,
+                               amount_total=40.0)
+    resultado = cot_lead.candidatas_del_lead(lead)
+    candidata = next(c for c in resultado["candidatas"]
+                     if c["orden_id"] == orden)
+    assert candidata["ambigua"] is False
+    assert candidata["aviso_ambigua"] == ""
+
+
+def test_el_mismo_lead_no_se_cuenta_como_otro(odoo, monkeypatch):
+    """El teléfono del PROPIO lead que se está mirando no es ambigüedad:
+    solo cuenta un lead DISTINTO y vivo."""
+    monkeypatch.delenv("LINEAR_API_KEY", raising=False)
+    linear_leads.reiniciar_muestra()
+    # LEAD-91 mirándose a sí mismo, con su propio teléfono de la muestra.
+    lead = {"ref": "LEAD-91", "pp": "PP-70211", "nombre": "Tamara",
+           "celular": "6552-0966", "url": ""}
+    partner = odoo.agregar_partner("Tamara", "6552-0966")
+    orden = odoo.agregar_orden(partner, "S00099", dias_atras=1,
+                               amount_total=60.0)
+    resultado = cot_lead.candidatas_del_lead(lead)
+    candidata = next(c for c in resultado["candidatas"]
+                     if c["orden_id"] == orden)
+    assert candidata["ambigua"] is False
+
+
+def test_sin_linear_las_candidatas_salen_sin_marca(odoo, monkeypatch):
+    """Best-effort: la marca es un extra — Linear caído no esconde
+    candidatas ni revienta la ficha."""
+    monkeypatch.delenv("LINEAR_API_KEY", raising=False)
+    linear_leads.reiniciar_muestra()
+
+    def revienta(refrescar=False):
+        raise linear_leads.ErrorLeads("Linear no contesta")
+
+    monkeypatch.setattr(linear_leads, "listar", revienta)
+    lead = {"ref": "LEAD-202", "pp": "PP-XX202", "nombre": "Cliente C",
+           "celular": "6552-0966", "url": ""}
+    partner = odoo.agregar_partner("Cliente C", "6552-0966")
+    odoo.agregar_orden(partner, "S00100", dias_atras=1, amount_total=10.0)
+    resultado = cot_lead.candidatas_del_lead(lead)
+    assert resultado["ok"] is True
+    assert resultado["candidatas"]
+    assert all(not c["ambigua"] for c in resultado["candidatas"])

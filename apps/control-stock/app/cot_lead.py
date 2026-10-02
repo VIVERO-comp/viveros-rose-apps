@@ -232,6 +232,12 @@ def candidatas_del_lead(lead, texto_libre=""):
         return {"ok": False, "error": _error(error), "candidatas": []}
 
     corte = _hace_60_dias_utc()
+    # Los teléfonos de los DEMÁS leads vivos, para marcar la candidata
+    # ambigua (2/10/2026, OK de Abraham): un teléfono compartido entre dos
+    # clientes puede hacer que la cotización de B salga como candidata en
+    # la ficha de A — la marca avisa, no bloquea (conectar sigue siendo
+    # decisión de la empleada) y no toca el amarre automático del espejo.
+    telefonos_otros = _telefonos_de_otros_leads_vivos(lead)
     candidatas = []
     for fila in filas:
         ref_interna = (fila.get("client_order_ref") or "").strip().upper()
@@ -256,10 +262,42 @@ def candidatas_del_lead(lead, texto_libre=""):
             continue
         legible = _orden_legible(fila)
         legible["cliente"] = partner.get("name") or ""
+        # La marca de ambigüedad, decidida ACÁ (la plantilla solo pinta):
+        # el teléfono de esta orden también es de otro lead vivo.
+        legible["ambigua"] = bool(
+            telefono_orden and telefono_orden[-8:] in telefonos_otros)
+        legible["aviso_ambigua"] = (
+            "Este teléfono es de más de un cliente: revisa que la "
+            "cotización sea de ESTE lead antes de conectarla."
+            if legible["ambigua"] else "")
         candidatas.append(legible)
 
     candidatas.sort(key=lambda o: o["fecha"], reverse=True)
     return {"ok": True, "error": None, "candidatas": candidatas}
+
+
+def _telefonos_de_otros_leads_vivos(lead):
+    """Los últimos 8 dígitos del celular de cada OTRO lead vivo del
+    tablero (los cerrados —Ganado, Perdido— no cuentan: a un lead cerrado
+    no se le hace una venta nueva). Best-effort a propósito: la marca de
+    ambigüedad es un extra, y si Linear no contesta las candidatas salen
+    igual, solo que sin marca."""
+    from . import linear_leads  # diferido: este módulo es la capa de Odoo
+    try:
+        leads = linear_leads.listar()
+    except Exception:
+        return set()
+    ref_propio = str((lead or {}).get("ref") or "")
+    telefonos = set()
+    for otro in leads:
+        if otro.get("ref") == ref_propio:
+            continue
+        if otro.get("estado") in linear_leads.CERRADOS:
+            continue
+        digitos = re.sub(r"\D", "", str(otro.get("celular") or ""))
+        if len(digitos) >= 7:
+            telefonos.add(digitos[-8:])
+    return telefonos
 
 
 # ---------------------------------------------------------------------------
