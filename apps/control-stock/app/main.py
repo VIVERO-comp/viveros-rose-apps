@@ -4741,24 +4741,36 @@ def compras_recibir_pantalla(request: Request):
     Sin orden de compra, o con Odoo caído, la pantalla lo dice en palabras
     simples y nunca es un 500 — la misma tolerancia del tablero.
     """
-    empleada = request.state.empleada
     ref = (request.query_params.get("ref") or "").strip()
     _alc, error = _compras_permiso(request, ref)
     if error:
         return _compras_vuelve(error=error,
                                ancla=compras.ancla_de_compra(ref))
-    compra = compras.con_lineas(compras.uno(ref))
-    estado = compra_odoo.recepcion(ref)
+    return _pantalla_recibir(request, ref,
+                             aviso=request.query_params.get("aviso"),
+                             error=request.query_params.get("error"))
+
+
+def _pantalla_recibir(request, ref, aviso=None, error=None, campo_error="",
+                      valores=None):
+    """La pantalla de recibir, compartida por el GET y el POST que rebotó.
+
+    `campo_error` es el campo que falló («llego-7»): la plantilla pinta el
+    mensaje DEBAJO de él y lo enfoca (regla 5 de formularios). `valores` es
+    lo que el empleado tecleó en los renglones, para que un rechazo no le
+    borre nada."""
     return plantillas.TemplateResponse(request, "compras_recibir.html", {
-        "empleada": empleada,
+        "empleada": request.state.empleada,
         "modo": compras.modo(),
-        "compra": compra,
-        "recepcion": estado,
+        "compra": compras.con_lineas(compras.uno(ref)),
+        "recepcion": compra_odoo.recepcion(ref),
         # El panel de lo dañado se pinta aunque Odoo no contestara: es una
         # tabla local y no tiene por qué desaparecer con Odoo.
         "danado": compra_odoo.danado_de(ref),
-        "aviso": request.query_params.get("aviso"),
-        "error": request.query_params.get("error"),
+        "aviso": aviso,
+        "error": error,
+        "campo_error": campo_error,
+        "valores": valores or {},
     })
 
 
@@ -4781,6 +4793,18 @@ async def compras_recibir(request: Request):
     resultado = compra_odoo.recibir(ref, llegadas=llegadas, danadas=danadas,
                                     autor=autor)
     if not resultado["ok"]:
+        if resultado.get("campo"):
+            # El error de UN campo (regla 5): la misma pantalla, pintada
+            # directo del POST, con lo tecleado en todos los renglones y el
+            # mensaje debajo del campo que falló — el redirect de abajo
+            # borraría lo escrito.
+            return _pantalla_recibir(
+                request, ref, error=resultado["error"],
+                campo_error=resultado["campo"],
+                valores={**{f"llego-{m}": str(v or "")
+                            for m, v in llegadas.items()},
+                         **{f"roto-{m}": str(v or "")
+                            for m, v in danadas.items()}})
         # Se vuelve a la MISMA pantalla: lo que se escribió se puede
         # corregir ahí, y mandar al tablero obligaría a volver a entrar.
         return _compras_recibir_vuelve(ref, error=resultado["error"])

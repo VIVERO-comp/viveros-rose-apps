@@ -459,16 +459,28 @@ def _comentar(compra, texto, autor=""):
 # Recibir: la entrada de stock de Odoo, validada con lo que llegó bueno
 # ---------------------------------------------------------------------------
 
-def _num(valor, defecto=0.0):
-    """Un número que se pueda recibir: cero o más. Lo ilegible cae en
-    `defecto` en vez de reventar la pantalla."""
+def _num_tecleado(valor):
+    """(numero, error) de un «Llegó» o «Dañadas» del formulario.
+
+    Vacío vale 0 —no escribir nada sigue siendo «no llegó / ninguna
+    dañada»—, pero un TEXTO («1O» con la o del dedo) o un NEGATIVO
+    devuelven su error y NUNCA un 0 en silencio: con ese 0 el renglón se
+    validaba quedando pendiente sin que nadie lo pidiera, o las dañadas
+    entraban al stock como buenas (regla de dinero/stock del 2/10/2026:
+    lo ilegible se rechaza con aviso). La coma es separador decimal,
+    como en todos lados.
+    """
     crudo = str(valor if valor is not None else "").strip()
     if not crudo:
-        return defecto
-    numero = ventas._num_positivo(crudo, defecto=None, permitir_cero=True)
-    if numero is None or numero < 0:
-        return defecto
-    return min(float(numero), 100000.0)
+        return 0.0, ""
+    try:
+        numero = round(float(crudo.replace(",", ".")), 2)
+    except ValueError:
+        return None, (f"«{crudo}» no se entiende: escribe un número, como "
+                      f"10 o 2.5 (o déjalo vacío si no aplica).")
+    if numero < 0:
+        return None, f"«{crudo}» es negativo, y una cantidad no puede serlo."
+    return min(float(numero), 100000.0), ""
 
 
 def _sin_recepcion(error):
@@ -613,7 +625,9 @@ def recibir(ref, llegadas=None, danadas=None, autor=""):
     número del renglón va en el nombre del campo, porque un formulario sin
     JavaScript no puede mandar una lista de objetos.
 
-    `{"ok", "error", "aviso", "pendiente", "entraron", "danadas"}`.
+    `{"ok", "error", "campo", "aviso", "pendiente", "entraron",
+    "danadas"}` — `campo` es el campo del formulario que falló (si el
+    error es de uno), para pintar el aviso debajo de él.
 
     Las tres reglas, y las tres son del dueño:
 
@@ -626,18 +640,23 @@ def recibir(ref, llegadas=None, danadas=None, autor=""):
     """
     estado = recepcion(ref)
     if not estado["ok"]:
-        return {"ok": False, "error": estado["error"], "aviso": "",
-                "pendiente": None, "entraron": 0.0, "danadas": 0.0}
+        return {"ok": False, "error": estado["error"], "campo": "",
+                "aviso": "", "pendiente": None, "entraron": 0.0,
+                "danadas": 0.0}
     if estado["cerrada"]:
-        return {"ok": False, "aviso": "", "pendiente": None,
+        return {"ok": False, "aviso": "", "campo": "", "pendiente": None,
                 "entraron": 0.0, "danadas": 0.0,
                 "error": (f"La orden {estado['orden']['nombre']} ya no tiene "
                           f"nada por recibir en Odoo.")}
 
-    cuentas, error = _cuentas_de(estado["renglones"], llegadas, danadas)
+    cuentas, error, campo = _cuentas_de(estado["renglones"], llegadas,
+                                        danadas)
     if error:
-        return {"ok": False, "error": error, "aviso": "", "pendiente": None,
-                "entraron": 0.0, "danadas": 0.0}
+        # `campo` dice CUÁL campo del formulario falló («llego-7»,
+        # «roto-7»), para que la pantalla pinte el error debajo de él y
+        # conserve lo tecleado — nunca un banner genérico arriba.
+        return {"ok": False, "error": error, "campo": campo, "aviso": "",
+                "pendiente": None, "entraron": 0.0, "danadas": 0.0}
 
     compra = compras.uno(ref)
     try:
@@ -652,7 +671,7 @@ def recibir(ref, llegadas=None, danadas=None, autor=""):
         _validar_entrada(estado["picking"])
         pendiente = _pendiente_de(compra)
     except Exception as fallo:
-        return {"ok": False, "aviso": "", "pendiente": None,
+        return {"ok": False, "aviso": "", "campo": "", "pendiente": None,
                 "entraron": 0.0, "danadas": 0.0,
                 "error": (f"No se pudo registrar la entrada en Odoo: "
                           f"{compras._error(fallo)}")}
@@ -679,17 +698,21 @@ def recibir(ref, llegadas=None, danadas=None, autor=""):
     aviso = _texto_recepcion(estado["orden"]["nombre"], entraron, rotas,
                              pendiente)
     _comentar(compra, _texto_comentario(entraron, rotas, pendiente), autor)
-    return {"ok": True, "error": "", "aviso": aviso, "pendiente": pendiente,
-            "entraron": entraron, "danadas": rotas}
+    return {"ok": True, "error": "", "campo": "", "aviso": aviso,
+            "pendiente": pendiente, "entraron": entraron, "danadas": rotas}
 
 
 def _cuentas_de(renglones, llegadas, danadas):
-    """(cuentas, error) — cuánto llegó y cuánto dañado por movimiento, ya
-    validado.
+    """(cuentas, error, campo) — cuánto llegó y cuánto dañado por
+    movimiento, ya validado. `campo` es el nombre del campo del formulario
+    que falló («llego-7» / «roto-7»), o vacío si el error no es de un campo.
 
-    Dos candados, y los dos son errores de dedo que de otro modo quedarían
-    guardados en Odoo:
+    Tres candados, y los tres son errores de dedo que de otro modo
+    quedarían guardados en Odoo:
 
+    - **lo ilegible o negativo se RECHAZA con aviso**, nunca se vuelve 0 en
+      silencio: con el 0 el renglón quedaba pendiente sin que nadie lo
+      pidiera, o las dañadas entraban al stock como buenas (2/10/2026);
     - **dañadas no puede pasar de lo que llegó**: «llegaron 10, 12 rotas» no
       quiere decir nada y restar daría negativo;
     - **algo tiene que haber llegado**: validar una entrada con todo en cero
@@ -700,24 +723,33 @@ def _cuentas_de(renglones, llegadas, danadas):
     cuentas = []
     for renglon in renglones:
         clave = str(renglon["movimiento"])
-        llego = _num(llegadas.get(clave, llegadas.get(renglon["movimiento"])))
-        roto = _num(danadas.get(clave, danadas.get(renglon["movimiento"])))
+        llego, error = _num_tecleado(
+            llegadas.get(clave, llegadas.get(renglon["movimiento"])))
+        if error:
+            return [], (f"Lo que llegó de «{renglon['nombre']}»: {error}"), \
+                f"llego-{clave}"
+        roto, error = _num_tecleado(
+            danadas.get(clave, danadas.get(renglon["movimiento"])))
+        if error:
+            return [], (f"Las dañadas de «{renglon['nombre']}»: {error}"), \
+                f"roto-{clave}"
         if roto > llego:
             return [], (f"De «{renglon['nombre']}» anotaste "
                         f"{compras._cantidad_bonita(roto)} dañadas pero solo "
                         f"{compras._cantidad_bonita(llego)} que llegaron. "
-                        f"Las dañadas son parte de lo que llegó.")
+                        f"Las dañadas son parte de lo que llegó."), \
+                f"roto-{clave}"
         cuentas.append({"movimiento": renglon["movimiento"],
                         "nombre": renglon["nombre"],
                         "producto_id": renglon["producto_id"],
                         "llego": llego, "danadas": roto,
                         "bueno": round(llego - roto, 2)})
     if not cuentas:
-        return [], "Esta entrada no tiene renglones que recibir."
+        return [], "Esta entrada no tiene renglones que recibir.", ""
     if sum(c["llego"] for c in cuentas) <= 0:
         return [], ("No anotaste nada que llegó. Si el camión no vino, dejá "
-                    "la compra en «En camino» y recibila cuando llegue.")
-    return cuentas, ""
+                    "la compra en «En camino» y recibila cuando llegue."), ""
+    return cuentas, "", ""
 
 
 def _validar_entrada(picking_id):

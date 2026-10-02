@@ -1193,3 +1193,7 @@ input.campo.cmp-mini{width:72px;padding:7px 8px;text-align:right}
 .cmp-acciones-fila{white-space:nowrap}
 .cmp-acciones-fila .btn{margin-left:4px}
 .cmp-acciones-fila .btn:first-child{margin-left:0}
+
+/* El error de la regla 5, debajo del campo que falló (la franja de
+   arriba queda para los errores sin campo). */
+.error-campo{margin:4px 0 0;font-size:12.5px;font-weight:600;color:var(--critico);line-height:1.4}

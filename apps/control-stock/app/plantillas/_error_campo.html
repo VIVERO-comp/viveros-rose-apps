@@ -1,0 +1,12 @@
+{# La regla 5 de formularios (1/10/2026): el error de validación sale
+   DEBAJO del campo que falló, nunca solo como banner arriba. Se incluye
+   justo debajo del input con {% with campo='nombre-del-campo' %}; el campo
+   que falló lo decide Python (`campo_error` en el contexto; para un campo
+   repetido el índice va pegado al nombre, ej. «servicio_monto-2»). El
+   mensaje viaja en la variable de error de siempre de cada pantalla, y el
+   input que falló lleva autofocus (puesto en la plantilla con la misma
+   comparación) para que la pantalla aterrice ahí sin una línea de JS. El
+   banner de arriba queda SOLO para los errores sin campo (Odoo caído). #}
+{% if campo_error and campo_error == campo %}
+<p class="error-campo" role="alert">{{ error_campo_texto or error_venta or error }}</p>
+{% endif %}

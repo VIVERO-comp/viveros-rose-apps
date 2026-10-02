@@ -783,16 +783,98 @@ def test_recibir_desde_la_pantalla_sube_el_stock_y_vuelve_a_la_tarjeta(
     assert compra_odoo.total_danado(ref) == 2.0
 
 
-def test_un_error_de_la_recepcion_vuelve_a_la_misma_pantalla(cliente,
-                                                             de_dueno, odoo):
+def test_un_error_de_un_campo_repinta_la_pantalla_sin_redirect(cliente,
+                                                               de_dueno, odoo):
+    """Regla 5: el error de un campo (acá «más dañadas que llegadas») NO
+    redirige — repinta la misma pantalla con lo tecleado y el mensaje
+    debajo del campo que falló."""
     ref = _pedida(odoo)
     tierra = compra_odoo.recepcion(ref)["renglones"][0]["movimiento"]
     respuesta = cliente.post("/compras/recibir", data={
         "ref": ref, f"llego-{tierra}": "2", f"roto-{tierra}": "7",
     }, follow_redirects=False)
-    destino = respuesta.headers["location"]
-    assert destino.startswith("/compras/recibir?ref=")
-    assert "error=" in destino and destino.endswith(compras.ANCLA_RECIBIR)
+    assert respuesta.status_code == 200
+    texto = respuesta.text
+    # Lo tecleado sigue en pantalla, y el error salió debajo del campo.
+    assert 'value="2"' in texto and 'value="7"' in texto
+    assert "error-campo" in texto
+    assert f'name="roto-{tierra}"' in texto
+    # Sin banner genérico arriba: el error es de UN campo.
+    assert "Ups." not in texto
+
+
+def test_un_llego_ilegible_rebota_con_su_campo_y_sin_tocar_odoo(odoo):
+    """El dedo clásico: «1O» (con la letra o) en vez de «10». Antes se
+    volvía 0 en silencio y el renglón quedaba pendiente sin que nadie lo
+    pidiera; ahora se rechaza diciendo renglón y campo."""
+    ref = _pedida(odoo)
+    tierra = compra_odoo.recepcion(ref)["renglones"][0]["movimiento"]
+    resultado = compra_odoo.recibir(ref, llegadas={str(tierra): "1O"})
+    assert not resultado["ok"]
+    assert "Tierra negra" in resultado["error"]
+    assert "1O" in resultado["error"]
+    assert resultado["campo"] == f"llego-{tierra}"
+    assert odoo.escrituras("stock.move", "write") == []
+
+
+def test_unas_danadas_ilegibles_no_entran_al_stock_como_buenas(odoo):
+    """Si «Dañadas» no se entiende, antes caía a 0 y las rotas entraban al
+    stock como buenas. Ahora se rechaza, sin escribirle nada a Odoo."""
+    ref = _pedida(odoo)
+    renglones = compra_odoo.recepcion(ref)["renglones"]
+    tierra, macetas = renglones[0]["movimiento"], renglones[1]["movimiento"]
+    resultado = compra_odoo.recibir(
+        ref, llegadas={str(tierra): "40", str(macetas): "10"},
+        danadas={str(macetas): "3x"})
+    assert not resultado["ok"]
+    assert resultado["campo"] == f"roto-{macetas}"
+    assert odoo.escrituras("stock.move", "write") == []
+    assert compra_odoo.danado_de(ref) == []
+
+
+def test_un_negativo_tampoco_se_vuelve_cero(odoo):
+    ref = _pedida(odoo)
+    tierra = compra_odoo.recepcion(ref)["renglones"][0]["movimiento"]
+    resultado = compra_odoo.recibir(ref, llegadas={str(tierra): "-5"})
+    assert not resultado["ok"]
+    assert "negativo" in resultado["error"]
+    assert resultado["campo"] == f"llego-{tierra}"
+    assert odoo.escrituras("stock.move", "write") == []
+
+
+def test_el_vacio_sigue_valiendo_cero(odoo):
+    """Vacío NO es ilegible: dejar un renglón en blanco sigue siendo «de
+    este no llegó nada», que queda pendiente como siempre."""
+    ref = _pedida(odoo)
+    renglones = compra_odoo.recepcion(ref)["renglones"]
+    tierra, macetas = renglones[0]["movimiento"], renglones[1]["movimiento"]
+    resultado = compra_odoo.recibir(
+        ref, llegadas={str(tierra): "40", str(macetas): ""})
+    assert resultado["ok"], resultado["error"]
+    escritas = {a[0][0]: a[1]["quantity"]
+                for a, _k in odoo.escrituras("stock.move", "write")}
+    assert escritas[macetas] == 0.0
+
+
+def test_recibir_con_un_dedo_conserva_lo_tecleado_de_todos_los_renglones(
+        cliente, de_dueno, odoo):
+    """El POST con un «1O» repinta la pantalla con TODO lo tecleado (el
+    renglón bueno incluido), el campo malo marcado y enfocado."""
+    ref = _pedida(odoo)
+    renglones = compra_odoo.recepcion(ref)["renglones"]
+    tierra, macetas = renglones[0]["movimiento"], renglones[1]["movimiento"]
+    respuesta = cliente.post("/compras/recibir", data={
+        "ref": ref, f"llego-{tierra}": "1O", f"roto-{tierra}": "",
+        f"llego-{macetas}": "8", f"roto-{macetas}": "2",
+    }, follow_redirects=False)
+    assert respuesta.status_code == 200
+    texto = respuesta.text
+    assert 'value="1O"' in texto          # lo tecleado no se borra
+    assert 'value="8"' in texto and 'value="2"' in texto
+    assert 'aria-invalid="true"' in texto and "autofocus" in texto
+    assert texto.count('class="error-campo"') == 1
+    # Y Odoo quedó sin tocar.
+    assert odoo.escrituras("stock.move", "write") == []
 
 
 def test_un_empleado_no_recibe_una_compra_ajena_ni_por_post(cliente, odoo):

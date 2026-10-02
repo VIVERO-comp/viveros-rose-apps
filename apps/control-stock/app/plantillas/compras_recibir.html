@@ -87,7 +87,9 @@
     </div>
 
     {% set vuelta = '/compras/recibir?ref=' ~ (compra.ref | urlencode) ~ '#cp-recibir' %}
-    {% if error %}<div class="franja"><b>Ups.</b> <span>{{ error }}</span>
+    {# El banner solo para errores SIN campo (Odoo caído, permisos): el de
+       un campo sale debajo del campo mismo (regla 5, _error_campo.html). #}
+    {% if error and not campo_error %}<div class="franja"><b>Ups.</b> <span>{{ error }}</span>
       <a class="cierra-banner" href="{{ vuelta }}" aria-label="Cerrar el aviso">×</a></div>{% endif %}
     {% if aviso %}<div class="aviso-ok">{{ aviso }}
       <a class="cierra-banner" href="{{ vuelta }}" aria-label="Cerrar el aviso">×</a></div>{% endif %}
@@ -158,15 +160,20 @@
                    escribir nada. Se corrige escribiendo. #}
                 <td><input class="campo cmp-mini" type="text" inputmode="decimal"
                            name="llego-{{ r.movimiento }}"
-                           value="{{ r.esperado_texto }}"
-                           aria-label="Cuántos llegaron de {{ r.nombre }}"></td>
+                           value="{{ valores.get('llego-' ~ r.movimiento, r.esperado_texto) }}"
+                           {% if campo_error == 'llego-' ~ r.movimiento %}autofocus aria-invalid="true"{% endif %}
+                           aria-label="Cuántos llegaron de {{ r.nombre }}">
+                  {% with campo = 'llego-' ~ r.movimiento %}{% include '_error_campo.html' %}{% endwith %}</td>
                 {# Las dañadas nacen VACÍAS, o sea en cero: lo normal es que
                    no llegue nada roto, y un número sugerido ahí sería
                    inventar una rotura. #}
                 <td><input class="campo cmp-mini" type="text" inputmode="decimal"
                            name="roto-{{ r.movimiento }}"
+                           value="{{ valores.get('roto-' ~ r.movimiento, '') }}"
                            placeholder="0"
-                           aria-label="Cuántas llegaron dañadas de {{ r.nombre }}"></td>
+                           {% if campo_error == 'roto-' ~ r.movimiento %}autofocus aria-invalid="true"{% endif %}
+                           aria-label="Cuántas llegaron dañadas de {{ r.nombre }}">
+                  {% with campo = 'roto-' ~ r.movimiento %}{% include '_error_campo.html' %}{% endwith %}</td>
               </tr>
               {% endfor %}
             </tbody>

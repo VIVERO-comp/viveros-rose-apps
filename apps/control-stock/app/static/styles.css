@@ -1758,3 +1758,7 @@ nav .marca{display:none}
   .fila-planta-editar .servicio-monto{justify-content:space-between}
   .fila-planta-editar .quitar-servicio{margin-left:0; align-self:flex-end}
 }
+
+/* El error de la regla 5, debajo del campo que falló (el banner de
+   arriba queda para los errores sin campo). */
+.error-campo{margin:4px 0 0;font-size:12.5px;font-weight:600;color:var(--critico);line-height:1.4}
