@@ -602,3 +602,35 @@ def test_la_tarjeta_de_actividad_tiene_un_solo_boton_oro(cliente, db_limpia):
     # ...y el ÚNICO oro de la tarjeta es Marcar terminada.
     assert tarjeta.count("btn oro") == 1
     assert "Marcar terminada" in tarjeta
+
+
+# ---------------------------------------------------------------------------
+# Nº17: el logger de la app está enganchado a stdout (el arranque caliente
+# ya no es mudo en los logs de Docker)
+# ---------------------------------------------------------------------------
+
+def test_el_logger_de_la_app_escribe_a_stdout_sin_duplicar():
+    import io
+    import logging
+    import sys
+
+    from app import main as modulo_main
+
+    registro = modulo_main._enganchar_registro()
+    # Tiene handler propio, nivel INFO, y sigue propagando (caplog y un
+    # root con handlers lo verían igual).
+    assert registro.level == logging.INFO
+    assert len(registro.handlers) == 1
+    assert registro.propagate is True
+    assert registro.handlers[0].stream is sys.stdout
+    # Idempotente: engancharlo otra vez (reimport, tests) no duplica.
+    modulo_main._enganchar_registro()
+    assert len(registro.handlers) == 1
+    # Y una línea INFO de verdad sale por el handler.
+    captura = io.StringIO()
+    registro.handlers[0].stream = captura
+    try:
+        registro.info("Calentamiento de arranque: prueba en 0.0 s")
+    finally:
+        registro.handlers[0].stream = sys.stdout
+    assert "Calentamiento de arranque: prueba" in captura.getvalue()

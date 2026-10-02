@@ -13,6 +13,7 @@ import logging
 import os
 import re
 import secrets
+import sys
 import time
 from datetime import datetime, timedelta
 from urllib.parse import quote
@@ -103,6 +104,34 @@ plantillas.env.globals["cal_color"] = calendario.color_de
 plantillas.env.globals["colores"] = colores  # la paleta unica en las plantillas
 plantillas.env.globals["cal_tipo"] = calendario.nombre_de_tipo
 plantillas.env.filters["fecha_dmy"] = calendario.dmy
+
+# ---------------------------------------------------------------------------
+# El logger de la app, enganchado a stdout (Nº17 del lote, 2/10/2026).
+#
+# "control_stock" no tenía NI UN handler: sus .info() —las líneas del
+# calentamiento de arranque— no llegaban al stdout de Docker (el root sin
+# handlers solo saca WARNING+ por el lastResort de logging, a stderr). Un
+# fallo del arranque caliente era funcional pero MUDO. Acá se le da un
+# handler propio a stdout, una sola vez (idempotente: reimportar o los
+# tests no agregan un segundo), y `propagate` se queda en True a
+# propósito: el root no tiene handlers en este deploy (uvicorn solo
+# configura los suyos), así que no hay línea doble, y el caplog de pytest
+# —que escucha en el root— sigue viendo todo.
+# ---------------------------------------------------------------------------
+
+def _enganchar_registro():
+    registro = logging.getLogger("control_stock")
+    registro.setLevel(logging.INFO)
+    if not registro.handlers:
+        a_stdout = logging.StreamHandler(sys.stdout)
+        a_stdout.setFormatter(logging.Formatter(
+            "%(levelname)s:     control-stock: %(message)s"))
+        registro.addHandler(a_stdout)
+    return registro
+
+
+_enganchar_registro()
+
 
 # ---------------------------------------------------------------------------
 # Calentamiento de arranque (29/09/2026): la PRIMERA petición tras levantar
