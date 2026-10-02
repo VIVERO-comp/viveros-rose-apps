@@ -48,7 +48,9 @@
   <div class="aviso-error">{{ aviso }}</div>
   {% endfor %}
 
-  {% if error %}
+  {# El banner queda para los errores SIN campo (la foto, Odoo caído): el
+     de un campo sale debajo del campo mismo (regla 5, _error_campo.html). #}
+  {% if error and not campo_error %}
   <div class="aviso-error">{{ error }}</div>
   {% endif %}
 
@@ -95,9 +97,12 @@
 
       <div class="campo">
         <span>Nombre {{ 'de la maceta' if tipo == 'maceta' else 'del insumo' }}</span>
-        <input name="nombre" autocomplete="off" required autofocus
+        <input name="nombre" autocomplete="off" required
+               {% if not campo_error or campo_error == 'nombre' %}autofocus{% endif %}
+               {% if campo_error == 'nombre' %}aria-invalid="true"{% endif %}
                value="{{ previo.nombre or '' }}"
                placeholder="{{ 'Ej: Maceta barro 30 cm' if tipo == 'maceta' else 'Ej: Abono orgánico' }}">
+        {% with campo = 'nombre' %}{% include '_error_campo.html' %}{% endwith %}
         <span class="nota-campo">La referencia en Odoo se arma sola desde el
           nombre y empieza por <b>{{ prefijo }}</b>.</span>
       </div>
@@ -105,23 +110,29 @@
       {% if tipo == 'maceta' %}
       <div class="campo">
         <span>Material</span>
-        <select name="material" required>
+        <select name="material" required
+                {% if campo_error == 'material' %}autofocus aria-invalid="true"{% endif %}>
           <option value="">— elige el material —</option>
           {% for clave, etiqueta in materiales %}
           <option value="{{ clave }}" {{ 'selected' if previo.material == clave }}>{{ etiqueta }}</option>
           {% endfor %}
         </select>
+        {% with campo = 'material' %}{% include '_error_campo.html' %}{% endwith %}
       </div>
       <div class="campos-nuevo">
         <div class="campo">
           <span>Diámetro (cm)</span>
           <input name="diametro" type="number" inputmode="decimal" min="0" step="0.5"
+                 {% if campo_error == 'diametro' %}autofocus aria-invalid="true"{% endif %}
                  placeholder="opcional" value="{{ previo.diametro or '' }}">
+          {% with campo = 'diametro' %}{% include '_error_campo.html' %}{% endwith %}
         </div>
         <div class="campo">
           <span>Alto (cm)</span>
           <input name="alto" type="number" inputmode="decimal" min="0" step="0.5"
+                 {% if campo_error == 'alto' %}autofocus aria-invalid="true"{% endif %}
                  placeholder="opcional" value="{{ previo.alto or '' }}">
+          {% with campo = 'alto' %}{% include '_error_campo.html' %}{% endwith %}
         </div>
       </div>
       <div class="campo">
@@ -134,12 +145,14 @@
       {% if tipo == 'insumo' %}
       <div class="campo">
         <span>Unidad</span>
-        <select name="unidad" required>
+        <select name="unidad" required
+                {% if campo_error == 'unidad' %}autofocus aria-invalid="true"{% endif %}>
           <option value="">— elige la unidad —</option>
           {% for u in unidades %}
           <option value="{{ u.clave }}" {{ 'selected' if previo.unidad == u.clave }}>{{ u.etiqueta }}</option>
           {% endfor %}
         </select>
+        {% with campo = 'unidad' %}{% include '_error_campo.html' %}{% endwith %}
         <span class="nota-campo">Se usa la unidad de medida que Odoo ya tenga;
           esta app no crea unidades nuevas.</span>
       </div>
@@ -149,12 +162,16 @@
         <div class="campo">
           <span>Precio de venta ($)</span>
           <input name="precio" type="text" inputmode="decimal"
+                 {% if campo_error == 'precio' %}autofocus aria-invalid="true"{% endif %}
                  placeholder="0.00" value="{{ previo.precio or '' }}">
+          {% with campo = 'precio' %}{% include '_error_campo.html' %}{% endwith %}
         </div>
         <div class="campo">
           <span>Costo ($)</span>
           <input name="costo" type="text" inputmode="decimal"
+                 {% if campo_error == 'costo' %}autofocus aria-invalid="true"{% endif %}
                  placeholder="0.00" value="{{ previo.costo or '' }}">
+          {% with campo = 'costo' %}{% include '_error_campo.html' %}{% endwith %}
         </div>
       </div>
 

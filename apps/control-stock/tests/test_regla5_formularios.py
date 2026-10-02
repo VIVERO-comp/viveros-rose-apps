@@ -276,3 +276,36 @@ def test_editar_monto_de_servicio_ilegible_marca_su_renglon(cliente,
     assert 'class="error-campo"' in pagina
     tramo = pagina[pagina.index('name="servicio_monto"'):]
     assert "aria-invalid" in tramo[:500]
+
+
+# ---------------------------------------------------------------------------
+# Crear producto (maceta / insumo)
+# ---------------------------------------------------------------------------
+
+from test_alta_producto import MACETA  # noqa: E402
+from test_alta_producto import odoo as odoo_altas  # noqa: E402,F401
+
+
+def test_crear_producto_precio_ilegible_marca_su_campo(cliente, odoo_altas):
+    pagina = cliente.post("/productos/crear", data={
+        "tipo": "maceta", **{**MACETA, "precio": "mucho"}})
+    assert pagina.status_code == 400
+    texto = pagina.text
+    assert 'value="mucho"' in texto                 # lo escrito sigue
+    assert 'class="error-campo"' in texto
+    tramo = texto[texto.index('name="precio"'):]
+    assert "aria-invalid" in tramo[:300]
+    assert '<div class="aviso-error">' not in texto
+    # revisar también reporta el campo directamente.
+    from app import altas
+    assert altas.revisar("maceta", {**MACETA, "precio": "mucho"})[2] == "precio"
+    assert altas.revisar("maceta", {**MACETA, "costo": "-2"})[2] == "costo"
+    assert altas.revisar("insumo", {**MACETA, "unidad": ""})[2] in ("unidad", "nombre")
+
+
+def test_crear_producto_sin_nombre_enfoca_el_nombre(cliente, odoo_altas):
+    pagina = cliente.post("/productos/crear", data={
+        "tipo": "maceta", **{**MACETA, "nombre": "🤍"}}).text
+    assert "Escribe el nombre del producto." in pagina
+    tramo = pagina[pagina.index('name="nombre"'):]
+    assert "aria-invalid" in tramo[:300]

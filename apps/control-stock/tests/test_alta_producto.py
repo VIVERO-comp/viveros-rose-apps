@@ -94,7 +94,7 @@ INSUMO = {"nombre": "Abono orgánico", "unidad": "unidad", "precio": "9",
 
 
 def _crear(tipo, form):
-    limpio, error = altas.revisar(tipo, form)
+    limpio, error, campo = altas.revisar(tipo, form)
     assert error is None, error
     return altas.crear(limpio)
 
@@ -163,7 +163,7 @@ def test_sin_la_categoria_el_tipo_se_apaga_sin_reventar(odoo):
     # Y la planta no depende de ninguna categoría nueva: siempre está.
     assert tipos["planta"]["listo"] is True
     # Intentar crearla igual no revienta: sube con su motivo.
-    limpio, _ = altas.revisar("maceta", MACETA)
+    limpio, _, _campo = altas.revisar("maceta", MACETA)
     with pytest.raises(datos.SinConexion) as fallo:
         altas.crear(limpio)
     assert "Macetas" in str(fallo.value)
@@ -294,7 +294,7 @@ def test_el_formulario_solo_ofrece_litro_y_unidad(odoo):
     assert [u["clave"] for u in altas.UNIDADES] == ["litro", "unidad"]
     assert all(altas.id_de_unidad(u["clave"]) for u in altas.UNIDADES)
     # Y lo que ya no se ofrece tampoco se acepta si alguien lo postea.
-    limpio, error = altas.revisar("insumo", {**INSUMO, "unidad": "saco"})
+    limpio, error, campo = altas.revisar("insumo", {**INSUMO, "unidad": "saco"})
     assert limpio is None
     assert "unidad" in error.lower()
     assert odoo.creados == []
@@ -316,7 +316,7 @@ def test_una_unidad_que_odoo_no_tiene_no_se_crea(odoo):
 
 
 def test_sin_unidad_elegida_no_se_crea_nada(odoo):
-    limpio, error = altas.revisar("insumo", {**INSUMO, "unidad": ""})
+    limpio, error, campo = altas.revisar("insumo", {**INSUMO, "unidad": ""})
     assert limpio is None
     assert "unidad" in error.lower()
     assert odoo.creados == []
@@ -328,41 +328,41 @@ def test_sin_unidad_elegida_no_se_crea_nada(odoo):
 
 def test_un_nombre_sin_letras_no_es_un_nombre(odoo):
     for nombre in ("", "   ", "🤍", "30"):
-        limpio, error = altas.revisar("maceta", {**MACETA, "nombre": nombre})
+        limpio, error, campo = altas.revisar("maceta", {**MACETA, "nombre": nombre})
         assert limpio is None and error
 
 
 def test_precio_y_costo_ilegibles_o_negativos_rebotan(odoo):
     for cambio in ({"precio": "-1"}, {"costo": "-2"}, {"precio": "mucho"}):
-        limpio, error = altas.revisar("maceta", {**MACETA, **cambio})
+        limpio, error, campo = altas.revisar("maceta", {**MACETA, **cambio})
         assert limpio is None and error
 
 
 def test_precio_y_costo_son_opcionales_y_valen_cero(odoo):
-    limpio, error = altas.revisar("insumo", {**INSUMO, "precio": "", "costo": ""})
+    limpio, error, campo = altas.revisar("insumo", {**INSUMO, "precio": "", "costo": ""})
     assert error is None
     assert limpio["precio"] == 0.0 and limpio["costo"] == 0.0
 
 
 def test_el_material_es_obligatorio_y_solo_de_la_lista(odoo):
     for material in ("", "acero", "FIBRA"):
-        limpio, error = altas.revisar("maceta", {**MACETA, "material": material})
+        limpio, error, campo = altas.revisar("maceta", {**MACETA, "material": material})
         assert limpio is None and "material" in error.lower()
 
 
 def test_un_tipo_que_no_existe_no_crea_nada(odoo):
-    limpio, error = altas.revisar("planta", MACETA)
+    limpio, error, campo = altas.revisar("planta", MACETA)
     assert limpio is None
     # La planta existe, pero su formulario es el de Stock: se dice dónde.
     assert "Stock" in error
-    limpio, error = altas.revisar("bicicleta", MACETA)
+    limpio, error, campo = altas.revisar("bicicleta", MACETA)
     assert limpio is None and error
 
 
 def test_un_nombre_del_que_no_sale_referencia_rebota(odoo):
     """Tiene letras, pero ninguna sirve para el default_code: un producto sin
     referencia queda invisible para el stock y para las ventas."""
-    limpio, error = altas.revisar("maceta", {**MACETA, "nombre": "日本"})
+    limpio, error, campo = altas.revisar("maceta", {**MACETA, "nombre": "日本"})
     assert limpio is None
     assert "referencia" in error
 

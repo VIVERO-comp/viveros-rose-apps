@@ -346,33 +346,39 @@ def sku_libre(prefijo, nombre):
 # ---------------------------------------------------------------------------
 
 def revisar(tipo, form):
-    """(limpio, error) del POST crudo del formulario.
+    """(limpio, error, campo) del POST crudo del formulario.
 
     `limpio` es lo que entra a crear(); `error` es la frase que se le muestra
-    al empleado con lo que escribió todavía en pantalla.
+    al empleado con lo que escribió todavía en pantalla, y `campo` el name=
+    del input que falló (regla 5: el mensaje se pinta debajo de ese campo),
+    o vacío si el error no es de un campo.
     """
     if tipo == "planta":
         return None, ("Las plantas se crean desde Stock → Crear producto → "
-                      "Planta.")
+                      "Planta."), ""
     if tipo not in CATEGORIA_DE:
-        return None, "Ese tipo de producto no existe."
+        return None, "Ese tipo de producto no existe.", ""
     nombre = " ".join((form.get("nombre") or "").split())
     if not ventas._tiene_letras(nombre):
         # Un nombre sin ni una letra no es un nombre (misma regla que los
         # contactos de WhatsApp): "30" o un emoji no identifican nada.
-        return None, "Escribe el nombre del producto."
+        return None, "Escribe el nombre del producto.", "nombre"
     if not sku_de(PREFIJO_DE[tipo], nombre):
         # El nombre tiene letras pero ninguna que sirva para armar la
         # referencia (otro alfabeto): un producto sin default_code queda
         # invisible para el stock y para las ventas.
         return None, ("Escribe el nombre con letras y números normales: la "
-                      "referencia de Odoo se arma con ellos.")
+                      "referencia de Odoo se arma con ellos."), "nombre"
     precio = ventas._num_positivo(form.get("precio"), defecto=0.0,
                                   permitir_cero=True)
+    if precio is None:
+        return None, ("El precio no se entiende: va en números, sin "
+                      "signos."), "precio"
     costo = ventas._num_positivo(form.get("costo"), defecto=0.0,
                                  permitir_cero=True)
-    if precio is None or costo is None:
-        return None, "Revisa el precio y el costo: van en números, sin signos."
+    if costo is None:
+        return None, ("El costo no se entiende: va en números, sin "
+                      "signos."), "costo"
     limpio = {"tipo": tipo, "nombre": nombre[:120], "precio": precio,
               "costo": costo,
               # La casilla nace apagada: un checkbox ausente es "no cobra".
@@ -380,23 +386,25 @@ def revisar(tipo, form):
     if tipo == "maceta":
         material = (form.get("material") or "").strip()
         if material not in dict(MATERIALES):
-            return None, "Elige el material de la maceta."
+            return None, "Elige el material de la maceta.", "material"
         diametro = ventas._num_positivo(form.get("diametro"), defecto=0.0,
                                         permitir_cero=True)
+        if diametro is None:
+            return None, ("El diámetro va en centímetros, en números."), \
+                "diametro"
         alto = ventas._num_positivo(form.get("alto"), defecto=0.0,
                                     permitir_cero=True)
-        if diametro is None or alto is None:
-            return None, ("El diámetro y el alto van en centímetros, "
-                          "en números.")
+        if alto is None:
+            return None, "El alto va en centímetros, en números.", "alto"
         limpio.update({"material": material, "diametro": diametro,
                        "alto": alto,
                        "color": " ".join((form.get("color") or "").split())[:60]})
     else:
         unidad = (form.get("unidad") or "").strip()
         if unidad not in {u["clave"] for u in UNIDADES}:
-            return None, "Elige la unidad del insumo."
+            return None, "Elige la unidad del insumo.", "unidad"
         limpio["unidad"] = unidad
-    return limpio, None
+    return limpio, None, ""
 
 
 # ---------------------------------------------------------------------------

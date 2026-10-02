@@ -4502,7 +4502,7 @@ def _vuelta_del_alta(valor):
 
 
 def _pantalla_alta(request, tipo, previo=None, error=None, creado="",
-                   avisos=(), estado=200, volver="", nombre=""):
+                   avisos=(), estado=200, volver="", nombre="", campo=""):
     """La pantalla de Crear producto: el paso de elegir, o un formulario."""
     etiquetas = {"maceta": "Maceta", "insumo": "Insumo"}
     previo = dict(previo or {})
@@ -4519,6 +4519,9 @@ def _pantalla_alta(request, tipo, previo=None, error=None, creado="",
         "prefijo": altas.PREFIJO_DE.get(tipo, ""),
         "previo": previo,
         "error": error,
+        # Regla 5: el campo que falló; la plantilla pinta el error debajo
+        # de él y lo enfoca, y el banner queda para errores sin campo.
+        "campo_error": campo if error else "",
         "creado": creado,
         "volver": (volver or "").strip() if _vuelta_del_alta(volver) else "",
         "volver_texto": (_vuelta_del_alta(volver) or {}).get("texto", ""),
@@ -4592,11 +4595,11 @@ async def alta_producto_guardar(request: Request):
     crudo = {campo: form.get(campo) for campo in
              ("nombre", "material", "diametro", "alto", "color", "precio",
               "costo", "unidad", "itbms")}
-    limpio, error = altas.revisar(tipo, crudo)
+    limpio, error, campo = altas.revisar(tipo, crudo)
     if error:
         return _pantalla_alta(request, tipo if tipo in altas.CATEGORIA_DE else "",
                               previo=crudo, error=error, estado=400,
-                              volver=volver)
+                              volver=volver, campo=campo)
 
     foto = None
     subida = form.get("foto")
