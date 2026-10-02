@@ -413,6 +413,40 @@ def test_paisajismo_cobra_las_plantas_a_precio_de_catalogo(odoo):
     assert orden["amount_total"] == pytest.approx(500 + 17 * 45.0)
 
 
+@pytest.mark.parametrize("entrada, esperado", [
+    ("12,50", 12.50),   # coma decimal: NO debe volverse 1250
+    ("3,25", 3.25),
+    ("0,50", 0.50),
+    ("12.50", 12.50),   # el punto se respeta igual
+    ("1000", 1000.0),   # entero sin separador
+    ("0", 0.0),         # cero a mano: servicio incluido sin cargo
+])
+def test_monto_servicio_coma_es_decimal(entrada, esperado):
+    assert cotizaciones._monto_servicio(entrada) == pytest.approx(esperado)
+
+
+@pytest.mark.parametrize("entrada", ["", "   ", "abc", "doce"])
+def test_monto_servicio_invalido_es_none(entrada):
+    assert cotizaciones._monto_servicio(entrada) is None
+
+
+def test_la_coma_no_multiplica_por_cien_en_la_orden(odoo):
+    """Anti-regresión del bug ×100: una cotización con monto «12,50»
+    produce una línea en Odoo con price_unit 12.50, nunca 1250."""
+    registro = cotizaciones.crear_cotizacion(
+        {"id": "g", "nombre": "Cliente Coma"}, "instalacion", "Ana", "",
+        [{"texto": "Instalación", "monto": "12,50"}], [])
+    orden = odoo.ordenes[registro["orden_id"]]
+    total = orden["amount_total"]
+    assert total == pytest.approx(12.50), f"esperaba 12.50, Odoo recibió {total}"
+
+
+def test_el_num_huerfano_ya_no_existe():
+    """`_num` se borró (era huérfano y borraba la coma igual que el bug);
+    que nadie lo reviva por error."""
+    assert not hasattr(cotizaciones, "_num")
+
+
 def test_servicios_del_formulario_empareja_los_renglones(odoo):
     assert cotizaciones.servicios_del_formulario(
         ["Uno", "Dos"], ["10"]) == [

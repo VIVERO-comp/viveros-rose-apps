@@ -404,24 +404,15 @@ def _oportunidad_espejada(partner_id, nombre, etiqueta_tipo, espejo):
 # Armado de las líneas y creación de la cotización
 # ---------------------------------------------------------------------------
 
-def _num(valor):
-    """Un monto digitado (string del formulario) a float, o None si viene
-    vacío/0 — un renglón opcional en $0 no se agrega a la cotización."""
-    texto = (valor or "").strip().replace(",", "")
-    if not texto:
-        return None
-    try:
-        numero = float(texto)
-    except ValueError:
-        return None
-    return numero if numero > 0 else None
-
-
 def _monto_servicio(valor):
-    """El monto de un renglón de servicio: como _num, pero respeta el 0
-    escrito a mano (un servicio incluido sin cargo) y lo distingue del
-    campo en blanco (None), que sí es un descuido que hay que avisar."""
-    texto = (valor or "").strip().replace(",", "")
+    """El monto de un renglón de servicio a float: respeta el 0 escrito a
+    mano (un servicio incluido sin cargo) y lo distingue del campo en
+    blanco (None), que sí es un descuido que hay que avisar.
+
+    La coma se trata como separador DECIMAL (formato de Panamá): «12,50»
+    es 12.50, nunca 1250. Asume un solo separador decimal, no de miles —
+    el mismo criterio que `_cantidad` y `ventas._num_positivo`."""
+    texto = (valor or "").strip().replace(",", ".")
     if not texto:
         return None
     try:
