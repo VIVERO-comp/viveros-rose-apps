@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Ventas a revisar — Control Viverorose</title>
+<link rel="icon" type="image/jpeg" href="/static/logo.jpg">
+<link rel="apple-touch-icon" href="/static/logo.jpg">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Revisar">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+{# «Ventas a revisar» (Orquesta · M1, 01/10/2026): la foto de la
+   reconciliación, SOLO para admins. Misma piel que Proveedores y Compras
+   — calendario.css con sus clases de siempre (.prov-tarjeta, .dato,
+   .panel-der) — y un solo botón negro: «Dejar nota». Los chips de clase
+   NO son estados del embudo: van con CSS local de abajo, nunca con
+   paleta.json. Sin JavaScript nuevo: menu.js es la hamburguesa de
+   siempre, el detalle se abre con ?abrir= y se cierra con un enlace. #}
+<link rel="stylesheet" href="/static/calendario.css?v={{ v_estaticos }}">
+<style>
+/* Los contadores de arriba: solo el COLOR del número distingue el tono
+   (rojo / dorado / verde), el resto es la tarjeta neutra de la casa. */
+.rv-conts{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:10px;margin:2px 0 12px}
+.rv-cont{background:#fff;border:1px solid var(--borde);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.rv-cont b{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums}
+.rv-cont span{font-size:10.5px;font-weight:600;color:var(--muy-suave);text-transform:uppercase;letter-spacing:.05em}
+.rv-cont.rv-rojo b{color:#b3261e}
+.rv-cont.rv-dorado b{color:#9a6a00}
+.rv-cont.rv-verde b{color:#2e7d43}
+/* El chip de la clase: gris/neutro de base, el tono solo en el texto. */
+.rv-chip{display:inline-flex;align-items:center;white-space:nowrap;border:1px solid var(--borde);border-radius:999px;padding:2px 9px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;background:var(--crema);color:var(--suave)}
+.rv-chip.rv-rojo{color:#b3261e;border-color:rgba(179,38,30,.35)}
+.rv-chip.rv-dorado{color:#9a6a00;border-color:rgba(154,106,0,.35)}
+.rv-chip.rv-verde{color:#2e7d43;border-color:rgba(46,125,67,.35)}
+/* El chip de una venta HISTÓRICA (vieja, registrada tarde el 1/10): gris
+   a propósito — acompaña al chip de la clase y nunca suena a advertencia. */
+.rv-chip.rv-historica{color:var(--muy-suave);background:var(--crema-2)}
+.rv-chips{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end}
+.rv-marca-roja{margin:0;font-size:12px;font-weight:700;color:#b3261e}
+.rv-prueba{align-self:flex-start;border:1px solid rgba(179,38,30,.35);border-radius:6px;padding:1px 7px;font-size:9.5px;font-weight:800;letter-spacing:.06em;color:#b3261e;background:#fdf2f1}
+.rv-motivo{margin:0;font-size:11.8px;color:var(--suave);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Las dos columnas del detalle: Odoo a un lado, las otras fuentes al
+   otro. En el panel angosto siguen siendo dos, que es el punto. */
+.rv-doslados{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.rv-fuentes{margin:0;padding-left:16px;font-size:11.8px;color:var(--texto);display:flex;flex-direction:column;gap:4px}
+.rv-fuentes li::marker{color:var(--muy-suave)}
+.rv-nota{margin:0;font-size:12px;border-bottom:1px solid var(--borde-2);padding:5px 0}
+.rv-nota b{font-weight:700}
+.rv-m2{font-size:10.5px;font-weight:700;color:var(--muy-suave);text-transform:uppercase;letter-spacing:.05em;align-self:center}
+</style>
+</head>
+<body class="{{ 'menu-oculto' if request.cookies.get('menu') == '0' }}">
+
+<div class="app">
+  <aside class="lado">
+    <div class="marca">
+      <img src="/static/logo.jpg" alt="Vivero Rose">
+      <span>Control Viverorose</span>
+    </div>
+    <a class="pil" href="/calendario">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>Calendario
+    </a>
+    <a class="pil" href="/?tab=stock">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M12 10C12 6 9 3 4 3c0 5 3 8 8 7z"/><path d="M12 13c0-3.5 2.5-6 7-6 0 4.5-2.5 7-7 6z"/></svg>Stock
+    </a>
+    <a class="pil" href="/venta">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2 2h2l2.7 12.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 1.9-1.6L22 6H5"/></svg>Vender
+    </a>
+    <a class="pil" href="/control">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Control
+    </a>
+    <a class="pil" href="/compras">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><path d="M2 4h20v4H2z"/><path d="M10 12h4"/></svg>Compras
+    </a>
+    <a class="pil" href="/?tab=ajustes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Ajustes
+    </a>
+    <div class="pie">
+      <b>{{ empleada.nombre or empleada.id }}</b>
+      <span>Ventas a revisar · solo admin</span>
+    </div>
+  </aside>
+
+  <div class="tablero">
+    {% with bm_titulo='Ventas a revisar',
+            bm_sub='Lo que dice Odoo contra las otras fuentes' %}{% include '_barra_movil.html' %}{% endwith %}
+    <div class="barra">
+      <button class="btn icono hamb" type="button" aria-label="Mostrar u ocultar el menú"
+              aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <h3>Ventas a revisar</h3>
+      <span class="crece"></span>
+      <span class="tenue" style="font-size:12px">Solo lectura — las notas son
+        lo único que se guarda</span>
+    </div>
+
+    {% if error_aviso %}<div class="franja"><b>Ups.</b> <span>{{ error_aviso }}</span>
+      <a class="cierra-banner" href="/revisar" aria-label="Cerrar el aviso">×</a></div>{% endif %}
+    {% if aviso %}<div class="aviso-ok">{{ aviso }}
+      <a class="cierra-banner" href="/revisar" aria-label="Cerrar el aviso">×</a></div>{% endif %}
+
+    {# Lo que el informe NO pudo leer se dice siempre, nunca un 0 fingido. #}
+    {% if huecos %}
+    <div class="franja"><b>Con huecos:</b> <span>{{ huecos | join(' · ') }}</span></div>
+    {% endif %}
+
+    <div class="rv-conts">
+      <div class="rv-cont rv-rojo"><b>🔴 {{ contadores.get('rojo', '—') }}</b><span>Diferencias</span></div>
+      <div class="rv-cont rv-dorado"><b>🟡 {{ contadores.get('F', '—') }}</b><span>Pagos fuera del sistema</span></div>
+      <div class="rv-cont rv-dorado"><b>🟡 {{ contadores.get('G', '—') }}</b><span>Entregas por confirmar</span></div>
+      <div class="rv-cont rv-verde"><b>🟢 {{ contadores.get('D', '—') }}</b><span>Pagadas</span></div>
+      <div class="rv-cont rv-verde"><b>🟢 {{ contadores.get('E', '—') }}</b><span>Entregadas</span></div>
+      <div class="rv-cont"><b>⚪ {{ contadores.get('B', '—') }}</b><span>Vencidas</span></div>
+    </div>
+
+    {% if not ventas %}
+    <div class="solo-lectura"><b>No hay ninguna venta en la lista.</b>
+      Si arriba hay un renglón «Con huecos», alguna fuente no contestó y
+      la lista puede estar incompleta — no es lo mismo que «todo cuadra».</div>
+    {% else %}
+    <div class="prov-grid">
+      {% for v in ventas %}
+      <div class="prov-tarjeta" id="orden-{{ v.orden_id }}">
+        <div class="prov-cab">
+          <b>{{ v.cliente or 'Sin nombre' }}</b>
+          <span class="rv-chips">
+            <span class="rv-chip rv-{{ v.tono }}">{{ v.chip }}</span>
+            {% if v.historica %}<span class="rv-chip rv-historica">HISTÓRICA · 1/10</span>{% endif %}
+          </span>
+        </div>
+        <p class="prov-contacto">
+          <span>{{ v.nombre }}</span>
+          {% if v.telefono %}<span>{{ v.telefono }}</span>{% endif %}
+        </p>
+        <div class="dato"><b>Total</b><span>{{ v.total | dinero }}</span></div>
+        <div class="dato"><b>Pagado</b><span>{{ v.pagado | dinero }}</span></div>
+        {% if v.marca_debe %}<p class="rv-marca-roja">{{ v.marca_debe }}</p>{% endif %}
+        {% if v.marca_prueba %}<span class="rv-prueba">PRUEBA / REVISIÓN ADMIN</span>{% endif %}
+        {% if v.motivo %}<p class="rv-motivo" title="{{ v.motivo }}">{{ v.motivo }}</p>{% endif %}
+        <a class="prov-abrir" href="/revisar?abrir={{ v.orden_id }}#orden-{{ v.orden_id }}">
+          Ver el detalle →</a>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if fuera_texto %}
+    <p class="pie-nota" style="margin-top:12px">{{ fuera_texto }}</p>
+    {% endif %}
+  </div>
+</div>
+
+{% set activa = '' %}{% include '_nav.html' %}
+
+{% if abierta %}
+{# El detalle de UNA venta: mismo panel lateral de Proveedores y Compras
+   (.panel-der + .telon, sin JS). La vuelta deja al admin en su tarjeta. #}
+{% set vuelta = '/revisar#orden-' ~ abierta.orden_id %}
+<a class="telon" href="{{ vuelta }}" aria-label="Cerrar"></a>
+<aside class="panel-der">
+  <div class="cab-panel">
+    <div><span class="rv-chip rv-{{ abierta.tono }}">{{ abierta.chip }}</span>
+      {% if abierta.historica %}<span class="rv-chip rv-historica">HISTÓRICA · 1/10</span>{% endif %}
+      <h4>{{ abierta.cliente or 'Sin nombre' }}</h4></div>
+    <a class="btn chico" href="{{ vuelta }}">Cerrar</a>
+  </div>
+  <div class="dato"><b>Pedido</b><span>{{ abierta.nombre }}</span></div>
+  {% if abierta.telefono %}<div class="dato"><b>Teléfono</b><span>{{ abierta.telefono }}</span></div>{% endif %}
+  <div class="dato"><b>Total</b><span>{{ abierta.total | dinero }}</span></div>
+  <div class="dato"><b>Pagado</b><span>{{ abierta.pagado | dinero }}</span></div>
+  <div class="dato"><b>Debe</b><span>{{ abierta.debe | dinero }}</span></div>
+  {% if abierta.marca_debe %}<p class="rv-marca-roja">{{ abierta.marca_debe }}</p>{% endif %}
+  {% if abierta.marca_prueba %}<span class="rv-prueba">PRUEBA / REVISIÓN ADMIN</span>{% endif %}
+  {% if abierta.motivo %}<p class="pie-nota">{{ abierta.motivo }}</p>{% endif %}
+
+  <div class="rv-doslados">
+    <div class="campo-caja">
+      <label>Lo que dice Odoo</label>
+      {% if abierta.fuentes_odoo %}
+      <ul class="rv-fuentes">
+        {% for f in abierta.fuentes_odoo %}<li>{{ f }}</li>{% endfor %}
+      </ul>
+      {% else %}<p class="pie-nota">No dice nada.</p>{% endif %}
+      {# La entrega va SIEMPRE en su renglón propio, por fuente. #}
+      <div class="dato"><b>Entrega</b><span>
+        {{ 'Entregado' if abierta.entregado_odoo else 'Sin entregar' }} — según Odoo</span></div>
+    </div>
+    <div class="campo-caja">
+      <label>Lo que dicen las otras fuentes</label>
+      {% if abierta.fuentes_otras %}
+      <ul class="rv-fuentes">
+        {% for f in abierta.fuentes_otras %}<li>{{ f }}</li>{% endfor %}
+      </ul>
+      {% else %}<p class="pie-nota">No dicen nada.</p>{% endif %}
+      <div class="dato"><b>Entrega</b><span>
+        {{ 'Entregado' if abierta.entregado_calendario else 'Sin entregar' }} — según el calendario</span></div>
+    </div>
+  </div>
+
+  {# Los dos botones de la fase M2: se VEN para que se sepa qué viene,
+     pero no hacen nada todavía — y lo dicen. #}
+  <div class="acciones">
+    <button class="btn" type="button" disabled>Registrar pago</button>
+    <button class="btn" type="button" disabled>Confirmar entrega</button>
+    <span class="rv-m2">Fase M2</span>
+  </div>
+
+  <div class="campo-caja">
+    <label>Notas de revisión</label>
+    {% if notas %}
+      {% for n in notas %}
+      <p class="rv-nota"><b>{{ n.quien }}</b> · {{ n.creada_en | fecha_bonita }} — {{ n.nota }}</p>
+      {% endfor %}
+    {% else %}
+    <p class="pie-nota">Sin notas todavía.</p>
+    {% endif %}
+    {# El único botón negro de la pantalla. La nota es texto y nada más:
+       nunca registra un pago ni confirma una entrega. #}
+    <form method="post" action="/revisar/nota">
+      <input type="hidden" name="orden_id" value="{{ abierta.orden_id }}">
+      <textarea class="campo" name="nota" rows="3" maxlength="2000"
+                placeholder="Qué se revisó, o qué falta por aclarar"
+                aria-label="Nota de revisión para {{ abierta.nombre }}"></textarea>
+      <button class="btn oro" type="submit">Dejar nota</button>
+    </form>
+  </div>
+</aside>
+{% endif %}
+
+<script src="/static/menu.js?v={{ v_estaticos }}"></script>
+</body>
+</html>
