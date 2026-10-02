@@ -1,0 +1,216 @@
+/* Diseño Orquesta — la pestaña Control (Korto, 2/10/2026).
+   Fuente de verdad: docs/diseno-orquesta/pantallas 05 (Mac · CRM),
+   06 (tarjeta abierta), 21 (celular) y 22 (celular · tarjeta abierta).
+
+   Este archivo lo carga SOLO control.html, después de calendario.css y de
+   diseno-base.css: sus overrides no tocan ninguna otra pantalla. Lo
+   nuevo lleva prefijo `dc-`; el resto son los selectores de siempre con
+   la piel del lienzo. Reglas de la casa que ganan sobre el lienzo:
+
+   - la pestaña sigue llamándose Control (el lienzo dice CRM);
+   - la ficha va en UNA columna, igual en Mac y celular;
+   - el tablero sigue siendo MOVIBLE con el arrastre de siempre;
+   - el color del interés NO vive aquí: llega de paleta.json vía Python
+     en la variable --dc-interes de cada tarjeta y de la ficha.
+
+   La tablet (768–860.98px) no se toca: todo va en los dos cortes de
+   calendario.css — computadora (≥861px) y teléfono (≤767.98px). */
+
+/* ==================== computadora (pantallas 05 y 06) ================= */
+
+@media (min-width:861px){
+
+  /* ---- la barra de arriba: hamburguesa cuadrada, título 22px ---- */
+  .tablero{padding:18px 28px 20px;gap:12px}
+  .barra{border-bottom:0;padding-bottom:4px;gap:12px}
+  .barra h3{font-size:22px;font-weight:600;letter-spacing:-.01em}
+  .barra .btn.icono.hamb{
+    width:44px;height:44px;padding:0;justify-content:center;
+    border:1px solid var(--d-borde-boton);border-radius:var(--d-radio-boton);
+    background:#fff;color:var(--d-tinta);
+  }
+  .segmento{background:#fff;border:1px solid var(--d-borde-campo);border-radius:10px;padding:0;gap:0;overflow:hidden}
+  .segmento a{font-size:14px;color:var(--d-tinta);padding:0 16px;height:40px;display:inline-flex;align-items:center;border-radius:0}
+  .segmento a.on{background:#EDEDED;box-shadow:none;font-weight:700}
+
+  /* ---- el tablero: columnas grises 16px, scroll de lado ---- */
+  .ret-tablero{gap:12px;padding-bottom:10px}
+  .ret-tablero::-webkit-scrollbar{height:10px}
+  .ret-tablero::-webkit-scrollbar-track{background:transparent}
+  .ret-tablero::-webkit-scrollbar-thumb{background:var(--d-borde-campo);border-radius:5px}
+  .ret-col{
+    flex:0 0 276px;background:var(--d-col);border:none;
+    border-radius:var(--d-radio-col);
+  }
+  .ret-cab{padding:10px 12px 4px;border-bottom:0}
+  .ret-cab b{font-size:13px;font-weight:700;text-transform:none;letter-spacing:0}
+  /* El punto de color del estado era decoración: el lienzo no lo lleva. */
+  .ret-cab .pt-leyenda{display:none}
+  .ret-cuenta{
+    min-width:22px;height:22px;display:inline-grid;place-items:center;
+    padding:0 6px;border:none;border-radius:11px;background:#E9E9E9;
+    font-size:12px;font-weight:600;color:var(--d-tinta);
+  }
+  .ret-col.urgente .ret-cuenta{background:#E9E9E9;border:none}
+  .ret-lista{padding:4px 8px 8px;gap:8px}
+  .ret-lista.dropok{
+    background:var(--d-gris-activo);border-radius:0 0 var(--d-radio-col) var(--d-radio-col);
+    box-shadow:inset 0 0 0 2px var(--d-tinta);
+  }
+  .ret-pie{padding:0 12px 10px;font-size:11px;color:var(--d-suave)}
+
+  /* ---- la tarjeta: blanca, 14px, borde izquierdo del interés ---- */
+  .ret-tarjeta{
+    background:#fff;border:1px solid var(--d-borde-tarjeta);
+    border-left:3px solid var(--dc-interes, var(--d-borde-tarjeta));
+    border-radius:var(--d-radio-tarjeta);padding:9px 10px;
+    transition:box-shadow .12s;
+  }
+  .ret-tarjeta:hover{box-shadow:0 2px 10px rgba(17,17,17,.08);transform:none}
+  .ret-tarjeta .t-cab b{font-size:13.5px;font-weight:700}
+}
+
+/* ==================== teléfono (pantallas 21 y 22) ==================== */
+
+@media (max-width:767.98px){
+  /* La lista apilada de siempre, con la tarjeta del lienzo: blanca, borde
+     12px y el borde izquierdo del interés. */
+  .ret-col{background:none;border:none}
+  .ret-cab b{font-size:15px;font-weight:700}
+  .ret-cab .pt-leyenda{display:none}
+  .ret-cuenta{
+    min-width:24px;height:24px;display:inline-grid;place-items:center;
+    padding:0 7px;border:none;border-radius:12px;background:#E9E9E9;
+    font-size:12.5px;font-weight:600;color:var(--d-tinta);
+  }
+  .ret-tarjeta{
+    background:#fff;border:1px solid #E4E4E4;
+    border-left:3px solid var(--dc-interes, #E4E4E4);
+    border-radius:12px;padding:12px;
+  }
+  .ret-tarjeta .t-cab b{font-size:15px}
+  .ret-pie{font-size:11.5px;color:var(--d-suave)}
+
+  /* La ficha a pantalla completa con «← Atrás» arriba a la izquierda
+     (pantalla 22). El width:100% se repite aquí porque el bloque
+     compartido de abajo le pone min(480px,94vw) — ese es el de Mac. */
+  .panel-der{width:100%;border-left:0}
+  .panel-der .cab-panel{flex-direction:row-reverse;justify-content:space-between}
+  .dc-cerrar{border:1px solid var(--d-borde-boton);border-radius:var(--d-radio-boton);min-height:44px;padding:0 14px}
+  .dc-cerrar .dc-cerrar-x{display:none}
+  .dc-cerrar .dc-cerrar-atras{display:inline;font-size:14px;font-weight:600}
+}
+
+/* En computadora (y tablet, que conserva el panel de siempre) cierra la X
+   cuadrada; «← Atrás» es solo del teléfono. */
+@media (min-width:768px){
+  .dc-cerrar{
+    width:36px;height:36px;padding:0;justify-content:center;
+    border:1px solid var(--d-borde-boton);border-radius:var(--d-radio-boton);
+    font-size:14px;line-height:1;
+  }
+  .dc-cerrar .dc-cerrar-atras{display:none}
+}
+
+/* ==================== piezas compartidas de las dos caras =============
+   (chips y ficha: mismos valores en los dos cortes; la tablet queda
+   fuera porque cada bloque vive dentro de su media query). */
+
+@media (min-width:861px), (max-width:767.98px){
+
+  /* ---- los chips de la tarjeta, como los del lienzo ---- */
+  .dc-chip-interes{
+    display:inline-flex;align-items:center;height:20px;padding:0 8px;
+    border-radius:10px;border:1px solid transparent;
+    font-size:11px;font-weight:600;white-space:nowrap;
+    /* fondo, texto y borde llegan en el style= que compone Python
+       (colores.chip_interes, paleta.json). */
+  }
+  .ctl-pie-tarjeta{gap:6px}
+  .ret-tarjeta .t-sub{font-size:11.5px;color:var(--d-suave)}
+  .chip-est,.etq-pago{
+    display:inline-flex;align-items:center;height:20px;padding:0 8px;
+    border:1px solid transparent;border-radius:10px;
+    background:var(--d-gris-activo);color:#3F3F3F;
+    font-size:11px;font-weight:600;white-space:nowrap;margin-right:0;
+  }
+  /* Rojo solo para plata que se debe; verde para lo saldado (la clase la
+     decide Python: control._clase_pago). */
+  .etq-pago.dc-debe{background:var(--d-rojo-fondo);color:var(--d-rojo)}
+  .etq-pago.dc-ok{background:var(--d-verde-fondo);color:var(--d-verde)}
+  .chip-est.chip-nadie{background:transparent;border:1px dashed var(--d-borde-campo);color:var(--d-suave)}
+
+  /* ---- los banners ---- */
+  .franja{border-radius:12px}
+  .aviso-ok{border-radius:12px}
+
+  /* ---- la ficha (pantalla 06): borde de arriba del interés. El ancho
+     de 480px es SOLO de computadora y vive al final del archivo: aquí
+     dentro pisaría el width:100% del teléfono. ---- */
+  .telon{background:rgba(17,17,17,.35)}
+  .panel-der{
+    border-top:5px solid var(--dc-interes, var(--d-borde));
+    box-shadow:none;padding:20px;gap:12px;
+  }
+  .panel-der h4{font-size:20px;font-weight:700;line-height:1.2}
+  .panel-der .cab-panel{box-shadow:0 8px 10px -10px rgba(17,17,17,.35)}
+
+  /* Los titulitos de sección, como el .d-sec del lienzo: mayúscula
+     chica con su raya arriba. */
+  .panel-der .grupo-tit,
+  .panel-der .ret-cotiz-titulo,
+  .panel-der .ficha-hilo-cab{
+    font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--d-suave);font-weight:600;
+    border-top:1px solid var(--d-borde);padding-top:12px;
+  }
+
+  /* Un solo botón negro por pantalla: en la ficha es abrir el chat (el
+     .btn.oro de siempre — var(--dorado) ya es la tinta), a lo ancho como
+     el .d-btn del lienzo. Los demás botones quedan blancos con borde. */
+  .panel-der .acciones .btn.oro{
+    width:100%;min-height:48px;justify-content:center;
+    border-radius:12px;font-size:15px;font-weight:600;
+  }
+  .panel-der .btn{border-color:var(--d-borde-campo);border-radius:var(--d-radio-boton)}
+  .panel-der .btn.fantasma{border-style:dashed;border-color:var(--d-borde-campo)}
+
+  .panel-der .etq{
+    display:inline-flex;align-items:center;height:22px;padding:0 8px;
+    border-radius:11px;font-size:12px;font-weight:600;
+    background:var(--d-gris-activo);color:#3F3F3F;
+  }
+  .panel-der .etq.at{background:var(--d-rojo-fondo);color:var(--d-rojo)}
+  .panel-der .dato{border-bottom-color:var(--d-borde)}
+
+  /* «Más opciones» (lienzo 06/22): lo delicado, plegado. El summary se ve
+     como el enlace subrayado del lienzo (.d-lnk); cero JS. */
+  .dc-mas{border-top:1px solid var(--d-borde);padding-top:12px;margin-top:auto}
+  .dc-mas>summary{
+    list-style:none;cursor:pointer;user-select:none;
+    font-size:13px;font-weight:600;color:var(--d-suave);
+    text-decoration:underline;text-underline-offset:2px;width:fit-content;
+  }
+  .dc-mas>summary::-webkit-details-marker{display:none}
+  .dc-mas>summary::after{content:' ▾'}
+  .dc-mas[open]>summary::after{content:' ▴'}
+  .dc-mas .ret-mover{border-top:0;padding-top:12px;margin-top:0}
+
+  /* El modal del motivo, con los radios del lienzo. */
+  .modal{border-radius:16px;border-color:var(--d-borde)}
+  .modal .btn.oro{min-height:44px;border-radius:12px;font-size:14px}
+}
+
+/* El ancho de la ficha en computadora (pantalla 06): 480px. Va al final y
+   solo en ≥861px, para no pisar el width:100% del teléfono ni tocar la
+   tablet. */
+@media (min-width:861px){
+  .panel-der{width:min(480px,94vw);border-left:1px solid var(--d-borde)}
+}
+
+/* Los campos de escritura del teléfono ya crecen a 16px en calendario.css
+   (.panel-der/.modal, ≤767.98px); aquí solo se asegura el del buscador de
+   cotizaciones si algún corte lo dejara fuera. */
+@media (max-width:767.98px){
+  .panel-der .campo-caja .campo{font-size:16px}
+}

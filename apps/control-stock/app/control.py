@@ -36,7 +36,7 @@ import time
 import httpx
 from datetime import date, datetime, timedelta
 
-from . import (agenda, avisos, calendario, cot_lead, cotizaciones, crm_twenty,
+from . import (agenda, avisos, calendario, colores, cot_lead, cotizaciones, crm_twenty,
                linear_leads, mantenimiento, resumen, ventas)
 from .datos import ZONA_PANAMA, _db
 
@@ -381,6 +381,22 @@ def hace_alerta(dias):
     return (dias or 0) >= DIAS_HACE_ALERTA
 
 
+# El chip de pago de la tarjeta (diseño Orquesta, 2/10/2026): rojo solo
+# para plata que falta cobrar, verde para lo saldado. La clase la decide
+# Python — la plantilla no compara textos (regla 10).
+_PAGO_DEBE = ("Abono 50%", "Cobrar saldo")
+_PAGO_OK = ("Pagado 100%",)
+
+
+def _clase_pago(pago):
+    """'debe' | 'ok' | '' según la etiqueta de pago que puso Odoo."""
+    if pago in _PAGO_DEBE:
+        return "debe"
+    if pago in _PAGO_OK:
+        return "ok"
+    return ""
+
+
 def _tarjeta(lead):
     """El lead listo para la tarjeta: lo que se ve y nada más."""
     estado = lead.get("estado_ficha") or {}
@@ -391,6 +407,12 @@ def _tarjeta(lead):
                         if lead.get("motivo_clave") else ""),
         "resp_titulo": lead.get("resp") or SIN_ASIGNAR,
         "hace_alerta": hace_alerta(lead.get("dias")),
+        # Diseño Orquesta (2/10/2026): el color del interés sale de
+        # paleta.json (colores.py), nunca de un hex en la plantilla. Sin
+        # interés conocido, "" y la tarjeta queda neutra.
+        "interes_color": colores.color_interes(lead.get("interes")),
+        "interes_chip": colores.chip_interes(lead.get("interes")),
+        "pago_clase": _clase_pago(lead.get("pago") or ""),
     })
 
 
