@@ -1140,10 +1140,13 @@ def _redirigir_venta(error=None, nueva=False, conflicto=None, fiscal=None):
         (f"?error={quote(error)}" if error else "")
     if conflicto:
         # El aviso de cliente ajeno (B.2, por teléfono o por nombre): el
-        # id, el nombre y el motivo viajan en la URL para que /venta/nueva
-        # pinte las dos opciones (usar ese cliente o crear uno nuevo).
+        # id, el nombre, el teléfono y el motivo viajan en la URL para que
+        # /venta/nueva pinte las dos opciones (usar ese cliente o crear
+        # uno nuevo). El id solo alimenta el value de usar-<id>; lo que la
+        # empleada lee es el nombre con el teléfono (2/10/2026).
         destino += (f"&conflicto={conflicto['id']}"
                     f"&conflicto_nombre={quote(conflicto['nombre'])}"
+                    f"&conflicto_telefono={quote(conflicto.get('telefono') or '')}"
                     f"&conflicto_motivo={conflicto['motivo']}")
     if fiscal:
         # La confirmación R2 (guardar un dato fiscal en un cliente
@@ -1355,6 +1358,7 @@ def _resultados_con_stock(resultados):
 @app.get("/venta/nueva")
 def venta_nueva(request: Request, q: str = "", error: str = "",
                 conflicto: str = "", conflicto_nombre: str = "",
+                conflicto_telefono: str = "",
                 conflicto_motivo: str = "", fiscal: str = "",
                 fiscal_nombre: str = "", fiscal_detalle: str = ""):
     # El formulario de la venta: cliente (nombre y celular), buscador en
@@ -1378,6 +1382,7 @@ def venta_nueva(request: Request, q: str = "", error: str = "",
         # uno nuevo) y el POST siguiente viaja con cliente_decision.
         "conflicto_cliente": ({"id": int(conflicto),
                                "nombre": conflicto_nombre.strip()[:120],
+                               "telefono": conflicto_telefono.strip()[:30],
                                "motivo": ("nombre" if conflicto_motivo == "nombre"
                                           else "telefono")}
                               if conflicto.isdigit() else None),
@@ -1477,15 +1482,18 @@ def _confirmar_fiscal_del_form(form):
 
 
 def _conflicto_de(error):
-    """El dict que pinta el aviso con las dos opciones en _cliente.html."""
+    """El dict que pinta el aviso con las dos opciones en _cliente.html.
+    El teléfono acompaña al nombre en el texto; el id solo arma el value
+    de usar-<id> (2/10/2026: el empleado no lee ids)."""
     return {"id": error.partner_id, "nombre": error.nombre_existente,
-            "motivo": error.motivo}
+            "telefono": error.telefono, "motivo": error.motivo}
 
 
 def _fiscal_de(error):
-    """El dict que pinta la confirmación R2 en _cliente.html."""
+    """El dict que pinta la confirmación R2 en _cliente.html. El detalle
+    ya trae nombre y teléfono (lo arma ConfirmarDatoFiscal)."""
     return {"id": error.partner_id, "nombre": error.nombre_existente,
-            "detalle": error.detalle}
+            "telefono": error.telefono, "detalle": error.detalle}
 
 
 def _leads_para_elegir():

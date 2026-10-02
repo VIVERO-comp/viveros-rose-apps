@@ -648,7 +648,8 @@ def iniciar_tablas():
                 renglones TEXT,             -- JSON de los renglones libres (personalizada)
                 extra TEXT,                 -- JSON de los datos opcionales del cliente
                 cobro TEXT,                 -- 'total' | 'planta' (alquiler)
-                cliente_anterior TEXT       -- JSON: filtro del eco (B.2-R1)
+                cliente_anterior TEXT,      -- JSON: filtro del eco (B.2-R1)
+                preview_partner TEXT        -- JSON: cliente de la vista previa
             );
             CREATE TABLE IF NOT EXISTS ventas_locales (
                 n INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -690,6 +691,10 @@ def iniciar_tablas():
         # 2/10/2026) — ver _sin_datos_del_cliente_anterior.
         if "cliente_anterior" not in columnas_borrador:
             con.execute("ALTER TABLE venta_borrador ADD COLUMN cliente_anterior TEXT")
+        # Migración suave: el cliente que la vista previa de ESTA venta ya
+        # creó/usó (2/10/2026) — ver cliente_de_vista_previa.
+        if "preview_partner" not in columnas_borrador:
+            con.execute("ALTER TABLE venta_borrador ADD COLUMN preview_partner TEXT")
         # Migración suave: la tabla pudo nacer sin la columna celular.
         columnas = [fila[1] for fila in con.execute("PRAGMA table_info(ventas_locales)")]
         if "celular" not in columnas:
@@ -835,6 +840,9 @@ def guardar_borrador(usuario, nombre, celular, servicios=None, datos=None,
     agregar/quitar plantas (venta.js lo manda mientras se escribe). Los
     argumentos en None dejan lo guardado como estaba — salvo los datos de
     cliente cuando cambió el cliente (ver _sin_datos_del_cliente_anterior)."""
+    fila_antes = _fila_borrador(usuario)
+    cambio = _es_otro_cliente(fila_antes["nombre"], fila_antes["celular"],
+                              nombre, celular)
     datos, anterior = _sin_datos_del_cliente_anterior(usuario, nombre, celular, datos)
     crudo = None if servicios is None else json.dumps(servicios, ensure_ascii=False)
     libres = None if renglones is None else json.dumps(renglones, ensure_ascii=False)
@@ -851,6 +859,12 @@ def guardar_borrador(usuario, nombre, celular, servicios=None, datos=None,
             " extra=COALESCE(?, extra), cliente_anterior=?",
             (usuario, nombre, celular, crudo, libres, extra, filtro,
              nombre, celular, crudo, libres, extra, filtro))
+        if cambio:
+            # Cambió el cliente (R1): el partner que la vista previa había
+            # resuelto era del cliente anterior y se olvida — la próxima
+            # coincidencia vuelve a preguntar (R3), nunca se hereda.
+            con.execute("UPDATE venta_borrador SET preview_partner=NULL"
+                        " WHERE usuario=?", (usuario,))
 
 
 def _json_o_defecto(crudo, defecto):
@@ -894,8 +908,48 @@ def guardar_cobro(usuario, modo):
 
 
 def _limpiar_borrador(usuario):
+    # Borra la fila entera: con ella se va también el preview_partner (el
+    # cliente que la vista previa resolvió se olvida al terminar la venta).
     with _db() as con:
         con.execute("DELETE FROM venta_borrador WHERE usuario=?", (usuario,))
+
+
+def recordar_cliente_vista_previa(usuario, partner_id, nombre, celular):
+    """El partner que la vista previa de ESTA venta creó/usó, con el nombre
+    y el teléfono con que se hizo esa vista previa (2/10/2026, aprobado por
+    Korto): así «vista previa → Generar cotización» no pregunta dos veces
+    por el mismo cliente. Vive en el borrador (una fila por empleada), se
+    olvida al cambiar de cliente (guardar_borrador) y al terminar o
+    cancelar la venta (_limpiar_borrador)."""
+    crudo = json.dumps({"id": int(partner_id), "nombre": str(nombre or ""),
+                        "celular": str(celular or "")}, ensure_ascii=False)
+    with _db() as con:
+        con.execute(
+            "INSERT INTO venta_borrador (usuario, preview_partner) VALUES (?,?)"
+            " ON CONFLICT (usuario) DO UPDATE SET preview_partner=?",
+            (usuario, crudo, crudo))
+
+
+def cliente_de_vista_previa(usuario, nombre, celular):
+    """El partner recordado por la vista previa, SOLO si el nombre y el
+    teléfono tecleados ahora son los MISMOS de esa vista previa: el nombre
+    con nombres_compatibles y el teléfono por sus últimos 8 dígitos (o los
+    dos vacíos). Si cambió cualquiera de los dos, None — y aplica la regla
+    normal (R3: se pregunta). El recuerdo es por empleada, nunca global."""
+    with _db() as con:
+        fila = con.execute(
+            "SELECT preview_partner FROM venta_borrador WHERE usuario=?",
+            (usuario,)).fetchone()
+    recordado = _json_o_defecto(fila["preview_partner"], {}) if fila else {}
+    if not recordado.get("id"):
+        return None
+    if not nombres_compatibles(nombre, recordado.get("nombre")):
+        return None
+    tecleado = re.sub(r"\D", "", celular or "")[-8:]
+    guardado = re.sub(r"\D", "", recordado.get("celular") or "")[-8:]
+    if tecleado != guardado:
+        return None
+    return int(recordado["id"])
 
 
 # ---------------------------------------------------------------------------
@@ -1218,15 +1272,22 @@ class ClienteAjeno(ValueError):
     ValueError para que cualquier ruta vieja que solo atrape ValueError
     muestre al menos el aviso en vez de un error 500."""
 
-    def __init__(self, partner_id, nombre_existente, motivo="telefono"):
+    def __init__(self, partner_id, nombre_existente, motivo="telefono",
+                 telefono=""):
         self.partner_id = int(partner_id)
         self.nombre_existente = str(nombre_existente or "")
+        # El teléfono guardado en Odoo (el read lo trae como False si está
+        # vacío): la empleada reconoce al cliente por nombre y teléfono —
+        # el id es un dato técnico y no va en el texto que ella lee.
+        self.telefono = str(telefono or "")
         self.motivo = motivo if motivo in ("telefono", "nombre") else "telefono"
         encabezado = ("Ese teléfono ya es de otro cliente"
                       if self.motivo == "telefono"
                       else "Ya existe un cliente con ese nombre")
+        quien = self.nombre_existente + (
+            f" · {self.telefono}" if self.telefono else "")
         super().__init__(
-            f"{encabezado} (id {self.partner_id}: {self.nombre_existente}). "
+            f"{encabezado} ({quien}). "
             "Marca si es el mismo cliente o uno nuevo.")
 
 
@@ -1242,13 +1303,17 @@ class ConfirmarDatoFiscal(ValueError):
     toca. El autocompletado SIN esta elección + confirmación sigue
     prohibido (completar_cliente excluye vat/ref siempre)."""
 
-    def __init__(self, partner_id, nombre_existente, detalles):
+    def __init__(self, partner_id, nombre_existente, detalles, telefono=""):
         self.partner_id = int(partner_id)
         self.nombre_existente = str(nombre_existente or "")
+        # Igual que en ClienteAjeno: la empleada ve nombre y teléfono; el
+        # id queda como dato técnico (viaja en el hidden usar-<id>).
+        self.telefono = str(telefono or "")
         self.detalles = list(detalles)
+        quien = self.nombre_existente + (
+            f" · {self.telefono}" if self.telefono else "")
         self.detalle = ("Se va a " + "; y se va a ".join(self.detalles)
-                        + f" del cliente id {self.partner_id} "
-                        f"({self.nombre_existente}).")
+                        + f" del cliente {quien}.")
         super().__init__(self.detalle + " Marca sí o no.")
 
 
@@ -1285,8 +1350,10 @@ def _fiscales_con_confirmacion(partner_id, nombre_existente, valores_extra,
                 if campo in CAMPOS_FISCALES}
     if not fiscales or confirmar == "no":
         return
+    # El phone viaja en el mismo read: el aviso de confirmación muestra
+    # nombre y teléfono, no el id (2/10/2026).
     actual = _ejecutar("res.partner", "read", [[partner_id]],
-                       {"fields": list(CAMPOS_FISCALES)})[0]
+                       {"fields": list(CAMPOS_FISCALES) + ["phone"]})[0]
     pendientes = {campo: valor for campo, valor in fiscales.items()
                   if (actual.get(campo) or "") != valor}
     if not pendientes:
@@ -1302,7 +1369,8 @@ def _fiscales_con_confirmacion(partner_id, nombre_existente, valores_extra,
                             f"(«{tenia}») por «{valor}»")
         else:
             detalles.append(f"guardar el {_NOMBRE_FISCAL[campo]} «{valor}»")
-    raise ConfirmarDatoFiscal(partner_id, nombre_existente, detalles)
+    raise ConfirmarDatoFiscal(partner_id, nombre_existente, detalles,
+                              telefono=actual.get("phone") or "")
 
 
 def _usar_existente(partner_id, nombre_existente, valores_extra, confirmar):
@@ -1315,7 +1383,8 @@ def _usar_existente(partner_id, nombre_existente, valores_extra, confirmar):
 
 
 def buscar_o_crear_cliente(nombre, celular="", datos=None, decision=None,
-                           celular_tal_cual=False, confirmar_fiscal=None):
+                           celular_tal_cual=False, confirmar_fiscal=None,
+                           recordado=None):
     """LA única puerta para resolver el cliente de una orden (B.2,
     2/10/2026) — la usan Nueva Venta, las cotizaciones de servicio y la
     personalizada, para que la regla sea UNA:
@@ -1339,6 +1408,11 @@ def buscar_o_crear_cliente(nombre, celular="", datos=None, decision=None,
     - `celular_tal_cual` guarda el phone como lo digitó la empleada (Nueva
       Venta, histórico con guion); sin él se guardan solo los dígitos
       (cotizaciones de servicio, histórico también).
+    - `recordado` es el partner que la vista previa de ESTA misma venta ya
+      creó/usó (cliente_de_vista_previa, que solo lo devuelve si nombre y
+      teléfono siguen iguales): si el que se iba a preguntar es ÉL, se
+      reusa sin volver a preguntar — la pregunta ya se respondió al hacer
+      la vista previa. Una decisión explícita «nuevo» le gana.
     """
     nombre = (nombre or "").strip()
     valores_extra = valores_de_cliente(datos)
@@ -1349,7 +1423,7 @@ def buscar_o_crear_cliente(nombre, celular="", datos=None, decision=None,
             "res.partner", "search", [_dominio_telefono(digitos)], {"limit": 1})
         if ids:
             existente = _ejecutar("res.partner", "read", [[ids[0]]],
-                                  {"fields": ["name"]})[0]
+                                  {"fields": ["name", "phone"]})[0]
             if nombres_compatibles(nombre, existente.get("name")):
                 # El mismo cliente: se reusa con SU nombre de Odoo tal cual
                 # (no se renombra con lo digitado — lo guardado manda).
@@ -1359,18 +1433,31 @@ def buscar_o_crear_cliente(nombre, celular="", datos=None, decision=None,
                 return _usar_existente(ids[0], existente.get("name"),
                                        valores_extra, confirmar_fiscal)
             if not crear_aparte:
+                if recordado == ids[0]:
+                    # La vista previa de esta misma venta ya usó este
+                    # cliente con estos mismos datos: no se pregunta dos
+                    # veces (2/10/2026).
+                    return _usar_existente(ids[0], existente.get("name"),
+                                           valores_extra, confirmar_fiscal)
                 raise ClienteAjeno(ids[0], existente.get("name"),
-                                   motivo="telefono")
+                                   motivo="telefono",
+                                   telefono=existente.get("phone") or "")
     if nombre and not crear_aparte:
         ids = _ejecutar("res.partner", "search",
                         [[["name", "=ilike", nombre]]], {"limit": 1})
         if ids:
             existente = _ejecutar("res.partner", "read", [[ids[0]]],
-                                  {"fields": ["name"]})[0]
-            if decision == f"usar-{ids[0]}":
+                                  {"fields": ["name", "phone"]})[0]
+            if decision == f"usar-{ids[0]}" or recordado == ids[0]:
+                # Decisión explícita, o el partner que la vista previa de
+                # esta misma venta ya creó/usó (el caso típico: la vista
+                # previa crea el cliente y «Generar cotización» lo vuelve
+                # a encontrar por nombre — preguntar ahí sería preguntar
+                # por el cliente que nosotros mismos acabamos de crear).
                 return _usar_existente(ids[0], existente.get("name"),
                                        valores_extra, confirmar_fiscal)
-            raise ClienteAjeno(ids[0], existente.get("name"), motivo="nombre")
+            raise ClienteAjeno(ids[0], existente.get("name"), motivo="nombre",
+                               telefono=existente.get("phone") or "")
     valores = {"name": nombre, "customer_rank": 1, "company_type": "person",
                **valores_extra}
     if digitos:
@@ -1381,7 +1468,7 @@ def buscar_o_crear_cliente(nombre, celular="", datos=None, decision=None,
 
 
 def _cliente_id(nombre, celular="", datos=None, decision=None,
-                confirmar_fiscal=None):
+                confirmar_fiscal=None, recordado=None):
     """El partner para la orden de Nueva Venta: el genérico "Cliente Local"
     si no dieron nombre; si lo dieron, la puerta única
     (buscar_o_crear_cliente), con el phone tal cual lo digitó la empleada."""
@@ -1390,7 +1477,8 @@ def _cliente_id(nombre, celular="", datos=None, decision=None,
         return _id_config("VENTA_CLIENTE_LOCAL")
     return buscar_o_crear_cliente(nombre, celular, datos, decision,
                                   celular_tal_cual=True,
-                                  confirmar_fiscal=confirmar_fiscal)
+                                  confirmar_fiscal=confirmar_fiscal,
+                                  recordado=recordado)
 
 
 def _linea_de_planta(linea):
@@ -1430,8 +1518,12 @@ def crear_cotizacion(empleada, nombre_cliente, celular="", datos=None,
     # B.2-R1: el formulario puede traer todavía en pantalla los datos del
     # cliente anterior (ver datos_del_cliente_actual) — ese eco no viaja.
     datos = datos_del_cliente_actual(usuario, nombre_cliente, celular, datos)
+    # El cliente que la vista previa de ESTA venta ya resolvió (si nombre
+    # y teléfono siguen iguales) se reusa sin volver a preguntar.
     partner = _cliente_id(nombre_cliente, celular, datos, decision_cliente,
-                          confirmar_fiscal)
+                          confirmar_fiscal,
+                          recordado=cliente_de_vista_previa(
+                              usuario, nombre_cliente, celular))
     # El PP-XXXXX del lead pendiente (si hay): se resuelve ANTES de crear
     # la orden y ANTES de que _espejar_en_crm consuma el lead pendiente.
     pp_lead = _pp_del_lead_pendiente(usuario)
@@ -1555,8 +1647,18 @@ def pdf_vista_previa(empleada, nombre_cliente, celular="", datos=None, cargos=No
     if not lineas and not lineas_libres:
         raise ValueError("Agrega al menos una planta para ver la cotización.")
     datos = datos_del_cliente_actual(usuario, nombre_cliente, celular, datos)
+    # La segunda vista previa seguida tampoco vuelve a preguntar por el
+    # cliente que la primera ya creó/usó (mismo nombre y teléfono).
     partner = _cliente_id(nombre_cliente, celular, datos, decision_cliente,
-                          confirmar_fiscal)
+                          confirmar_fiscal,
+                          recordado=cliente_de_vista_previa(
+                              usuario, nombre_cliente, celular))
+    if (nombre_cliente or "").strip():
+        # Se recuerda SOLO dentro de esta venta (el borrador es por
+        # empleada): al crear con el mismo nombre y teléfono no se vuelve
+        # a preguntar por el cliente que esta vista previa resolvió. El
+        # genérico "Cliente Local" (sin nombre) no se recuerda.
+        recordar_cliente_vista_previa(usuario, partner, nombre_cliente, celular)
     orden = _orden_vista_previa(usuario, partner, [
         _linea_de_planta(l) for l in lineas]
         + lineas_libres + lineas_de_cargos(cargos), banderas)

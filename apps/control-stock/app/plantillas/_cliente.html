@@ -19,7 +19,9 @@
   <p style="margin:0 0 6px">
     {% if conflicto_cliente.motivo == "nombre" %}Ya existe un cliente con
     ese nombre{% else %}Ese teléfono ya es de otro cliente{% endif %}
-    (id {{ conflicto_cliente.id }}: {{ conflicto_cliente.nombre }}).</p>
+    ({{ conflicto_cliente.nombre }}{% if conflicto_cliente.telefono %} · {{ conflicto_cliente.telefono }}{% endif %}).</p>
+  {# El id no se le enseña a la empleada: solo viaja en el value del
+     radio usar-<id> para el POST (2/10/2026). #}
   <label style="display:block">
     <input type="radio" name="cliente_decision" form="{{ form_cliente }}"
            value="usar-{{ conflicto_cliente.id }}">

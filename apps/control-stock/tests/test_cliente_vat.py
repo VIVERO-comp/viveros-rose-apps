@@ -105,7 +105,12 @@ def test_mismo_telefono_y_otro_nombre_no_se_reusa_en_silencio(odoo):
         ventas.buscar_o_crear_cliente("Beto Mendoza", "65673062")
     assert cayo.value.partner_id == 7
     assert cayo.value.nombre_existente == "Zoila González"
-    assert "Ese teléfono ya es de otro cliente (id 7" in str(cayo.value)
+    assert cayo.value.telefono == "6567-3062"
+    # El aviso dice nombre y teléfono, no el id (2/10/2026): la empleada
+    # reconoce al cliente por sus datos; el id es técnico.
+    assert ("Ese teléfono ya es de otro cliente "
+            "(Zoila González · 6567-3062)" in str(cayo.value))
+    assert "id 7" not in str(cayo.value)
     # Sin la decisión no se creó nada: ni fusión ni duplicado a ciegas.
     assert len(odoo.partners) == 1
 
@@ -299,12 +304,31 @@ def test_el_formulario_pinta_las_dos_opciones_del_conflicto(cliente, odoo, monke
 
     monkeypatch.setattr(ventas, "_ejecutar", partners_nada_mas)
     pagina = cliente.get("/venta/nueva", params={
-        "error": "Ese teléfono ya es de otro cliente (id 7: Zoila González).",
-        "conflicto": "7", "conflicto_nombre": "Zoila González"}).text
+        "error": "Ese teléfono ya es de otro cliente "
+                 "(Zoila González · 6567-3062).",
+        "conflicto": "7", "conflicto_nombre": "Zoila González",
+        "conflicto_telefono": "6567-3062"}).text
     assert "cliente_decision" in pagina
     assert 'value="usar-7"' in pagina
     assert 'value="nuevo"' in pagina
-    assert "Zoila González" in pagina
+    # El aviso muestra nombre y teléfono; el id 7 solo vive en el value
+    # técnico usar-7 del radio, nunca en el texto que lee la empleada.
+    assert "Zoila González · 6567-3062" in pagina
+    assert "id 7" not in pagina
+
+
+def test_el_redirect_del_conflicto_lleva_nombre_y_telefono():
+    # El 303 tras un ClienteAjeno (2/10/2026): el teléfono viaja en la URL
+    # (conflicto_telefono) para que /venta/nueva lo pinte junto al nombre;
+    # el id sigue viajando, pero solo alimenta el value de usar-<id>.
+    from app import main as app_main
+    error = ventas.ClienteAjeno(7, "Zoila González", telefono="6567-3062")
+    respuesta = app_main._redirigir_venta(
+        str(error), nueva=True, conflicto=app_main._conflicto_de(error))
+    destino = respuesta.headers["location"]
+    assert "conflicto=7" in destino
+    assert "conflicto_telefono=6567-3062" in destino
+    assert "conflicto_nombre=" in destino
 
 
 # --- R1 (2/10/2026): el borrador no aporta NADA del cliente anterior ---------
@@ -387,7 +411,10 @@ def test_usar_cliente_sin_vat_con_cedula_pide_confirmacion(odoo):
     assert cayo.value.partner_id == 7
     assert "guardar" in str(cayo.value)
     assert "8-123-4567" in str(cayo.value)
-    assert "id 7" in str(cayo.value) and "Zoila González" in str(cayo.value)
+    # El aviso nombra al cliente con su teléfono, nunca con el id.
+    assert "del cliente Zoila González · 6567-3062" in str(cayo.value)
+    assert "id 7" not in str(cayo.value)
+    assert cayo.value.telefono == "6567-3062"
     # Sin confirmar, nada fiscal se escribió.
     assert not odoo.partners[7].get("vat")
     assert not odoo.partners[7].get("ref")
@@ -463,7 +490,10 @@ def test_sin_telefono_el_nombre_que_casa_no_se_reusa_solo(odoo):
         ventas.buscar_o_crear_cliente("maría lópez", "")
     assert cayo.value.partner_id == 7
     assert cayo.value.motivo == "nombre"
-    assert "Ya existe un cliente con ese nombre" in str(cayo.value)
+    # Sin teléfono guardado el aviso muestra solo el nombre: ni el id,
+    # ni un «· None» colgando.
+    assert "Ya existe un cliente con ese nombre (María López)." in str(cayo.value)
+    assert "id 7" not in str(cayo.value) and "·" not in str(cayo.value)
     assert len(odoo.partners) == 1  # nada creado sin la decisión
 
 
@@ -481,6 +511,109 @@ def test_cotizaciones_tambien_avisa_por_nombre_sin_telefono(odoo):
     odoo.partners[7] = {"name": "María López", "phone": ""}
     with pytest.raises(ventas.ClienteAjeno):
         cotizaciones._cliente_id("María López", "")
+
+
+# --- La exención de la vista previa (2/10/2026, aprobada por Korto) -----------
+# «Vista previa → Generar cotización» no pregunta dos veces por el cliente
+# que la propia vista previa creó/usó: el partner se recuerda en el borrador
+# (por empleada) junto al nombre y teléfono con que se hizo la vista previa,
+# y se reusa SOLO si al crear siguen iguales. Se olvida al cambiar de
+# cliente (R1) y al terminar/cancelar la venta (_limpiar_borrador).
+
+def test_vista_previa_y_crear_con_los_mismos_datos_no_pregunta(odoo):
+    # (a) La vista previa creó el cliente (caso R3: sin teléfono); crear
+    # con el mismo nombre lo reusa SIN ClienteAjeno.
+    pid = ventas.buscar_o_crear_cliente("María López", "")
+    ventas.recordar_cliente_vista_previa("genesis", pid, "María López", "")
+    recordado = ventas.cliente_de_vista_previa("genesis", " maría  lópez ", "")
+    assert recordado == pid
+    assert ventas.buscar_o_crear_cliente("maría lópez", "",
+                                         recordado=recordado) == pid
+    assert len(odoo.partners) == 1  # ni duplicado ni pregunta
+
+
+def test_dos_vistas_previas_seguidas_tampoco_preguntan(odoo):
+    # (b) La segunda vista previa resuelve el cliente igual que la primera.
+    pid = ventas.buscar_o_crear_cliente("María López", "")
+    ventas.recordar_cliente_vista_previa("genesis", pid, "María López", "")
+    otra_vez = ventas.buscar_o_crear_cliente(
+        "María López", "",
+        recordado=ventas.cliente_de_vista_previa("genesis", "María López", ""))
+    assert otra_vez == pid
+    ventas.recordar_cliente_vista_previa("genesis", otra_vez, "María López", "")
+    assert ventas.cliente_de_vista_previa("genesis", "María López", "") == pid
+
+
+def test_cambiar_el_nombre_tras_la_vista_previa_si_pregunta(odoo):
+    # (c) El recuerdo era de María: con otro nombre no aplica y la regla
+    # normal pregunta (ClienteAjeno).
+    odoo.partners[7] = {"name": "Zoila González", "phone": "6567-3062"}
+    pid = ventas.buscar_o_crear_cliente("María López", "")
+    ventas.recordar_cliente_vista_previa("genesis", pid, "María López", "")
+    assert ventas.cliente_de_vista_previa("genesis", "Zoila González", "") is None
+    with pytest.raises(ventas.ClienteAjeno):
+        ventas.buscar_o_crear_cliente(
+            "Zoila González", "",
+            recordado=ventas.cliente_de_vista_previa(
+                "genesis", "Zoila González", ""))
+
+
+def test_cambiar_el_telefono_tras_la_vista_previa_olvida_el_recuerdo(odoo):
+    # El teléfono compara por sus últimos 8 dígitos; distinto = se olvida.
+    pid = ventas.buscar_o_crear_cliente("María López", "6567-3062")
+    ventas.recordar_cliente_vista_previa("genesis", pid,
+                                         "María López", "6567-3062")
+    assert ventas.cliente_de_vista_previa(
+        "genesis", "María López", "65673062") == pid  # mismos 8 dígitos
+    assert ventas.cliente_de_vista_previa(
+        "genesis", "María López", "6999-0000") is None
+    assert ventas.cliente_de_vista_previa(
+        "genesis", "María López", "") is None  # lo borró: ya no es igual
+
+
+def test_el_recuerdo_es_por_empleada_no_global(odoo):
+    # (d) Otro empleado con el mismo nombre NO hereda el recuerdo: a él
+    # la regla normal le pregunta.
+    pid = ventas.buscar_o_crear_cliente("María López", "")
+    ventas.recordar_cliente_vista_previa("genesis", pid, "María López", "")
+    assert ventas.cliente_de_vista_previa("ruben", "María López", "") is None
+    with pytest.raises(ventas.ClienteAjeno):
+        ventas.buscar_o_crear_cliente(
+            "María López", "",
+            recordado=ventas.cliente_de_vista_previa("ruben", "María López", ""))
+
+
+def test_el_recuerdo_se_olvida_al_cambiar_de_cliente_en_el_borrador(odoo):
+    pid = ventas.buscar_o_crear_cliente("María López", "6567-3062")
+    ventas.recordar_cliente_vista_previa("genesis", pid,
+                                         "María López", "6567-3062")
+    # El mismo cliente en el borrador no borra nada.
+    ventas.guardar_borrador("genesis", "María López", "6567-3062")
+    assert ventas.cliente_de_vista_previa(
+        "genesis", "María López", "6567-3062") == pid
+    # Cambió el cliente (la lógica R1/_es_otro_cliente): se olvida.
+    ventas.guardar_borrador("genesis", "Beto Mendoza", "6111-0000")
+    assert ventas.cliente_de_vista_previa(
+        "genesis", "Beto Mendoza", "6111-0000") is None
+    assert ventas.cliente_de_vista_previa(
+        "genesis", "María López", "6567-3062") is None
+
+
+def test_el_recuerdo_se_olvida_al_terminar_la_venta(odoo):
+    pid = ventas.buscar_o_crear_cliente("María López", "")
+    ventas.recordar_cliente_vista_previa("genesis", pid, "María López", "")
+    ventas._limpiar_borrador("genesis")
+    assert ventas.cliente_de_vista_previa("genesis", "María López", "") is None
+
+
+def test_decision_nuevo_le_gana_al_recuerdo(odoo):
+    # Si la empleada eligió explícitamente «crear uno nuevo», el recuerdo
+    # de la vista previa no la contradice.
+    pid = ventas.buscar_o_crear_cliente("María López", "")
+    nuevo = ventas.buscar_o_crear_cliente("María López", "",
+                                          decision="nuevo", recordado=pid)
+    assert nuevo != pid
+    assert len(odoo.partners) == 2
 
 
 # --- R4: ninguna opción viene preseleccionada ---------------------------------
@@ -511,7 +644,7 @@ def test_la_confirmacion_fiscal_se_pinta_sin_preseleccion(cliente, odoo, monkeyp
     pagina = cliente.get("/venta/nueva", params={
         "error": "x", "fiscal": "7", "fiscal_nombre": "Zoila González",
         "fiscal_detalle": "Se va a guardar el RUC/Tax ID «8-123-4567» del "
-                          "cliente id 7 (Zoila González)."}).text
+                          "cliente Zoila González · 6567-3062."}).text
     assert 'name="confirmar_fiscal"' in pagina
     assert 'value="si"' in pagina and 'value="no"' in pagina
     assert 'value="usar-7"' in pagina          # la elección viaja de vuelta
