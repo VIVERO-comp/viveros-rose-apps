@@ -148,12 +148,12 @@
       <div class="campos-nuevo">
         <div class="campo">
           <span>Precio de venta ($)</span>
-          <input name="precio" type="number" inputmode="decimal" min="0" step="0.01"
+          <input name="precio" type="text" inputmode="decimal"
                  placeholder="0.00" value="{{ previo.precio or '' }}">
         </div>
         <div class="campo">
           <span>Costo ($)</span>
-          <input name="costo" type="number" inputmode="decimal" min="0" step="0.01"
+          <input name="costo" type="text" inputmode="decimal"
                  placeholder="0.00" value="{{ previo.costo or '' }}">
         </div>
       </div>

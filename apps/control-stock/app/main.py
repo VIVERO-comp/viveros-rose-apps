@@ -1377,7 +1377,8 @@ def venta_nueva(request: Request, q: str = "", error: str = ""):
     # venta.js solo lo refresca mientras se escribe. El total real lo
     # confirma Odoo al crear.
     contexto["leads_crm"] = _leads_para_elegir()
-    contexto["cargos_montos"] = _cargos_del_form(contexto["borrador"])
+    contexto["cargos_montos"] = _cargos_del_form(contexto["borrador"],
+                                                 avisar=False)
     # La casilla del PDF (garantía): en venta normal nace DESMARCADA.
     contexto["casillas"] = ventas.banderas_de(contexto["borrador"], False)
     contexto["total_con_cargos"] = (
@@ -1474,23 +1475,48 @@ def _amarrar_lead_del_form(request, form):
         ventas.quitar_lead_pendiente(usuario)
 
 
-def _cargos_del_form(form):
+def _cargos_del_form(form, avisar=True):
     """Los cargos opcionales (envío, instalación, mantenimiento): el monto
     de cada uno y, en "<clave>_desc", el párrafo que se imprime debajo.
-    Vacío o ilegible cuenta como 0: son opcionales, no motivo de error.
-    Un párrafo vacío NO se guarda: así el renglón sale con el de fábrica.
-    El envío ya no es un monto suelto: es la opción elegida (radios) y
-    ventas.resolver_envio decide el monto, la opción y la nota."""
+    Vacío cuenta como 0: son opcionales, no motivo de error. Pero un
+    TEXTO o un NEGATIVO se rechazan con ValueError, que las rutas POST ya
+    muestran en pantalla — antes caían a $0 en silencio y la cotización
+    salía sin el cargo que se quiso cobrar (2/10/2026). `avisar=False` es
+    solo para PINTAR una pantalla desde el borrador guardado (ahí no se
+    guarda nada y reventar el render dejaría al empleado sin formulario
+    que corregir): lo inválido se muestra como 0 y el rechazo de verdad
+    llega al dar el botón. Un párrafo vacío NO se guarda: así el renglón
+    sale con el de fábrica. El envío ya no es un monto suelto: es la
+    opción elegida (radios) y ventas.resolver_envio decide el monto, la
+    opción y la nota."""
     cargos = {}
     for cargo in ventas.CARGOS:
         if cargo["clave"] == "envio":
-            cargos.update(ventas.resolver_envio(form))
+            try:
+                cargos.update(ventas.resolver_envio(form))
+            except ValueError:
+                if avisar:
+                    raise
+                cargos["envio"] = 0.0
         else:
             crudo = str(form.get(cargo["clave"]) or "").strip().replace(",", ".")
-            try:
-                cargos[cargo["clave"]] = max(float(crudo), 0.0) if crudo else 0.0
-            except ValueError:
-                cargos[cargo["clave"]] = 0.0
+            if not crudo:
+                valor = 0.0
+            else:
+                try:
+                    valor = float(crudo)
+                except ValueError:
+                    valor = None
+                if valor is not None and valor < 0:
+                    valor = None
+                if valor is None:
+                    if avisar:
+                        raise ValueError(
+                            f"El monto de «{cargo['nombre']}» no se "
+                            "entiende: escribe un número, como 12.50 o "
+                            "12,50 (o déjalo vacío para no cobrarlo).")
+                    valor = 0.0
+            cargos[cargo["clave"]] = valor
         parrafo = str(form.get(cargo["clave"] + "_desc") or "").strip()[:600]
         if parrafo:
             cargos[cargo["clave"] + "_desc"] = parrafo

@@ -430,12 +430,12 @@
         <tr>
           <td><b>{{ l.nombre }}</b>
             {% if l.sku %}<span class="cmp-orden">{{ l.sku }}</span>{% endif %}</td>
-          <td><input class="campo cmp-mini" type="number" inputmode="decimal"
-                     min="0" step="any" name="cant-{{ l.n }}"
+          <td><input class="campo cmp-mini" type="text" inputmode="decimal"
+                     name="cant-{{ l.n }}"
                      value="{{ l.cantidad_texto }}"
                      aria-label="Cuántos de {{ l.nombre }}"></td>
-          <td><input class="campo cmp-mini" type="number" inputmode="decimal"
-                     min="0" step="0.01" name="costo-{{ l.n }}"
+          <td><input class="campo cmp-mini" type="text" inputmode="decimal"
+                     name="costo-{{ l.n }}"
                      value="{{ l.costo_texto }}" placeholder="costo"
                      aria-label="Costo de cada {{ l.nombre }}"></td>
           {# El nombre del botón lleva el NÚMERO del renglón: un submit

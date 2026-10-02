@@ -255,12 +255,12 @@
             <td class="cmp-num">
               {% if pr.dias_entrega is not none %}{{ pr.dias_entrega }}
               {% else %}<span class="tenue">—</span>{% endif %}</td>
-            <td><input class="campo cmp-mini" type="number" inputmode="decimal"
-                       min="0" step="any" name="minimo-{{ pr.linea_id }}"
+            <td><input class="campo cmp-mini" type="text" inputmode="decimal"
+                       name="minimo-{{ pr.linea_id }}"
                        value="{{ pr.cantidad_minima }}"
                        aria-label="Cantidad mínima de {{ pr.nombre }}"></td>
-            <td><input class="campo cmp-mini" type="number" inputmode="decimal"
-                       min="0" step="0.01" name="precio-{{ pr.linea_id }}"
+            <td><input class="campo cmp-mini" type="text" inputmode="decimal"
+                       name="precio-{{ pr.linea_id }}"
                        value="{{ pr.precio if pr.precio is not none else '' }}"
                        placeholder="sin precio"
                        aria-label="Precio de {{ pr.nombre }}"></td>
@@ -338,11 +338,11 @@
           <tr>
             <td><b>{{ p.nombre }}</b>
               {% if p.sku %}<span class="cmp-orden">{{ p.sku }}</span>{% endif %}</td>
-            <td><input class="campo cmp-mini" type="number" inputmode="decimal"
-                       min="0" step="0.01" name="precio-{{ p.producto_tmpl_id }}"
+            <td><input class="campo cmp-mini" type="text" inputmode="decimal"
+                       name="precio-{{ p.producto_tmpl_id }}"
                        placeholder="precio" aria-label="Precio de {{ p.nombre }}"></td>
-            <td><input class="campo cmp-mini" type="number" inputmode="decimal"
-                       min="0" step="any" name="minimo-{{ p.producto_tmpl_id }}"
+            <td><input class="campo cmp-mini" type="text" inputmode="decimal"
+                       name="minimo-{{ p.producto_tmpl_id }}"
                        placeholder="mínimo" aria-label="Cantidad mínima de {{ p.nombre }}"></td>
             <td><input class="campo cmp-mini" type="text" maxlength="60"
                        name="nombreprov-{{ p.producto_tmpl_id }}"

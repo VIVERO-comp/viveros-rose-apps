@@ -685,7 +685,7 @@
       {% for opcion in envio_opciones %}
       <label class="campo">
         <span>{{ opcion.vehiculo_pantalla }} · {{ opcion.zona }} ({{ opcion.tiempo }}) ($)</span>
-        <input name="{{ opcion.clave }}" type="number" step="0.01" min="0.01"
+        <input name="{{ opcion.clave }}" type="text"
                inputmode="decimal" required
                value="{{ '%.2f' | format(precios[opcion.clave]) }}">
       </label>
@@ -834,11 +834,11 @@
         </div>
         <div class="campo">
           <span>Precio de venta ($)</span>
-          <input id="agregar-precio" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
+          <input id="agregar-precio" type="text" inputmode="decimal" placeholder="0.00">
         </div>
         <div class="campo">
           <span>Costo ($)</span>
-          <input id="agregar-costo" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
+          <input id="agregar-costo" type="text" inputmode="decimal" placeholder="0.00">
         </div>
         <div class="campo">
           <span>Altura de (cm)</span>

@@ -1227,3 +1227,85 @@ def test_pagado_no_gana_ni_pierde_controles(cliente_venta, odoo):
     assert ">Descargar / Compartir factura</a>" in pagina
     assert "Facturar / Pagado" not in pagina
     assert f"/venta/{n}/cotizacion.pdf" not in pagina
+
+
+# ---------------------------------------------------------------------------
+# El cierre del bug de la coma (2/10/2026): los parsers de dinero de
+# ventas.py entienden la coma como decimal, y el texto o el negativo se
+# rechazan — _monto_escrito ya no los vuelve un $0 callado.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("crudo, esperado", [
+    ("12,50", 12.5),   # coma decimal: NO debe volverse 1250
+    ("12.50", 12.5),
+    ("0,50", 0.5),
+    ("1000", 1000.0),
+])
+def test_num_positivo_coma_y_punto(crudo, esperado):
+    assert ventas._num_positivo(crudo) == pytest.approx(esperado)
+
+
+def test_num_positivo_vacio_cae_al_defecto():
+    assert ventas._num_positivo("") is None
+    assert ventas._num_positivo("", defecto=1.0) == 1.0
+    assert ventas._num_positivo(None, defecto=0.0) == 0.0
+
+
+@pytest.mark.parametrize("crudo", ["abc", "doce", "-1", "-0,50", "-12.50"])
+def test_num_positivo_rechaza_texto_y_negativo(crudo):
+    assert ventas._num_positivo(crudo) is None
+    assert ventas._num_positivo(crudo, permitir_cero=True) is None
+
+
+def test_num_positivo_cero_solo_si_se_permite():
+    assert ventas._num_positivo("0") is None
+    assert ventas._num_positivo("0", permitir_cero=True) == 0.0
+    assert ventas._num_positivo("0,00", permitir_cero=True) == 0.0
+
+
+@pytest.mark.parametrize("crudo, esperado", [
+    ("12,50", 12.5), ("12.50", 12.5), ("", 0.0),
+])
+def test_monto_de_envio_coma_punto_y_vacio(crudo, esperado):
+    assert ventas._monto_escrito({"envio": crudo}) == pytest.approx(esperado)
+    # Sin el campo siquiera: 0, sin cargo.
+    assert ventas._monto_escrito({}) == 0.0
+
+
+@pytest.mark.parametrize("crudo", ["abc", "quince"])
+def test_monto_de_envio_ilegible_avisa(crudo):
+    """Antes `except ValueError: 0.0` tragaba el texto y la cotización
+    salía sin el envío que se quiso cobrar."""
+    with pytest.raises(ValueError, match="no se entiende"):
+        ventas._monto_escrito({"envio": crudo})
+
+
+@pytest.mark.parametrize("crudo", ["-5", "-0,50"])
+def test_monto_de_envio_negativo_avisa(crudo):
+    with pytest.raises(ValueError, match="negativo"):
+        ventas._monto_escrito({"envio": crudo})
+
+
+def test_resolver_envio_con_coma(db_limpia):
+    """El personalizado y el formulario viejo entienden «12,50»."""
+    assert ventas.resolver_envio(
+        {"envio_opcion": "personalizado", "envio": "12,50",
+         "envio_nota": "Chame"})["envio"] == 12.5
+    assert ventas.resolver_envio({"envio": "12,50"}) == {"envio": 12.5}
+
+
+def test_resolver_envio_rechaza_lo_ilegible_donde_el_monto_cuenta(db_limpia):
+    with pytest.raises(ValueError):
+        ventas.resolver_envio({"envio_opcion": "personalizado", "envio": "abc"})
+    with pytest.raises(ValueError):
+        ventas.resolver_envio({"envio_opcion": "carro_ciudad", "envio": "-5"})
+    with pytest.raises(ValueError):
+        ventas.resolver_envio({"envio": "abc"})  # formulario viejo
+
+
+def test_sin_envio_sigue_ignorando_el_campo_aunque_sea_ilegible(db_limpia):
+    """Con «Sin envío» el monto no viaja a ninguna parte: un «abc»
+    olvidado ahí no bloquea la venta (el contrato documentado: ese campo
+    se ignora entero)."""
+    assert ventas.resolver_envio({"envio_opcion": "", "envio": "abc"}) == {
+        "envio": 0.0, "envio_opcion": "", "envio_nota": ""}

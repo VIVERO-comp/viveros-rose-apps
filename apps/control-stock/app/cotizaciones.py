@@ -411,7 +411,12 @@ def _monto_servicio(valor):
 
     La coma se trata como separador DECIMAL (formato de Panamá): «12,50»
     es 12.50, nunca 1250. Asume un solo separador decimal, no de miles —
-    el mismo criterio que `_cantidad` y `ventas._num_positivo`."""
+    el mismo criterio que `_cantidad` y `ventas._num_positivo`.
+
+    Un NEGATIVO es tan inválido como un texto: antes `max(numero, 0.0)`
+    lo recortaba a $0 en silencio (2/10/2026). El None hace que la capa
+    de arriba lo avise en pantalla, igual que el precio ilegible. El 0
+    ESCRITO sigue valiendo (servicio incluido sin cargo)."""
     texto = (valor or "").strip().replace(",", ".")
     if not texto:
         return None
@@ -419,7 +424,9 @@ def _monto_servicio(valor):
         numero = float(texto)
     except ValueError:
         return None
-    return max(numero, 0.0)
+    if numero < 0:
+        return None
+    return numero
 
 
 def servicios_del_formulario(textos, montos, descripciones=None):
@@ -487,6 +494,11 @@ def _renglones_limpios(renglones):
             raise ValueError("Falta la descripción de un renglón.")
         precio = _monto_servicio(crudo_precio)
         if precio is None:
+            if crudo_precio:
+                raise ValueError(
+                    f"El precio del renglón «{_resumen(texto)}» no se "
+                    "entiende: escribe un número sin signo (la coma vale "
+                    "como decimal).")
             raise ValueError(f"Falta el precio del renglón: «{_resumen(texto)}».")
         cantidad = _cantidad(crudo_cantidad)
         if cantidad is None:
@@ -511,9 +523,14 @@ def _servicios_limpios(servicios):
         descripcion = (renglon.get("descripcion") or "").strip()
         crudo = (renglon.get("monto") or "").strip()
         monto = _monto_servicio(crudo)
-        if not texto and not descripcion and monto is None:
+        if not texto and not descripcion and monto is None and not crudo:
             continue
         if monto is None:
+            if crudo:
+                raise ValueError(
+                    f"El monto del servicio «{_resumen(texto or descripcion)}» "
+                    "no se entiende: escribe un número sin signo (la coma "
+                    "vale como decimal).")
             raise ValueError(f"Falta el monto del servicio: «{_resumen(texto or descripcion)}».")
         limpios.append({"texto": texto, "monto": monto,
                         "descripcion": descripcion})

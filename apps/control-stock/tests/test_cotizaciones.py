@@ -1440,3 +1440,145 @@ def test_el_enlace_de_la_propuesta_lleva_data_pdf_con_su_nombre(cliente, odoo):
             assert "data-pdf" in enlace
             assert f'download="{esperado}"' in enlace
     assert encontrado, "no se encontró el enlace de la propuesta"
+
+
+# ---------------------------------------------------------------------------
+# El cierre del bug de la coma (2/10/2026): con los campos de dinero en
+# type="text" la coma SÍ llega al servidor — y también llega cualquier
+# cosa. Texto y negativo se RECHAZAN con aviso en pantalla, nunca un $0
+# callado.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("entrada", ["-5", "-0,50", "-12.50", "-1000"])
+def test_monto_servicio_negativo_es_invalido(entrada):
+    """Antes `max(numero, 0.0)` volvía un «-5» un $0 silencioso; ahora es
+    tan inválido como un texto y la capa de arriba lo avisa."""
+    assert cotizaciones._monto_servicio(entrada) is None
+
+
+@pytest.mark.parametrize("entrada, esperado", [
+    ("2,5", 2.5),      # coma decimal: NO debe volverse 25
+    ("2.5", 2.5),
+    ("1", 1.0),
+    ("", 1.0),         # vacío: el contrato es 1 (un renglón sin cantidad)
+    ("   ", 1.0),
+])
+def test_cantidad_coma_y_vacio(entrada, esperado):
+    assert cotizaciones._cantidad(entrada) == pytest.approx(esperado)
+
+
+@pytest.mark.parametrize("entrada", ["abc", "doce", "-3", "-0,5", "0"])
+def test_cantidad_rechaza_texto_negativo_y_cero(entrada):
+    assert cotizaciones._cantidad(entrada) is None
+
+
+def test_monto_negativo_avisa_y_no_crea_nada(odoo):
+    with pytest.raises(ValueError, match="no se entiende"):
+        cotizaciones.crear_cotizacion(
+            {"id": "g", "nombre": "Génesis"}, "instalacion", "María", "",
+            [{"texto": "Instalación de palmas", "monto": "-80"}], [])
+    assert not odoo.ordenes
+
+
+def test_ruta_monto_ilegible_avisa_y_no_guarda_cero(cliente, odoo):
+    """La ruta entera: un monto «abc» vuelve al formulario con el aviso
+    visible y en Odoo no queda NINGUNA orden (ni una con $0)."""
+    r = cliente.post("/venta/servicio/renta",
+                     data={"cliente": "María", "celular": "",
+                           "servicio_texto": "Alquiler de 20 plantas",
+                           "servicio_monto": "abc"})
+    assert r.status_code == 200
+    assert "no se entiende" in r.text
+    assert not odoo.ordenes
+
+
+def test_ruta_monto_negativo_avisa_y_no_guarda_cero(cliente, odoo):
+    r = cliente.post("/venta/servicio/renta",
+                     data={"cliente": "María", "celular": "",
+                           "servicio_texto": "Alquiler de 20 plantas",
+                           "servicio_monto": "-850"})
+    assert r.status_code == 200
+    assert "no se entiende" in r.text
+    assert not odoo.ordenes
+
+
+def test_ruta_cargo_instalacion_ilegible_avisa_y_no_guarda_cero(cliente, odoo):
+    """El cargo opcional: «abc» en instalación ya no cae a $0 callado —
+    el formulario vuelve con el aviso y no se crea la orden."""
+    r = cliente.post("/venta/servicio/renta",
+                     data={"cliente": "María", "celular": "",
+                           "servicio_texto": "Alquiler de 20 plantas",
+                           "servicio_monto": "850",
+                           "instalacion": "abc"})
+    assert r.status_code == 200
+    assert "Instalación" in r.text and "no se entiende" in r.text
+    assert not odoo.ordenes
+
+
+def test_ruta_cargo_instalacion_negativo_avisa_y_no_guarda_cero(cliente, odoo):
+    r = cliente.post("/venta/servicio/renta",
+                     data={"cliente": "María", "celular": "",
+                           "servicio_texto": "Alquiler de 20 plantas",
+                           "servicio_monto": "850",
+                           "instalacion": "-40"})
+    assert r.status_code == 200
+    assert "no se entiende" in r.text
+    assert not odoo.ordenes
+
+
+def test_ruta_envio_personalizado_ilegible_avisa_y_no_guarda_cero(cliente, odoo):
+    r = cliente.post("/venta/servicio/renta",
+                     data={"cliente": "María", "celular": "",
+                           "servicio_texto": "Alquiler de 20 plantas",
+                           "servicio_monto": "850",
+                           "envio_opcion": "personalizado",
+                           "envio": "quince"})
+    assert r.status_code == 200
+    assert "envío" in r.text and "no se entiende" in r.text
+    assert not odoo.ordenes
+
+
+def test_ruta_cargo_con_coma_llega_como_decimal(cliente, odoo):
+    """El viaje completo del fix: «12,50» escrito en el cargo de
+    instalación entra a la orden como 12.50, nunca 1250."""
+    r = cliente.post("/venta/servicio/renta",
+                     data={"cliente": "María", "celular": "",
+                           "servicio_texto": "Alquiler de 20 plantas",
+                           "servicio_monto": "850",
+                           "instalacion": "12,50"})
+    assert "Cotización de servicio creada" in r.text
+    orden = list(odoo.ordenes.values())[-1]
+    assert orden["amount_total"] == pytest.approx(850 + 12.50)
+
+
+def test_cargos_del_form_rechaza_con_aviso_y_tolera_al_pintar():
+    """_cargos_del_form: el POST rechaza texto y negativo (ValueError que
+    las rutas muestran); avisar=False es SOLO para pintar la pantalla
+    desde un borrador sucio — ahí no se guarda nada."""
+    from app.main import _cargos_del_form
+    assert _cargos_del_form({"instalacion": "12,50"})["instalacion"] == 12.5
+    assert _cargos_del_form({"instalacion": "12.50"})["instalacion"] == 12.5
+    assert _cargos_del_form({"instalacion": ""})["instalacion"] == 0.0
+    assert _cargos_del_form({})["mantenimiento"] == 0.0
+    with pytest.raises(ValueError, match="no se entiende"):
+        _cargos_del_form({"instalacion": "abc"})
+    with pytest.raises(ValueError, match="no se entiende"):
+        _cargos_del_form({"mantenimiento": "-9"})
+    with pytest.raises(ValueError, match="envío"):
+        _cargos_del_form({"envio": "abc"})
+    # El modo de pintar: lo ilegible se muestra como 0, sin reventar.
+    assert _cargos_del_form({"instalacion": "abc"}, avisar=False)["instalacion"] == 0.0
+    assert _cargos_del_form({"mantenimiento": "-9"}, avisar=False)["mantenimiento"] == 0.0
+    assert _cargos_del_form({"envio": "abc"}, avisar=False)["envio"] == 0.0
+
+
+def test_venta_nueva_se_pinta_aunque_el_borrador_traiga_basura(cliente, odoo):
+    """El GET de /venta/nueva arma el total desde el borrador guardado
+    (avisar=False): un «abc» que venta.js dejó ahí no puede tumbar la
+    pantalla — el rechazo de verdad llega al dar el botón."""
+    r = cliente.post("/venta/borrador",
+                     data={"cliente": "María", "celular": "",
+                           "instalacion": "abc", "envio": "-5"})
+    assert r.status_code == 204
+    pagina = cliente.get("/venta/nueva")
+    assert pagina.status_code == 200

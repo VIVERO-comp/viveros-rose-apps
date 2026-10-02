@@ -156,15 +156,15 @@
                 {# «Llegó» nace con lo que Odoo espera en esta entrada: el
                    camión completo es el caso normal y así no hay que
                    escribir nada. Se corrige escribiendo. #}
-                <td><input class="campo cmp-mini" type="number" inputmode="decimal"
-                           min="0" step="any" name="llego-{{ r.movimiento }}"
+                <td><input class="campo cmp-mini" type="text" inputmode="decimal"
+                           name="llego-{{ r.movimiento }}"
                            value="{{ r.esperado_texto }}"
                            aria-label="Cuántos llegaron de {{ r.nombre }}"></td>
                 {# Las dañadas nacen VACÍAS, o sea en cero: lo normal es que
                    no llegue nada roto, y un número sugerido ahí sería
                    inventar una rotura. #}
-                <td><input class="campo cmp-mini" type="number" inputmode="decimal"
-                           min="0" step="any" name="roto-{{ r.movimiento }}"
+                <td><input class="campo cmp-mini" type="text" inputmode="decimal"
+                           name="roto-{{ r.movimiento }}"
                            placeholder="0"
                            aria-label="Cuántas llegaron dañadas de {{ r.nombre }}"></td>
               </tr>
