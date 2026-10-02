@@ -532,6 +532,18 @@ def fijar_config(clave, valor):
                     (clave, str(valor)))
 
 
+def leer_config(clave, por_defecto=""):
+    """UN valor de la tabla config, o el de siempre si nadie lo fijó.
+
+    El gemelo de lectura de `fijar_config`: los ajustes editables sin
+    desplegar (como el umbral RESPONDER_A_MANO_HORAS) viven ahí y se leen
+    por acá."""
+    with _db() as con:
+        fila = con.execute("SELECT valor FROM config WHERE clave = ?",
+                           (clave,)).fetchone()
+    return fila["valor"] if fila else por_defecto
+
+
 # ---------------------------------------------------------------------------
 # Fotos cambiadas desde la app
 # ---------------------------------------------------------------------------

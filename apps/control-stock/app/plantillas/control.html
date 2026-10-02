@@ -236,11 +236,15 @@
        nunca se recalcula en el servidor a partir de una lectura, que puede
        venir de una caché vieja — esa negación era el bug de "hay que
        apretar dos veces". #}
+    {# El texto de ayuda (2/10/2026): «queda marcado hasta que lo apagues»
+       solo si «Responder a mano» existe en Linear — lo decide
+       control.ficha() (abierta.responder_protegido), no la plantilla. #}
     <form method="post" action="/control/responder?vista={{ vista }}">
       <input type="hidden" name="ref" value="{{ abierta.ref }}">
       <input type="hidden" name="prender" value="{{ '0' if abierta.te_toca else '1' }}">
       <button class="btn{{ ' peligro' if abierta.te_toca }}" type="submit"
-              data-guardando="…">
+              data-guardando="…"
+              {% if abierta.responder_protegido %}title="Queda marcado hasta que lo apagues: nuestra respuesta por WhatsApp no lo quita."{% endif %}>
         {% if abierta.te_toca %}🔴 Responder · apagalo{% else %}Prender 🔴 Responder{% endif %}
       </button>
     </form>
@@ -279,6 +283,14 @@
     </form>
     {% endif %}
   </div>
+  {# La letra chica de 🔴 Responder (2/10/2026): el tooltip no existe en el
+     teléfono, así que la promesa va escrita. Solo cuando es verdad
+     (abierta.responder_protegido): sin «Responder a mano» en Linear,
+     prometer que no se apaga sería mentirle al empleado. #}
+  {% if puede_tocar_abierta and abierta.responder_protegido %}
+  <p class="pie-nota">🔴 Responder queda marcado hasta que lo apagues acá:
+    nuestra respuesta por WhatsApp no lo quita.</p>
+  {% endif %}
 
   {# Las señales, en su propio grupo. Los botones solo existen si Abraham
      ya creó su etiqueta en Linear (mecanismo de `senales_disponibles`,

@@ -142,6 +142,25 @@
     {% endif %}
   </div>
 
+  {# ---------- 5b. «Responder a mano» que pasó del umbral (2/10/2026) ----------
+     Solo aparece si HAY alguna: un renglón vacío no es noticia (nada se
+     inventa, como el resto del resumen). El reloj lo anota el botón de la
+     ficha; el umbral es la clave RESPONDER_A_MANO_HORAS de config. #}
+  {% if r.responder_a_mano and r.responder_a_mano.total %}
+  <div class="inv-card">
+    <h3>Responder a mano · +{{ r.responder_a_mano.horas }} h
+      · {{ r.responder_a_mano.total }}</h3>
+    <p>Marcados con <b>«Responder a mano»</b> hace más de
+      {{ r.responder_a_mano.horas }} horas y todavía sin apagar:</p>
+    {% for l in r.responder_a_mano.filas %}
+    <div class="fila">
+      <span>{{ l.nombre }} · {{ l.resp or 'Sin dueño' }}</span>
+      <b>{{ l.hace }}</b>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   {# ---------- 6. El almacen de WAHA, que vive en el otro droplet ---------- #}
   {# No es un bloque del negocio: es salud del sistema. Se sumo porque el
      almacen se disparo una vez a 70 MB bajando historial y nadie lo vio.

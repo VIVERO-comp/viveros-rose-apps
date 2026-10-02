@@ -43,7 +43,7 @@ import os
 from datetime import datetime, timedelta
 
 from . import (almacen_waha, avisos, calendario, crm_twenty, linear_leads,
-               mapas, ventas)
+               mapas, responder_a_mano, ventas)
 from .datos import ZONA_PANAMA
 
 # El horario de atención del vivero (Abraham, 25/09/2026). Aquí solo se usa
@@ -143,7 +143,21 @@ def _leads(dia):
         if lead.get("te_toca") and lead["estado"] != "RECORDATORIO":
             esperando.setdefault(lead.get("resp") or "", []).append(lead)
 
+    # «Responder a mano» con más horas que el umbral (2/10/2026, spec B2):
+    # el reloj lo anota el botón de la ficha (Linear no guarda cuándo se
+    # puso una etiqueta) y `vencidos` reconcilia primero con ESTA lista de
+    # leads — una etiqueta quitada a mano en Linear borra su fila acá
+    # mismo, sin consultas extra. Si no hay ninguna, el renglón no
+    # aparece: nada se inventa.
+    marcados = [dict(f, hace=_hace_cuanto(f["horas"]))
+                for f in responder_a_mano.vencidos(leads)]
+
     return {
+        "responder_a_mano": {
+            "total": len(marcados),
+            "horas": responder_a_mano.umbral_horas(),
+            "filas": marcados,
+        },
         "nuevos": {
             "total": len(nuevos),
             "por_origen": sorted(por_origen.items(), key=lambda p: (-p[1], p[0])),
@@ -286,7 +300,8 @@ def del_dia(dia=None):
         datos.update(_leads(dia))
     except Exception as fallo:
         datos["errores"].append(f"Linear no contestó: {fallo}")
-        datos.update({"nuevos": None, "sin_resp": None, "esperando": None})
+        datos.update({"nuevos": None, "sin_resp": None, "esperando": None,
+                      "responder_a_mano": None})
 
     if not ventas.configurado():
         datos.update({"cotizaciones": None, "pagos": None})
@@ -350,7 +365,8 @@ def del_dia(dia=None):
 
 def hay_algo(datos):
     """¿Pasó algo que valga un aviso? Un día cerrado y en blanco, no."""
-    for clave in ("nuevos", "cotizaciones", "pagos", "esperando"):
+    for clave in ("nuevos", "cotizaciones", "pagos", "esperando",
+                  "responder_a_mano"):
         bloque = datos.get(clave)
         if bloque and bloque.get("total"):
             return True
@@ -388,6 +404,9 @@ def titular(datos):
     e = datos.get("esperando")
     if e and e["total"]:
         partes.append(f"{e['total']} esperando")
+    ram = datos.get("responder_a_mano")
+    if ram and ram["total"]:
+        partes.append(f"{ram['total']} responder a mano +{ram['horas']} h")
     # El almacén solo se nombra cuando está mal. Sano no gasta titular: el
     # número se ve en la pantalla, que es a donde lleva el aviso.
     a = datos.get("almacen")

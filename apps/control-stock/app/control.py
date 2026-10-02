@@ -37,7 +37,7 @@ import httpx
 from datetime import date, datetime, timedelta
 
 from . import (agenda, avisos, calendario, cot_lead, cotizaciones, crm_twenty,
-               linear_leads, mantenimiento, resumen, ventas)
+               linear_leads, mantenimiento, responder_a_mano, resumen, ventas)
 from .datos import ZONA_PANAMA, _db
 
 VISTAS = ("empleado", "estado")
@@ -713,6 +713,16 @@ def alternar_responder(ref, prender, autor=""):
             linear_leads.poner_te_toca(lead["id"], False)
     except linear_leads.ErrorLeads as fallo:
         return "", str(fallo)
+    # El reloj del aviso de +48 h (2/10/2026, spec B2): Linear no guarda
+    # cuándo se puso una etiqueta, así que el momento se anota acá — DESPUÉS
+    # de que Linear confirmó, nunca antes: una fila sin etiqueta detrás
+    # sería un aviso falso. Se anota solo si la etiqueta existe en Linear
+    # (sin ella no hay nada que medir, y la reconciliación la borraría
+    # igual); apagar borra siempre, exista o no.
+    if prender and hay_responder_a_mano:
+        responder_a_mano.anotar(lead["ref"])
+    elif not prender:
+        responder_a_mano.borrar(lead["ref"])
     linear_leads.refrescar()
     if waha_activo():
         etiquetar_en_whatsapp(lead["ref"])
@@ -927,6 +937,11 @@ def ficha(ref, buscar_cotizacion=""):
     abierta["senales"] = [
         {"nombre": n, "prendida": n in lead["etiquetas"]}
         for n in linear_leads.LABELS_SENAL if n in disponibles]
+    # La ayuda del botón 🔴 Responder (2/10/2026): «queda marcado hasta que
+    # lo apagues» solo es verdad si «Responder a mano» existe en Linear —
+    # sin ella, nuestra respuesta lo apaga como siempre. Python decide, la
+    # plantilla solo pinta el texto que corresponde.
+    abierta["responder_protegido"] = linear_leads.responder_a_mano_disponible()
     sucesos, internas = separar_notas(linear_leads.comentarios(lead["id"]))
     abierta["notas"] = internas
     abierta["cot"] = _cotizacion_de(lead, buscar_cotizacion)
@@ -1260,9 +1275,23 @@ def avisar_a_quien_le_toca(leads=None):
 
 
 def avisar_en_fondo(leads):
-    """El aviso, sin que la pantalla lo espere."""
-    calendario._en_fondo("control-avisos",
-                         lambda: avisar_a_quien_le_toca(leads))
+    """El aviso, sin que la pantalla lo espere.
+
+    De paso, la reconciliación de `responder_a_mano_desde` (2/10/2026):
+    el refresco del tablero ya trae los leads en la mano, así que es el
+    lugar barato para borrar la fila de un lead al que alguien le quitó
+    «Responder a mano» directo en Linear (no por el botón). Va ANTES del
+    aviso y sin depender de `avisos.configurado()`: la tabla tiene que
+    decir la verdad aunque los push estén apagados.
+    """
+    def tarea():
+        try:
+            responder_a_mano.reconciliar(leads)
+        except Exception:
+            pass  # apoyo de pantalla: el aviso de abajo no se pierde por esto
+        avisar_a_quien_le_toca(leads)
+
+    calendario._en_fondo("control-avisos", tarea)
 
 
 def refrescar():
