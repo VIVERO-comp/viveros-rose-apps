@@ -568,6 +568,22 @@ def inicio(request: Request, refrescar: int = 0, crear: str = "",
         "dispositivos_armados": wa_autor.configurado(),
         "responsables_wa": linear_leads.responsables() if es_admin else [],
         "aviso_ajustes": request.query_params.get("aviso"),
+        # Precios de envío rebotados (regla 5, Nº7 del lote): el campo que
+        # falló, el mensaje que va debajo de él y lo que se había tecleado
+        # en los 4 campos — todo viajó en el redirect del POST, para que
+        # el rechazo no borre lo escrito ni mande el aviso al tope.
+        "campo_error_envio": (
+            (request.query_params.get("campo") or "").strip()[:40]
+            if request.query_params.get("aviso") == "envio-invalido" else ""),
+        "error_envio": ("Este precio no se entiende: escribe un número "
+                        "mayor que cero, como 12.50 o 12,50. No se guardó "
+                        "ninguno."
+                        if request.query_params.get("aviso") == "envio-invalido"
+                        else ""),
+        "envio_tecleado": {
+            opcion["clave"]: request.query_params.get("v_" + opcion["clave"])
+            for opcion in ventas.OPCIONES_ENVIO
+            if request.query_params.get("v_" + opcion["clave"]) is not None},
         "inv_nueva": request.query_params.get("inv") if es_admin else None,
         # Para armar los links /invitacion/{token} que se comparten.
         "base_publica": (os.environ.get("PUBLIC_BASE_URL")
@@ -939,15 +955,24 @@ async def ajustes_envio(request: Request):
         return rechazo
     form = await request.form()
     nuevos = {}
+    tecleado = {opcion["clave"]: str(form.get(opcion["clave"]) or "").strip()
+                for opcion in ventas.OPCIONES_ENVIO}
     for opcion in ventas.OPCIONES_ENVIO:
-        crudo = str(form.get(opcion["clave"]) or "").strip().replace(",", ".")
+        crudo = tecleado[opcion["clave"]].replace(",", ".")
         try:
             precio = float(crudo)
         except ValueError:
             precio = 0.0
         if precio <= 0:
-            return RedirectResponse("/?tab=ajustes&aviso=envio-invalido",
-                                    status_code=303)
+            # Regla 5 (Nº7 del lote): el rechazo viaja con el campo que
+            # falló Y los 4 montos tecleados, para que la pantalla los
+            # conserve y pinte el error debajo del campo — antes el
+            # redirect pelado los borraba y el aviso genérico salía arriba.
+            vuelta = ("/?tab=ajustes&aviso=envio-invalido"
+                      + f"&campo={quote(opcion['clave'])}"
+                      + "".join(f"&v_{clave}={quote(valor)}"
+                                for clave, valor in tecleado.items()))
+            return RedirectResponse(vuelta, status_code=303)
         nuevos[opcion["clave"]] = precio
     # Se guarda todo o nada: un formulario con un precio ilegible no deja
     # los otros tres a medias.

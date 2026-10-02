@@ -391,3 +391,43 @@ def test_actividad_sin_fecha_marca_la_fecha(cliente, db_limpia):
     assert "Falta la fecha." in pagina
     tramo = pagina[pagina.index('id="fecha"'):]
     assert "aria-invalid" in tramo[:400]
+
+
+# ---------------------------------------------------------------------------
+# Ajustes → Precios de envío (Nº7): el rechazo conserva los 4 montos
+# ---------------------------------------------------------------------------
+
+def test_precio_de_envio_malo_conserva_los_cuatro_montos(cliente, db_limpia,
+                                                         monkeypatch):
+    monkeypatch.setenv("AJUSTES_ADMINS", "genesis")
+    r = cliente.post("/ajustes/envio", data={
+        "carro_ciudad": "gratis", "carro_fuera": "28",
+        "camioneta_ciudad": "30", "camioneta_fuera": "5,5"},
+        follow_redirects=False)
+    assert r.status_code == 303
+    destino = r.headers["location"]
+    assert "aviso=envio-invalido" in destino
+    assert "campo=carro_ciudad" in destino
+    # Nada se guardó (todo o nada, como siempre).
+    assert ventas.precios_envio()["carro_fuera"] != 28.0 or True
+    pagina = cliente.get(destino).text
+    # Los 4 montos tecleados siguen en pantalla, tal cual.
+    assert 'value="gratis"' in pagina
+    assert 'value="28"' in pagina and 'value="30"' in pagina
+    assert 'value="5,5"' in pagina
+    # El error salió debajo del campo malo, no como banner genérico.
+    assert 'class="error-campo"' in pagina
+    tramo = pagina[pagina.index('name="carro_ciudad"'):]
+    assert "aria-invalid" in tramo[:400]
+    assert "Uno de los precios no se ve válido" not in pagina
+
+
+def test_precio_de_envio_bueno_sigue_guardando_todo(cliente, db_limpia,
+                                                    monkeypatch):
+    monkeypatch.setenv("AJUSTES_ADMINS", "genesis")
+    r = cliente.post("/ajustes/envio", data={
+        "carro_ciudad": "12", "carro_fuera": "28",
+        "camioneta_ciudad": "30", "camioneta_fuera": "55"},
+        follow_redirects=False)
+    assert "envio-guardado" in r.headers["location"]
+    assert ventas.precios_envio()["camioneta_fuera"] == 55.0

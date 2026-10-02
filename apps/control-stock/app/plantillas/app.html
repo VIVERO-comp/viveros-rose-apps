@@ -676,10 +676,14 @@
       <summary><span class="que"><b>Precios de envío</b><span>Lo que cobra Vender por llevar el pedido · sin desplegar</span></span><span class="flecha">›</span></summary>
       <div class="ajuste-cuerpo">
     {% if aviso_ajustes == 'envio-guardado' %}<div class="aviso-ok">Precios guardados. Las próximas cotizaciones ya salen con ellos.</div>
-    {% elif aviso_ajustes == 'envio-invalido' %}<div class="aviso-error">Uno de los precios no se ve válido: tiene que ser un número mayor que cero. No se guardó ninguno.</div>{% endif %}
+    {% elif aviso_ajustes == 'envio-invalido' and not campo_error_envio %}<div class="aviso-error">Uno de los precios no se ve válido: tiene que ser un número mayor que cero. No se guardó ninguno.</div>{% endif %}
     {# Los 4 precios de las opciones fijas de Vender. Se guardan en la base
        (tabla config), así que cambian al instante, sin desplegar.
-       Personalizado no tiene precio fijo: lo escribe el empleado. #}
+       Personalizado no tiene precio fijo: lo escribe el empleado.
+       Tras un rechazo, cada campo repinta LO TECLEADO (envio_tecleado,
+       viajó en el redirect) y el error sale debajo del campo que falló
+       (regla 5); el banner de arriba queda para un enlace viejo sin
+       campo. #}
     {% set precios = envio_precios() %}
     <form class="form-invitar" method="post" action="/ajustes/envio">
       {% for opcion in envio_opciones %}
@@ -687,7 +691,11 @@
         <span>{{ opcion.vehiculo_pantalla }} · {{ opcion.zona }} ({{ opcion.tiempo }}) ($)</span>
         <input name="{{ opcion.clave }}" type="text"
                inputmode="decimal" required
-               value="{{ '%.2f' | format(precios[opcion.clave]) }}">
+               {% if campo_error_envio == opcion.clave %}autofocus aria-invalid="true"{% endif %}
+               value="{{ envio_tecleado[opcion.clave] if opcion.clave in envio_tecleado else '%.2f' | format(precios[opcion.clave]) }}">
+        {% if campo_error_envio == opcion.clave %}
+        <p class="error-campo" role="alert">{{ error_envio }}</p>
+        {% endif %}
       </label>
       {% endfor %}
       <button class="boton" type="submit">Guardar precios</button>
