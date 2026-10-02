@@ -2091,6 +2091,15 @@ async def venta_personalizada_crear(request: Request):
         contexto["confirmar_fiscal"] = _fiscal_de(error)
         return plantillas.TemplateResponse(
             request, "venta_personalizada.html", contexto)
+    except ventas.ErrorDeCampo as error:
+        # Regla 5: el error debajo del campo que falló, con lo escrito en
+        # pantalla (los mismos renglones y servicios del POST).
+        contexto = _contexto_personalizada(request, error=str(error),
+                                           renglones=renglones,
+                                           servicios=servicios)
+        contexto["campo_error"] = error.campo
+        return plantillas.TemplateResponse(
+            request, "venta_personalizada.html", contexto)
     except ValueError as error:
         return plantillas.TemplateResponse(
             request, "venta_personalizada.html",

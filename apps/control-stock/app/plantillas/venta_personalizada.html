@@ -17,7 +17,9 @@
 <main class="angosto">
   <a class="volver" href="/venta">← Volver a Vender</a>
 
-  {% if error_venta %}
+  {# El banner queda para los errores SIN campo (Odoo caído): el de un
+     campo sale debajo del campo mismo (regla 5, _error_campo.html). #}
+  {% if error_venta and not campo_error %}
   <div class="aviso-error">{{ error_venta }}</div>
   {% endif %}
 
@@ -131,8 +133,10 @@
         <label class="servicio-monto">Monto
           <input name="servicio_monto" form="form-servicio" type="text"
                  inputmode="decimal" placeholder="0.00"
+                 {% if campo_error == 'servicio_monto-' ~ loop.index0 %}autofocus aria-invalid="true"{% endif %}
                  value="{{ sv.monto }}">
         </label>
+        {% with campo = 'servicio_monto-' ~ loop.index0 %}{% include '_error_campo.html' %}{% endwith %}
         <button class="quitar-servicio" type="button">Quitar</button>
       </div>
     </div>
@@ -154,7 +158,9 @@
     <div class="servicio">
       <textarea class="servicio-texto" name="renglon_texto" form="form-servicio"
                 rows="1" placeholder="Ej: 50 sacos de tierra negra"
+                {% if campo_error == 'renglon_texto-' ~ loop.index0 %}autofocus aria-invalid="true"{% endif %}
                 >{{ r.texto }}</textarea>
+      {% with campo = 'renglon_texto-' ~ loop.index0 %}{% include '_error_campo.html' %}{% endwith %}
       {# El párrafo gris bajo el título en el PDF, igual que en los
          servicios (Abraham, 22/09/2026). #}
       <textarea class="servicio-descripcion" name="renglon_descripcion" form="form-servicio"
@@ -164,13 +170,20 @@
         <label class="servicio-monto">Cant
           <input class="servicio-cantidad" name="renglon_cantidad" form="form-servicio"
                  type="text" inputmode="decimal"
+                 {% if campo_error == 'renglon_cantidad-' ~ loop.index0 %}autofocus aria-invalid="true"{% endif %}
                  placeholder="1" value="{{ r.cantidad }}">
         </label>
         <label class="servicio-monto">Precio
           <input name="renglon_precio" form="form-servicio" type="text"
                  inputmode="decimal" placeholder="0.00"
+                 {% if campo_error == 'renglon_precio-' ~ loop.index0 %}autofocus aria-invalid="true"{% endif %}
                  value="{{ r.precio }}">
         </label>
+        {% with campo_r = 'renglon_cantidad-' ~ loop.index0, campo_p = 'renglon_precio-' ~ loop.index0 %}
+        {% if campo_error in (campo_r, campo_p) %}
+        {% with campo = campo_error %}{% include '_error_campo.html' %}{% endwith %}
+        {% endif %}
+        {% endwith %}
         <button class="quitar-servicio" type="button">Quitar</button>
       </div>
     </div>

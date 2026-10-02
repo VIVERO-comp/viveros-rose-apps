@@ -184,3 +184,56 @@ def test_nueva_venta_error_sin_campo_conserva_el_banner(cliente, odoo_vacio):
     assert '<div class="aviso-error">' in texto
     assert "Agrega al menos una planta" in texto
     assert 'class="error-campo"' not in texto
+
+
+# ---------------------------------------------------------------------------
+# Cotización personalizada (render directo del POST)
+# ---------------------------------------------------------------------------
+
+def test_personalizada_precio_de_renglon_marca_el_renglon(cliente,
+                                                          sin_odoo_pero_activo):
+    pagina = cliente.post("/venta/servicio-personalizada", data={
+        "cliente": "Ana", "celular": "",
+        "renglon_texto": ["Sacos de tierra", "Piedras"],
+        "renglon_cantidad": ["2", "3"],
+        "renglon_precio": ["5", "x9"],
+        "renglon_descripcion": ["", ""],
+    })
+    assert pagina.status_code == 200
+    texto = pagina.text
+    assert 'value="x9"' in texto and 'value="5"' in texto   # nada se pierde
+    assert texto.count('class="error-campo"') == 1
+    assert "no se entiende" in texto
+    # El marcado quedó en el precio del SEGUNDO renglón.
+    assert texto.index('value="5"') < texto.index('aria-invalid="true"')
+    assert '<div class="aviso-error">' not in texto
+
+
+def test_personalizada_renglon_sin_titulo_marca_el_texto(cliente,
+                                                         sin_odoo_pero_activo):
+    pagina = cliente.post("/venta/servicio-personalizada", data={
+        "cliente": "Ana", "celular": "",
+        "renglon_texto": [""],
+        "renglon_cantidad": ["2"],
+        "renglon_precio": ["5"],
+        "renglon_descripcion": [""],
+    }).text
+    assert "Falta la descripción de un renglón." in pagina
+    assert 'class="error-campo"' in pagina
+    tramo = pagina[pagina.index('name="renglon_texto"'):]
+    assert "aria-invalid" in tramo[:400]
+
+
+def test_personalizada_servicio_sin_monto_marca_su_renglon(
+        cliente, sin_odoo_pero_activo):
+    pagina = cliente.post("/venta/servicio-personalizada", data={
+        "cliente": "Ana", "celular": "",
+        "servicios": "1",
+        "servicio_texto": ["Diseño del jardín"],
+        "servicio_monto": [""],
+        "servicio_descripcion": [""],
+    }).text
+    assert "Falta el monto del servicio" in pagina
+    assert 'class="error-campo"' in pagina
+    tramo = pagina[pagina.index('name="servicio_monto"'):]
+    assert "aria-invalid" in tramo[:400]
