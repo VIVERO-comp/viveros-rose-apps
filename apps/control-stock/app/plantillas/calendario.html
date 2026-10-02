@@ -469,7 +469,11 @@
     <div class="dato"><b>En Linear</b>
       <span class="mono">{{ abierta.ref }}{% if abierta.url %} · <a href="{{ abierta.url }}" target="_blank" rel="noopener">abrir</a>{% endif %}</span></div>
     {% if puede_tocar_abierta %}
-    <button class="btn oro" type="submit" style="margin-top:10px" data-guardando="Guardando…">Guardar cambios</button>
+    {# Un solo botón principal por pantalla (regla 2 de formularios): el
+       oro de la tarjeta es «✓ Marcar terminada», que es la acción que
+       cierra el trabajo; guardar los cambios pasa al gris de la casa
+       (Nº15 del lote, 2/10/2026). #}
+    <button class="btn" type="submit" style="margin-top:10px" data-guardando="Guardando…">Guardar cambios</button>
     {% endif %}
   </form>
 

@@ -576,3 +576,29 @@ def test_los_campos_de_escritura_van_a_16px_en_movil():
     # Cubre cant-/costo- (Compras) y llego-/roto- (Recibir): los cuatro
     # usan la clase .cmp-mini.
     assert "input.campo.cmp-mini{font-size:16px" in movil
+
+
+# ---------------------------------------------------------------------------
+# Nº15: un solo botón principal en la tarjeta de actividad del calendario
+# ---------------------------------------------------------------------------
+
+def test_la_tarjeta_de_actividad_tiene_un_solo_boton_oro(cliente, db_limpia):
+    """«✓ Marcar terminada» queda como LA acción principal (oro);
+    «Guardar cambios» pasa al estilo secundario."""
+    dia = calendario.hoy().isoformat()
+    cliente.post("/calendario/actividad", data={
+        "tipo": "entrega", "cliente": "Trabajo Interno Z", "fecha": dia,
+        "hora": "11:30", "dur": "60"}, follow_redirects=False)
+    actividad = next(a for a in calendario.listar(dia, dia)
+                     if a["cliente"] == "Trabajo Interno Z")
+    pagina = cliente.get(
+        f"/calendario?dia={dia}&vista=lista&abrir={actividad['id']}").text
+    # La tarjeta abierta: desde su Guardar cambios hasta su Nota nueva.
+    desde = pagina.index("Guardar cambios")
+    tarjeta = pagina[desde:pagina.index("Nota nueva", desde)]
+    # Guardar cambios quedó en gris...
+    corte = pagina[desde - 200:desde]
+    assert "btn oro" not in corte
+    # ...y el ÚNICO oro de la tarjeta es Marcar terminada.
+    assert tarjeta.count("btn oro") == 1
+    assert "Marcar terminada" in tarjeta
