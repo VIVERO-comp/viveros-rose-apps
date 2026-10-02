@@ -14,7 +14,8 @@ Lo que queda amarrado acá:
 - que las dos pantallas usen EL MISMO mecanismo —el `.segmento` de
   Control— y no dos inventos distintos;
 - que el enlace no se coma el único botón negro, que en Compras es
-  «+ Compra»;
+  «+ Anotar compra» (el texto del Diseño Orquesta, pantalla 12; antes
+  decía «+ Compra» — mismo enlace, mismo destino);
 - y que las dos rutas contesten de verdad, no solo que el `href` esté
   escrito.
 """
@@ -145,7 +146,7 @@ def test_el_unico_boton_negro_de_compras_sigue_siendo_mas_compra(cliente,
     texto = cliente.get("/compras").text
     assert texto.count('class="btn oro"') == 1
     negro = texto.split('class="btn oro"')[1].split("</a>")[0]
-    assert "+ Compra" in negro
+    assert "+ Anotar compra" in negro
     # El segmento no es un botón: son enlaces dentro del segmento.
     for seg in _segmentos(texto):
         assert "btn oro" not in seg
