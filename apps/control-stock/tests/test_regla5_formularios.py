@@ -237,3 +237,42 @@ def test_personalizada_servicio_sin_monto_marca_su_renglon(
     assert 'class="error-campo"' in pagina
     tramo = pagina[pagina.index('name="servicio_monto"'):]
     assert "aria-invalid" in tramo[:400]
+
+
+# ---------------------------------------------------------------------------
+# Editar cotización (render directo del POST, como ya hacía al crear)
+# ---------------------------------------------------------------------------
+
+from test_cotizaciones import _cotizacion_de_renta  # noqa: E402
+from test_cotizaciones import odoo as odoo_servicios  # noqa: E402,F401
+
+
+def test_editar_cantidad_ilegible_marca_la_planta(cliente, odoo_servicios):
+    registro = _cotizacion_de_renta(odoo_servicios)
+    pagina = cliente.post(f"/venta/servicio/{registro['n']}/editar", data={
+        "servicio_texto": "Alquiler de 20 plantas",
+        "servicio_monto": "850", "servicio_descripcion": "",
+        "planta_id": "601", "planta_nombre": "CROTO",
+        "planta_cantidad": "2x", "planta_precio": "45",
+    })
+    assert pagina.status_code == 200
+    texto = pagina.text
+    assert 'value="2x"' in texto                 # lo tecleado sigue
+    assert "Cantidad inválida en una planta." in texto
+    assert 'class="error-campo"' in texto
+    tramo = texto[texto.index('name="planta_cantidad"'):]
+    assert "aria-invalid" in tramo[:500]
+    assert '<div class="aviso-error">' not in texto
+
+
+def test_editar_monto_de_servicio_ilegible_marca_su_renglon(cliente,
+                                                            odoo_servicios):
+    registro = _cotizacion_de_renta(odoo_servicios)
+    pagina = cliente.post(f"/venta/servicio/{registro['n']}/editar", data={
+        "servicio_texto": "Alquiler de 20 plantas",
+        "servicio_monto": "85O", "servicio_descripcion": "",
+    }).text
+    assert 'value="85O"' in pagina
+    assert 'class="error-campo"' in pagina
+    tramo = pagina[pagina.index('name="servicio_monto"'):]
+    assert "aria-invalid" in tramo[:500]

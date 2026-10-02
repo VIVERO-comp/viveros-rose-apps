@@ -2281,36 +2281,50 @@ async def venta_servicio_editar_guardar(request: Request, n: int):
             # del lead — mismo patrón que conectar/desconectar cotización.
             autor=(request.state.empleada.get("nombre")
                   or request.state.empleada["id"]))
+    except ventas.ErrorDeCampo as error:
+        # Regla 5: lo mismo que el ValueError de abajo, pero el mensaje
+        # sale debajo del campo que falló y la pantalla aterriza ahí.
+        return _editar_rebotado(request, n, form, servicios, plantas,
+                                renglones, str(error), campo=error.campo)
     except ValueError as error:
         # El formulario vuelve con lo escrito, como al crear: un redirect
         # perdería lo que la empleada ya corrigió.
-        datos_edicion = cotizaciones.cargar_para_editar(n)
-        if datos_edicion is None or not datos_edicion["editable"]:
-            return _redirigir_venta(str(error))
-        datos_edicion["servicios"] = servicios or datos_edicion["servicios"]
-        nombres = {p["producto_id"]: p["nombre"] for p in datos_edicion["plantas"]}
-        # El buscador (30/09/2026) puede haber sumado una planta que la
-        # cotización todavía no tenía en Odoo: su nombre no está en
-        # `nombres`. El formulario ya lo sabe (lo puso el buscador en un
-        # campo oculto junto al id) y gana sobre el diccionario viejo.
-        nombres.update({
-            _entero_o_none(pid): nombre
-            for pid, nombre in zip(form.getlist("planta_id"),
-                                   form.getlist("planta_nombre")) if nombre})
-        datos_edicion["plantas"] = [
-            {**p, "nombre": nombres.get(_entero_o_none(p["producto_id"]), "")}
-            for p in plantas] or datos_edicion["plantas"]
-        datos_edicion["renglones"] = renglones or datos_edicion["renglones"]
-        return plantillas.TemplateResponse(
-            request, "venta_servicio_editar.html",
-            _contexto_editar(request, datos_edicion, error=str(error)),
-            status_code=200)
+        return _editar_rebotado(request, n, form, servicios, plantas,
+                                renglones, str(error))
     except Exception as error:
         return _redirigir_venta(
             f"No se pudo guardar: {ventas._mensaje_de_error(error)}")
     # De vuelta a la lista, ANCLADO en la tarjeta que se editó: guardar no
     # debe mandar a la empleada al tope de la lista.
     return RedirectResponse(f"/venta#cot-{n}", status_code=303)
+
+
+def _editar_rebotado(request, n, form, servicios, plantas, renglones,
+                     error, campo=""):
+    """El re-render de Editar cotización cuando el guardado rebotó: el
+    formulario vuelve con lo escrito (un redirect lo perdería) y, si el
+    error es de un campo, con el mensaje debajo de ese campo (regla 5)."""
+    datos_edicion = cotizaciones.cargar_para_editar(n)
+    if datos_edicion is None or not datos_edicion["editable"]:
+        return _redirigir_venta(error)
+    datos_edicion["servicios"] = servicios or datos_edicion["servicios"]
+    nombres = {p["producto_id"]: p["nombre"] for p in datos_edicion["plantas"]}
+    # El buscador (30/09/2026) puede haber sumado una planta que la
+    # cotización todavía no tenía en Odoo: su nombre no está en
+    # `nombres`. El formulario ya lo sabe (lo puso el buscador en un
+    # campo oculto junto al id) y gana sobre el diccionario viejo.
+    nombres.update({
+        _entero_o_none(pid): nombre
+        for pid, nombre in zip(form.getlist("planta_id"),
+                               form.getlist("planta_nombre")) if nombre})
+    datos_edicion["plantas"] = [
+        {**p, "nombre": nombres.get(_entero_o_none(p["producto_id"]), "")}
+        for p in plantas] or datos_edicion["plantas"]
+    datos_edicion["renglones"] = renglones or datos_edicion["renglones"]
+    contexto = _contexto_editar(request, datos_edicion, error=error)
+    contexto["campo_error"] = campo
+    return plantillas.TemplateResponse(
+        request, "venta_servicio_editar.html", contexto, status_code=200)
 
 
 def _entero_o_none(valor):

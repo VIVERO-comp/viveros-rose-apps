@@ -1211,7 +1211,9 @@ def _plantas_limpias(plantas):
     un precio ilegibles avisan en vez de adivinar. Precio vacío = el que
     ponga Odoo con su lista de precios."""
     limpias = []
-    for planta in plantas or []:
+    # El índice del enumerate es el de la fila en pantalla (la lista llega
+    # entera): con él el error sale debajo de SU planta (regla 5).
+    for i, planta in enumerate(plantas or []):
         try:
             producto_id = int(planta.get("producto_id"))
         except (TypeError, ValueError):
@@ -1222,17 +1224,23 @@ def _plantas_limpias(plantas):
         try:
             cantidad = float(crudo)
         except ValueError:
-            raise ValueError("Cantidad inválida en una planta.")
+            raise ventas.ErrorDeCampo("Cantidad inválida en una planta.",
+                                      f"planta_cantidad-{i}")
         if cantidad < 0:
-            raise ValueError("La cantidad de una planta no puede ser negativa.")
+            raise ventas.ErrorDeCampo(
+                "La cantidad de una planta no puede ser negativa.",
+                f"planta_cantidad-{i}")
         precio = str(planta.get("precio") or "").strip().replace(",", ".")
         if precio:
             try:
                 precio = round(float(precio), 2)
             except ValueError:
-                raise ValueError("Precio inválido en una planta.")
+                raise ventas.ErrorDeCampo("Precio inválido en una planta.",
+                                          f"planta_precio-{i}")
             if precio < 0:
-                raise ValueError("El precio de una planta no puede ser negativo.")
+                raise ventas.ErrorDeCampo(
+                    "El precio de una planta no puede ser negativo.",
+                    f"planta_precio-{i}")
         else:
             precio = None
         if cantidad > 0:

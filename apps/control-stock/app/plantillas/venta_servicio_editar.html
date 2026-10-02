@@ -23,7 +23,9 @@
    Nueva venta/Personalizada: con dos columnas esta pantalla necesita el
    mismo aire, no los 940px genéricos de .angosto solo. #}
 <main class="angosto forma-venta">
-  {% if error_venta %}
+  {# El banner queda para los errores SIN campo (Odoo caído): el de un
+     campo sale debajo del campo mismo (regla 5, _error_campo.html). #}
+  {% if error_venta and not campo_error %}
   <div class="aviso-error">{{ error_venta }}</div>
   {% endif %}
 
@@ -67,15 +69,20 @@
         <label class="servicio-monto">Cant
           <input class="servicio-cantidad" name="planta_cantidad" form="form-servicio"
                  type="number" step="1" min="0" inputmode="numeric" value="{{ p.cantidad }}"
+                 {% if campo_error == 'planta_cantidad-' ~ loop.index0 %}autofocus aria-invalid="true"{% endif %}
                  aria-label="Cantidad de {{ p.nombre }}" data-planta-cant>
         </label>
         {% if precio_editable %}
         <label class="servicio-monto">Precio
           <input name="planta_precio" form="form-servicio" type="text"
                  inputmode="decimal" placeholder="0.00"
+                 {% if campo_error == 'planta_precio-' ~ loop.index0 %}autofocus aria-invalid="true"{% endif %}
                  value="{{ p.precio }}" aria-label="Precio de {{ p.nombre }}"
                  data-planta-precio>
         </label>
+        {% endif %}
+        {% if campo_error in ('planta_cantidad-' ~ loop.index0, 'planta_precio-' ~ loop.index0) %}
+        {% with campo = campo_error %}{% include '_error_campo.html' %}{% endwith %}
         {% endif %}
         <span class="servicio-monto">Subtotal <b data-planta-sub>{{ p.subtotal | dinero }}</b></span>
         <button class="quitar-servicio" type="button" aria-label="Quitar {{ p.nombre }}">Quitar</button>
@@ -153,8 +160,10 @@
         <label class="servicio-monto">Monto
           <input name="servicio_monto" form="form-servicio" type="text"
                  inputmode="decimal" placeholder="0.00"
+                 {% if campo_error == 'servicio_monto-' ~ loop.index0 %}autofocus aria-invalid="true"{% endif %}
                  value="{{ s.monto }}">
         </label>
+        {% with campo = 'servicio_monto-' ~ loop.index0 %}{% include '_error_campo.html' %}{% endwith %}
         <button class="quitar-servicio" type="button">Quitar</button>
       </div>
     </div>
@@ -174,7 +183,9 @@
     <div class="servicio">
       <textarea class="servicio-texto" name="renglon_texto" form="form-servicio"
                 rows="1" placeholder="Ej: 50 sacos de tierra negra"
+                {% if campo_error == 'renglon_texto-' ~ loop.index0 %}autofocus aria-invalid="true"{% endif %}
                 >{{ r.texto }}</textarea>
+      {% with campo = 'renglon_texto-' ~ loop.index0 %}{% include '_error_campo.html' %}{% endwith %}
       <textarea class="servicio-descripcion" name="renglon_descripcion" form="form-servicio"
                 rows="1" placeholder="Descripción (opcional): el párrafo que sale debajo en el PDF"
                 >{{ r.descripcion }}</textarea>
@@ -182,13 +193,18 @@
         <label class="servicio-monto">Cant
           <input class="servicio-cantidad" name="renglon_cantidad" form="form-servicio"
                  type="text" inputmode="decimal"
+                 {% if campo_error == 'renglon_cantidad-' ~ loop.index0 %}autofocus aria-invalid="true"{% endif %}
                  placeholder="1" value="{{ r.cantidad }}">
         </label>
         <label class="servicio-monto">Precio
           <input name="renglon_precio" form="form-servicio" type="text"
                  inputmode="decimal" placeholder="0.00"
+                 {% if campo_error == 'renglon_precio-' ~ loop.index0 %}autofocus aria-invalid="true"{% endif %}
                  value="{{ r.precio }}">
         </label>
+        {% if campo_error in ('renglon_cantidad-' ~ loop.index0, 'renglon_precio-' ~ loop.index0) %}
+        {% with campo = campo_error %}{% include '_error_campo.html' %}{% endwith %}
+        {% endif %}
         <button class="quitar-servicio" type="button">Quitar</button>
       </div>
     </div>
