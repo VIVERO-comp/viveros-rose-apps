@@ -1585,6 +1585,25 @@ def _amarrar_lead_del_form(request, form):
         ventas.quitar_lead_pendiente(usuario)
 
 
+def _post_al_borrador(request, form):
+    """Nº10 del lote (solución que pidió Abraham): el nombre y el celular
+    del cliente viajan EN EL POST (los inputs llevan name= y form=) y acá
+    MANDAN sobre el borrador que guarda el beacon de venta.js — con su
+    debounce de 400 ms, un envío rápido podía re-renderizar con el nombre
+    viejo o vacío. El POST es la fuente primaria y el borrador el
+    respaldo, nunca al revés: se llama al entrar a TODOS los POST de
+    Vender que crean algo, antes de validar, para que cualquier re-render
+    con error pinte lo que de verdad viajó."""
+    if "cliente" not in form and "celular" not in form:
+        return
+    ventas.guardar_borrador(request.state.empleada["id"],
+                            (form.get("cliente") or "").strip()[:120],
+                            (form.get("celular") or "").strip()[:30],
+                            _servicios_del_form(form),
+                            _datos_cliente_del_form(form),
+                            _renglones_del_form(form))
+
+
 def _cargos_del_form(form, avisar=True):
     """Los cargos opcionales (envío, instalación, mantenimiento): el monto
     de cada uno y, en "<clave>_desc", el párrafo que se imprime debajo.
@@ -1830,6 +1849,7 @@ def venta_vista_previa_pdf(request: Request):
 @app.post("/venta/cotizar")
 async def venta_cotizar(request: Request):
     form = await request.form()
+    _post_al_borrador(request, form)
     _amarrar_lead_del_form(request, form)
     try:
         registro = ventas.crear_cotizacion(
@@ -1875,6 +1895,7 @@ async def venta_vender(request: Request):
     igual que las cotizaciones de servicio — no hay pantalla de cobro
     nueva ni se toca la de Facturar/Reintentar de las cotizaciones."""
     form = await request.form()
+    _post_al_borrador(request, form)
     _amarrar_lead_del_form(request, form)
     try:
         registro = ventas.crear_cotizacion(
@@ -1968,6 +1989,7 @@ async def venta_servicio_crear(request: Request, tipo: str):
         return RedirectResponse("/venta", status_code=303)
     form = await request.form()
     usuario = request.state.empleada["id"]
+    _post_al_borrador(request, form)
     servicios = cotizaciones.servicios_del_formulario(
         form.getlist("servicio_texto"), form.getlist("servicio_monto"),
         form.getlist("servicio_descripcion"))
@@ -2082,6 +2104,7 @@ def venta_personalizada_form(request: Request, q: str = "", error: str = ""):
 async def venta_personalizada_crear(request: Request):
     form = await request.form()
     usuario = request.state.empleada["id"]
+    _post_al_borrador(request, form)
     renglones = cotizaciones.renglones_del_formulario(
         form.getlist("renglon_texto"), form.getlist("renglon_cantidad"),
         form.getlist("renglon_precio"), form.getlist("renglon_descripcion"))

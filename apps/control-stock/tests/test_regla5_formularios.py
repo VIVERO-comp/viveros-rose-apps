@@ -507,3 +507,49 @@ def test_el_pie_de_hablando_dice_quien_la_abre():
                     if e["clave"] == "HABLANDO")
     assert hablando["auto"] == "solo, con nuestra primera respuesta"
     assert "cliente escribe" not in hablando["auto"]
+
+
+# ---------------------------------------------------------------------------
+# Nº10: el nombre y el celular viajan EN EL POST y mandan sobre el borrador
+# (el beacon de venta.js, con su debounce de 400 ms, es solo el respaldo)
+# ---------------------------------------------------------------------------
+
+def test_el_post_manda_sobre_el_borrador_del_beacon(cliente, odoo_vacio):
+    """El beacon alcanzó a guardar un nombre VIEJO; el POST llega con el
+    nuevo. El re-render con error pinta el del POST, nunca el del
+    beacon."""
+    ventas.agregar_renglon_planta("genesis", "Croton", "1", "5")
+    cliente.post("/venta/borrador", data={"cliente": "Vieja", "celular": ""})
+    respuesta = cliente.post("/venta/cotizar", data={
+        "cliente": "Zoe Nueva", "celular": "6111-2233",
+        "instalacion": "12x",
+    }, follow_redirects=True)
+    texto = respuesta.text
+    assert 'value="Zoe Nueva"' in texto
+    assert 'value="6111-2233"' in texto
+    assert 'value="Vieja"' not in texto
+    assert ventas.borrador_de("genesis")["nombre"] == "Zoe Nueva"
+
+
+def test_sin_beacon_el_post_igual_conserva_el_cliente(cliente, odoo_vacio):
+    """Nadie guardó borrador (el envío fue en <0.4 s): el POST solo basta."""
+    ventas.agregar_renglon_planta("genesis", "Croton", "1", "5")
+    respuesta = cliente.post("/venta/cotizar", data={
+        "cliente": "Rápida", "celular": "6999-0000", "instalacion": "abc",
+    }, follow_redirects=True)
+    assert 'value="Rápida"' in respuesta.text
+    assert 'value="6999-0000"' in respuesta.text
+
+
+def test_servicio_y_personalizada_tambien_guardan_el_post(cliente,
+                                                          sin_odoo_pero_activo):
+    cliente.post("/venta/servicio/renta", data={
+        "cliente": "Cliente Servicio", "celular": "6000-1111",
+        "servicio_texto": ["Montaje"], "servicio_monto": ["abc"],
+        "servicio_descripcion": [""]})
+    assert ventas.borrador_de("genesis")["nombre"] == "Cliente Servicio"
+    cliente.post("/venta/servicio-personalizada", data={
+        "cliente": "Cliente Pers", "celular": "",
+        "renglon_texto": ["X"], "renglon_cantidad": ["1"],
+        "renglon_precio": ["zz"], "renglon_descripcion": [""]})
+    assert ventas.borrador_de("genesis")["nombre"] == "Cliente Pers"
