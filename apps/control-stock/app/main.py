@@ -3371,11 +3371,15 @@ def compras_pantalla(request: Request):
         "resp_sugerido": agenda.responsable_de_empleada(empleada),
         "aviso": request.query_params.get("aviso"),
         "error": request.query_params.get("error"),
+        # Regla 5: el campo que falló (viajó en el redirect); la plantilla
+        # pinta el error debajo de él y lo enfoca.
+        "campo_error": ((request.query_params.get("campo") or "").strip()[:60]
+                        if request.query_params.get("error") else ""),
     })
 
 
 def _compras_vuelve(aviso="", error="", ancla="", nueva=False, abrir="",
-                    bajos=False, q=""):
+                    bajos=False, q="", campo=""):
     """El 303 de vuelta a Compras, SIN tirar al empleado para arriba.
 
     La regla de siempre del proyecto («volver tiene que devolverte donde
@@ -3401,6 +3405,10 @@ def _compras_vuelve(aviso="", error="", ancla="", nueva=False, abrir="",
         partes.append("aviso=" + quote(aviso))
     if error:
         partes.append("error=" + quote(error))
+        if campo:
+            # Regla 5: el campo que falló viaja con el error, para que la
+            # pantalla pinte el mensaje debajo de él y lo enfoque.
+            partes.append("campo=" + quote(campo))
     return RedirectResponse(
         "/compras" + ("?" + "&".join(partes) if partes else "")
         + (ancla or ""), status_code=303)
@@ -3663,8 +3671,10 @@ async def compras_nueva(request: Request):
             # borrador se descarta — solo si Linear aceptó.
             usuario_borrador=usuario)
     except compras.ErrorCompras as fallo:
-        # El borrador sigue en pie: el formulario se reabre con todo.
+        # El borrador sigue en pie: el formulario se reabre con todo, y si
+        # el error es de un campo, el mensaje sale debajo de él (regla 5).
         return _compras_vuelve(error=str(fallo), nueva=True,
+                               campo=getattr(fallo, "campo", "") or "",
                                ancla=compras.ANCLA_LINEAS)
     cuantas = len(compras.lineas_de(nueva["ref"]))
     detalle = (f" con {cuantas} producto" + ("s" if cuantas != 1 else "")

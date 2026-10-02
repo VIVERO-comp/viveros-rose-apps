@@ -88,7 +88,15 @@ TTL_PLATA = 120         # la cadencia con la que se relee Odoo por detrás
 
 class ErrorCompras(Exception):
     """Falla al hablar con Linear, con el texto que se le muestra a quien
-    está usando la pantalla."""
+    está usando la pantalla.
+
+    `campo` (opcional) es el name= del campo del formulario que falló,
+    cuando el error es de UN campo: la pantalla pinta el mensaje debajo de
+    él (regla 5) en vez del banner genérico arriba."""
+
+    def __init__(self, mensaje, campo=""):
+        super().__init__(mensaje)
+        self.campo = campo
 
 
 # ---------------------------------------------------------------------------
@@ -1476,7 +1484,7 @@ def crear(que_compro, proveedor_nombre="", proveedor_id=None, resp="",
     """
     que_compro = (que_compro or "").strip()
     if not que_compro:
-        raise ErrorCompras("Escribí qué se compra.")
+        raise ErrorCompras("Escribí qué se compra.", campo="que_compro")
     # «¿Cómo llega?» se limpia ACÁ, antes de tocar Linear: lo que no sea
     # del vocabulario cae en «todavía no se dijo». Nunca rebota la compra
     # por esto — es un dato de apoyo, no un requisito para anotar lo que
@@ -1491,10 +1499,11 @@ def crear(que_compro, proveedor_nombre="", proveedor_id=None, resp="",
         raise ErrorCompras(
             f"«{resp}» no está en el equipo. El responsable sale de las "
             f"etiquetas «{PREFIJO_RESP}…» de Linear, y esas no se crean "
-            f"desde acá.")
+            f"desde acá.", campo="resp")
     lead_ref = (lead_ref or "").strip().upper()
     if lead_ref and linear_leads.uno(lead_ref) is None:
-        raise ErrorCompras(f"El lead {lead_ref} no está en el tablero.")
+        raise ErrorCompras(f"El lead {lead_ref} no está en el tablero.",
+                           campo="lead_ref")
     _exigir_escritura()
 
     proveedor_nombre = (proveedor_nombre or "").strip()

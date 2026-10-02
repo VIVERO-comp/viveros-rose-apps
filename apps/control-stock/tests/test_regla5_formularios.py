@@ -309,3 +309,46 @@ def test_crear_producto_sin_nombre_enfoca_el_nombre(cliente, odoo_altas):
     assert "Escribe el nombre del producto." in pagina
     tramo = pagina[pagina.index('name="nombre"'):]
     assert "aria-invalid" in tramo[:300]
+
+
+# ---------------------------------------------------------------------------
+# + Compra (Anotar compra): el POST redirige con el campo y el borrador
+# conserva lo escrito
+# ---------------------------------------------------------------------------
+
+from app import compras, linear_leads  # noqa: E402
+
+
+@pytest.fixture
+def compras_muestra(monkeypatch, db_limpia):
+    monkeypatch.delenv("LINEAR_API_KEY", raising=False)
+    monkeypatch.delenv("AJUSTES_ADMINS", raising=False)
+    linear_leads.reiniciar_muestra()
+    compras.reiniciar_muestra()
+    compras.iniciar_tablas()
+    from app import control
+    control.iniciar_tablas()
+
+
+def test_compra_sin_que_compro_viaja_con_su_campo(cliente, compras_muestra):
+    respuesta = cliente.post("/compras/nueva", data={
+        "que_compro": "", "proveedor": "Don Pedro",
+    }, follow_redirects=False)
+    assert respuesta.status_code == 303
+    destino = respuesta.headers["location"]
+    assert "error=" in destino and "campo=que_compro" in destino
+    # Y el GET pinta el error debajo del campo, con el borrador intacto.
+    pagina = cliente.get(destino.split("#")[0]).text
+    assert "Escribí qué se compra." in pagina
+    assert 'class="error-campo"' in pagina
+    assert 'value="Don Pedro"' in pagina          # el borrador conserva
+    tramo = pagina[pagina.index('name="que_compro"'):]
+    assert "aria-invalid" in tramo[:400]
+    assert "Ups." not in pagina                   # sin franja arriba
+
+
+def test_compra_lead_inexistente_marca_el_selector(cliente, compras_muestra):
+    respuesta = cliente.post("/compras/nueva", data={
+        "que_compro": "Tierra", "lead_ref": "LEAD-999",
+    }, follow_redirects=False)
+    assert "campo=lead_ref" in respuesta.headers["location"]

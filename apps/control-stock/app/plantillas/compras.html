@@ -89,7 +89,9 @@
        vuelve A DONDE ESTABA, no al tope: con el formulario abierto, al
        formulario; con el tablero, al tablero. #}
     {% set sin_banner = ('/compras?nueva=1#cp-lineas' if nueva else '/compras#cp-tablero') %}
-    {% if error %}<div class="franja"><b>Ups.</b> <span>{{ error }}</span>
+    {# El banner solo para errores SIN campo: el de un campo sale debajo
+       del campo mismo (regla 5, _error_campo.html). #}
+    {% if error and not campo_error %}<div class="franja"><b>Ups.</b> <span>{{ error }}</span>
       <a class="cierra-banner" href="{{ sin_banner }}" aria-label="Cerrar el aviso">×</a></div>{% endif %}
     {% if aviso %}<div class="aviso-ok">{{ aviso }}
       <a class="cierra-banner" href="{{ sin_banner }}" aria-label="Cerrar el aviso">×</a></div>{% endif %}
@@ -333,7 +335,9 @@
     <label for="cp-que">¿Qué se compra?</label>
     <input class="campo" id="cp-que" name="que_compro" required maxlength="250"
            autocomplete="off" placeholder="Ej: 50 sacos de tierra negra"
+           {% if campo_error == 'que_compro' %}autofocus aria-invalid="true"{% endif %}
            value="{{ borrador.que_compro }}">
+    {% with campo = 'que_compro' %}{% include '_error_campo.html' %}{% endwith %}
     <span class="pie-nota">Es el título de la tarjeta. No todo lo que se
       compra es un producto del catálogo (un flete, una herramienta): los
       productos van abajo.</span>
@@ -591,22 +595,26 @@
 
   <div class="campo-caja">
     <label for="cp-resp">Responsable</label>
-    <select class="sel ancho" id="cp-resp" name="resp">
+    <select class="sel ancho" id="cp-resp" name="resp"
+            {% if campo_error == 'resp' %}autofocus aria-invalid="true"{% endif %}>
       <option value="">Sin asignar</option>
       {% for r in responsables %}
       <option value="{{ r }}" {{ 'selected' if r == (borrador.resp or resp_sugerido) }}>{{ r }}</option>
       {% endfor %}
     </select>
+    {% with campo = 'resp' %}{% include '_error_campo.html' %}{% endwith %}
   </div>
 
   <div class="campo-caja">
     <label for="cp-lead">¿Es para un cliente? (opcional)</label>
-    <select class="sel ancho" id="cp-lead" name="lead_ref">
+    <select class="sel ancho" id="cp-lead" name="lead_ref"
+            {% if campo_error == 'lead_ref' %}autofocus aria-invalid="true"{% endif %}>
       <option value="">No, es para el vivero</option>
       {% for l in leads %}
       <option value="{{ l.ref }}" {{ 'selected' if l.ref == borrador.lead_ref }}>{{ l.ref }} · {{ l.nombre }}</option>
       {% endfor %}
     </select>
+    {% with campo = 'lead_ref' %}{% include '_error_campo.html' %}{% endwith %}
   </div>
 
   <div class="acciones">
