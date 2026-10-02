@@ -1,0 +1,300 @@
+/* Diseño Orquesta — pestaña Calendario (Korto, 2/10/2026).
+   Fuente de verdad: docs/diseno-orquesta/pantallas/01, 02, 17 y 18 (.html).
+
+   Este archivo lo carga SOLO calendario.html, DESPUÉS de calendario.css y
+   de diseno-base.css: todo lo nuevo del aspecto del Calendario vive aquí
+   con la misma especificidad que el original, ganando por orden. Así
+   Control, Compras, Proveedores y Recibir —que comparten calendario.css—
+   no cambian ni un pelo.
+
+   Solo el ASPECTO: la vista de semana por horas, los filtros, el buscador,
+   la ficha y sus formularios funcionan igual que ayer. Los colores de los
+   tipos siguen llegando de Python (paleta.json vía colores.py) en estilos
+   en línea; aquí ningún color de interés se escribe a mano — los tintes
+   pastel se derivan del color del tipo con color-mix sobre la variable
+   --c que pinta la plantilla. Los grises son los tokens --d-* de
+   diseno-base.css. */
+
+body{font-size:15px}
+
+/* ==================== la barra de arriba (pantalla 01) ================= */
+
+.barra{gap:10px;border-bottom:0;padding-bottom:6px}
+.barra h3{font-size:22px;font-weight:700;letter-spacing:-.01em}
+.barra .btn{
+  height:40px;padding:0 14px;font-size:14px;font-weight:500;
+  border:1px solid var(--d-borde-campo);border-radius:var(--d-radio-boton);
+  background:#fff;
+}
+.barra .btn.icono{width:40px;justify-content:center;padding:0;font-size:16px}
+.barra .btn.chico{font-size:14px}
+@media (min-width:861px){
+  .barra .hamb{
+    width:44px;height:44px;border-color:var(--d-borde-boton);
+    display:inline-flex;align-items:center;justify-content:center;
+  }
+}
+/* El segmento Semana · Día · Mes · Lista: una caja con borde, la vista
+   activa en gris (pantalla 01), ya no la píldora flotante. */
+.segmento{
+  background:#fff;border:1px solid var(--d-borde-campo);
+  border-radius:var(--d-radio-boton);padding:0;gap:0;overflow:hidden;
+}
+.segmento a{
+  height:40px;display:inline-flex;align-items:center;padding:0 14px;
+  font-size:14px;font-weight:500;color:var(--d-tinta);border-radius:0;
+}
+.segmento a.on{background:var(--d-gris-activo);box-shadow:none;font-weight:700}
+.segmento .apagado{padding:0 14px;display:inline-flex;align-items:center}
+/* El único botón negro de la pantalla: + Nueva actividad. */
+.barra .btn.oro{
+  height:44px;padding:0 18px;border:0;border-radius:var(--d-radio-boton);
+  background:var(--d-tinta);color:#fff;font-size:15px;font-weight:600;
+}
+.desple-caja{border-color:var(--d-borde);border-radius:var(--d-radio-pil)}
+.buscador{border-radius:var(--d-radio-boton)}
+.buscador input{font-size:14px}
+
+/* ==================== la fila de filtros (chips) ======================= */
+/* Los 4 filtros de tipos salen del sidebar y viven como chips redondos
+   bajo la barra, como la fila «Ver a: … | chips» de la pantalla 01. El
+   toque sigue siendo el MISMO enlace que arma el servidor; prendido =
+   pastel del color del tipo, apagado = blanco y gris. */
+
+.fila-filtros{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ff-rotulo{font-size:12.5px;color:var(--d-suave)}
+.cal-filtros{display:flex;flex-direction:row;gap:8px;flex-wrap:wrap}
+.filtro{
+  height:36px;padding:0 12px;border-radius:18px;font-size:14px;font-weight:600;
+  display:inline-flex;align-items:center;gap:8px;
+  color:var(--c);background:color-mix(in srgb, var(--c) 10%, #fff);
+  border:1px solid color-mix(in srgb, var(--c) 25%, #fff);
+}
+.filtro:hover{background:color-mix(in srgb, var(--c) 16%, #fff)}
+.filtro.off{background:#fff;color:var(--d-suave);border-color:var(--d-borde-campo)}
+.filtro.off:hover{background:var(--d-gris-activo)}
+.filtro .cbx{width:14px;height:14px;border-radius:4px}
+
+/* ==================== el lienzo y la columna derecha =================== */
+
+@media (min-width:861px){
+  .tablero{padding:18px 28px 24px;gap:12px}
+  .zona{grid-template-columns:1fr 320px;gap:24px}
+}
+
+/* Los bloques de la columna derecha como cajas del diseño (border 1px,
+   radio 14, título en mayúsculas espaciadas, renglones separados por una
+   línea — pantalla 01, .box/.sec/.pet). */
+.cal-lado{gap:14px}
+.cal-lado .leads-lado,.leads-abajo .leads-lado{
+  border:1px solid var(--d-borde);border-radius:var(--d-radio-tarjeta);
+  padding:16px;gap:10px;margin-top:0;border-top:1px solid var(--d-borde);
+}
+.leads-tit{
+  font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--d-suave);
+}
+.leads-tit span{font-size:11px;letter-spacing:0}
+.lead-it{
+  border:0;border-top:1px solid var(--d-borde);border-radius:0;
+  background:none;padding:10px 2px 0;
+}
+.lead-it:hover{background:none}
+.lead-it b{font-size:14px;font-weight:700;line-height:1.3}
+.lead-it small{font-size:12px;color:var(--d-suave)}
+.lead-vacio{font-size:12.5px;color:var(--d-suave)}
+.saldo-roto{font-size:12px}
+
+/* ==================== el carril (semana y día) ========================= */
+/* La MISMA rejilla por horas de siempre (las posiciones las sigue
+   calculando Python); cambia la piel: cabeceras de día a la izquierda con
+   su raya abajo, hoy con raya negra, bloques con esquinas de tarjeta. */
+
+.carril-caja{border-color:var(--d-borde);border-radius:var(--d-radio-tarjeta)}
+.carril-cab{background:#fff;border-bottom:0}
+.carril-cab div{
+  text-align:left;padding:8px 10px;font-size:13px;font-weight:600;
+  color:var(--d-suave);border-left:0;border-bottom:1px solid var(--d-borde);
+}
+.carril-cab .dnum{
+  display:inline;font-size:13px;font-weight:600;color:inherit;
+  line-height:inherit;margin-left:4px;
+}
+.carril-cab .col-hoy{background:#fff;color:var(--d-tinta);border-bottom:2px solid var(--d-tinta)}
+.carril-cab .col-hoy .dnum{
+  background:none;color:inherit;border-radius:0;width:auto;height:auto;
+  display:inline;font-size:13px;margin:0 0 0 4px;
+}
+.carril-cab .col-hoy a:not(.mas)::after{content:' · hoy'}
+.carril-cab .cant-dia,.carril-cab .mas{vertical-align:middle;margin-top:0;margin-left:6px}
+.col-dia.hoy-fondo{background:#fff}
+.col-dia.finde{background:var(--d-col)}
+.bloque{border-radius:10px;padding:5px 9px}
+.bloque .tt{font-size:11.5px}
+
+/* ==================== mes y lista: mismos tokens ======================= */
+
+.mes{border-radius:var(--d-radio-tarjeta);border-color:var(--d-borde);background:var(--d-borde)}
+.celda.hoy .num .n{background:var(--d-tinta)}
+.celda.sel{background:var(--d-gris-activo);box-shadow:inset 0 0 0 2px var(--d-tinta)}
+.act{border-radius:var(--d-radio-tarjeta);border-color:var(--d-borde)}
+
+/* ==================== la ficha de la actividad (pantalla 02) =========== */
+/* Panel a la derecha, encima: 480px, banda del color del tipo arriba (el
+   color lo pinta la plantilla en línea, de paleta.json), título
+   «Tipo · Cliente», chip pastel + fecha, X cuadrada para cerrar. El clic
+   afuera (.telon) y la tecla Esc del navegador siguen como estaban. */
+
+@media (min-width:861px){
+  .panel-der{width:min(480px,94vw);padding:20px 24px}
+  .panel-der .cab-panel{margin:-20px -24px 0;padding:20px 24px 0;top:-20px}
+}
+.panel-der{border-top:5px solid var(--d-borde)}
+.cab-panel h4{font-size:20px;font-weight:700;line-height:1.2;letter-spacing:-.01em}
+.pan-tit{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.pan-meta{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  font-size:12.5px;color:var(--d-suave);
+}
+.pan-x{
+  width:36px;height:36px;flex:0 0 auto;display:grid;place-items:center;
+  border:1px solid var(--d-borde-boton);border-radius:var(--d-radio-boton);
+  background:#fff;color:var(--d-tinta);text-decoration:none;
+}
+.pan-x:hover{background:var(--d-gris-activo)}
+/* El chip pastel del tipo: color del tipo en --c (lo pone la plantilla,
+   de paleta.json), fondo derivado con color-mix — ni un hex a mano. */
+.chip-tipo{
+  display:inline-flex;align-items:center;height:22px;padding:0 8px;
+  border-radius:11px;font-size:12px;font-weight:600;white-space:nowrap;
+  color:var(--c);background:color-mix(in srgb, var(--c) 10%, #fff);
+}
+/* La barrita «← Atrás · Actividad» del celular (pantalla 18): en
+   computadora no existe. */
+.pan-atras{display:none}
+/* Títulos de sección (QUÉ DEBE · NOTAS), como .d-sec del diseño. */
+.sec-tit{
+  font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--d-suave);border-top:1px solid var(--d-borde);padding-top:12px;
+}
+/* Campos de la ficha con la talla del diseño. El tamaño de letra SOLO se
+   toca en pantalla grande: en el celular manda el 16px de calendario.css
+   (iOS no hace zoom al enfocar). */
+.panel-der input.campo,.panel-der select.sel{border-radius:var(--d-radio-boton);border-color:var(--d-borde-campo)}
+.modal input.campo,.modal select.sel,.modal textarea.campo{border-radius:var(--d-radio-boton);border-color:var(--d-borde-campo)}
+@media (min-width:768px){
+  .panel-der input.campo,.panel-der select.sel{font-size:14px}
+}
+.dato b{font-size:11px}
+/* Las acciones: UN botón negro grande (terminar) y lo demás en gris; lo
+   delicado (cancelar) vive en «Más opciones». */
+.panel-der .acciones{gap:8px}
+.panel-der .acciones .f-principal{display:block;width:100%}
+.pan-principal{
+  width:100%;height:52px;justify-content:center;border-radius:12px;
+  font-size:16px;font-weight:600;background:var(--d-tinta);border-color:var(--d-tinta);
+}
+.panel-der .acciones .btn{height:40px;padding:0 14px;border-radius:var(--d-radio-boton);border-color:var(--d-borde-campo);font-size:14px}
+.panel-der .acciones .btn.pan-principal{height:52px;border:0;padding:0 18px}
+.mas-opciones{width:100%}
+.mas-opciones>summary{
+  list-style:none;cursor:pointer;user-select:none;height:36px;
+  display:inline-flex;align-items:center;
+  font-size:14px;color:var(--d-suave);text-decoration:underline;text-underline-offset:2px;
+}
+.mas-opciones>summary::-webkit-details-marker{display:none}
+.mas-opciones>div{display:flex;flex-direction:column;gap:8px;align-items:flex-start;padding-top:8px}
+/* Guardar cambios es secundario (el negro es terminar): compacto, no un
+   renglón a lo ancho — el form es display:contents, así que sin esto el
+   botón se estira como hijo del panel. */
+.panel-der form > .btn[data-guardando]{
+  align-self:flex-start;height:40px;padding:0 14px;
+  border-color:var(--d-borde-campo);
+}
+.panel-der .btn.guardando::after{border-color:rgba(0,0,0,.25);border-top-color:var(--d-tinta)}
+.pan-principal.guardando::after{border-color:rgba(255,255,255,.35);border-top-color:#fff}
+
+/* Los modales (Actividad nueva · Agendar): tokens del diseño. */
+.modal{border-radius:var(--d-radio-col);border-color:var(--d-borde)}
+.modal .btn.oro{background:var(--d-tinta);border-color:var(--d-tinta)}
+
+/* ==================== el celular (pantallas 17 y 18) =================== */
+
+/* El botón negro de abajo: + Nueva actividad a lo ancho (pantalla 17).
+   En computadora no existe; la barra de arriba lleva el suyo. */
+.cal-bar-nueva{display:none}
+
+@media (max-width:767.98px){
+  .fila-filtros{display:none}
+  .bm-titulo{font-size:20px;font-weight:700}
+  .bm-yo{flex:0 0 auto;font-size:12.5px;color:var(--d-suave)}
+
+  /* La tira de días: cajitas blancas con borde; el día elegido lleva el
+     borde negro de 2px (pantalla 17), ya no el relleno negro. */
+  .mov-tira{gap:6px}
+  .mov-dia{
+    min-height:52px;padding:6px 0 4px;gap:0;
+    border:1px solid var(--d-borde-campo);border-radius:var(--d-radio-boton);
+  }
+  .mov-dia .dw{font-size:11px;text-transform:none;letter-spacing:0;font-weight:500;color:var(--d-tinta)}
+  .mov-dia .nm{font-size:14px;font-weight:500}
+  .mov-dia.hoy{border-color:var(--d-borde-campo)}
+  .mov-dia.hoy .nm{font-weight:700}
+  .mov-dia.sel{background:#fff;border:2px solid var(--d-tinta);color:var(--d-tinta)}
+  .mov-dia.sel .dw{color:var(--d-tinta);font-weight:700}
+  .mov-dia.sel .nm{font-weight:700}
+  .mov-dia.sel .pt.on{background:var(--d-tinta)}
+
+  /* El rótulo del día, como las secciones del diseño (HOY · MAR 13). */
+  .mov-sub{
+    font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--d-suave);
+  }
+
+  /* La tarjeta de actividad (pantalla 17): blanca, borde fino, la banda
+     del color del tipo a la izquierda (color en línea desde Python), la
+     primera línea en negrita del color del tipo. */
+  .mov-act{
+    border:1px solid var(--d-borde);border-left-width:3px;border-radius:12px;
+    padding:12px;background:#fff;display:flex;flex-direction:column;gap:5px;
+  }
+  .mov-act .mov-tt{font-size:15px;font-weight:700;line-height:1.3}
+  .mov-act .mov-cli{display:block;font-size:15px;line-height:1.3}
+  .mov-act .mov-det{font-size:12.5px;color:var(--d-suave);margin-top:0}
+
+  .cal-bar-nueva{
+    display:block;position:fixed;left:0;right:0;bottom:0;z-index:25;
+    background:#fff;border-top:1px solid var(--d-borde);
+    padding:10px 16px calc(10px + env(safe-area-inset-bottom));
+  }
+  .cal-bar-nueva .btn{
+    width:100%;height:52px;justify-content:center;border:0;border-radius:12px;
+    background:var(--d-tinta);color:#fff;font-size:16px;font-weight:600;
+  }
+  .tablero{padding-bottom:calc(88px + env(safe-area-inset-bottom))}
+
+  /* Los leads por agendar, como cajas del diseño también en el teléfono. */
+  .leads-abajo .leads-lado{padding:14px;border-radius:12px}
+
+  /* La ficha a pantalla completa (pantalla 18): arriba «← Atrás ·
+     Actividad» con la banda del color del tipo (en línea); la banda de
+     arriba del panel y la X del escritorio no van. */
+  .panel-der{border-top:0}
+  .pan-x{display:none}
+  .pan-atras{
+    display:flex;align-items:center;gap:10px;
+    margin:-20px -20px 0;padding:12px 16px;
+    border-bottom:4px solid var(--d-borde);background:#fff;
+  }
+  .pan-atras .pan-volver{
+    width:44px;height:44px;flex:0 0 auto;display:grid;place-items:center;
+    border:1px solid var(--d-borde-boton);border-radius:var(--d-radio-pil);
+    background:#fff;color:var(--d-tinta);text-decoration:none;
+  }
+  .pan-atras span{font-size:17px;font-weight:600}
+  /* Con la barrita de Atrás arriba, la cabecera deja de ir pegajosa: en el
+     teléfono el diseño es una página que scrollea entera. */
+  .panel-der .cab-panel{position:static;margin:0;padding:0;box-shadow:none}
+  .panel-der .acciones .btn{height:44px;flex:1;justify-content:center}
+  .panel-der .acciones .btn.pan-principal{height:52px;flex-basis:100%}
+}
