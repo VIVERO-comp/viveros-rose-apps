@@ -484,17 +484,36 @@ def es_borrador(ref):
 
 def _cantidad(valor, defecto=1.0):
     """Una cantidad que se pueda comprar: positiva y con tope. Lo ilegible
-    cae en `defecto` en vez de reventar el formulario."""
+    cae en `defecto` en vez de reventar el formulario. (El camino del
+    formulario ya NO pasa por aquí con lo ilegible: `_cantidad_tecleada`
+    lo rechaza antes con aviso — esto queda como red para los llamadores
+    internos, que no traen texto de un humano.)"""
     numero = ventas._num_positivo(valor, defecto=None)
     if numero is None or numero <= 0:
         return defecto
     return min(numero, 100000.0)
 
 
+def _cantidad_tecleada(valor):
+    """(ok, error) de una cantidad que tecleó el empleado. Vacía vale
+    «déjala como está» (ok y sin número: el llamador conserva la previa),
+    pero un TEXTO, un 0 o un NEGATIVO devuelven su error — nunca caen al
+    defecto en silencio (regla de dinero/stock, 2/10/2026)."""
+    crudo = str(valor if valor is not None else "").strip()
+    if not crudo:
+        return None, ""
+    numero = ventas._num_positivo(crudo, defecto=None)
+    if numero is None or numero <= 0:
+        return None, (f"«{crudo}» no se entiende como cantidad: escribe un "
+                      f"número mayor que cero, como 3 o 2.5.")
+    return min(numero, 100000.0), ""
+
+
 def _costo(valor):
     """El costo unitario, o None. **None es «no se sabe» y no 0**: una
     compra se puede anotar antes de saber el precio, y pintar $0.00 ahí
-    sería inventar un número."""
+    sería inventar un número. (Como `_cantidad`: el formulario pasa antes
+    por `_costo_tecleado`, que rechaza lo ilegible con aviso.)"""
     crudo = str(valor if valor is not None else "").strip()
     if not crudo:
         return None
@@ -502,6 +521,21 @@ def _costo(valor):
     if numero is None:
         return None
     return round(numero, 2)
+
+
+def _costo_tecleado(valor):
+    """(costo, error) de un costo que tecleó el empleado. Vacío sigue
+    siendo «no se sabe» (None, válido), pero un texto o un negativo
+    devuelven su error en vez de descartarse en silencio."""
+    crudo = str(valor if valor is not None else "").strip()
+    if not crudo:
+        return None, ""
+    numero = ventas._num_positivo(crudo, defecto=None, permitir_cero=True)
+    if numero is None:
+        return None, (f"«{crudo}» no se entiende como costo: escribe un "
+                      f"número sin signo, como 12.50 o 12,50 (o déjalo "
+                      f"vacío si no se sabe).")
+    return round(numero, 2), ""
 
 
 def _linea(fila):
@@ -650,11 +684,19 @@ def guardar_cantidades(ref, cantidades=None, costos=None):
     Las dos llegan como `{n: valor}`. **Un `n` que no sea de esta compra se
     ignora**: el formulario manda lo que tiene en pantalla y un POST a mano
     no puede tocar las líneas de otra.
+
+    Devuelve None, o el PRIMER valor que no se entendió, como
+    `{"error", "campo", "valor"}` (campo = `cant-7` / `costo-7`): lo
+    legible se guarda igual —el borrador no pierde nada—, lo ilegible
+    conserva el valor previo y la pantalla lo avisa debajo de su campo
+    (regla 5). Antes una cantidad ilegible caía al valor previo y un
+    costo ilegible a «no se sabe», los dos EN SILENCIO (2/10/2026).
     """
     ref = str(ref or "")
     if not ref or not (cantidades or costos):
-        return
+        return None
     iniciar_tablas()
+    problema = None
     with _db() as con:
         mios = {f["n"]: f for f in con.execute(
             "SELECT * FROM compra_linea WHERE ref = ?", (ref,)).fetchall()}
@@ -662,14 +704,29 @@ def guardar_cantidades(ref, cantidades=None, costos=None):
             fila = mios.get(_entero(clave))
             if fila is None:
                 continue
+            numero, error = _cantidad_tecleada(valor)
+            if error:
+                problema = problema or {"error": error,
+                                        "campo": f"cant-{fila['n']}",
+                                        "valor": str(valor or "")}
+                continue
+            if numero is None:
+                continue        # vacía: se queda la que estaba
             con.execute("UPDATE compra_linea SET cantidad = ? WHERE n = ?",
-                        (_cantidad(valor, defecto=fila["cantidad"]), fila["n"]))
+                        (numero, fila["n"]))
         for clave, valor in (costos or {}).items():
             fila = mios.get(_entero(clave))
             if fila is None:
                 continue
+            costo, error = _costo_tecleado(valor)
+            if error:
+                problema = problema or {"error": error,
+                                        "campo": f"costo-{fila['n']}",
+                                        "valor": str(valor or "")}
+                continue
             con.execute("UPDATE compra_linea SET costo = ? WHERE n = ?",
-                        (_costo(valor), fila["n"]))
+                        (costo, fila["n"]))
+    return problema
 
 
 def _entero(valor):
@@ -725,6 +782,10 @@ def guardar_borrador(usuario, datos=None, cantidades=None, costos=None):
     `datos` en None deja los campos como estaban (hay POSTs que solo tocan
     las cantidades). Las líneas no se tocan acá: tienen sus propias
     funciones.
+
+    Devuelve lo que devuelva `guardar_cantidades`: None, o el primer
+    valor ilegible como `{"error", "campo", "valor"}` para que la
+    pantalla lo avise debajo de su campo.
     """
     iniciar_tablas()
     if datos is not None:
@@ -738,7 +799,7 @@ def guardar_borrador(usuario, datos=None, cantidades=None, costos=None):
                 f" VALUES ({marcas})"
                 f" ON CONFLICT(usuario) DO UPDATE SET {pone}",
                 (str(usuario), *(limpio[c] for c in CAMPOS_BORRADOR)))
-    guardar_cantidades(_clave_borrador(usuario), cantidades, costos)
+    return guardar_cantidades(_clave_borrador(usuario), cantidades, costos)
 
 
 def borrador_de(usuario):

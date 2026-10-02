@@ -3403,11 +3403,14 @@ def compras_pantalla(request: Request):
         # pinta el error debajo de él y lo enfoca.
         "campo_error": ((request.query_params.get("campo") or "").strip()[:60]
                         if request.query_params.get("error") else ""),
+        # Lo tecleado en el campo que falló (viajó en el redirect): la
+        # lista lo repinta tal cual en vez del valor guardado.
+        "valor_error": (request.query_params.get("v") or "")[:40],
     })
 
 
 def _compras_vuelve(aviso="", error="", ancla="", nueva=False, abrir="",
-                    bajos=False, q="", campo=""):
+                    bajos=False, q="", campo="", valor=""):
     """El 303 de vuelta a Compras, SIN tirar al empleado para arriba.
 
     La regla de siempre del proyecto («volver tiene que devolverte donde
@@ -3435,8 +3438,11 @@ def _compras_vuelve(aviso="", error="", ancla="", nueva=False, abrir="",
         partes.append("error=" + quote(error))
         if campo:
             # Regla 5: el campo que falló viaja con el error, para que la
-            # pantalla pinte el mensaje debajo de él y lo enfoque.
+            # pantalla pinte el mensaje debajo de él y lo enfoque; `valor`
+            # es lo que se tecleó ahí, para repintarlo tal cual.
             partes.append("campo=" + quote(campo))
+            if valor:
+                partes.append("v=" + quote(valor))
     return RedirectResponse(
         "/compras" + ("?" + "&".join(partes) if partes else "")
         + (ancla or ""), status_code=303)
@@ -3565,8 +3571,12 @@ async def compras_borrador(request: Request):
                                ancla=compras.ANCLA_TABLERO)
 
     cantidades, costos = _cantidades_del_form(form)
-    compras.guardar_borrador(usuario, datos=_campos_del_borrador(form),
-                             cantidades=cantidades, costos=costos)
+    # Lo legible queda guardado; lo ilegible NO pisa nada y vuelve a la
+    # pantalla con su aviso debajo del campo (regla 5, Nº8 del lote).
+    problema = compras.guardar_borrador(usuario,
+                                        datos=_campos_del_borrador(form),
+                                        cantidades=cantidades, costos=costos)
+    problema = problema or {}
     texto = (form.get("q") or "").strip()[:120]
     # El marcador escondido del formulario: la lista de «lo que está bajo»
     # sigue abierta al volver. Mismo patrón que `casillas` en Vender.
@@ -3596,12 +3606,20 @@ async def compras_borrador(request: Request):
             sku=sku, nombre=form.get("nom-" + sku) or "")
         # Se vuelve a la LISTA, que es donde está lo nuevo, y el buscador
         # queda vacío para que el siguiente producto empiece de cero.
-        return _compras_vuelve(aviso=aviso, error=error, nueva=True,
-                               bajos=bajos, ancla=compras.ANCLA_LINEAS)
+        return _compras_vuelve(aviso=aviso,
+                               error=error or problema.get("error", ""),
+                               campo="" if error else problema.get("campo", ""),
+                               valor=problema.get("valor", ""),
+                               nueva=True, bajos=bajos,
+                               ancla=compras.ANCLA_LINEAS)
     if form.get("quitar") is not None:
         aviso, error = compras.quitar_del_borrador(usuario, form.get("quitar"))
-        return _compras_vuelve(aviso=aviso, error=error, nueva=True,
-                               bajos=bajos, ancla=compras.ANCLA_LINEAS)
+        return _compras_vuelve(aviso=aviso,
+                               error=error or problema.get("error", ""),
+                               campo="" if error else problema.get("campo", ""),
+                               valor=problema.get("valor", ""),
+                               nueva=True, bajos=bajos,
+                               ancla=compras.ANCLA_LINEAS)
     if accion == "crear_proveedor":
         # El proveedor nace en Odoo **solo acá**, con el clic explícito: ni
         # anotar la compra ni escribir el nombre lo crean. Y el borrador ya
@@ -3643,6 +3661,8 @@ async def compras_borrador(request: Request):
     # "buscar" y "guardar": el texto buscado viaja en el query, así que
     # recargar la pantalla repite la búsqueda y nada más.
     return _compras_vuelve(
+        error=problema.get("error", ""), campo=problema.get("campo", ""),
+        valor=problema.get("valor", ""),
         nueva=True, bajos=bajos, q=texto,
         ancla=(compras.ANCLA_BUSCADOR if accion == "buscar"
                else compras.ANCLA_LINEAS))
@@ -3672,8 +3692,19 @@ async def compras_nueva(request: Request):
     form = await request.form()
     usuario = request.state.empleada["id"]
     cantidades, costos = _cantidades_del_form(form)
-    compras.guardar_borrador(usuario, datos=_campos_del_borrador(form),
-                             cantidades=cantidades, costos=costos)
+    problema = compras.guardar_borrador(usuario,
+                                        datos=_campos_del_borrador(form),
+                                        cantidades=cantidades, costos=costos)
+    if problema:
+        # Una cantidad o un costo ilegibles NO anotan la compra: el
+        # borrador conserva lo demás y el aviso sale debajo del campo que
+        # falló, con lo tecleado tal cual (regla 5, Nº8 del lote). Antes
+        # la cantidad caía al valor previo y el costo a «no se sabe», los
+        # dos en silencio.
+        return _compras_vuelve(error=problema["error"],
+                               campo=problema["campo"],
+                               valor=problema["valor"], nueva=True,
+                               ancla=compras.ANCLA_LINEAS)
     if not (compras.escritura_activa() or not compras.configurado()):
         return _compras_vuelve(error="Esta instancia mira el tablero real "
                                      "pero no escribe en Linear.",

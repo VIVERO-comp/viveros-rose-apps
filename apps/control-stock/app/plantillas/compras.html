@@ -436,12 +436,16 @@
             {% if l.sku %}<span class="cmp-orden">{{ l.sku }}</span>{% endif %}</td>
           <td><input class="campo cmp-mini" type="text" inputmode="decimal"
                      name="cant-{{ l.n }}"
-                     value="{{ l.cantidad_texto }}"
-                     aria-label="Cuántos de {{ l.nombre }}"></td>
+                     value="{{ valor_error if campo_error == 'cant-' ~ l.n else l.cantidad_texto }}"
+                     {% if campo_error == 'cant-' ~ l.n %}autofocus aria-invalid="true"{% endif %}
+                     aria-label="Cuántos de {{ l.nombre }}">
+            {% with campo = 'cant-' ~ l.n %}{% include '_error_campo.html' %}{% endwith %}</td>
           <td><input class="campo cmp-mini" type="text" inputmode="decimal"
                      name="costo-{{ l.n }}"
-                     value="{{ l.costo_texto }}" placeholder="costo"
-                     aria-label="Costo de cada {{ l.nombre }}"></td>
+                     value="{{ valor_error if campo_error == 'costo-' ~ l.n else l.costo_texto }}" placeholder="costo"
+                     {% if campo_error == 'costo-' ~ l.n %}autofocus aria-invalid="true"{% endif %}
+                     aria-label="Costo de cada {{ l.nombre }}">
+            {% with campo = 'costo-' ~ l.n %}{% include '_error_campo.html' %}{% endwith %}</td>
           {# El nombre del botón lleva el NÚMERO del renglón: un submit
              manda un solo par nombre/valor y cada renglón tiene que poder
              decir cuál es. #}

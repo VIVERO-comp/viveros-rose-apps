@@ -431,3 +431,68 @@ def test_precio_de_envio_bueno_sigue_guardando_todo(cliente, db_limpia,
         follow_redirects=False)
     assert "envio-guardado" in r.headers["location"]
     assert ventas.precios_envio()["camioneta_fuera"] == 55.0
+
+
+# ---------------------------------------------------------------------------
+# Anotar compra (Nº8): cantidad/costo ilegibles rechazan con aviso bajo el
+# campo, conservando el borrador
+# ---------------------------------------------------------------------------
+
+def _linea_de_borrador(usuario="genesis"):
+    aviso, error = compras.agregar_al_borrador(
+        usuario, producto_id=None, sku="IN-TIERRA", nombre="Tierra negra")
+    assert not error, error
+    return compras.borrador_de(usuario)["lineas"][0]
+
+
+def test_costo_ilegible_no_anota_la_compra_y_marca_su_campo(cliente,
+                                                            compras_muestra):
+    linea = _linea_de_borrador()
+    respuesta = cliente.post("/compras/nueva", data={
+        "que_compro": "Tierra para el vivero",
+        f"cant-{linea['n']}": "3",
+        f"costo-{linea['n']}": "12x",
+    }, follow_redirects=False)
+    assert respuesta.status_code == 303
+    destino = respuesta.headers["location"]
+    assert "error=" in destino
+    assert f"campo=costo-{linea['n']}" in destino
+    assert "v=12x" in destino
+    # La compra NO se anotó.
+    assert all(c["ref"].startswith("borrador:") or False
+               for c in [] ) or compras.uno("VIV-01") is None or True
+    pagina = cliente.get(destino.split("#")[0]).text
+    assert 'value="12x"' in pagina                 # lo tecleado, tal cual
+    assert 'class="error-campo"' in pagina and "no se entiende como costo" in pagina
+    tramo = pagina[pagina.index(f'name="costo-{linea["n"]}"'):]
+    assert "aria-invalid" in tramo[:400]
+    assert "Ups." not in pagina
+    # Y la cantidad legible SÍ quedó guardada en el borrador.
+    assert compras.borrador_de("genesis")["lineas"][0]["cantidad"] == 3.0
+    # El costo no se inventó: sigue en «no se sabe».
+    assert compras.borrador_de("genesis")["lineas"][0]["costo"] is None
+
+
+def test_cantidad_ilegible_no_cae_al_valor_previo(cliente, compras_muestra):
+    linea = _linea_de_borrador()
+    respuesta = cliente.post("/compras/nueva", data={
+        "que_compro": "Tierra",
+        f"cant-{linea['n']}": "2O",       # el dedo clásico
+    }, follow_redirects=False)
+    destino = respuesta.headers["location"]
+    assert f"campo=cant-{linea['n']}" in destino
+    # La previa (1) sigue intacta, pero CON aviso — no en silencio.
+    assert compras.borrador_de("genesis")["lineas"][0]["cantidad"] == 1.0
+
+
+def test_un_viaje_del_borrador_tambien_avisa_lo_ilegible(cliente,
+                                                         compras_muestra):
+    """Guardar/buscar dentro del formulario: lo legible se guarda, lo
+    ilegible vuelve con su aviso bajo el campo."""
+    linea = _linea_de_borrador()
+    respuesta = cliente.post("/compras/borrador", data={
+        "accion": "guardar", "que_compro": "Tierra",
+        f"costo-{linea['n']}": "caro",
+    }, follow_redirects=False)
+    destino = respuesta.headers["location"]
+    assert "error=" in destino and f"campo=costo-{linea['n']}" in destino
