@@ -329,6 +329,43 @@ def test_lead_ref_no_bloquea_si_linear_no_contesta(con_comodin, monkeypatch):
     registro = ventas.crear_cotizacion(EMPLEADA, "Ana", "")  # no revienta
     orden = con_comodin.ordenes[registro["orden_id"]]
     assert not orden["lead_ref"]
+    # Nº5 (2/10/2026): el best-effort ya no es mudo — la venta sale, pero
+    # el registro trae el aviso de que el amarre se perdió.
+    assert "LEAD-70" in registro["aviso_lead"]
+    assert "Conectar cotización" in registro["aviso_lead"]
+
+
+def test_el_amarre_perdido_se_ve_en_la_pantalla_de_exito(cliente_venta,
+                                                         con_comodin,
+                                                         monkeypatch):
+    """El POST de «Generar cotización» desde una ficha, con Linear caído:
+    la pantalla de éxito dice que la venta no quedó conectada al lead, en
+    vez de dejar que nadie se entere."""
+    ventas.agregar_al_carrito("genesis", 501, 1)
+    ventas.poner_lead_pendiente("genesis", "LEAD-70", "Ana")
+
+    def revienta(ref, leads=None):
+        raise RuntimeError("Linear no contesta")
+
+    monkeypatch.setattr(linear_leads, "uno", revienta)
+    pagina = cliente_venta.post("/venta/cotizar",
+                                data={"cliente": "Ana", "celular": ""}).text
+    assert "Cotización creada" in pagina
+    assert "no quedó conectada al lead" in pagina
+    assert "LEAD-70" in pagina
+
+
+def test_con_el_amarre_sano_no_hay_aviso(cliente_venta, con_comodin,
+                                         monkeypatch):
+    ventas.agregar_al_carrito("genesis", 501, 1)
+    ventas.poner_lead_pendiente("genesis", "LEAD-70", "Ana")
+    monkeypatch.setattr(
+        linear_leads, "uno",
+        lambda ref, leads=None: {"pp": "PP-ABCDE"} if ref == "LEAD-70" else None)
+    pagina = cliente_venta.post("/venta/cotizar",
+                                data={"cliente": "Ana", "celular": ""}).text
+    assert "Cotización creada" in pagina
+    assert "no quedó conectada al lead" not in pagina
 
 
 def test_la_orden_vendida_lleva_data_pdf_con_su_nombre(cliente_venta, con_comodin):

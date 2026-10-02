@@ -17,6 +17,12 @@
         <b {% if color %}style="color:var(--{{ color }})"{% endif %}>{{ valor }}</b></div>
       {% endfor %}
     </div>
+    {# El renglón honesto cuando la venta venía de una ficha y el amarre al
+       lead se perdió (Linear no contestó): la venta salió igual, pero hay
+       que conectarla a mano. Lo decide Python (aviso_lead). #}
+    {% if aviso %}
+    <div class="aviso-error" style="text-align:left;margin-top:12px">{{ aviso }}</div>
+    {% endif %}
     <div class="botones-venta" style="margin-top:20px">
       {# REGLA NUEVA (Abraham, 28/09/2026), que reemplaza la del 22/09/2026:
          antes se evitaba target="_blank" para no dejar una pestaña sin

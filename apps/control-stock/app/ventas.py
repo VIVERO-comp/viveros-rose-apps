@@ -999,16 +999,30 @@ def _pp_del_lead_pendiente(usuario):
     adelante hace el tomar_lead_pendiente real.
 
     Best-effort: sin lead pendiente, o si Linear no contesta o no lo
-    encuentra, no se escribe nada — nunca bloquea la venta."""
+    encuentra, no se escribe nada — nunca bloquea la venta. Pero el
+    best-effort ya no es MUDO (2/10/2026): devuelve `(pp, aviso)`, y
+    cuando venía de una ficha y el enlace se perdió, el aviso queda en el
+    log y llega a la pantalla de éxito, para que alguien lo conecte a
+    mano desde la ficha en vez de que nadie se entere."""
     pendiente = lead_pendiente(usuario)
     if not pendiente:
-        return None
+        return None, ""
+    aviso = (f"La venta salió, pero no quedó conectada al lead "
+             f"{pendiente['ref']}: conéctala desde la ficha del lead con "
+             f"«Conectar cotización».")
     try:
         from . import linear_leads
         lead = linear_leads.uno(pendiente["ref"])
-    except Exception:
-        return None
-    return (lead or {}).get("pp") or None
+    except Exception as error:
+        print(f"ventas: lead_ref de {pendiente['ref']} se perdió "
+              f"(Linear no contestó): {error!r}", flush=True)
+        return None, aviso
+    pp = (lead or {}).get("pp") or None
+    if pp is None:
+        print(f"ventas: lead_ref de {pendiente['ref']} se perdió "
+              f"(el lead no está o no tiene PP).", flush=True)
+        return None, aviso
+    return pp, ""
 
 
 def vincular_lead(n, issue):
@@ -1526,7 +1540,7 @@ def crear_cotizacion(empleada, nombre_cliente, celular="", datos=None,
                               usuario, nombre_cliente, celular))
     # El PP-XXXXX del lead pendiente (si hay): se resuelve ANTES de crear
     # la orden y ANTES de que _espejar_en_crm consuma el lead pendiente.
-    pp_lead = _pp_del_lead_pendiente(usuario)
+    pp_lead, aviso_lead = _pp_del_lead_pendiente(usuario)
     valores_orden = {
         "partner_id": partner,
         "tag_ids": [[6, 0, [_id_config("VENTA_TAG_LOCAL")]]],
@@ -1587,7 +1601,9 @@ def crear_cotizacion(empleada, nombre_cliente, celular="", datos=None,
     vaciar_carrito(usuario)
     vaciar_renglones_planta(usuario)
     _limpiar_borrador(usuario)
-    return obtener_venta(n)
+    # `aviso_lead` es transitorio (no se guarda): es el renglón honesto de
+    # la pantalla de éxito cuando el amarre al lead se perdió.
+    return {**obtener_venta(n), "aviso_lead": aviso_lead}
 
 
 # ---------------------------------------------------------------------------

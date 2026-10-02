@@ -1817,6 +1817,10 @@ async def venta_cotizar(request: Request):
     return plantillas.TemplateResponse(request, "venta_exito.html", {
         "titulo": "Cotización creada",
         "sub": f"{registro['orden']} · {registro['cliente']}",
+        # El aviso honesto del amarre perdido (Nº5, 2/10/2026): la venta
+        # salió igual, pero si venía de una ficha y Linear no contestó, acá
+        # se dice — antes nadie se enteraba.
+        "aviso": registro.get("aviso_lead") or "",
         "filas": [("Total", dinero_venta(registro["total"]), None),
                   ("Estado", "Cotización (borrador en Odoo)", "dorado")],
         "pdf_href": f"/venta/{registro['n']}/cotizacion.pdf",
@@ -1856,6 +1860,7 @@ async def venta_vender(request: Request):
     return plantillas.TemplateResponse(request, "venta_exito.html", {
         "titulo": "Venta confirmada",
         "sub": f"{registro['orden']} · {registro['cliente']}",
+        "aviso": registro.get("aviso_lead") or "",
         "filas": [("Total", dinero_venta(registro["total"]), None),
                   ("Estado", "Confirmada · el cobro se registra en Odoo", "dorado")],
         "pdf_href": f"/venta/{registro['n']}/cotizacion.pdf",
