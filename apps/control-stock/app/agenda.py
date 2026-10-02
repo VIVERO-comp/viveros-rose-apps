@@ -45,7 +45,7 @@ import re
 import time
 import unicodedata
 
-from . import calendario, linear_leads, mantenimiento, ventas
+from . import calendario, linear_leads, mantenimiento, seguimiento, ventas
 
 TTL_SALDOS = 60
 
@@ -395,9 +395,19 @@ def al_marcar_hecha(actividad, autor=""):
     campo explícito (`mantenimiento.es_recurrente`), nunca por el título,
     así que un Mantenimiento agendado a mano sigue entregando como
     siempre.
+
+    El SEGUIMIENTO programado desde la ficha (2/10/2026, ver
+    `seguimiento.py`) va ANTES del filtro de tipos que entregan, porque su
+    tipo no entrega: marcarlo Hecha quita la señal «Seguimiento» del lead
+    y borra su ancla, sin tocar el estado. También por campo explícito
+    (`seguimiento_lead.actividad_id`), nunca por el título.
     """
     ref = (actividad or {}).get("lead") or ""
-    if not ref or not cierra_la_entrega(actividad.get("tipo")):
+    if not ref:
+        return ""
+    if seguimiento.es_de_seguimiento(actividad):
+        return seguimiento.al_marcar_hecha(actividad, autor=autor)
+    if not cierra_la_entrega(actividad.get("tipo")):
         return ""
     if mantenimiento.es_recurrente(actividad):
         return mantenimiento.al_marcar_hecha(actividad, autor=autor)

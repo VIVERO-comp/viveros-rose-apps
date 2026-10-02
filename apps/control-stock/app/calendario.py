@@ -175,6 +175,12 @@ def catalogo(refrescar=False):
     datos = _pedir(CONSULTA_CATALOGO, {"equipo": equipo})["team"]
 
     etiquetas = {}
+    # El grupo "Tipo de actividad" también CRUDO, por nombre tal cual está
+    # en Linear (2/10/2026): un tipo que Abraham cree con un nombre que no
+    # es de los 13 (p. ej. «Seguimiento cliente», la clave SEGUIMIENTO_TIPO
+    # de config) no entra al mapa de claves pero sí tiene que poder
+    # encontrarse — el código solo BUSCA, nunca crea.
+    tipos_nombres = {}
     for etiqueta in datos["labels"]["nodes"]:
         if etiqueta["isGroup"]:
             continue
@@ -182,8 +188,10 @@ def catalogo(refrescar=False):
         # Solo las del grupo "Tipo de actividad": un "Bug" llamado igual que
         # un tipo no debe secuestrar el color de la pantalla.
         padre = (etiqueta.get("parent") or {}).get("name", "")
-        if clave and padre.lower().startswith("tipo"):
-            etiquetas[clave] = etiqueta["id"]
+        if padre.lower().startswith("tipo"):
+            tipos_nombres[(etiqueta["name"] or "").strip().lower()] = etiqueta["id"]
+            if clave:
+                etiquetas[clave] = etiqueta["id"]
 
     estados = {}
     for clave, tipos_linear in ESTADOS.items():
@@ -202,7 +210,8 @@ def catalogo(refrescar=False):
     ]
     gente.sort(key=lambda g: g["nombre"].lower())
 
-    dato = {"etiquetas": etiquetas, "estados": estados, "gente": gente}
+    dato = {"etiquetas": etiquetas, "estados": estados, "gente": gente,
+            "tipos_nombres": tipos_nombres}
     _catalogo_cache.update({"en": time.time(), "dato": dato})
     return dato
 
@@ -605,12 +614,18 @@ mutation($id: String!, $texto: String!) {
 
 
 def crear(tipo, cliente, fecha, hora=HORA_POR_DEFECTO, dur=DURACION_POR_DEFECTO,
-          lugar="", resp_id="", prioridad=3, nota="", lead="", resp_lead=""):
+          lugar="", resp_id="", prioridad=3, nota="", lead="", resp_lead="",
+          etiqueta_id=""):
     """Crea la actividad. Devuelve {ref, url, id}.
 
     `lead` (LEAD-NN) y `resp_lead` (el nombre del empleado) viajan en la
     marca de la descripcion: con ellos la actividad sabe a que lead cierra
     y quien la tiene, sin tabla propia y sin asiento de Linear.
+
+    `etiqueta_id` (2/10/2026) manda sobre el mapa de claves cuando el tipo
+    de Linear se llama distinto que el local (p. ej. el SEGUIMIENTO_TIPO
+    de config, «Seguimiento cliente»): quien llama ya lo resolvio contra
+    `catalogo()["tipos_nombres"]` — aqui nunca se crea una etiqueta.
     """
     _exigir_escritura()
     if tipo not in POR_CLAVE:
@@ -625,7 +640,7 @@ def crear(tipo, cliente, fecha, hora=HORA_POR_DEFECTO, dur=DURACION_POR_DEFECTO,
                               prioridad, nota, lead, resp_lead)
 
     cat = catalogo()
-    etiqueta = cat["etiquetas"].get(tipo)
+    etiqueta = etiqueta_id or cat["etiquetas"].get(tipo)
     datos = {
         "teamId": _var("LINEAR_TEAM_CALENDARIO_ID") or _var("LINEAR_TEAM_ID"),
         "projectId": _var("LINEAR_PROJECT_CALENDARIO_ID"),

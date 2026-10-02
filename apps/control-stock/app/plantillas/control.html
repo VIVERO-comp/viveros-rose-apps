@@ -160,6 +160,11 @@
             <span class="t-sub ctl-pie-tarjeta">
               {% if vista != 'estado' %}<span class="chip-est" style="{{ l.estado_chip }}">{{ l.estado_titulo }}</span>{% endif %}
               <span>{% if l.interes %}{{ l.interes }} · {% endif %}<span class="{{ 'hace-alerta' if l.hace_alerta }}">{{ l.hace }}</span></span>
+              {# El seguimiento programado (2/10/2026): la fecha en la
+                 tarjeta; el día que toca (o vencido) el chip se pinta en
+                 alerta y la tarjeta ya subió al tope de su columna — el
+                 orden lo decidió Python (_orden_columna), no esto. #}
+              {% if l.seguimiento_texto %}<span class="chip-est{{ ' chip-seg-hoy' if l.seguimiento_hoy }}">Seguimiento {{ l.seguimiento_texto }}</span>{% endif %}
               {% if l.pago %}<span class="etq-pago">{{ l.pago }}</span>{% endif %}
               {% if l.motivo %}<span class="chip-est" style="{{ l.motivo_chip }}">{{ l.motivo }}</span>{% endif %}
               {# Ganado y Perdido no se reparten (regla ya escrita): el chip
@@ -300,18 +305,28 @@
   <div class="acciones">
     {% if puede_tocar_abierta %}
     {% for s in abierta.senales %}
+    {# Seguimiento apagado pide FECHA (2/10/2026): el botón es un enlace
+       al selector del servidor (mañana / 3 días / 1 semana / elegir),
+       que además crea la cita del calendario. `s.pide_fecha` lo decide
+       control.ficha(), no la plantilla. Apagarlo sigue siendo el
+       interruptor de siempre (y cancela la cita). #}
+    {% if s.pide_fecha %}
+    <a class="btn chico fantasma"
+       href="/control?vista={{ vista }}&abrir={{ abierta.ref | urlencode }}&seguimiento={{ abierta.ref | urlencode }}">{{ s.nombre }}</a>
+    {% else %}
     <form method="post" action="/control/senal?vista={{ vista }}">
       <input type="hidden" name="ref" value="{{ abierta.ref }}">
       <input type="hidden" name="nombre" value="{{ s.nombre }}">
       <input type="hidden" name="prender" value="{{ '0' if s.prendida else '1' }}">
       <button class="btn chico{{ ' peligro' if s.prendida else ' fantasma' }}" type="submit"
-              data-guardando="…">{{ s.nombre }}{{ ' ✓' if s.prendida }}</button>
+              data-guardando="…">{{ s.nombre }}{{ ' ✓' if s.prendida }}{% if s.nombre == 'Seguimiento' and s.prendida and abierta.seguimiento_texto %} · {{ abierta.seguimiento_texto }}{% endif %}</button>
     </form>
+    {% endif %}
     {% endfor %}
     {% else %}
     {% for s in abierta.senales %}
     <button class="btn chico{{ ' peligro' if s.prendida else ' fantasma' }}" type="button" disabled>
-      {{ s.nombre }}{{ ' ✓' if s.prendida }}</button>
+      {{ s.nombre }}{{ ' ✓' if s.prendida }}{% if s.nombre == 'Seguimiento' and s.prendida and abierta.seguimiento_texto %} · {{ abierta.seguimiento_texto }}{% endif %}</button>
     {% endfor %}
     {% endif %}
   </div>
@@ -590,6 +605,46 @@
   <p class="pie-nota">Queda como comentario firmado en el issue
     («{{ empleada.nombre or empleada.id }} movió de {{ moviendo.lead.estado_titulo }}
     a {{ moviendo.destino.nombre }} · …»), para que en dos semanas se sepa por qué.</p>
+</form>
+{% endif %}
+
+{% if programando_seg %}
+{# El selector de fecha del Seguimiento (2/10/2026): mismo patrón que el
+   modal del motivo — lo abre el query `seguimiento=LEAD-NN`, el servidor
+   armó las opciones (control.opciones_seguimiento) y cero JS. Los tres
+   botones rápidos mandan su fecha; «Programar» manda la del campo. #}
+<a class="telon" href="/control?vista={{ vista }}&abrir={{ programando_seg.lead.ref | urlencode }}" aria-label="Cerrar"></a>
+<form class="modal" method="post" action="/control/seguimiento?vista={{ vista }}">
+  <div class="cab-panel">
+    <div><span class="tenue">SEGUIMIENTO · {{ programando_seg.lead.ref }}</span>
+      <h4>¿Para cuándo, {{ programando_seg.lead.nombre }}?</h4></div>
+    <a class="btn chico" href="/control?vista={{ vista }}&abrir={{ programando_seg.lead.ref | urlencode }}">Cerrar</a>
+  </div>
+  <input type="hidden" name="ref" value="{{ programando_seg.lead.ref }}">
+  {% if programando_seg.tipo_aviso %}
+  <div class="solo-lectura"><b>Ojo.</b> {{ programando_seg.tipo_aviso }}
+    La señal «Seguimiento» se pone igual.</div>
+  {% endif %}
+  <div class="acciones" style="flex-wrap:wrap">
+    {% for o in programando_seg.opciones %}
+    <button class="btn" type="submit" name="fecha" value="{{ o.fecha }}"
+            data-guardando="…">{{ o.texto }} · {{ o.dmy }}</button>
+    {% endfor %}
+  </div>
+  <div class="campo-caja">
+    <label for="seg-fecha">O elegir el día</label>
+    <input class="campo" id="seg-fecha" type="date" name="fecha_elegida"
+           min="{{ programando_seg.hoy }}">
+  </div>
+  <div class="acciones">
+    <button class="btn oro" type="submit" data-guardando="Creando…">Programar</button>
+    <a class="btn" href="/control?vista={{ vista }}&abrir={{ programando_seg.lead.ref | urlencode }}">Mejor no</a>
+  </div>
+  <p class="pie-nota">Pone la señal «Seguimiento» y crea la actividad
+    «Seguimiento — {{ programando_seg.lead.nombre }}» en el calendario,
+    a nombre de {{ programando_seg.lead.resp or 'nadie todavía (el lead no tiene Resp:)' }}.
+    Ese día la tarjeta sube al inicio de su columna; al marcar la actividad
+    «Hecha», la señal se quita sola y el lead se queda donde está.</p>
 </form>
 {% endif %}
 

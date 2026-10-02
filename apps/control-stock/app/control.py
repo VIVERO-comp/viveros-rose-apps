@@ -37,7 +37,8 @@ import httpx
 from datetime import date, datetime, timedelta
 
 from . import (agenda, avisos, calendario, cot_lead, cotizaciones, crm_twenty,
-               linear_leads, mantenimiento, responder_a_mano, resumen, ventas)
+               linear_leads, mantenimiento, responder_a_mano, resumen,
+               seguimiento, ventas)
 from .datos import ZONA_PANAMA, _db
 
 VISTAS = ("empleado", "estado")
@@ -357,12 +358,18 @@ def _clave_espera(lead):
 
 
 def _orden_columna(leads):
-    """Primero «Te toca», ordenados por hace-cuánto-espera; después, el
-    resto tal como venía (por `dias`, lo que ya hacía `linear_leads._buscar`)."""
-    con_te_toca = [l for l in leads if l.get("te_toca")]
-    resto = [l for l in leads if not l.get("te_toca")]
+    """El seguimiento que TOCA HOY va primero (2/10/2026: ese día la
+    tarjeta sube al inicio de su columna — y uno vencido que nadie marcó
+    Hecha no baja, sigue arriba hasta que se haga); después «Te toca»,
+    ordenados por hace-cuánto-espera; después, el resto tal como venía
+    (por `dias`, lo que ya hacía `linear_leads._buscar`)."""
+    seg_hoy = [l for l in leads if l.get("seguimiento_hoy")]
+    resto = [l for l in leads if not l.get("seguimiento_hoy")]
+    con_te_toca = [l for l in resto if l.get("te_toca")]
+    sin_te_toca = [l for l in resto if not l.get("te_toca")]
+    seg_hoy.sort(key=lambda l: l.get("seguimiento_fecha") or "")
     con_te_toca.sort(key=_clave_espera)
-    return con_te_toca + resto
+    return seg_hoy + con_te_toca + sin_te_toca
 
 
 # ---------------------------------------------------------------------------
@@ -400,6 +407,23 @@ def _vivos(leads):
     return [l for l in leads if l["estado"] not in linear_leads.CERRADOS]
 
 
+def _con_seguimiento(leads):
+    """La fecha del seguimiento programado pegada a cada tarjeta
+    (2/10/2026): UNA consulta a la tabla para todo el tablero. Todo
+    decidido acá — el texto («HOY» o la fecha a la panameña) y si la
+    tarjeta sube (`seguimiento_hoy`: hoy o vencido) — la plantilla solo
+    pinta."""
+    fechas = seguimiento.fechas()
+    hoy = datetime.now(ZONA_PANAMA).date().isoformat()
+    for lead in leads:
+        fecha = fechas.get(lead["ref"], "")
+        lead["seguimiento_fecha"] = fecha
+        lead["seguimiento_hoy"] = bool(fecha) and fecha <= hoy
+        lead["seguimiento_texto"] = (
+            ("HOY" if fecha <= hoy else calendario.dmy(fecha)) if fecha else "")
+    return leads
+
+
 def tablero_por_empleado(leads=None):
     """[{clave, titulo, pie, leads}] — una columna por responsable.
 
@@ -407,8 +431,8 @@ def tablero_por_empleado(leads=None):
     de Linear, en orden. Las columnas SALEN de las etiquetas, así que
     sumar a alguien al equipo es crear su etiqueta allá.
     """
-    leads = _vivos([_tarjeta(l) for l in (leads if leads is not None
-                                          else linear_leads.listar())])
+    leads = _con_seguimiento(_vivos([_tarjeta(l) for l in (
+        leads if leads is not None else linear_leads.listar())]))
     columnas = [{"clave": "", "titulo": SIN_ASIGNAR,
                  "pie": "Nadie los tiene: repártelos."}]
     for nombre in linear_leads.responsables():
@@ -428,8 +452,8 @@ def tablero_por_estado(leads=None):
     completo, empleados incluidos. Lo que cada quien puede MOVER sigue
     siendo otra cosa: eso lo decide `puede_tocar()` con su `Resp:` propio.
     """
-    todos = [_tarjeta(l) for l in (leads if leads is not None
-                                   else linear_leads.listar())]
+    todos = _con_seguimiento([_tarjeta(l) for l in (
+        leads if leads is not None else linear_leads.listar())])
     columnas = []
     for estado in linear_leads.ESTADOS:
         columnas.append({
@@ -758,8 +782,42 @@ def alternar_senal(ref, nombre, prender, autor=""):
     except linear_leads.ErrorLeads as fallo:
         return "", str(fallo)
     linear_leads.refrescar()
-    return (f"{lead['nombre']}: {nombre} "
-            + ("puesta." if prender else "quitada."), "")
+    aviso = (f"{lead['nombre']}: {nombre} "
+             + ("puesta." if prender else "quitada."))
+    # Apagar el Seguimiento a mano también suelta su cita (2/10/2026):
+    # sin esto quedaría una actividad huérfana en el calendario pidiendo
+    # un seguimiento que ya nadie marcó. Prenderlo por acá (un POST a mano,
+    # sin fecha) sigue siendo la bandera a secas de siempre.
+    if nombre == seguimiento.SENAL and not prender:
+        extra = seguimiento.cancelar(lead["ref"])
+        if extra:
+            aviso += " " + extra
+    return aviso, ""
+
+
+def programar_seguimiento(ref, fecha, autor=""):
+    """El botón Seguimiento con su fecha (2/10/2026): señal + actividad
+    del calendario + ancla en `seguimiento_lead`. La lógica vive en
+    `seguimiento.programar`; acá solo se cablea a la ficha."""
+    return seguimiento.programar(ref, fecha, autor=autor)
+
+
+def opciones_seguimiento(lead):
+    """El selector de fecha del Seguimiento, armado en el servidor:
+    mañana / 3 días / 1 semana / elegir. Las fechas se calculan ACÁ (zona
+    de Panamá) y llegan listas a la plantilla — cero JS de interfaz.
+    `tipo_aviso` adelanta en el modal si el tipo de actividad todavía no
+    existe en Linear (el botón avisa en vez de prometer una cita que no
+    va a crear)."""
+    hoy = datetime.now(ZONA_PANAMA).date()
+    opciones = []
+    for dias, texto in ((1, "Mañana"), (3, "En 3 días"), (7, "En 1 semana")):
+        fecha = (hoy + timedelta(days=dias)).isoformat()
+        opciones.append({"fecha": fecha, "texto": texto,
+                         "dmy": calendario.dmy(fecha)})
+    _etiqueta, tipo_aviso = seguimiento.tipo_en_linear()
+    return {"lead": lead, "opciones": opciones, "hoy": hoy.isoformat(),
+            "tipo_aviso": tipo_aviso}
 
 
 
@@ -934,8 +992,16 @@ def ficha(ref, buscar_cotizacion=""):
     # Linear, en el orden fijo de `LABELS_SENAL`, cada una con su estado
     # actual en ESTE lead.
     disponibles = linear_leads.senales_disponibles()
+    # El Seguimiento dejó de ser bandera a secas (2/10/2026): prenderlo
+    # pasa por el selector de fecha (`pide_fecha`), apagarlo sigue siendo
+    # el mismo interruptor (y cancela la cita, ver `alternar_senal`). Las
+    # demás señales no cambian. Todo decidido acá: la plantilla solo mira
+    # `pide_fecha`.
+    _con_seguimiento([abierta])
     abierta["senales"] = [
-        {"nombre": n, "prendida": n in lead["etiquetas"]}
+        {"nombre": n, "prendida": n in lead["etiquetas"],
+         "pide_fecha": (n == seguimiento.SENAL
+                        and n not in lead["etiquetas"])}
         for n in linear_leads.LABELS_SENAL if n in disponibles]
     # La ayuda del botón 🔴 Responder (2/10/2026): «queda marcado hasta que
     # lo apagues» solo es verdad si «Responder a mano» existe en Linear —

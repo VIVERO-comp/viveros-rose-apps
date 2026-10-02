@@ -2914,6 +2914,16 @@ def control_pantalla(request: Request):
         if lead and control.puede_tocar(lead, alc):
             moviendo = {"lead": lead, "destino": destino}
 
+    # El selector de fecha del Seguimiento (2/10/2026): mismo patrón que
+    # el modal del motivo — un query param lo abre, el servidor arma las
+    # opciones (mañana / 3 días / 1 semana / elegir) y cero JS.
+    programando_seg = None
+    ref_seg = request.query_params.get("seguimiento", "")
+    if ref_seg:
+        lead_seg = control.ficha(ref_seg)
+        if lead_seg and control.puede_tocar(lead_seg, alc):
+            programando_seg = control.opciones_seguimiento(lead_seg)
+
     puede_escribir = linear_leads.escritura_activa() or not linear_leads.configurado()
     return plantillas.TemplateResponse(request, "control.html", {
         "empleada": empleada,
@@ -2923,6 +2933,7 @@ def control_pantalla(request: Request):
         "columnas": columnas,
         "abierta": abierta,
         "moviendo": moviendo,
+        "programando_seg": programando_seg,
         "estados": linear_leads.ESTADOS,
         "responsables": linear_leads.responsables(),
         "motivos": linear_leads.MOTIVOS_PERDIDA,
@@ -3080,6 +3091,24 @@ async def control_senal(request: Request):
     autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
     aviso, error = control.alternar_senal(
         ref, nombre, form.get("prender") == "1", autor=autor)
+    return _control_vuelve(vista, aviso=aviso, error=error, abrir=ref)
+
+
+@app.post("/control/seguimiento")
+async def control_seguimiento(request: Request):
+    """El Seguimiento con fecha (2/10/2026): pone la señal de siempre Y
+    crea la actividad «Seguimiento — <cliente>» en el calendario, asignada
+    al Resp: del lead. La fecha llega del selector del modal (mañana /
+    3 días / 1 semana) o del campo «elegir» — el que venga lleno; el
+    botón elegido manda sobre el campo suelto."""
+    form = await request.form()
+    ref = form.get("ref", "")
+    fecha = form.get("fecha", "") or form.get("fecha_elegida", "")
+    _alc, vista, error = _control_permiso(request, ref)
+    if error:
+        return _control_vuelve(vista, error=error, abrir=ref)
+    autor = request.state.empleada.get("nombre") or request.state.empleada["id"]
+    aviso, error = control.programar_seguimiento(ref, fecha, autor=autor)
     return _control_vuelve(vista, aviso=aviso, error=error, abrir=ref)
 
 

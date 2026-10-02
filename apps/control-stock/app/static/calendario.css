@@ -915,6 +915,13 @@ a{color:inherit}
   color:var(--muy-suave);font-weight:600;font-style:italic;
   background:transparent;border-style:dashed;
 }
+/* El seguimiento programado (2/10/2026): el chip de la fecha en la
+   tarjeta. El dia que toca (o vencido) se pinta en alerta — la clase la
+   decide Python (control._con_seguimiento), igual que hace-alerta. */
+.chip-est.chip-seg-hoy{
+  color:var(--critico);border-color:rgba(192,91,70,.4);
+  background:rgba(192,91,70,.1);
+}
 .ctl-pie-tarjeta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:5px}
 .ctl-pie-tarjeta .ctl-wa{margin-left:auto}
 
