@@ -1,0 +1,25 @@
+{# El hilo del chat, tal cual lo arma control.hilo(): cliente a la
+   izquierda, equipo a la derecha con el nombre de quien respondió (verde
+   un empleado con nombre, lila el sistema, ámbar un dispositivo sin
+   dueño). Lo usan la ficha del lead (control.html) y /conversaciones
+   (ITEM 11 de Jay) — se pinta con `hilo`, la lista de bloques. #}
+<div class="ficha-hilo">
+  {% for b in hilo %}
+    {% if b.tipo == 'dia' %}
+    <span class="hilo-dia">{{ b.texto }}</span>
+    {% elif b.tipo == 'suceso' %}
+    <div class="hilo-suceso"><span>{{ b.texto }}</span>
+      {% if b.hora %}<span class="hilo-hora">{{ b.hora }}</span>{% endif %}</div>
+    {% else %}
+    <div class="hilo-grupo{{ ' mio' if b.mio }}{{ ' anonimo' if b.desconocido }}{{ ' delsistema' if b.sistema }}">
+      <span class="hilo-ava">{{ b.iniciales }}</span>
+      <div class="hilo-pila">
+        <span class="hilo-nombre">{{ b.nombre }}</span>
+        {% for m in b.mensajes %}
+        <div class="hilo-globo"><span>{{ m.texto }}</span><span class="hilo-hora">{{ m.hora }}</span></div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  {% endfor %}
+</div>

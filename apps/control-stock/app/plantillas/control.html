@@ -87,6 +87,12 @@
         {% elif not alc.admin %}Todo el tablero · todavía no te toca ningún lead
         {% else %}Arrastrar entre estados es una corrección: pide el motivo{% endif %}
       </span>
+      {# La puerta a /conversaciones (ITEM 11 de Jay): discreta y solo
+         para el admin — es supervisión. El menú lateral está congelado
+         por otra tanda y no se toca. #}
+      {% if alc.admin %}
+      <a class="tenue" href="/conversaciones" style="font-size:12px;white-space:nowrap">Conversaciones</a>
+      {% endif %}
     </div>
 
     {# La X del banner (29/09/2026): un error o un aviso se quedaban en la
@@ -434,26 +440,9 @@
   <p class="pie-nota" style="margin:0 0 6px;color:var(--critico)">{{ abierta.hilo_error }}</p>
   {% endif %}
   {% if abierta.hilo %}
-  <div class="ficha-hilo">
-    {% for b in abierta.hilo %}
-      {% if b.tipo == 'dia' %}
-      <span class="hilo-dia">{{ b.texto }}</span>
-      {% elif b.tipo == 'suceso' %}
-      <div class="hilo-suceso"><span>{{ b.texto }}</span>
-        {% if b.hora %}<span class="hilo-hora">{{ b.hora }}</span>{% endif %}</div>
-      {% else %}
-      <div class="hilo-grupo{{ ' mio' if b.mio }}{{ ' anonimo' if b.desconocido }}{{ ' delsistema' if b.sistema }}">
-        <span class="hilo-ava">{{ b.iniciales }}</span>
-        <div class="hilo-pila">
-          <span class="hilo-nombre">{{ b.nombre }}</span>
-          {% for m in b.mensajes %}
-          <div class="hilo-globo"><span>{{ m.texto }}</span><span class="hilo-hora">{{ m.hora }}</span></div>
-          {% endfor %}
-        </div>
-      </div>
-      {% endif %}
-    {% endfor %}
-  </div>
+  {# El pintado vive en _hilo.html, compartido con /conversaciones
+     (ITEM 11 de Jay): mismo armado, misma piel. #}
+  {% with hilo = abierta.hilo %}{% include '_hilo.html' %}{% endwith %}
   {% elif not abierta.hilo_error %}
   <p class="pie-nota" style="margin:0">Sin chat disponible.</p>
   {% endif %}
