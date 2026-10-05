@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Conversaciones — Control Viverorose</title>
+<link rel="icon" type="image/jpeg" href="/static/logo.jpg">
+<link rel="apple-touch-icon" href="/static/logo.jpg">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Conversaciones">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+{# Conversaciones de WhatsApp (ITEM 11 del plan de Jay, 5/10/2026): TODAS
+   las conversaciones por chat, casadas o no con un lead — la puerta que
+   faltaba para supervisar el tono. SOLO LECTURA (ni un formulario: acá no
+   hay un solo POST) y solo admin. Misma piel que /revisar: calendario.css
+   con las clases de siempre (.prov-tarjeta, .panel-der, .ficha-hilo). #}
+<link rel="stylesheet" href="/static/calendario.css?v={{ v_estaticos }}">
+<style>
+/* El renglón del último mensaje: la flecha dice quién habló de último
+   (← el cliente, → el equipo con su nombre). Solo presentación. */
+.cv-ultimo{margin:0;font-size:11.8px;color:var(--suave);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cv-ultimo b{font-weight:700}
+.cv-cuando{font-size:10.5px;font-weight:600;color:var(--muy-suave);white-space:nowrap}
+.cv-cant{display:inline-flex;align-items:center;border:1px solid var(--borde);border-radius:999px;padding:2px 9px;font-size:10px;font-weight:700;color:var(--suave);background:var(--crema);white-space:nowrap}
+</style>
+</head>
+<body class="{{ 'menu-oculto' if request.cookies.get('menu') == '0' }}">
+
+<div class="app">
+  <aside class="lado">
+    <div class="marca">
+      <img src="/static/logo.jpg" alt="Vivero Rose">
+      <span>Control Viverorose</span>
+    </div>
+    <a class="pil" href="/calendario">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>Calendario
+    </a>
+    <a class="pil" href="/?tab=stock">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M12 10C12 6 9 3 4 3c0 5 3 8 8 7z"/><path d="M12 13c0-3.5 2.5-6 7-6 0 4.5-2.5 7-7 6z"/></svg>Stock
+    </a>
+    <a class="pil" href="/venta">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2 2h2l2.7 12.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 1.9-1.6L22 6H5"/></svg>Vender
+    </a>
+    <a class="pil" href="/control">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Control
+    </a>
+    <a class="pil" href="/compras">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><path d="M2 4h20v4H2z"/><path d="M10 12h4"/></svg>Compras
+    </a>
+    <a class="pil" href="/?tab=ajustes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Ajustes
+    </a>
+    <div class="pie">
+      <b>{{ empleada.nombre or empleada.id }}</b>
+      <span>Conversaciones · solo admin</span>
+    </div>
+  </aside>
+
+  <div class="tablero">
+    {% with bm_titulo='Conversaciones', bm_sub='Lo que se habla por WhatsApp' %}{% include '_barra_movil.html' %}{% endwith %}
+    <div class="barra">
+      <button class="btn icono hamb" type="button" aria-label="Mostrar u ocultar el menú"
+              aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <h3>Conversaciones</h3>
+      <span class="crece"></span>
+      <span class="tenue" style="font-size:12px">Solo lectura — acá no se
+        escribe nada</span>
+    </div>
+
+    {# Twenty caído o sin key no es «no hay chats»: se dice la verdad y
+       la pantalla carga igual. #}
+    {% if not lista.ok %}
+    <div class="franja"><b>Ups.</b> <span>{{ lista.error }}</span></div>
+    {% elif not lista.conversaciones %}
+    <div class="solo-lectura"><b>Sin conversaciones.</b> En los últimos
+      {{ lista.leidos }} mensajes de Twenty no apareció ningún chat.</div>
+    {% else %}
+    <div class="prov-grid">
+      {% for c in lista.conversaciones %}
+      <div class="prov-tarjeta" id="conv-{{ loop.index }}">
+        <div class="prov-cab">
+          <b>{{ c.titulo }}</b>
+          <span class="cv-cant">{{ c.cant }} msj</span>
+        </div>
+        <p class="prov-contacto">
+          {% if c.telefono %}<span>{{ c.telefono }}</span>{% endif %}
+          <span class="cv-cuando">{{ c.ultimo.cuando }}</span>
+        </p>
+        <p class="cv-ultimo">
+          {% if c.ultimo.salida %}<b>→ {{ c.ultimo.autor or 'Vivero' }}:</b>
+          {% else %}<b>← {{ c.nombre or 'Cliente' }}:</b>
+          {% endif %}
+          {{ c.ultimo.texto or '(sin texto)' }}</p>
+        {% if c.chat_id %}
+        <a class="prov-abrir" href="/conversaciones?n={{ n }}&abrir={{ c.chat_id | urlencode }}#conv-{{ loop.index }}">
+          Ver la conversación →</a>
+        {% else %}
+        <p class="pie-nota" style="margin:2px 0 0">Mensajes sin chatId en
+          Twenty: no se puede abrir el hilo.</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    {# Honestidad del corte: cuánto se leyó, y el «Ver más» solo si de
+       verdad hay más atrás. #}
+    <p class="pie-nota" style="margin-top:12px">
+      Agrupadas de los últimos {{ lista.leidos }} mensajes.
+      {% if lista.hay_mas %}Hay mensajes más viejos que no entran acá.
+        {% if ver_mas %}<a class="tenue" href="/conversaciones?n={{ ver_mas }}">Ver más ({{ ver_mas }} mensajes)</a>{% endif %}
+      {% endif %}
+    </p>
+    {% endif %}
+  </div>
+</div>
+
+{% set activa = '' %}{% include '_nav.html' %}
+
+{% if abierta %}
+{# El hilo de UNA conversación: el mismo panel lateral de la casa
+   (.panel-der + .telon, sin JS) y el MISMO pintado del hilo de la ficha
+   (_hilo.html). Cero formularios: solo lectura. #}
+{% set vuelta = '/conversaciones?n=' ~ n %}
+<a class="telon" href="{{ vuelta }}" aria-label="Cerrar"></a>
+<aside class="panel-der">
+  <div class="cab-panel">
+    <div><h4>{{ abierta.titulo }}</h4>
+      {% if abierta.telefono %}<span class="tenue" style="font-size:12px">{{ abierta.telefono }}</span>{% endif %}
+    </div>
+    <a class="btn chico" href="{{ vuelta }}">Cerrar</a>
+  </div>
+
+  {% if abierta.lead %}
+  {# Este chat casa con un lead del tablero: la puerta de vuelta a la
+     ficha. Si no casa, la conversación se muestra igual — esa es la
+     gracia de la pantalla. #}
+  <div class="dato"><b>Lead</b><span>
+    <a href="/control?abrir={{ abierta.lead.ref | urlencode }}">{{ abierta.lead.nombre }} · {{ abierta.lead.ref }}</a>
+    {% if abierta.lead.estado_nombre %} — {{ abierta.lead.estado_nombre }}{% endif %}</span></div>
+  {% else %}
+  <div class="dato"><b>Lead</b><span>Sin lead en el tablero</span></div>
+  {% endif %}
+
+  <div class="ficha-hilo-cab">
+    <span>Conversación · {{ abierta.cant }} mensajes</span>
+    {% if abierta.twenty_url %}
+    <a class="tenue" href="{{ abierta.twenty_url }}" target="_blank" rel="noopener">ver en Twenty ↗</a>
+    {% endif %}
+  </div>
+  {% if abierta.error %}
+  <p class="pie-nota" style="margin:0 0 6px;color:var(--critico)">{{ abierta.error }}</p>
+  {% endif %}
+  {% if abierta.hilo %}
+  {% with hilo = abierta.hilo %}{% include '_hilo.html' %}{% endwith %}
+  {% elif not abierta.error %}
+  <p class="pie-nota" style="margin:0">Este chat no tiene mensajes en Twenty.</p>
+  {% endif %}
+</aside>
+{% endif %}
+
+<script src="/static/menu.js?v={{ v_estaticos }}"></script>
+</body>
+</html>

@@ -27,8 +27,8 @@ from fastapi.templating import Jinja2Templates
 
 from . import (acceso_google, agenda, altas, avisos, calculos, calendario,
                calendario_google, colores, compra_odoo, compras,
-               calendario_ics, conteos, control, cot_lead, cotizaciones,
-               coworkers, crm_twenty, datos, fichas, fotos,
+               calendario_ics, conteos, control, conversaciones, cot_lead,
+               cotizaciones, coworkers, crm_twenty, datos, fichas, fotos,
                linear_leads, mantenimiento, proveedores, resumen, seguridad,
                vehiculos, ventas, wa_autor)
 
@@ -5187,3 +5187,40 @@ async def ventas_a_revisar_nota(request: Request):
     if orden_id:
         url += "#orden-" + quote(orden_id)
     return RedirectResponse(url, status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Conversaciones de WhatsApp (ITEM 11 del plan de Jay, 5/10/2026): TODAS
+# las conversaciones por chat, casadas o no con un lead — la puerta para
+# supervisar el tono. SOLO LECTURA (esta pantalla no tiene ni un POST:
+# jamás escribe en Twenty, Linear ni Odoo) y solo admin, el mismo candado
+# de /revisar. Los datos los arma `app/conversaciones.py`.
+# ---------------------------------------------------------------------------
+
+@app.get("/conversaciones")
+def conversaciones_whatsapp(request: Request):
+    """La lista agrupada por chat y el hilo de una (`?abrir=<chatId>`) en
+    el panel lateral — el mismo mecanismo de /revisar, sin JS. Twenty
+    caído o sin key: la pantalla carga igual y lo dice."""
+    if (rechazo := _solo_admin(request)) is not None:
+        return rechazo
+    try:
+        n = int(request.query_params.get("n") or conversaciones.LIMITE_BASE)
+    except ValueError:
+        n = conversaciones.LIMITE_BASE
+    n = max(60, min(n, conversaciones.LIMITE_TOPE))
+    lista = conversaciones.listar(n)
+    abrir = (request.query_params.get("abrir") or "").strip()
+    abierta = conversaciones.abrir(abrir) if abrir else None
+    # El «Ver más» solo si de verdad hay más mensajes atrás y el tope
+    # todavía lo permite — honesto, nunca un botón de mentira.
+    ver_mas = (min(n * 2, conversaciones.LIMITE_TOPE)
+               if lista["ok"] and lista["hay_mas"]
+               and n < conversaciones.LIMITE_TOPE else None)
+    return plantillas.TemplateResponse(request, "conversaciones.html", {
+        "empleada": request.state.empleada,
+        "lista": lista,
+        "abierta": abierta,
+        "n": n,
+        "ver_mas": ver_mas,
+    })
