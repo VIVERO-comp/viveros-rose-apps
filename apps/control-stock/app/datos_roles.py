@@ -29,6 +29,7 @@ y quien_ocupa(deber) de aquí, sin re-trabajo.
 
 import unicodedata
 
+from . import seguridad
 from .datos import _db, ahora_iso
 
 # Los 3 deberes, con el texto que ve la pantalla. La CLAVE es estable (va
@@ -50,6 +51,13 @@ DEBERES = {
 
 LARGO_NOMBRE = 60
 LARGO_TERMINO = 120
+
+# El rol Inventario (BLOQUE 13, 5/10/2026) se identifica por este SLUG
+# INMUTABLE, nunca por el nombre visible: renombrar la fila desde la
+# pantalla no suelta ni un candado (la trampa es_maceta, que compara por
+# nombre, ya mordió una vez). El slug solo lo escribe la migración de
+# iniciar_tablas; ninguna ruta lo toca.
+SLUG_INVENTARIO = "inventario"
 
 # ---------------------------------------------------------------------------
 # Semillas (DATO, no código). Se insertan solo si la tabla nace vacía; de
@@ -102,10 +110,13 @@ def iniciar_tablas():
         con.executescript("""
         -- Un rol: espacio con nombre donde vive trabajo. `deber` marca los
         -- 3 fijos (system_manager | operations | owner_view), NULL el resto.
+        -- `slug` identifica a los roles con comportamiento en código (hoy
+        -- solo 'inventario'): inmutable, NULL para los roles normales.
         CREATE TABLE IF NOT EXISTS roles (
             n INTEGER PRIMARY KEY AUTOINCREMENT,
             nombre TEXT NOT NULL,
             deber TEXT,
+            slug TEXT,
             activo INTEGER NOT NULL DEFAULT 1,
             creado_en TEXT NOT NULL
         );
@@ -142,7 +153,35 @@ def iniciar_tablas():
             creado_en TEXT NOT NULL
         );
         """)
+        _asegurar_columna_slug(con)
         _sembrar(con)
+        _asegurar_rol_inventario(con)
+
+
+def _asegurar_columna_slug(con):
+    """Migración al vuelo para las bases que nacieron antes del slug.
+    Idempotente, como el resto del esquema."""
+    columnas = {f["name"] for f in con.execute("PRAGMA table_info(roles)")}
+    if "slug" not in columnas:
+        con.execute("ALTER TABLE roles ADD COLUMN slug TEXT")
+
+
+def _asegurar_rol_inventario(con):
+    """El rol Inventario existe siempre, SIN persona (a Omar lo invita
+    Korto y le pone el rol por la pantalla del item 1). Si alguien ya
+    había creado a mano un rol llamado «Inventario», se adopta ESE (se le
+    estampa el slug) en vez de nacer un tocayo; si no, se inserta."""
+    if con.execute("SELECT 1 FROM roles WHERE slug=?",
+                   (SLUG_INVENTARIO,)).fetchone():
+        return
+    for fila in con.execute("SELECT n, nombre FROM roles"):
+        if _plano(fila["nombre"]) == SLUG_INVENTARIO:
+            con.execute("UPDATE roles SET slug=? WHERE n=?",
+                        (SLUG_INVENTARIO, fila["n"]))
+            return
+    con.execute(
+        "INSERT INTO roles (nombre, deber, slug, activo, creado_en) "
+        "VALUES (?,NULL,?,1,?)", ("Inventario", SLUG_INVENTARIO, ahora_iso()))
 
 
 def _sembrar(con):
@@ -267,6 +306,36 @@ def deberes_estado():
                       else ("sin_persona" if ocupante else "sin_rol")),
         })
     return estado
+
+
+def roles_activos_de(usuario):
+    """Los roles ACTIVOS que ocupa una empleada del login:
+    [{n, nombre, slug}]. Un rol desactivado no cuenta."""
+    with _db() as con:
+        return [dict(f) for f in con.execute(
+            "SELECT r.n, r.nombre, r.slug FROM roles r "
+            "JOIN rol_persona rp ON rp.rol = r.n "
+            "WHERE rp.usuario=? AND r.activo=1 ORDER BY r.n", (usuario,))]
+
+
+def solo_inventario(empleada):
+    """EL predicado del rol Inventario — el único lugar donde se decide.
+
+    True solo para una empleada NO admin cuyo ÚNICO rol activo es el del
+    slug 'inventario'. De aquí cuelgan las tres cosas, siempre juntas: el
+    menú (=[Stock]), el redirect global a /stock y los candados de los
+    POST (la puerta vive en main._puerta_rol_inventario). La matriz:
+    admin → False · solo-inventario → True · inventario+otro rol → False
+    · sin roles → False. Se compara por SLUG, jamás por el nombre: la
+    fila se puede renombrar sin soltar un solo candado.
+
+    `empleada` es el dict de la sesión (request.state.empleada)."""
+    mios = roles_activos_de(empleada["id"])
+    if len(mios) != 1 or mios[0]["slug"] != SLUG_INVENTARIO:
+        return False
+    # El admin nunca queda preso en la vista plana, tenga el rol que
+    # tenga. Se pregunta al final: es la consulta más cara de las dos.
+    return not seguridad.es_admin(empleada)
 
 
 def _catalogo(tabla, solo_activos):
