@@ -1776,14 +1776,6 @@ def validar_salida(orden_id):
         _ejecutar("stock.picking", "button_validate", [[picking["id"]]])
 
 
-def _entregar_orden(venta):
-    """El paso de entrega del flujo VIEJO (el botón único). Ya no corre
-    en el cobro — queda solo para re-sellar una venta vieja que haya
-    quedado a medias en 'confirmada' antes del cambio."""
-    validar_salida(venta["orden_id"])
-    _actualizar_venta(venta["n"], estado="entregada")
-
-
 def _facturar_orden(venta, valores_asistente=None):
     """Crea (o reutiliza) la factura de la orden y la publica. Reutilizar es
     lo que hace al reintento seguro: si el intento anterior creó la factura
