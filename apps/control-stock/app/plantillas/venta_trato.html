@@ -65,7 +65,7 @@
       <b>{% if hechos.pago_confirmado %}Sí{% if not hechos.pago_completo %} · depósito (saldo pendiente){% endif %}{% else %}Todavía no{% endif %}</b></div>
     {% if hechos.pago_confirmado %}
     <div class="fila"><span>Quién / cuándo</span>
-      <b>{{ hechos.pago_por or "—" }} · {{ (hechos.pago_en or "")[:10] }}</b></div>
+      <b>{{ hechos.pago_por or "—" }} · {{ pago_en_texto or "—" }}</b></div>
     {% if hechos.pago_monto is not none %}
     <div class="fila"><span>Monto (sin ITBMS)</span><b>{{ hechos.pago_monto | dinero }}</b></div>
     {% endif %}
@@ -141,7 +141,20 @@
   <div class="seccion-titulo" style="margin-top:16px">Marcar entregada</div>
   <div class="inv-card vt-form">
     {% if hechos.entrega_marcada %}
-    <p style="margin:0">Entregada el <b>{{ hechos.fecha_entrega }}</b> por {{ hechos.entrega_por or "—" }}.</p>
+    <p style="margin:0">Entregada el <b>{{ hechos.fecha_entrega }}</b> por
+      {{ hechos.entrega_por or "—" }} (acto registrado: {{ entrega_en_texto or "—" }}).</p>
+    {% if soy_manager %}
+    {# La entrega real fue otro día: el system manager corrige la FECHA
+       (la que usa delivered revenue); el historial gana su fila y el
+       instante del acto no se reescribe. #}
+    <form method="post" action="/venta/estado/{{ origen }}/{{ n }}/entregada" style="margin-top:8px">
+      <label for="vt-fecha-corr">Corregir la fecha real de entrega</label>
+      <input type="date" id="vt-fecha-corr" name="fecha" value="{{ hechos.fecha_entrega }}">
+      <div style="margin-top:8px">
+        <button class="btn btn-linea" type="submit">Corregir fecha</button>
+      </div>
+    </form>
+    {% endif %}
     {% elif soy_manager %}
     <form method="post" action="/venta/estado/{{ origen }}/{{ n }}/entregada">
       <label for="vt-fecha">Fecha real de entrega (la que usa delivered revenue)</label>
@@ -168,7 +181,7 @@
   <div class="inv-card">
     <ul class="vt-hist" style="margin-top:0">
       {% for c in historial_estado %}
-      <li>{{ c.de or "·" }} → {{ c.a }} ({{ c.hecho }}{% if c.detalle %} · {{ c.detalle }}{% endif %}) · {{ c.puesto_por or "—" }} · {{ c.puesto_en[:16] }}</li>
+      <li>{{ c.de or "·" }} → {{ c.a }} ({{ c.hecho }}{% if c.detalle %} · {{ c.detalle }}{% endif %}) · {{ c.puesto_por or "—" }} · {{ c.en_texto }}</li>
       {% endfor %}
     </ul>
   </div>

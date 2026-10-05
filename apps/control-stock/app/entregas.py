@@ -20,6 +20,13 @@ Reglas:
   final el hecho local con su fecha REAL de entrega.
 - La recogida (plantas que vuelven, alquiler) NO es un paso de la venta
   de plantas y no vive aquí.
+- **«Marcar entregada» NO escribe en Linear ni en Twenty** (régimen del
+  BLOQUE 12: hacia los sistemas reales, solo lectura). El embudo del
+  lead (pago → Por agendar, «Hecha» → Entregado, Ganado = entregado +
+  saldo 0) sigue moviéndose por sus caminos de siempre; esta máquina de
+  estados es PARALELA (ver venta_estado.py). La única escritura externa
+  es la salida de Odoo (validar_salida), que es stock — el trabajo de
+  Odoo. La reconciliación estado↔embudo es pregunta abierta para Jay.
 """
 
 from .datos import _db, ahora_iso

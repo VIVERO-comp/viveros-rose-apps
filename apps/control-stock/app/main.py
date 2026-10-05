@@ -2877,6 +2877,11 @@ def venta_estado_ficha(request: Request, origen: str, n: int,
         "registro": registro,
         "titulo_doc": f"{registro.get('orden') or ''} · {registro.get('cliente') or ''}",
         "hechos": hechos,
+        # Los instantes van en EPOCH (UTC); el texto de pantalla se arma
+        # acá — la zona la decide quien muestra, nunca quien guarda.
+        "pago_en_texto": venta_estado.texto_de_epoch(hechos.get("pago_en")),
+        "entrega_en_texto": venta_estado.texto_de_epoch(
+            hechos.get("entrega_en")),
         "estado_texto": venta_estado.ESTADOS[hechos["estado"]],
         "botones": botones,
         "soy_manager": venta_estado.es_system_manager(usuario),
@@ -2886,7 +2891,9 @@ def venta_estado_ficha(request: Request, origen: str, n: int,
         "overrides": venta_estado.overrides_de(origen, n),
         "obligacion": entregas.obligacion_de(origen, n),
         "historial_entrega": entregas.historial_de(origen, n),
-        "historial_estado": venta_estado.historial_de(origen, n),
+        "historial_estado": [
+            {**c, "en_texto": venta_estado.texto_de_epoch(c["puesto_en"])}
+            for c in venta_estado.historial_de(origen, n)],
         "empleadas": [e for e in seguridad.listar() if e["activa"]],
         "hoy": datetime.now(datos.ZONA_PANAMA).date().isoformat(),
         # El acceso directo a Registrar pago, solo para la venta de
@@ -3008,6 +3015,17 @@ async def venta_estado_entregada(request: Request, origen: str, n: int):
         return RedirectResponse("/venta", status_code=303)
     form = await request.form()
     usuario, nombre = _quien_es(request)
+    if venta_estado.estado_de(origen, n)["entrega_marcada"]:
+        # Ya estaba marcada: este POST es la CORRECCIÓN de la fecha (la
+        # entrega real fue otro día) — solo el system manager, con su
+        # fila en el historial; el instante del acto no se reescribe.
+        error = venta_estado.corregir_fecha_entrega(
+            origen, n, form.get("fecha"), usuario, nombre)
+        aviso = "" if error else "Fecha de entrega corregida."
+        if error == "fecha_invalida":
+            error = "La fecha no se entiende (AAAA-MM-DD)."
+        return RedirectResponse(_url_estado(origen, n, error or "", aviso),
+                                status_code=303)
     error, resultado = entregas.marcar_entregada(
         origen, n, usuario, nombre, fecha=(form.get("fecha") or "").strip())
     if error == "odoo":

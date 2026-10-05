@@ -38,11 +38,57 @@ locales de Vender: 'venta' (ventas_locales, plantas) y 'servicio'
 (`pago_monto`, `entrega_monto`) alimentan las dos cifras de `cifras.py`
 (pending/delivered revenue) y van SIN ITBMS cuando el que registra lo
 sabe — rotulados provisionales allá.
+
+**LA FRONTERA CON EL EMBUDO DE LINEAR (revisión del Arquitecto, 5/10):
+esta es una máquina PARALELA al embudo del lead, no su reemplazo.** El
+embudo de Linear sigue EXACTAMENTE como está: el pago real en Odoo pone
+«Por agendar», la «Hecha» del calendario pone «Entregado», y «Ganado» =
+entregado + saldo 0 — nada de eso se toca desde aquí. Este módulo NO
+escribe en Linear, ni en Twenty, ni en Odoo (régimen del BLOQUE 12:
+hacia los sistemas reales, solo lectura); «Marcar entregada» tampoco —
+valida la salida de Odoo vía ventas.validar_salida desde entregas.py,
+que es dinero/stock, y nada más. Cómo (y si) se reconcilian el estado
+de la venta y el estado del lead es una PREGUNTA ABIERTA para Jay
+(docs/DECISIONES-PENDIENTES.md del repo plantaspanama).
+
+**Tiempo (revisión del Arquitecto): los `*_en` de venta_estado y
+venta_estado_cambio van en EPOCH (segundos UTC, time.time()).** La
+trampa de zonas ya mordió una vez (edad_horas negativa por comparar
+texto entre máquinas): nada que compare horas usa texto — quien muestra
+decide la zona (texto_de_epoch). `fecha_entrega` es la excepción a
+propósito: es una FECHA de calendario elegida por una persona
+(AAAA-MM-DD), no un instante — no hay reloj que comparar.
+
+**El historial (venta_estado_cambio) es INMUTABLE: solo INSERT.** Nunca
+un UPDATE ni un DELETE sobre esa tabla — una corrección es otra fila
+(hay prueba que escanea el código fuente).
 """
 
-from .datos import _db, ahora_iso
+import time
+from datetime import datetime
+
+from .datos import ZONA_PANAMA, _db, ahora_iso
 from . import datos_roles
 from .datos_roles import LARGO_TERMINO, _plano
+
+
+def _ahora_epoch():
+    """El instante de un hecho o un cambio de estado: EPOCH UTC-aware
+    (time.time() ya es segundos UTC). Comparar tiempos es con ESTE
+    número; el texto es solo de pantalla (texto_de_epoch)."""
+    return time.time()
+
+
+def texto_de_epoch(epoch):
+    """Para MOSTRAR un epoch como fecha-hora de Panamá. Nunca para
+    comparar: la zona la decide quien muestra, no quien guarda."""
+    if not epoch:
+        return ""
+    try:
+        momento = datetime.fromtimestamp(float(epoch), ZONA_PANAMA)
+    except (TypeError, ValueError, OSError, OverflowError):
+        return ""
+    return momento.strftime("%d/%m/%Y %H:%M")
 
 ORIGENES = ("venta", "servicio")
 
@@ -100,15 +146,17 @@ def iniciar_tablas():
             pago_completo INTEGER NOT NULL DEFAULT 0,  -- saldo en 0
             pago_monto REAL,                 -- sin ITBMS cuando se sabe
             pago_por TEXT,
-            pago_en TEXT,
+            pago_en REAL,                    -- EPOCH UTC (time.time())
             entrega_marcada INTEGER NOT NULL DEFAULT 0,
-            fecha_entrega TEXT,              -- la fecha REAL de entrega
+            fecha_entrega TEXT,              -- la fecha REAL (AAAA-MM-DD)
             entrega_monto REAL,              -- sin ITBMS cuando se sabe
             entrega_por TEXT,
-            entrega_en TEXT,
+            entrega_en REAL,                 -- EPOCH UTC (time.time())
             PRIMARY KEY (origen, venta)
         );
         -- Historial: todo cambio de estado, con el hecho que lo movió.
+        -- INMUTABLE: solo INSERT, nunca UPDATE ni DELETE (una corrección
+        -- es otra fila). Hay una prueba que escanea el código fuente.
         CREATE TABLE IF NOT EXISTS venta_estado_cambio (
             n INTEGER PRIMARY KEY AUTOINCREMENT,
             origen TEXT NOT NULL,
@@ -118,7 +166,7 @@ def iniciar_tablas():
             hecho TEXT NOT NULL,             -- nace | pago | entrega | manual
             detalle TEXT NOT NULL DEFAULT '',
             puesto_por TEXT NOT NULL DEFAULT '',
-            puesto_en TEXT NOT NULL
+            puesto_en REAL NOT NULL          -- EPOCH UTC (time.time())
         );
         -- El término guardado con la venta al cotizar (item 5).
         CREATE TABLE IF NOT EXISTS venta_termino (
@@ -225,7 +273,7 @@ def _asegurar(con, origen, venta, tipo_venta="", por="", ahora=None):
     fila 'nace' en el historial). Devuelve el dict actual."""
     if origen not in ORIGENES:
         raise ValueError(f"origen desconocido: {origen}")
-    ahora = ahora or ahora_iso()
+    ahora = ahora or _ahora_epoch()
     fila = con.execute(
         "SELECT * FROM venta_estado WHERE origen=? AND venta=?",
         (origen, int(venta))).fetchone()
@@ -275,7 +323,7 @@ def registrar_pago(origen, venta, por, monto=None, completo=None,
     es el total; en evento/jardín/proyecto/PH/mantenimiento un pago sin
     más datos es un depósito y NO deja la venta lista para cerrar.
     Sube el estado a lo que los hechos sostengan (nunca lo baja)."""
-    ahora = ahora_iso()
+    ahora = _ahora_epoch()
     with _db() as con:
         fila = _asegurar(con, origen, venta, por=por, ahora=ahora)
         if completo is None:
@@ -304,8 +352,10 @@ def marcar_entregada(origen, venta, por_usuario, por_nombre=None,
     if not es_system_manager(por_usuario):
         return "solo_system_manager", estado_de(origen, venta)
     por = por_nombre or por_usuario
-    ahora = ahora_iso()
-    fecha = (fecha or ahora[:10])[:10]
+    ahora = _ahora_epoch()
+    # La fecha es de calendario (la elige el system manager); su default
+    # es HOY en Panamá — nunca un reloj de otra máquina.
+    fecha = (fecha or datetime.now(ZONA_PANAMA).date().isoformat())[:10]
     with _db() as con:
         fila = _asegurar(con, origen, venta, por=por, ahora=ahora)
         con.execute(
@@ -319,6 +369,37 @@ def marcar_entregada(origen, venta, por_usuario, por_nombre=None,
         _subir_estado(con, fila, "entrega", f"entregada el {fecha}",
                       por, ahora)
     return None, estado_de(origen, venta)
+
+
+def corregir_fecha_entrega(origen, venta, fecha, por_usuario,
+                           por_nombre=None):
+    """La entrega real fue OTRO día: el system manager corrige la fecha
+    de calendario (la que usa delivered revenue). Solo sobre una entrega
+    ya marcada; el historial gana su fila (INSERT, nunca se toca la
+    vieja) y el instante del acto (`entrega_en`) queda como estaba — el
+    acto pasó cuando pasó."""
+    if not es_system_manager(por_usuario):
+        return "solo_system_manager"
+    fecha = (fecha or "").strip()[:10]
+    if len(fecha) != 10:
+        return "fecha_invalida"
+    por = por_nombre or por_usuario
+    with _db() as con:
+        fila = con.execute(
+            "SELECT estado, entrega_marcada, fecha_entrega FROM venta_estado"
+            " WHERE origen=? AND venta=?", (origen, int(venta))).fetchone()
+        if fila is None or not fila["entrega_marcada"]:
+            return "sin_entrega"
+        con.execute(
+            "UPDATE venta_estado SET fecha_entrega=? WHERE origen=? AND venta=?",
+            (fecha, origen, int(venta)))
+        con.execute(
+            "INSERT INTO venta_estado_cambio (origen, venta, de, a, hecho,"
+            " detalle, puesto_por, puesto_en) VALUES (?,?,?,?,?,?,?,?)",
+            (origen, int(venta), fila["estado"], fila["estado"], "entrega",
+             f"fecha corregida: {fila['fecha_entrega']} → {fecha}",
+             por, _ahora_epoch()))
+    return None
 
 
 def bloqueo_manual(fila, estado, por_usuario):
@@ -355,7 +436,7 @@ def poner_estado_manual(origen, venta, estado, por_usuario, por_nombre=None):
     if estado not in ESTADOS:
         return "estado_invalido"
     por = por_nombre or por_usuario
-    ahora = ahora_iso()
+    ahora = _ahora_epoch()
     with _db() as con:
         fila = _asegurar(con, origen, venta, por=por, ahora=ahora)
         actual = int(fila["estado"])

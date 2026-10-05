@@ -194,3 +194,74 @@ def test_escribir_el_mismo_default_no_es_override(base):
     venta_estado.guardar_termino(
         "venta", 3, "plant retail", "100% antes de proceder", "Génesis")
     assert venta_estado.overrides_de("venta", 3) == []
+
+
+# ---------------------------------------------------------------------------
+# Revisión del Arquitecto (5/10): epoch UTC, historial inmutable y la
+# corrección de la fecha de entrega.
+# ---------------------------------------------------------------------------
+
+def test_los_instantes_van_en_epoch_utc(manager):
+    """La trampa de zonas (edad_horas negativa) no se repite: los *_en de
+    venta_estado y venta_estado_cambio son NÚMEROS (epoch UTC), nunca
+    texto. El texto es solo de pantalla (texto_de_epoch)."""
+    venta_estado.abrir("venta", 21, "plant retail", "genesis")
+    venta_estado.registrar_pago("venta", 21, "genesis")
+    venta_estado.marcar_entregada("venta", 21, manager, "Sam")
+    fila = venta_estado.estado_de("venta", 21)
+    assert isinstance(fila["pago_en"], float) and fila["pago_en"] > 1.7e9
+    assert isinstance(fila["entrega_en"], float) and fila["entrega_en"] > 1.7e9
+    for cambio in venta_estado.historial_de("venta", 21):
+        assert isinstance(cambio["puesto_en"], float)
+        assert cambio["puesto_en"] > 1.7e9
+    # El texto de pantalla existe y lo decide quien muestra.
+    assert venta_estado.texto_de_epoch(fila["pago_en"])
+    assert venta_estado.texto_de_epoch(None) == ""
+    # La fecha de entrega es la excepción a propósito: una FECHA de
+    # calendario elegida por una persona, no un instante.
+    assert len(fila["fecha_entrega"]) == 10
+
+
+def test_el_historial_es_inmutable_solo_insert():
+    """Ninguna pieza de la app escribe UPDATE ni DELETE sobre
+    venta_estado_cambio: una corrección es otra fila. Se escanea el
+    código fuente completo de app/ (el mismo candado de estilo que la
+    lista de métodos de reconciliacion)."""
+    import glob
+    import os
+    import re
+    carpeta = os.path.join(os.path.dirname(venta_estado.__file__), "*.py")
+    for ruta in glob.glob(carpeta):
+        with open(ruta, encoding="utf-8") as archivo:
+            fuente = archivo.read()
+        assert not re.search(r"(?i)UPDATE\s+venta_estado_cambio", fuente), ruta
+        assert not re.search(r"(?i)DELETE\s+FROM\s+venta_estado_cambio",
+                             fuente), ruta
+
+
+def test_corregir_la_fecha_de_entrega(manager):
+    """La entrega real fue otro día: solo el system manager corrige la
+    fecha (la que usa delivered revenue), el historial gana su fila y el
+    instante del acto no se reescribe."""
+    venta_estado.abrir("venta", 22, "plant retail", "genesis")
+    venta_estado.registrar_pago("venta", 22, "genesis")
+    venta_estado.marcar_entregada("venta", 22, manager, "Sam",
+                                  fecha="2026-10-05")
+    acto = venta_estado.estado_de("venta", 22)["entrega_en"]
+    # Sin el deber, no.
+    assert venta_estado.corregir_fecha_entrega(
+        "venta", 22, "2026-10-03", "genesis") == "solo_system_manager"
+    assert venta_estado.corregir_fecha_entrega(
+        "venta", 22, "2026-10-03", manager, "Sam") is None
+    fila = venta_estado.estado_de("venta", 22)
+    assert fila["fecha_entrega"] == "2026-10-03"
+    assert fila["entrega_en"] == acto  # el acto pasó cuando pasó
+    ultimo = venta_estado.historial_de("venta", 22)[-1]
+    assert "fecha corregida" in ultimo["detalle"]
+    assert "2026-10-05" in ultimo["detalle"] and "2026-10-03" in ultimo["detalle"]
+
+
+def test_corregir_fecha_exige_una_entrega_marcada(manager):
+    venta_estado.abrir("venta", 23, "plant retail", "genesis")
+    assert venta_estado.corregir_fecha_entrega(
+        "venta", 23, "2026-10-03", manager) == "sin_entrega"
