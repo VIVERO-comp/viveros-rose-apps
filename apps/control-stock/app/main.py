@@ -28,9 +28,9 @@ from fastapi.templating import Jinja2Templates
 from . import (acceso_google, agenda, altas, avisos, calculos, calendario,
                calendario_google, colores, compra_odoo, compras,
                calendario_ics, conteos, control, conversaciones, cot_lead,
-               cotizaciones, coworkers, crm_twenty, datos, fichas, fotos,
-               linear_leads, mantenimiento, proveedores, resumen, seguridad,
-               vehiculos, ventas, wa_autor)
+               cotizaciones, coworkers, crm_twenty, datos, datos_roles,
+               fichas, fotos, linear_leads, mantenimiento, proveedores,
+               resumen, seguridad, vehiculos, ventas, wa_autor)
 
 app = FastAPI(title="Control Viverorose")
 
@@ -225,6 +225,10 @@ mantenimiento.iniciar_tablas()
 avisos.iniciar_tablas()
 calendario_ics.iniciar_tablas()
 calendario_google.iniciar_tablas()
+# Item 1 de Jay (5/10/2026): roles, marcas, tipos de venta, llegadas y
+# términos por defecto. Mismo patrón: crear al importar es idempotente, y
+# la semilla solo entra si la tabla nace vacía.
+datos_roles.iniciar_tablas()
 calendario_google.arrancar_hilo()
 # El calendario arranca calentándose en fondo (catálogo + mes en curso):
 # ni la primera visita del día espera a Linear (velocidad, 22/09/2026).
@@ -595,6 +599,19 @@ def inicio(request: Request, refrescar: int = 0, crear: str = "",
         "dispositivos": dispositivos,
         "dispositivos_armados": wa_autor.configurado(),
         "responsables_wa": linear_leads.responsables() if es_admin else [],
+        # Item 1 de Jay (5/10/2026): roles y catálogos de venta, solo para
+        # admins. Todo llega decidido desde Python: la lista completa de
+        # roles (inactivos incluidos, apagados), los 3 deberes con su
+        # ocupante o su aviso, los catálogos enteros y las empleadas
+        # activas del login para el selector de "poner persona".
+        "roles_ajustes": datos_roles.listar_roles(solo_activos=False) if es_admin else [],
+        "deberes_ajustes": datos_roles.deberes_estado() if es_admin else [],
+        "marcas_ajustes": datos_roles.catalogo_completo("marcas") if es_admin else [],
+        "tipos_ajustes": datos_roles.catalogo_completo("tipos_venta") if es_admin else [],
+        "llegadas_ajustes": datos_roles.catalogo_completo("llegadas") if es_admin else [],
+        "personas_roles": ([{"usuario": e["usuario"], "nombre": e["nombre"]}
+                            for e in seguridad.listar() if e["activa"]]
+                           if es_admin else []),
         "aviso_ajustes": request.query_params.get("aviso"),
         # Precios de envío rebotados (regla 5, Nº7 del lote): el campo que
         # falló, el mensaje que va debajo de él y lo que se había tecleado
@@ -1107,6 +1124,143 @@ async def ajustes_admin(request: Request):
                                 status_code=303)
     aviso = "admin-dado" if dar else "admin-quitado"
     return RedirectResponse(f"/?tab=ajustes&aviso={aviso}", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Ajustes: roles y catálogos de venta (Item 1 de Jay, 5/10/2026).
+# Todas estas rutas son solo-admin (mismo candado central que el resto de
+# Ajustes) y solo tocan las tablas locales de datos_roles: ni Linear, ni
+# Twenty, ni Odoo. Cada POST redirige a la pestaña con su aviso.
+# ---------------------------------------------------------------------------
+
+def _vuelta_ajustes(aviso):
+    return RedirectResponse(f"/?tab=ajustes&aviso={aviso}", status_code=303)
+
+
+# Códigos de datos_roles -> aviso de la pestaña. Lo que no esté aquí sale
+# con su propio nombre (los códigos y los avisos comparten vocabulario).
+_AVISOS_ROLES = {
+    "vacio": "nombre-vacio",
+    "repetido": "nombre-repetido",
+    "no_existe": "fila-no-existe",
+    "empleada_invalida": "rol-empleada-invalida",
+    "deber_invalido": "deber-invalido",
+    "rol_con_otro_deber": "deber-rol-ocupado",
+    "deber_sin_persona": "deber-sin-persona",
+    "catalogo_invalido": "catalogo-invalido",
+}
+
+
+def _n_entero(valor):
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        return 0
+
+
+@app.post("/ajustes/roles/renombrar")
+async def ajustes_rol_renombrar(request: Request):
+    if (rechazo := _solo_admin(request)) is not None:
+        return rechazo
+    form = await request.form()
+    error = datos_roles.renombrar_rol(_n_entero(form.get("rol")),
+                                      form.get("nombre"))
+    return _vuelta_ajustes(_AVISOS_ROLES.get(error, "rol-renombrado"))
+
+
+@app.post("/ajustes/roles/duplicar")
+async def ajustes_rol_duplicar(request: Request):
+    """La copia para los pods: mismas personas, sin el deber. El nombre es
+    opcional (sin él sale "Copia de <rol>")."""
+    if (rechazo := _solo_admin(request)) is not None:
+        return rechazo
+    form = await request.form()
+    error, _ = datos_roles.duplicar_rol(_n_entero(form.get("rol")),
+                                        form.get("nombre"))
+    return _vuelta_ajustes(_AVISOS_ROLES.get(error, "rol-duplicado"))
+
+
+@app.post("/ajustes/roles/persona/poner")
+async def ajustes_rol_persona_poner(request: Request):
+    if (rechazo := _solo_admin(request)) is not None:
+        return rechazo
+    form = await request.form()
+    yo = request.state.empleada
+    error = datos_roles.poner_persona(_n_entero(form.get("rol")),
+                                      (form.get("usuario") or "").strip(),
+                                      yo.get("nombre") or yo["id"])
+    return _vuelta_ajustes(_AVISOS_ROLES.get(error, "persona-puesta"))
+
+
+@app.post("/ajustes/roles/persona/quitar")
+async def ajustes_rol_persona_quitar(request: Request):
+    """Quitar a alguien de un rol. Si el rol carga un deber y queda sin
+    nadie, el quite se aplica y el aviso lo DICE (deber-sin-persona): un
+    deber se reasigna, nunca se vacía en silencio."""
+    if (rechazo := _solo_admin(request)) is not None:
+        return rechazo
+    form = await request.form()
+    error = datos_roles.quitar_persona(_n_entero(form.get("rol")),
+                                       (form.get("usuario") or "").strip())
+    return _vuelta_ajustes(_AVISOS_ROLES.get(error, "persona-quitada"))
+
+
+@app.post("/ajustes/deberes")
+async def ajustes_deber_asignar(request: Request):
+    if (rechazo := _solo_admin(request)) is not None:
+        return rechazo
+    form = await request.form()
+    error = datos_roles.asignar_deber((form.get("deber") or "").strip(),
+                                      _n_entero(form.get("rol")))
+    return _vuelta_ajustes(_AVISOS_ROLES.get(error, "deber-asignado"))
+
+
+@app.post("/ajustes/catalogo/agregar")
+async def ajustes_catalogo_agregar(request: Request):
+    if (rechazo := _solo_admin(request)) is not None:
+        return rechazo
+    form = await request.form()
+    error = datos_roles.catalogo_agregar(
+        (form.get("tabla") or "").strip(), form.get("nombre"),
+        termino=form.get("termino") or "",
+        override_visible=form.get("override") == "1")
+    return _vuelta_ajustes(_AVISOS_ROLES.get(error, "catalogo-agregado"))
+
+
+@app.post("/ajustes/catalogo/renombrar")
+async def ajustes_catalogo_renombrar(request: Request):
+    if (rechazo := _solo_admin(request)) is not None:
+        return rechazo
+    form = await request.form()
+    error = datos_roles.catalogo_renombrar(
+        (form.get("tabla") or "").strip(), _n_entero(form.get("n")),
+        form.get("nombre"))
+    return _vuelta_ajustes(_AVISOS_ROLES.get(error, "catalogo-renombrado"))
+
+
+@app.post("/ajustes/catalogo/activar")
+async def ajustes_catalogo_activar(request: Request):
+    """Desactivar o reactivar una fila de catálogo. Nada se borra: la
+    inactiva se queda con su historia y sale de los selectores futuros."""
+    if (rechazo := _solo_admin(request)) is not None:
+        return rechazo
+    form = await request.form()
+    prender = form.get("activo") == "1"
+    error = datos_roles.catalogo_activar(
+        (form.get("tabla") or "").strip(), _n_entero(form.get("n")), prender)
+    return _vuelta_ajustes(_AVISOS_ROLES.get(
+        error, "catalogo-prendido" if prender else "catalogo-apagado"))
+
+
+@app.post("/ajustes/tipos/termino")
+async def ajustes_tipo_termino(request: Request):
+    if (rechazo := _solo_admin(request)) is not None:
+        return rechazo
+    form = await request.form()
+    error = datos_roles.fijar_termino(
+        _n_entero(form.get("n")), form.get("termino"),
+        form.get("override") == "1")
+    return _vuelta_ajustes(_AVISOS_ROLES.get(error, "termino-guardado"))
 
 
 # ---------------------------------------------------------------------------
