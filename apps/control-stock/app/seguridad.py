@@ -17,6 +17,7 @@ HttpOnly, con expiración deslizante.
 
 import hashlib
 import hmac
+import os
 import secrets
 from datetime import datetime, timedelta
 
@@ -66,7 +67,63 @@ def desactivar(usuario):
 def listar():
     with datos._db() as con:
         return [dict(f) for f in con.execute(
-            "SELECT usuario, nombre, email, activa FROM empleadas ORDER BY nombre")]
+            "SELECT usuario, nombre, email, email_verificado, activa, es_admin, "
+            "admin_cambiado_por, admin_cambiado_en FROM empleadas ORDER BY nombre")]
+
+
+# ---------------------------------------------------------------------------
+# Quién es admin (5/10/2026). LA decisión vive aquí y solo aquí: correo
+# fijado en el servidor (AJUSTES_ADMINS del .env, la semilla — siempre hay
+# un admin aunque la base se pierda) O empleada activa con es_admin=1,
+# dado desde la pantalla de Ajustes. Todas las pantallas solo-admin pasan
+# por es_admin(); a un fijado en el servidor no se le puede quitar el
+# admin por pantalla.
+# ---------------------------------------------------------------------------
+
+def admins_fijados():
+    """Emails (o usuarios) de AJUSTES_ADMINS, separados por coma."""
+    return {a.strip().lower() for a in os.environ.get("AJUSTES_ADMINS", "").split(",")
+            if a.strip()}
+
+
+def fijado_en_servidor(usuario, email=None, email_verificado=False):
+    """True si el usuario (o su email, solo VERIFICADO) está en
+    AJUSTES_ADMINS. El email anotado a mano en Mi cuenta no cuenta: si no,
+    cualquiera se anotaría el email de una admin."""
+    admins = admins_fijados()
+    return ((usuario or "").lower() in admins
+            or ((email or "").lower() in admins and bool(email_verificado)))
+
+
+def es_admin(empleada):
+    """LA regla de admin para todas las pantallas: fijado en el servidor,
+    o empleada activa con es_admin=1. `empleada` es el dict de la sesión."""
+    if fijado_en_servidor(empleada["id"], empleada.get("email"),
+                          empleada.get("email_verificado")):
+        return True
+    with datos._db() as con:
+        fila = con.execute(
+            "SELECT es_admin FROM empleadas WHERE usuario=? AND activa=1",
+            (empleada["id"],)).fetchone()
+    return bool(fila and fila["es_admin"])
+
+
+def fijar_admin(usuario, dar, por):
+    """Da o quita el admin por pantalla, con su rastro (quién y cuándo, en
+    cada cambio). 'no_existe' si no hay empleada activa con ese usuario;
+    None si quedó guardado. Las reglas de quién puede llamar esto (solo un
+    admin, nadie se auto-quita, los fijados no se quitan) viven en la ruta."""
+    with datos._db() as con:
+        fila = con.execute(
+            "SELECT 1 FROM empleadas WHERE usuario=? AND activa=1",
+            (usuario,)).fetchone()
+        if fila is None:
+            return "no_existe"
+        con.execute(
+            "UPDATE empleadas SET es_admin=?, admin_cambiado_por=?, "
+            "admin_cambiado_en=? WHERE usuario=?",
+            (1 if dar else 0, por, datos.ahora_iso(), usuario))
+    return None
 
 
 def verificar(usuario, contrasena):

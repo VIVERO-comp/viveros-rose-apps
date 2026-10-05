@@ -857,6 +857,12 @@ button.enlace-sub{
   font-size:12.5px;line-height:1.5;margin-bottom:12px;
 }
 .acceso-item form{display:flex}
+/* Admin desde Ajustes (5/10/2026): el chip de la fila «Con acceso» y el
+   guion de quien no es admin. El botón deshabilitado (uno mismo, o un
+   admin fijado en el servidor) usa el btn-linea de siempre, apagado. */
+.b-admin{background:rgba(201,162,77,.18);color:#8a6a1f;margin-left:6px}
+.admin-no{font-size:11px;color:var(--texto-suave);margin-left:6px}
+.acciones-acceso .btn[disabled]{opacity:.45;cursor:not-allowed}
 .btn-chico{font-size:11.5px;padding:8px 12px;border-radius:11px}
 .sin-filas{font-size:12px;color:var(--texto-suave);margin:2px 2px 16px}
 /* Dispositivos de WhatsApp (Fase A, 25/09/2026): el nombre se escribe en la
