@@ -705,6 +705,187 @@
     </details>
 
     {% if es_admin %}
+    {# Item 1 de Jay (5/10/2026): roles, deberes y catálogos de venta. Todo
+       son datos locales (datos_roles): nada de esto toca Linear, Twenty ni
+       Odoo, y nada se borra — los catálogos se DESACTIVAN. Los nombres de
+       personas vienen de la base (semilla + pantalla), nunca del código. #}
+    <details class="ajuste-d">
+      <summary><span class="que"><b>Roles y catálogos de venta</b><span>Quién hace qué · marcas, tipos de venta, llegadas y términos</span></span><span class="flecha">›</span></summary>
+      <div class="ajuste-cuerpo">
+    {% if aviso_ajustes == 'rol-renombrado' %}<div class="aviso-ok">Rol renombrado.</div>
+    {% elif aviso_ajustes == 'rol-duplicado' %}<div class="aviso-ok">Rol duplicado, con las mismas personas. Ajústale el nombre y el equipo a la copia.</div>
+    {% elif aviso_ajustes == 'persona-puesta' %}<div class="aviso-ok">Listo: la persona quedó en el rol.</div>
+    {% elif aviso_ajustes == 'persona-quitada' %}<div class="aviso-ok">Persona quitada del rol.</div>
+    {% elif aviso_ajustes == 'deber-asignado' %}<div class="aviso-ok">Deber reasignado: ahora lo carga ese rol.</div>
+    {% elif aviso_ajustes == 'deber-sin-persona' %}<div class="aviso-error">Quedó hecho, pero ese deber quedó <b>sin persona</b>: ponle a alguien al rol que lo carga — ese trabajo no puede quedar huérfano.</div>
+    {% elif aviso_ajustes == 'deber-rol-ocupado' %}<div class="aviso-error">Ese rol ya carga otro deber. Un rol carga un deber como mucho: duplica el rol si hace falta.</div>
+    {% elif aviso_ajustes == 'deber-invalido' %}<div class="aviso-error">Ese deber no existe.</div>
+    {% elif aviso_ajustes == 'rol-empleada-invalida' %}<div class="aviso-error">Esa persona no es una empleada activa de la app.</div>
+    {% elif aviso_ajustes == 'nombre-vacio' %}<div class="aviso-error">El nombre no puede quedar vacío (máximo 60 letras). No se guardó.</div>
+    {% elif aviso_ajustes == 'nombre-repetido' %}<div class="aviso-error">Ya existe uno con ese nombre (aunque esté desactivado). No se guardó.</div>
+    {% elif aviso_ajustes == 'fila-no-existe' %}<div class="aviso-error">Esa fila ya no existe. Recarga la pestaña.</div>
+    {% elif aviso_ajustes == 'catalogo-invalido' %}<div class="aviso-error">Ese catálogo no existe.</div>
+    {% elif aviso_ajustes == 'catalogo-agregado' %}<div class="aviso-ok">Agregado. Ya puede usarse.</div>
+    {% elif aviso_ajustes == 'catalogo-renombrado' %}<div class="aviso-ok">Renombrado.</div>
+    {% elif aviso_ajustes == 'catalogo-apagado' %}<div class="aviso-ok">Desactivado. No se borró nada: deja de ofrecerse en los selectores y se puede reactivar aquí.</div>
+    {% elif aviso_ajustes == 'catalogo-prendido' %}<div class="aviso-ok">Reactivado: vuelve a ofrecerse.</div>
+    {% elif aviso_ajustes == 'termino-guardado' %}<div class="aviso-ok">Término guardado. Las cotizaciones de ese tipo saldrán con él.</div>{% endif %}
+
+    <div class="seccion-titulo">Los 3 deberes</div>
+    <p class="pie-ajuste">El deber se queda aunque cambie la persona: aquí se
+      dice qué rol lo carga, y las personas se ponen en el rol, abajo.</p>
+    {% for d in deberes_ajustes %}
+    <div class="historial-item acceso-item rol-item">
+      <div><b>{{ d.titulo }}</b>
+        {% if d.rol %}<span class="badge b-admin">{{ d.rol.nombre }}</span>{% endif %}
+        <small>{{ d.que_hace }}{% if d.personas %} · hoy: {% for p in d.personas %}{{ p.nombre }}{{ '' if loop.last else ', ' }}{% endfor %}{% endif %}</small>
+        {% if d.aviso == 'sin_persona' %}<small class="rol-alerta">⚠ El rol que lo carga no tiene a nadie: ponle una persona abajo.</small>
+        {% elif d.aviso == 'sin_rol' %}<small class="rol-alerta">⚠ Ningún rol carga este deber: asígnale uno aquí.</small>{% endif %}
+      </div>
+      <form method="post" action="/ajustes/deberes" class="form-rol">
+        <input type="hidden" name="deber" value="{{ d.clave }}">
+        <select name="rol">
+          {% for rol in roles_ajustes if rol.activo and (not rol.deber or rol.deber == d.clave) %}
+          <option value="{{ rol.n }}" {% if d.rol and d.rol.n == rol.n %}selected{% endif %}>{{ rol.nombre }}</option>
+          {% endfor %}
+        </select>
+        <button class="btn btn-linea btn-chico" type="submit">Guardar</button>
+      </form>
+    </div>
+    {% endfor %}
+
+    <div class="seccion-titulo">Roles del equipo</div>
+    <p class="pie-ajuste">Un rol es un espacio con nombre donde vive trabajo:
+      se renombra, se duplica (para partirlo en equipos) y puede tener varias
+      personas. Esto no toca las etiquetas <b>Resp:</b> de Linear.</p>
+    {% for rol in roles_ajustes if rol.activo %}
+    <div class="rol-card">
+      <div class="rol-cab">
+        <form method="post" action="/ajustes/roles/renombrar" class="form-rol">
+          <input type="hidden" name="rol" value="{{ rol.n }}">
+          <input name="nombre" type="text" maxlength="60" value="{{ rol.nombre }}" required>
+          <button class="btn btn-linea btn-chico" type="submit">Renombrar</button>
+        </form>
+        {% if rol.deber %}<span class="badge b-admin">deber: {% for d in deberes_ajustes if d.clave == rol.deber %}{{ d.titulo }}{% endfor %}</span>{% endif %}
+        <form method="post" action="/ajustes/roles/duplicar"
+              onsubmit="return confirm('¿Duplicar {{ rol.nombre }}? La copia nace con las mismas personas y sin deber, lista para renombrarla.')">
+          <input type="hidden" name="rol" value="{{ rol.n }}">
+          <button class="btn btn-linea btn-chico" type="submit">Duplicar</button>
+        </form>
+      </div>
+      <div class="rol-personas">
+        {% for p in rol.personas %}
+        <form method="post" action="/ajustes/roles/persona/quitar" class="chip-persona{% if not p.activa %} apagada{% endif %}"
+              onsubmit="return confirm('¿Quitar a {{ p.nombre }} de {{ rol.nombre }}?{% if rol.deber %} Este rol carga un deber: si queda sin nadie, el aviso te lo va a decir.{% endif %}')">
+          <span>{{ p.nombre }}{% if not p.activa %} · sin acceso{% endif %}</span>
+          <input type="hidden" name="rol" value="{{ rol.n }}">
+          <input type="hidden" name="usuario" value="{{ p.usuario }}">
+          <button type="submit" aria-label="Quitar a {{ p.nombre }}">✕</button>
+        </form>
+        {% else %}
+        <span class="rol-alerta">Sin personas{% if rol.deber %} — y este rol carga un deber: ponle a alguien{% endif %}.</span>
+        {% endfor %}
+        <form method="post" action="/ajustes/roles/persona/poner" class="form-rol">
+          <input type="hidden" name="rol" value="{{ rol.n }}">
+          <select name="usuario" required>
+            <option value="" disabled selected>Poner a…</option>
+            {% for e in personas_roles %}<option value="{{ e.usuario }}">{{ e.nombre }}</option>{% endfor %}
+          </select>
+          <button class="btn btn-linea btn-chico" type="submit">Poner</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+
+    <div class="seccion-titulo">Marcas</div>
+    {% for m in marcas_ajustes %}
+    <div class="historial-item acceso-item rol-item{% if not m.activo %} fila-apagada{% endif %}">
+      <form method="post" action="/ajustes/catalogo/renombrar" class="form-rol">
+        <input type="hidden" name="tabla" value="marcas">
+        <input type="hidden" name="n" value="{{ m.n }}">
+        <input name="nombre" type="text" maxlength="60" value="{{ m.nombre }}" required {% if not m.activo %}disabled{% endif %}>
+        {% if m.activo %}<button class="btn btn-linea btn-chico" type="submit">Guardar</button>{% endif %}
+      </form>
+      <form method="post" action="/ajustes/catalogo/activar">
+        <input type="hidden" name="tabla" value="marcas">
+        <input type="hidden" name="n" value="{{ m.n }}">
+        <input type="hidden" name="activo" value="{{ '0' if m.activo else '1' }}">
+        <button class="btn btn-linea btn-chico" type="submit">{{ 'Desactivar' if m.activo else 'Reactivar' }}</button>
+      </form>
+    </div>
+    {% endfor %}
+    <form class="form-rol form-agregar-cat" method="post" action="/ajustes/catalogo/agregar">
+      <input type="hidden" name="tabla" value="marcas">
+      <input name="nombre" type="text" maxlength="60" placeholder="Marca nueva" required>
+      <button class="btn btn-linea btn-chico" type="submit">Agregar</button>
+    </form>
+
+    <div class="seccion-titulo">Tipos de venta y términos por defecto</div>
+    <p class="pie-ajuste">El término es lo que la cotización de ese tipo va a
+      mostrar por defecto (el consumo llega con el item 5). <b>Override
+      visible</b>: al cotizar se ofrece cambiarlo a la vista; sin la casilla,
+      el default manda (plantas: 100% antes, sin crédito por accidente).</p>
+    {% for t in tipos_ajustes %}
+    <div class="rol-card{% if not t.activo %} fila-apagada{% endif %}">
+      <div class="rol-cab">
+        <form method="post" action="/ajustes/catalogo/renombrar" class="form-rol">
+          <input type="hidden" name="tabla" value="tipos_venta">
+          <input type="hidden" name="n" value="{{ t.n }}">
+          <input name="nombre" type="text" maxlength="60" value="{{ t.nombre }}" required {% if not t.activo %}disabled{% endif %}>
+          {% if t.activo %}<button class="btn btn-linea btn-chico" type="submit">Guardar</button>{% endif %}
+        </form>
+        <form method="post" action="/ajustes/catalogo/activar">
+          <input type="hidden" name="tabla" value="tipos_venta">
+          <input type="hidden" name="n" value="{{ t.n }}">
+          <input type="hidden" name="activo" value="{{ '0' if t.activo else '1' }}">
+          <button class="btn btn-linea btn-chico" type="submit">{{ 'Desactivar' if t.activo else 'Reactivar' }}</button>
+        </form>
+      </div>
+      {% if t.activo %}
+      <form method="post" action="/ajustes/tipos/termino" class="form-rol form-termino">
+        <input type="hidden" name="n" value="{{ t.n }}">
+        <input name="termino" type="text" maxlength="120" value="{{ t.termino_default }}" placeholder="Término por defecto (ej: 100% antes de proceder)">
+        <label class="casilla-override"><input type="checkbox" name="override" value="1" {% if t.override_visible %}checked{% endif %}> Override visible</label>
+        <button class="btn btn-linea btn-chico" type="submit">Guardar término</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+    <form class="form-rol form-agregar-cat" method="post" action="/ajustes/catalogo/agregar">
+      <input type="hidden" name="tabla" value="tipos_venta">
+      <input type="hidden" name="override" value="1">
+      <input name="nombre" type="text" maxlength="60" placeholder="Tipo de venta nuevo" required>
+      <input name="termino" type="text" maxlength="120" placeholder="Su término por defecto">
+      <button class="btn btn-linea btn-chico" type="submit">Agregar</button>
+    </form>
+
+    <div class="seccion-titulo">Cómo llegan los leads</div>
+    <p class="pie-ajuste">WhatsApp crea el lead solo; cualquier otra llegada
+      se anotará a mano al crear el lead (item 3). La marca no es una llegada.</p>
+    {% for l in llegadas_ajustes %}
+    <div class="historial-item acceso-item rol-item{% if not l.activo %} fila-apagada{% endif %}">
+      <form method="post" action="/ajustes/catalogo/renombrar" class="form-rol">
+        <input type="hidden" name="tabla" value="llegadas">
+        <input type="hidden" name="n" value="{{ l.n }}">
+        <input name="nombre" type="text" maxlength="60" value="{{ l.nombre }}" required {% if not l.activo %}disabled{% endif %}>
+        {% if l.activo %}<button class="btn btn-linea btn-chico" type="submit">Guardar</button>{% endif %}
+      </form>
+      <form method="post" action="/ajustes/catalogo/activar">
+        <input type="hidden" name="tabla" value="llegadas">
+        <input type="hidden" name="n" value="{{ l.n }}">
+        <input type="hidden" name="activo" value="{{ '0' if l.activo else '1' }}">
+        <button class="btn btn-linea btn-chico" type="submit">{{ 'Desactivar' if l.activo else 'Reactivar' }}</button>
+      </form>
+    </div>
+    {% endfor %}
+    <form class="form-rol form-agregar-cat" method="post" action="/ajustes/catalogo/agregar">
+      <input type="hidden" name="tabla" value="llegadas">
+      <input name="nombre" type="text" maxlength="60" placeholder="Llegada nueva" required>
+      <button class="btn btn-linea btn-chico" type="submit">Agregar</button>
+    </form>
+      </div>
+    </details>
+
     <details class="ajuste-d">
       <summary><span class="que"><b>Precios de envío</b><span>Lo que cobra Vender por llevar el pedido · sin desplegar</span></span><span class="flecha">›</span></summary>
       <div class="ajuste-cuerpo">
