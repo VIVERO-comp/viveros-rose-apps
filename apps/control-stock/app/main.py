@@ -29,9 +29,9 @@ from . import (acceso_google, agenda, altas, avisos, calculos, calendario,
                calendario_google, colores, compra_odoo, compras,
                calendario_ics, conteos, control, conversaciones, cot_lead,
                cotizaciones, coworkers, crm_twenty, datos, datos_roles,
-               fichas, fotos, linear_leads, mantenimiento, proveedores,
-               resumen, seguridad, vehiculos, venta_estado, ventas,
-               wa_autor)
+               entregas, fichas, fotos, linear_leads, mantenimiento,
+               proveedores, resumen, seguridad, vehiculos, venta_estado,
+               ventas, wa_autor)
 
 app = FastAPI(title="Control Viverorose")
 
@@ -230,8 +230,10 @@ calendario_google.iniciar_tablas()
 # términos por defecto. Mismo patrón: crear al importar es idempotente, y
 # la semilla solo entra si la tabla nace vacía.
 datos_roles.iniciar_tablas()
-# Items 5-6-7 de Jay (5/10/2026): los 3 estados con sus dos hechos.
+# Items 5-6-7 de Jay (5/10/2026): los 3 estados con sus dos hechos, y la
+# entrega como obligación nombrada (dirección + asignado).
 venta_estado.iniciar_tablas()
+entregas.iniciar_tablas()
 calendario_google.arrancar_hilo()
 # El calendario arranca calentándose en fondo (catálogo + mes en curso):
 # ni la primera visita del día espera a Linear (velocidad, 22/09/2026).
@@ -1558,6 +1560,18 @@ def _lista_vender(request):
     filas.sort(key=lambda f: (_numero_de_orden(f["orden"]) is not None,
                               _numero_de_orden(f["orden"]) or 0),
               reverse=True)
+    # El chip de los 3 estados (items 5-7): una consulta para toda la
+    # lista; una venta sin fila está en 1 (Acordada).
+    estados3 = venta_estado.estados_de()
+    for fila in filas:
+        origen = "venta" if fila["tipo"] == "venta" else "servicio"
+        numero = (estados3.get((origen, fila["n"])) or {}).get("estado", 1)
+        fila["estado3"] = {
+            "n": numero,
+            "texto": venta_estado.ETIQUETA_CORTA[numero],
+            "css": "b-ok" if numero >= 2 else "b-bajo",
+            "href": f"/venta/estado/{origen}/{fila['n']}",
+        }
     return filas, aviso
 
 
@@ -2780,6 +2794,162 @@ async def venta_cobrar_confirmar(request: Request, n: int):
     # La URL vieja sigue aceptando el POST (nada desaparece), pero hace
     # lo NUEVO: registrar el pago sin entregar.
     return await _registrar_pago_venta(request, n)
+
+
+# ---------------------------------------------------------------------------
+# La ficha «Estado / Entrega» de una venta (items 5-6-7 de Jay): los 3
+# estados con sus candados, los dos hechos, el término del trato y la
+# entrega como obligación nombrada (dirección + asignado, con historial).
+# Todo lo que la plantilla pinta se decide acá, en Python (regla 10).
+# ---------------------------------------------------------------------------
+
+def _registro_local(origen, n):
+    """La venta local detrás de la ficha: ventas_locales o
+    cotizaciones_servicio, con las llaves que la ficha necesita."""
+    if origen == "venta":
+        registro = ventas.obtener_venta(n)
+    else:
+        registro = cotizaciones.obtener(n)
+    return registro
+
+
+def _quien_es(request):
+    empleada = request.state.empleada
+    return empleada["id"], (empleada.get("nombre") or empleada["id"])
+
+
+def _url_estado(origen, n, error="", aviso=""):
+    url = f"/venta/estado/{origen}/{n}"
+    partes = []
+    if error:
+        partes.append("error=" + quote(error))
+    if aviso:
+        partes.append("aviso=" + quote(aviso))
+    return url + ("?" + "&".join(partes) if partes else "")
+
+
+_TEXTO_ERROR_ESTADO = {
+    "falta_pago": "Para pasar a 2 falta el pago registrado: el chip no "
+                  "escribe plata.",
+    "faltan_hechos": "El 3 exige los DOS hechos: pago confirmado Y "
+                     "entrega marcada — nunca uno solo.",
+    "falta_saldo": "El 3 exige los términos satisfechos: falta cobrar el "
+                   "saldo (un depósito no cierra).",
+    "solo_system_manager": "Eso lo hace quien carga el deber de system "
+                           "manager (Ajustes → Roles).",
+    "falta_asignado": "Ponle un asignado a la entrega antes de marcarla: "
+                      "la entrega es una obligación con nombre.",
+    "cerrada": "La venta ya cerró (estado 3): la obligación queda como "
+               "historia y no se edita.",
+    "estado_invalido": "Ese estado no existe.",
+}
+
+
+@app.get("/venta/estado/{origen}/{n}")
+def venta_estado_ficha(request: Request, origen: str, n: int,
+                       error: str = "", aviso: str = ""):
+    if origen not in venta_estado.ORIGENES:
+        return RedirectResponse("/venta", status_code=303)
+    registro = _registro_local(origen, n)
+    if registro is None:
+        return RedirectResponse("/venta", status_code=303)
+    usuario, _nombre = _quien_es(request)
+    hechos = venta_estado.estado_de(origen, n)
+    # Los botones del chip a mano: cada estado con su candado ya decidido
+    # (la plantilla no sabe de reglas, solo pinta).
+    botones = []
+    for numero, texto in venta_estado.ESTADOS.items():
+        bloqueo = venta_estado.bloqueo_manual(hechos, numero, usuario)
+        botones.append({
+            "n": numero, "texto": texto,
+            "actual": numero == hechos["estado"],
+            "permitido": bloqueo is None and numero != hechos["estado"],
+            "motivo": venta_estado.MOTIVO_BLOQUEO.get(bloqueo, ""),
+        })
+    manager = datos_roles.quien_ocupa("system_manager")
+    termino = venta_estado.termino_de(origen, n)
+    return plantillas.TemplateResponse(request, "venta_trato.html", {
+        "origen": origen, "n": n,
+        "registro": registro,
+        "titulo_doc": f"{registro.get('orden') or ''} · {registro.get('cliente') or ''}",
+        "hechos": hechos,
+        "estado_texto": venta_estado.ESTADOS[hechos["estado"]],
+        "botones": botones,
+        "soy_manager": venta_estado.es_system_manager(usuario),
+        "manager_nombres": ", ".join(
+            p["nombre"] for p in (manager or {}).get("personas", [])) or "—",
+        "termino": termino,
+        "overrides": venta_estado.overrides_de(origen, n),
+        "obligacion": entregas.obligacion_de(origen, n),
+        "historial_entrega": entregas.historial_de(origen, n),
+        "historial_estado": venta_estado.historial_de(origen, n),
+        "empleadas": [e for e in seguridad.listar() if e["activa"]],
+        "hoy": datetime.now(datos.ZONA_PANAMA).date().isoformat(),
+        # El acceso directo a Registrar pago, solo para la venta de
+        # plantas que todavía no pasó por él.
+        "puede_registrar_pago": (origen == "venta"
+                                 and registro.get("estado")
+                                 in ("cotizacion", "confirmada", "entregada",
+                                     "facturada")),
+        "error_texto": _TEXTO_ERROR_ESTADO.get(error, error or None),
+        "aviso": aviso or None,
+    })
+
+
+@app.post("/venta/estado/{origen}/{n}")
+async def venta_estado_manual(request: Request, origen: str, n: int):
+    if origen not in venta_estado.ORIGENES:
+        return RedirectResponse("/venta", status_code=303)
+    form = await request.form()
+    usuario, nombre = _quien_es(request)
+    try:
+        estado = int(form.get("estado") or 0)
+    except ValueError:
+        estado = 0
+    error = venta_estado.poner_estado_manual(origen, n, estado,
+                                             usuario, nombre)
+    aviso = "" if error else f"Estado puesto en {estado}."
+    return RedirectResponse(_url_estado(origen, n, error or "", aviso),
+                            status_code=303)
+
+
+@app.post("/venta/estado/{origen}/{n}/entrega")
+async def venta_estado_obligacion(request: Request, origen: str, n: int):
+    """Guardar la obligación nombrada: dirección + asignado (empleada
+    activa del selector, o el texto libre si se escribió — mensajero,
+    tercero, contratista). Editable hasta cerrar."""
+    if origen not in venta_estado.ORIGENES:
+        return RedirectResponse("/venta", status_code=303)
+    form = await request.form()
+    _usuario, nombre = _quien_es(request)
+    libre = (form.get("asignado_libre") or "").strip()
+    asignado = libre or (form.get("asignado_sel") or "").strip()
+    error = entregas.guardar(origen, n, form.get("direccion"),
+                             asignado, nombre)
+    aviso = "" if error else "Entrega guardada."
+    return RedirectResponse(_url_estado(origen, n, error or "", aviso),
+                            status_code=303)
+
+
+@app.post("/venta/estado/{origen}/{n}/entregada")
+async def venta_estado_entregada(request: Request, origen: str, n: int):
+    """«Marcar entregada»: solo el system manager; exige asignado (con
+    aviso visible); valida la salida en Odoo AHÍ y fija la fecha REAL de
+    entrega — la que usará delivered revenue."""
+    if origen not in venta_estado.ORIGENES:
+        return RedirectResponse("/venta", status_code=303)
+    form = await request.form()
+    usuario, nombre = _quien_es(request)
+    error, resultado = entregas.marcar_entregada(
+        origen, n, usuario, nombre, fecha=(form.get("fecha") or "").strip())
+    if error == "odoo":
+        texto = ("Odoo no aceptó la salida: "
+                 f"{resultado.get('detalle') or ''} — nada quedó marcado.")
+        return RedirectResponse(_url_estado(origen, n, error=texto),
+                                status_code=303)
+    aviso = "" if error else "Entrega marcada."
+    return RedirectResponse(_url_estado(origen, n, error or "", aviso),
+                            status_code=303)
 
 
 def cabeceras_descarga(nombre):

@@ -115,12 +115,18 @@
         <small>{{ item.fecha_texto }}{% if item.factura %} · Factura {{ item.factura }}{% endif %}{% if item.metodo %} · {{ "Yappy" if item.metodo == "yappy" else "Efectivo" }}{% endif %}</small>
         {% if item.resumen %}<small class="compra">{{ item.resumen }}</small>{% endif %}
       </div>
+      <span>
       {% if item.estado == "pagado" %}<span class="badge b-ok">Pagado</span>
       {% elif item.estado == "cotizacion" %}<span class="badge b-bajo">Cotización</span>
       {# "vendida" (28/09/2026): "Guardar venta" — confirmada, el cobro
          vive en el kanban de Odoo, igual que las cotizaciones de servicio. #}
       {% elif item.estado == "vendida" %}<span class="badge b-ok">Venta</span>
       {% else %}<span class="badge b-critico">{{ item.etiqueta_estado }}</span>{% endif %}
+      {# El chip de los 3 estados (items 5-7): 1 Acordada · 2 Plata
+         confirmada · 3 Cerrada. Lo decide Python (main._lista_vender). #}
+      <a class="badge {{ item.estado3.css }}" href="{{ item.estado3.href }}"
+         style="text-decoration:none">{{ item.estado3.texto }}</a>
+      </span>
     </div>
     {% if item.ultimo_error %}
     <div class="error-venta">Último intento: {{ item.ultimo_error }}</div>
@@ -191,8 +197,13 @@
          y Quitar solo mientras siga en cotización: facturada, ni los
          botones — y cancelada nunca llega aquí (main._lista_vender la
          filtra antes de armar la lista). #}
+      <span>
       {% if item.facturada %}<span class="badge b-ok">Facturado</span>
       {% else %}<span class="badge b-bajo">Cotización</span>{% endif %}
+      {# El mismo chip de los 3 estados que la tarjeta de venta. #}
+      <a class="badge {{ item.estado3.css }}" href="{{ item.estado3.href }}"
+         style="text-decoration:none">{{ item.estado3.texto }}</a>
+      </span>
     </div>
     <div class="venta-acciones">
       {# UN solo control (Abraham, 30/09/2026): «Descargar / Compartir»

@@ -52,6 +52,18 @@ ESTADOS = {
     3: "Entregada y pagada · cerrada",
 }
 
+# El chip corto de la lista de Vender (la etiqueta larga es de la ficha).
+ETIQUETA_CORTA = {1: "1 · Acordada", 2: "2 · Plata confirmada",
+                  3: "3 · Cerrada"}
+
+# Por qué un estado no se puede poner a mano, en palabras de pantalla.
+MOTIVO_BLOQUEO = {
+    "falta_pago": "falta el pago registrado",
+    "faltan_hechos": "exige pago confirmado Y entrega marcada",
+    "falta_saldo": "falta cobrar el saldo (los términos del trato)",
+    "solo_system_manager": "solo el system manager",
+}
+
 # El nombre SEMILLA del tipo que cierra con pago + entrega (su término
 # default es pagar completo, así que el pago del flujo ES el saldo). Se
 # compara normalizado; un tipo renombrado en Ajustes cae al lado
@@ -309,6 +321,29 @@ def marcar_entregada(origen, venta, por_usuario, por_nombre=None,
     return None, estado_de(origen, venta)
 
 
+def bloqueo_manual(fila, estado, por_usuario):
+    """Por qué ESTE usuario no puede poner ese estado a mano sobre esta
+    fila (None = puede). La ficha lo usa para pintar los botones con su
+    motivo; poner_estado_manual lo usa como EL candado — una sola regla.
+    """
+    estado = int(estado)
+    actual = int(fila["estado"])
+    if estado == actual:
+        return None
+    if estado < actual and not es_system_manager(por_usuario):
+        return "solo_system_manager"
+    if estado == 2 and not fila["pago_confirmado"]:
+        return "falta_pago"
+    if estado == 3:
+        if not es_system_manager(por_usuario):
+            return "solo_system_manager"
+        if not (fila["pago_confirmado"] and fila["entrega_marcada"]):
+            return "faltan_hechos"
+        if not fila["pago_completo"]:
+            return "falta_saldo"
+    return None
+
+
 def poner_estado_manual(origen, venta, estado, por_usuario, por_nombre=None):
     """El chip a mano, con candado. Cualquiera sube 1→2 si el pago está
     registrado; el 3 es SOLO del system manager y EXIGE los dos hechos
@@ -326,17 +361,9 @@ def poner_estado_manual(origen, venta, estado, por_usuario, por_nombre=None):
         actual = int(fila["estado"])
         if estado == actual:
             return None
-        if estado < actual and not es_system_manager(por_usuario):
-            return "solo_system_manager"
-        if estado == 2 and not fila["pago_confirmado"]:
-            return "falta_pago"
-        if estado == 3:
-            if not es_system_manager(por_usuario):
-                return "solo_system_manager"
-            if not (fila["pago_confirmado"] and fila["entrega_marcada"]):
-                return "faltan_hechos"
-            if not fila["pago_completo"]:
-                return "falta_saldo"
+        bloqueo = bloqueo_manual(fila, estado, por_usuario)
+        if bloqueo:
+            return bloqueo
         con.execute("UPDATE venta_estado SET estado=? WHERE origen=? AND venta=?",
                     (estado, origen, int(venta)))
         con.execute(

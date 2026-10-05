@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block titulo %}Estado / Entrega — Control Viverorose{% endblock %}
+
+{% block contenido %}
+<style>
+  /* Local a esta ficha: tarjetas angostas, chips y el historial. */
+  .vt-chip{display:inline-block;padding:4px 12px;border-radius:999px;font-size:13px;font-weight:700}
+  .vt-1{background:#fef3c7;color:#a16207}
+  .vt-2{background:#d9ecdc;color:#2e6c40}
+  .vt-3{background:#18181b;color:#fff}
+  .vt-estado{display:flex;align-items:center;gap:10px;margin:6px 0;flex-wrap:wrap}
+  .vt-estado form{display:inline;margin:0}
+  .vt-motivo{font-size:12px;color:var(--texto-suave)}
+  .vt-hist{list-style:none;padding:0;margin:6px 0 0;font-size:12.5px;color:var(--texto-suave)}
+  .vt-hist li{padding:3px 0;border-top:1px dashed var(--noche-3)}
+  .vt-form label{display:block;font-size:12.5px;font-weight:600;margin:10px 0 4px}
+  .vt-form input[type=text], .vt-form select, .vt-form input[type=date]{width:100%;box-sizing:border-box}
+</style>
+{% with bm_titulo='Estado / Entrega', bm_volver='/venta' %}{% include '_barra_movil.html' %}{% endwith %}
+<header>
+  <div class="brand">
+    <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
+    <div>
+      <h1>Estado / Entrega</h1>
+      <small>{{ titulo_doc }}</small>
+    </div>
+  </div>
+  <a class="x-salir" href="/venta" aria-label="Volver a Vender">✕</a>
+</header>
+
+<main class="angosto">
+  <a class="volver" href="/venta">← Volver a Vender</a>
+
+  {% if error_texto %}<div class="aviso-error">{{ error_texto }}</div>{% endif %}
+  {% if aviso %}<div class="aviso-ok">{{ aviso }}</div>{% endif %}
+
+  {# ---- El estado, con sus candados ya decididos en Python ---- #}
+  <div class="seccion-titulo">Estado del trato</div>
+  <div class="inv-card">
+    <p style="margin:0 0 8px"><span class="vt-chip vt-{{ hechos.estado }}">{{ estado_texto }}</span></p>
+    {% for b in botones %}
+    <div class="vt-estado">
+      <span class="vt-chip vt-{{ b.n }}" style="opacity:{{ '1' if b.actual else '.55' }}">{{ b.n }}</span>
+      <span>{{ b.texto }}</span>
+      {% if b.actual %}
+        <b>← actual</b>
+      {% elif b.permitido %}
+        <form method="post" action="/venta/estado/{{ origen }}/{{ n }}">
+          <input type="hidden" name="estado" value="{{ b.n }}">
+          <button class="btn btn-linea" type="submit">Poner</button>
+        </form>
+      {% else %}
+        <span class="vt-motivo">({{ b.motivo }})</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+    <p class="edit-nota">El pago nunca escribe «entregada»; la entrega nunca
+      escribe «pagada». El 3 exige los dos hechos.</p>
+  </div>
+
+  {# ---- Los dos hechos ---- #}
+  <div class="seccion-titulo" style="margin-top:16px">Los dos hechos</div>
+  <div class="inv-card resumen-cobro">
+    <div class="fila"><span>Pago confirmado</span>
+      <b>{% if hechos.pago_confirmado %}Sí{% if not hechos.pago_completo %} · depósito (saldo pendiente){% endif %}{% else %}Todavía no{% endif %}</b></div>
+    {% if hechos.pago_confirmado %}
+    <div class="fila"><span>Quién / cuándo</span>
+      <b>{{ hechos.pago_por or "—" }} · {{ (hechos.pago_en or "")[:10] }}</b></div>
+    {% if hechos.pago_monto is not none %}
+    <div class="fila"><span>Monto (sin ITBMS)</span><b>{{ hechos.pago_monto | dinero }}</b></div>
+    {% endif %}
+    {% endif %}
+    <div class="fila"><span>Entrega marcada</span>
+      <b>{% if hechos.entrega_marcada %}Sí · {{ hechos.fecha_entrega }}{% else %}Todavía no{% endif %}</b></div>
+    {% if hechos.entrega_marcada %}
+    <div class="fila"><span>Quién la marcó</span><b>{{ hechos.entrega_por or "—" }}</b></div>
+    {% endif %}
+  </div>
+  {% if puede_registrar_pago %}
+  <p style="margin:8px 0 0"><a class="btn btn-linea" href="/venta/pago/{{ n }}">Registrar pago →</a></p>
+  {% endif %}
+
+  {# ---- El término del trato ---- #}
+  <div class="seccion-titulo" style="margin-top:16px">Términos del trato</div>
+  <div class="inv-card">
+    {% if termino %}
+    <p style="margin:0"><b>{{ termino.termino or "—" }}</b>
+      <span class="vt-motivo">· tipo {{ termino.tipo_venta or "—" }}</span></p>
+    {% else %}
+    <p style="margin:0" class="vt-motivo">Esta venta no tiene término guardado
+      (es de antes del cambio, o se creó por fuera).</p>
+    {% endif %}
+    {% if overrides %}
+    <ul class="vt-hist">
+      {% for o in overrides %}
+      <li>Override: «{{ o.texto }}» — el default decía «{{ o.default_que_habia or "—" }}» · {{ o.por }} · {{ o.en[:16] }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  {# ---- La entrega es una obligación nombrada (item 7) ---- #}
+  <div class="seccion-titulo" style="margin-top:16px">La entrega: dirección y asignado</div>
+  <div class="inv-card vt-form">
+    {% if hechos.estado == 3 %}
+    <p style="margin:0">Dirección: <b>{{ obligacion.direccion or "—" }}</b></p>
+    <p style="margin:4px 0 0">Asignado: <b>{{ obligacion.asignado or "—" }}</b></p>
+    <p class="edit-nota">La venta cerró: la obligación queda como historia.</p>
+    {% else %}
+    <form method="post" action="/venta/estado/{{ origen }}/{{ n }}/entrega">
+      <label for="vt-direccion">Dirección</label>
+      <input type="text" id="vt-direccion" name="direccion" maxlength="200"
+             value="{{ obligacion.direccion }}" placeholder="¿A dónde va?">
+      <label for="vt-asignado-sel">Asignado (responsable de que llegue)</label>
+      <select id="vt-asignado-sel" name="asignado_sel">
+        <option value="">— Elegir empleada —</option>
+        {% for e in empleadas %}
+        <option value="{{ e.nombre }}" {{ 'selected' if obligacion.asignado == e.nombre }}>{{ e.nombre }}</option>
+        {% endfor %}
+      </select>
+      <label for="vt-asignado-libre">… o escribe quién (mensajero, tercero, contratista)</label>
+      <input type="text" id="vt-asignado-libre" name="asignado_libre" maxlength="200"
+             value="{{ '' if (obligacion.asignado in (empleadas | map(attribute='nombre') | list)) else obligacion.asignado }}"
+             placeholder="Si lo escribes, manda sobre el selector">
+      <div style="margin-top:10px">
+        <button class="btn btn-dorado" type="submit">Guardar entrega</button>
+      </div>
+    </form>
+    {% endif %}
+    {% if historial_entrega %}
+    <ul class="vt-hist">
+      {% for c in historial_entrega %}
+      <li>{{ "Dirección" if c.campo == "direccion" else "Asignado" }}:
+        «{{ c.antes or "—" }}» → «{{ c.despues or "—" }}» · {{ c.por }} · {{ c.en[:16] }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  {# ---- Marcar entregada: solo el system manager ---- #}
+  <div class="seccion-titulo" style="margin-top:16px">Marcar entregada</div>
+  <div class="inv-card vt-form">
+    {% if hechos.entrega_marcada %}
+    <p style="margin:0">Entregada el <b>{{ hechos.fecha_entrega }}</b> por {{ hechos.entrega_por or "—" }}.</p>
+    {% elif soy_manager %}
+    <form method="post" action="/venta/estado/{{ origen }}/{{ n }}/entregada">
+      <label for="vt-fecha">Fecha real de entrega (la que usa delivered revenue)</label>
+      <input type="date" id="vt-fecha" name="fecha" value="{{ hoy }}">
+      <div style="margin-top:10px">
+        <button class="btn btn-dorado" type="submit">MARCAR ENTREGADA</button>
+      </div>
+      <p class="edit-nota">Esto valida la salida en Odoo (y no antes) y fija
+        la fecha real. No toca el pago: si falta plata, la venta queda en 2.</p>
+    </form>
+    {% if not obligacion.asignado %}
+    <div class="aviso-error" style="margin-top:8px">Falta el asignado de la
+      entrega: ponlo arriba antes de marcarla.</div>
+    {% endif %}
+    {% else %}
+    <p style="margin:0" class="vt-motivo">La marca quien carga el deber de
+      system manager: {{ manager_nombres }}.</p>
+    {% endif %}
+  </div>
+
+  {# ---- Historial del estado ---- #}
+  {% if historial_estado %}
+  <div class="seccion-titulo" style="margin-top:16px">Historial del estado</div>
+  <div class="inv-card">
+    <ul class="vt-hist" style="margin-top:0">
+      {% for c in historial_estado %}
+      <li>{{ c.de or "·" }} → {{ c.a }} ({{ c.hecho }}{% if c.detalle %} · {{ c.detalle }}{% endif %}) · {{ c.puesto_por or "—" }} · {{ c.puesto_en[:16] }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</main>
+{% endblock %}
