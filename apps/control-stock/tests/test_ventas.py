@@ -20,7 +20,7 @@ class OdooFalso:
             501: {"default_code": "PL-ROMERO", "name": "ROMERO", "list_price": 3.5},
             502: {"default_code": "PL-JADE", "name": "JADE", "list_price": 5.25},
         }
-        self.partners = {74: "Cliente Local"}
+        self.partners = {74: {"name": "Cliente Local"}}
         # Plantillas para la foto de la pantalla de Stock: una con imagen de
         # ficha, una solo con adjunto (foto de referencia) y una sin nada.
         self.plantillas = {
@@ -99,29 +99,77 @@ class OdooFalso:
                 for i, a in self.adjuntos.items() if a["res_id"] == res_id][:1]
 
     # ---- partners ----
+    # Desde el comodín de la vista previa (5/10/2026) el fake guarda el
+    # dict completo y evalúa el dominio de verdad (notación polaca de
+    # Odoo, con "|" y "not like"): la exclusión _sin_comodines y la
+    # búsqueda del comodín por `comment` no se pueden probar con un fake
+    # que ignore las condiciones.
+    @staticmethod
+    def _evaluar_dominio(dominio, partner):
+        def condicion(c):
+            campo, op, valor = c
+            val, v = str(partner.get(campo) or ""), str(valor)
+            if op in ("=", "=="):
+                return val == v
+            if op == "=ilike":
+                return val.lower() == v.lower()
+            if op == "ilike":
+                return v.lower() in val.lower()
+            if op == "like":
+                return v in val
+            if op == "not like":
+                # Como en Odoo: el que no tiene el campo también pasa.
+                return v not in val
+            return False
+
+        def parcial(i):
+            token = dominio[i]
+            if token == "|":
+                a, i = parcial(i + 1)
+                b, i = parcial(i)
+                return a or b, i
+            if token == "&":
+                a, i = parcial(i + 1)
+                b, i = parcial(i)
+                return a and b, i
+            if token == "!":
+                a, i = parcial(i + 1)
+                return not a, i
+            return condicion(token), i + 1
+
+        i, resultado = 0, True
+        while i < len(dominio):
+            r, i = parcial(i)
+            resultado = resultado and r
+        return resultado
+
     def res_partner_search(self, args, kw):
-        # Desde el B.2 la puerta única busca PRIMERO por teléfono (dominio
-        # OR con "|"); este fake guarda solo nombres, así que esa búsqueda
-        # no encuentra a nadie y el flujo sigue al nombre, como antes.
-        if args[0] and args[0][0] == "|":
-            return []
-        campo, _op, valor = args[0][0]
-        if campo != "name":
-            return []
-        return [i for i, n in self.partners.items() if n.lower() == str(valor).lower()]
+        ids = [i for i, p in self.partners.items()
+               if self._evaluar_dominio(args[0], p)]
+        limite = kw.get("limit")
+        return ids[:limite] if limite else ids
 
     def res_partner_read(self, args, kw):
         # La puerta única B.2 lee el nombre del cliente que calzó antes de
         # decidir si reusa, avisa o confirma.
-        return [{"id": i, "name": self.partners[i]}
+        campos = kw.get("fields") or ["name"]
+        return [{"id": i, **{c: self.partners[i].get(c) for c in campos}}
                 for i in args[0] if i in self.partners]
 
     def res_partner_create(self, args, kw):
         nuevo = self._nuevo_id()
-        self.partners[nuevo] = args[0]["name"]
+        self.partners[nuevo] = dict(args[0])
         self.partners_vals = getattr(self, "partners_vals", [])
         self.partners_vals.append(args[0])
         return nuevo
+
+    def res_partner_write(self, args, kw):
+        # El comodín de la vista previa se reescribe en cada vistazo.
+        self.partners_writes = getattr(self, "partners_writes", [])
+        for pid in args[0]:
+            self.partners[pid].update(args[1])
+            self.partners_writes.append((pid, dict(args[1])))
+        return True
 
     # ---- órdenes ----
     def sale_order_create(self, args, kw):
@@ -467,7 +515,7 @@ def test_cobro_completo_con_yappy(cliente_venta, odoo):
     assert registro["estado"] == "pagado" and registro["metodo"] == "yappy"
     assert registro["factura"].startswith("INV/")
     assert odoo.pagos == [{"journal_id": 9, "factura_id": registro["factura_id"]}]
-    assert "María" in odoo.partners.values()  # cliente con nombre: partner creado
+    assert any(p["name"] == "María" for p in odoo.partners.values())  # cliente con nombre: partner creado
     # La entrega quedó validada (sin eso Odoo no habría facturado).
     assert all(p["state"] == "done" for p in odoo.pickings.values())
 
@@ -805,17 +853,13 @@ def test_la_vista_previa_no_crea_la_venta(cliente_venta, odoo, monkeypatch):
 
 def test_la_vista_previa_reusa_una_sola_orden_por_empleada(cliente_venta, odoo, monkeypatch):
     """La orden del vistazo se reescribe, no se acumula: el usuario de la
-    app no puede borrar pedidos en Odoo."""
+    app no puede borrar pedidos en Odoo. Y desde el 5/10/2026 el segundo
+    vistazo tampoco pregunta nada: la vista previa no resuelve clientes."""
     llamadas = _pdf_falso(monkeypatch)
     _agregar(cliente_venta, 501)
     cliente_venta.post("/venta/vista-previa", data={"cliente": "Marta"})
-    # B.2-R3 (2/10/2026): el primer vistazo ya creó a Marta en Odoo, así
-    # que el segundo encuentra su nombre y pide la decisión; "usar-<id>"
-    # es lo que la empleada marcaría en el aviso.
-    marta = next(i for i, n in odoo.partners.items() if n == "Marta")
     cliente_venta.post("/venta/vista-previa",
-                       data={"cliente": "Marta", "envio": "5",
-                             "cliente_decision": f"usar-{marta}"})
+                       data={"cliente": "Marta", "envio": "5"})
     previas = [i for i, o in odoo.ordenes.items()
                if (o.get("client_order_ref") or "").startswith(ventas.REF_VISTA_PREVIA)]
     assert len(previas) == 1
@@ -825,6 +869,115 @@ def test_la_vista_previa_reusa_una_sola_orden_por_empleada(cliente_venta, odoo, 
     assert len([l for l in lineas if not l.get("display_type")]) == 2
     assert len([l for l in lineas if l.get("display_type") == "line_subsection"]) == 1
     assert [r for r, _ in llamadas] == ["sale.report_saleorder"] * 2
+
+
+# --- El partner comodín de la vista previa (bug Nº2, 5/10/2026) --------------
+# La vista previa NUNCA crea ni reutiliza un cliente real: trabaja sobre UN
+# partner comodín por empleada (marcado en `comment`), al que cada vistazo
+# le reescribe lo tecleado. El cliente real nace recién al concretar, por la
+# puerta única y con sus avisos.
+
+def _comodines(odoo):
+    return {i: p for i, p in odoo.partners.items()
+            if ventas.MARCA_COMODIN in str(p.get("comment") or "")}
+
+
+def test_la_vista_previa_no_crea_ningun_cliente_real(cliente_venta, odoo, monkeypatch):
+    _pdf_falso(monkeypatch)
+    _agregar(cliente_venta, 501)
+    cliente_venta.post("/venta/vista-previa",
+                       data={"cliente": "Marta", "celular": "6000-0000"})
+    # El único partner nuevo es el comodín, con su marca; ningún "Marta"
+    # real quedó en la libreta.
+    creados = getattr(odoo, "partners_vals", [])
+    assert len(creados) == 1
+    assert ventas.MARCA_COMODIN in creados[0]["comment"]
+    assert creados[0]["customer_rank"] == 0
+    reales = [p for i, p in odoo.partners.items()
+              if i != 74 and i not in _comodines(odoo)]
+    assert reales == []
+    # El comodín carga lo tecleado (eso es lo que imprime el PDF).
+    comodin = next(iter(_comodines(odoo).values()))
+    assert comodin["name"] == "Marta"
+    assert comodin["phone"] == "6000-0000"
+
+
+def test_dos_vistazos_reusan_el_mismo_comodin(cliente_venta, odoo, monkeypatch):
+    _pdf_falso(monkeypatch)
+    _agregar(cliente_venta, 501)
+    cliente_venta.post("/venta/vista-previa",
+                       data={"cliente": "Marta", "celular": "6000-0000"})
+    cliente_venta.post("/venta/vista-previa",
+                       data={"cliente": "Rosa Díaz", "celular": "6111-2222"})
+    # UN solo create (el primer vistazo); el segundo solo reescribió.
+    assert len(odoo.partners_vals) == 1
+    assert len(_comodines(odoo)) == 1
+    comodin_id, comodin = next(iter(_comodines(odoo).items()))
+    assert comodin["name"] == "Rosa Díaz"
+    assert comodin["phone"] == "6111-2222"
+    assert any(pid == comodin_id for pid, _ in odoo.partners_writes)
+    # Y la orden fija apunta al comodín: eso es lo que recibe el PDF.
+    previa = next(o for o in odoo.ordenes.values()
+                  if (o.get("client_order_ref") or "").startswith(ventas.REF_VISTA_PREVIA))
+    assert previa["partner_id"] == comodin_id
+
+
+def test_el_vistazo_siguiente_no_arrastra_datos_del_anterior(cliente_venta, odoo, monkeypatch):
+    """Lo no tecleado se VACÍA en el comodín: la cédula de Marta no puede
+    salir impresa en el PDF de Rosa."""
+    _pdf_falso(monkeypatch)
+    _agregar(cliente_venta, 501)
+    cliente_venta.post("/venta/vista-previa",
+                       data={"cliente": "Marta", "celular": "6000-0000",
+                             "cedula": "8-111-2222"})
+    comodin = next(iter(_comodines(odoo).values()))
+    assert comodin["vat"] == "8-111-2222"
+    cliente_venta.post("/venta/vista-previa", data={"cliente": "Rosa Díaz"})
+    comodin = next(iter(_comodines(odoo).values()))
+    assert comodin["name"] == "Rosa Díaz"
+    assert not comodin["vat"] and not comodin["ref"] and not comodin["phone"]
+
+
+def test_cada_empleada_tiene_su_comodin(odoo, monkeypatch):
+    monkeypatch.setattr(ventas, "descargar_pdf", lambda *_a: b"%PDF-1.4")
+    a = ventas._partner_vista_previa("genesis", "Marta")
+    b = ventas._partner_vista_previa("ruben", "Marta")
+    assert a != b
+    assert ventas._partner_vista_previa("genesis", "Otra") == a
+
+
+def test_concretar_despues_del_vistazo_crea_el_cliente_real_por_la_puerta_unica(
+        cliente_venta, odoo, monkeypatch):
+    """El partner real nace al tocar «Generar cotización», no antes — y la
+    búsqueda de la puerta única NO tropieza con el comodín aunque este
+    cargue el mismo nombre y teléfono del vistazo."""
+    _pdf_falso(monkeypatch)
+    _agregar(cliente_venta, 501)
+    cliente_venta.post("/venta/vista-previa",
+                       data={"cliente": "Marta", "celular": "6000-0000"})
+    r = cliente_venta.post("/venta/cotizar",
+                           data={"cliente": "Marta", "celular": "6000-0000"},
+                           follow_redirects=False)
+    assert r.status_code == 200, r.headers.get("location")
+    assert "Cotización creada" in r.text
+    reales = [p for i, p in odoo.partners.items()
+              if i != 74 and i not in _comodines(odoo)]
+    assert [p["name"] for p in reales] == ["Marta"]
+    assert reales[0]["customer_rank"] == 1
+
+
+def test_concretar_con_un_homonimo_real_si_pregunta(cliente_venta, odoo, monkeypatch):
+    """Los avisos B.2 viven al concretar, intactos: si en Odoo ya existe
+    una Marta REAL, «Generar cotización» pregunta (ClienteAjeno) aunque la
+    vista previa no haya preguntado nada."""
+    _pdf_falso(monkeypatch)
+    odoo.partners[88] = {"name": "Marta", "phone": "6999-9999"}
+    _agregar(cliente_venta, 501)
+    cliente_venta.post("/venta/vista-previa", data={"cliente": "Marta"})
+    r = cliente_venta.post("/venta/cotizar", data={"cliente": "Marta"},
+                           follow_redirects=False)
+    assert r.status_code == 303
+    assert "conflicto=88" in r.headers["location"]
 
 
 def test_la_vista_previa_lleva_el_precio_a_mano(cliente_venta, odoo, monkeypatch):

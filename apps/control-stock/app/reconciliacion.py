@@ -165,6 +165,22 @@ CAMPOS_FACTURA = ["move_type", "state", "amount_total", "amount_residual",
                   "payment_state", "invoice_date", "journal_id"]
 CAMPOS_SALIDA = ["state", "date_done", "scheduled_date"]
 
+# Referencias internas de la app, que no son ventas de un cliente real: la
+# orden fija de la vista previa de Vender (una por empleada, apuntando al
+# partner comodín) y la propuesta de muestra del PDF. Mismo criterio que
+# `cot_lead._es_ref_interna`: quedan FUERA del informe y de «Creado hoy»
+# — una orden de utilería contada como «Cotización vigente» (o como
+# sospecha de duplicado) sería ruido, no reconciliación. Se descartan por
+# `client_order_ref`, que aquí es de solo lectura.
+_REFS_INTERNAS_PREFIJO = ("VISTA PREVIA",)
+_REFS_INTERNAS_EXACTAS = {"MUESTRA-PDF"}
+
+
+def _es_ref_interna(ref):
+    ref = (ref or "").strip().upper()
+    return ref in _REFS_INTERNAS_EXACTAS or any(
+        ref.startswith(p) for p in _REFS_INTERNAS_PREFIJO)
+
 
 # ---------------------------------------------------------------------------
 # La puerta a Odoo: solo lectura, verificada en cada llamada
@@ -441,7 +457,13 @@ def _creado_hoy(universo):
         ordenes_hoy = _leer(
             "sale.order", "search_read", [list(de_hoy)],
             {"fields": ["name", "partner_id", "amount_total", "state",
-                        "create_uid"], "order": "id asc"})
+                        "create_uid", "client_order_ref"],
+             "order": "id asc"})
+        # Las internas (vista previa, muestra) tampoco son «creado hoy»:
+        # estrenar la orden fija dispararía un renglón —y hasta una
+        # sospecha de duplicado— por pura utilería de la app.
+        ordenes_hoy = [o for o in ordenes_hoy
+                       if not _es_ref_interna(o.get("client_order_ref"))]
         facturas_hoy = _leer(
             "account.move", "search_read",
             [list(de_hoy) + [["move_type", "in",
@@ -490,7 +512,8 @@ def _leer_universo():
                        [[["state", "=", "cancel"],
                          ["date_order", ">=", _corte_canceladas()]]],
                        {"fields": CAMPOS_VENTA, "order": "date_order desc"})
-    ordenes = list(vivas) + list(canceladas)
+    ordenes = [o for o in list(vivas) + list(canceladas)
+               if not _es_ref_interna(o.get("client_order_ref"))]
 
     ids_partner = sorted({(o.get("partner_id") or [0])[0]
                           for o in ordenes if o.get("partner_id")})

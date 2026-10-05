@@ -1892,18 +1892,14 @@ async def venta_vista_previa(request: Request):
                             None, datos_cliente, None)
     _amarrar_lead_del_form(request, form)
     try:
+        # La vista previa no resuelve clientes (5/10/2026, bug Nº2):
+        # trabaja sobre el comodín de la empleada, así que no pasa
+        # decisiones de cliente ni puede levantar ClienteAjeno /
+        # ConfirmarDatoFiscal — esas preguntas viven al concretar.
         pdf = ventas.pdf_vista_previa(
             empleada, form.get("cliente", ""), form.get("celular", ""),
             datos_cliente, _cargos_del_form(form),
-            banderas=ventas.banderas_de(form, False),
-            decision_cliente=_decision_cliente_del_form(form),
-            confirmar_fiscal=_confirmar_fiscal_del_form(form))
-    except ventas.ClienteAjeno as error:
-        return _redirigir_venta(str(error), nueva=True,
-                                conflicto=_conflicto_de(error))
-    except ventas.ConfirmarDatoFiscal as error:
-        return _redirigir_venta(str(error), nueva=True,
-                                fiscal=_fiscal_de(error))
+            banderas=ventas.banderas_de(form, False))
     except ValueError as error:
         return _redirigir_venta(str(error), nueva=True)
     except Exception as error:

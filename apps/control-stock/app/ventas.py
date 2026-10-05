@@ -707,8 +707,9 @@ def iniciar_tablas():
         # 2/10/2026) — ver _sin_datos_del_cliente_anterior.
         if "cliente_anterior" not in columnas_borrador:
             con.execute("ALTER TABLE venta_borrador ADD COLUMN cliente_anterior TEXT")
-        # Migración suave: el cliente que la vista previa de ESTA venta ya
-        # creó/usó (2/10/2026) — ver cliente_de_vista_previa.
+        # Migración suave: lo que la vista previa de ESTA venta recordó
+        # (2/10/2026; desde el 5/10/2026 guarda solo el texto tecleado,
+        # nunca un partner) — ver cliente_de_vista_previa.
         if "preview_partner" not in columnas_borrador:
             con.execute("ALTER TABLE venta_borrador ADD COLUMN preview_partner TEXT")
         # Migración suave: la tabla pudo nacer sin la columna celular.
@@ -876,9 +877,9 @@ def guardar_borrador(usuario, nombre, celular, servicios=None, datos=None,
             (usuario, nombre, celular, crudo, libres, extra, filtro,
              nombre, celular, crudo, libres, extra, filtro))
         if cambio:
-            # Cambió el cliente (R1): el partner que la vista previa había
-            # resuelto era del cliente anterior y se olvida — la próxima
-            # coincidencia vuelve a preguntar (R3), nunca se hereda.
+            # Cambió el cliente (R1): el texto que la vista previa había
+            # recordado era del cliente anterior y se olvida — nunca se
+            # hereda de un cliente al siguiente.
             con.execute("UPDATE venta_borrador SET preview_partner=NULL"
                         " WHERE usuario=?", (usuario,))
 
@@ -925,19 +926,22 @@ def guardar_cobro(usuario, modo):
 
 def _limpiar_borrador(usuario):
     # Borra la fila entera: con ella se va también el preview_partner (el
-    # cliente que la vista previa resolvió se olvida al terminar la venta).
+    # texto del último vistazo se olvida al terminar la venta).
     with _db() as con:
         con.execute("DELETE FROM venta_borrador WHERE usuario=?", (usuario,))
 
 
-def recordar_cliente_vista_previa(usuario, partner_id, nombre, celular):
-    """El partner que la vista previa de ESTA venta creó/usó, con el nombre
-    y el teléfono con que se hizo esa vista previa (2/10/2026, aprobado por
-    Korto): así «vista previa → Generar cotización» no pregunta dos veces
-    por el mismo cliente. Vive en el borrador (una fila por empleada), se
-    olvida al cambiar de cliente (guardar_borrador) y al terminar o
-    cancelar la venta (_limpiar_borrador)."""
-    crudo = json.dumps({"id": int(partner_id), "nombre": str(nombre or ""),
+def recordar_cliente_vista_previa(usuario, nombre, celular):
+    """El TEXTO (nombre y teléfono) con que se hizo la última vista previa
+    de ESTA venta. Desde el 5/10/2026 (bug Nº2) la vista previa ya no crea
+    ni usa ningún partner real —trabaja sobre el comodín de la empleada—
+    así que no hay id que recordar: lo que queda es el texto tecleado,
+    para pre-llenar al concretar (el borrador ya lo guarda también; esto
+    conserva además qué respaldó el último vistazo). Vive en el borrador
+    (una fila por empleada), se olvida al cambiar de cliente
+    (guardar_borrador) y al terminar o cancelar la venta
+    (_limpiar_borrador)."""
+    crudo = json.dumps({"nombre": str(nombre or ""),
                         "celular": str(celular or "")}, ensure_ascii=False)
     with _db() as con:
         con.execute(
@@ -946,26 +950,21 @@ def recordar_cliente_vista_previa(usuario, partner_id, nombre, celular):
             (usuario, crudo, crudo))
 
 
-def cliente_de_vista_previa(usuario, nombre, celular):
-    """El partner recordado por la vista previa, SOLO si el nombre y el
-    teléfono tecleados ahora son los MISMOS de esa vista previa: el nombre
-    con nombres_compatibles y el teléfono por sus últimos 8 dígitos (o los
-    dos vacíos). Si cambió cualquiera de los dos, None — y aplica la regla
-    normal (R3: se pregunta). El recuerdo es por empleada, nunca global."""
+def cliente_de_vista_previa(usuario):
+    """El texto recordado por la última vista previa de esta venta:
+    {"nombre": ..., "celular": ...} o None si no hay (o si lo guardado es
+    de la versión vieja, que recordaba un partner id — ese recuerdo ya no
+    aplica: la pregunta por el cliente vive SOLO al concretar)."""
     with _db() as con:
         fila = con.execute(
             "SELECT preview_partner FROM venta_borrador WHERE usuario=?",
             (usuario,)).fetchone()
     recordado = _json_o_defecto(fila["preview_partner"], {}) if fila else {}
-    if not recordado.get("id"):
+    if recordado.get("id") or not (recordado.get("nombre")
+                                   or recordado.get("celular")):
         return None
-    if not nombres_compatibles(nombre, recordado.get("nombre")):
-        return None
-    tecleado = re.sub(r"\D", "", celular or "")[-8:]
-    guardado = re.sub(r"\D", "", recordado.get("celular") or "")[-8:]
-    if tecleado != guardado:
-        return None
-    return int(recordado["id"])
+    return {"nombre": recordado.get("nombre") or "",
+            "celular": recordado.get("celular") or ""}
 
 
 # ---------------------------------------------------------------------------
@@ -1366,6 +1365,35 @@ def _dominio_telefono(digitos):
     return ["|"] * (len(condiciones) - 1) + condiciones
 
 
+# La marca del partner comodín de la vista previa (bug Nº2, 5/10/2026).
+# Vive en `comment` (las notas internas de res.partner) porque es el único
+# campo que nadie más lee en los tres repos: `ref` NO sirve de identificador
+# —es la cédula: el PDF del addon compara `ref` con `vat` para etiquetar
+# «Cédula»/«RUC» (_datos_fiscales_propuesta), el buscador de Odoo lo indexa
+# y valores_de_cliente lo escribe— y `name`/`phone` los leen el frontend y
+# el order-api. El addon escribe `comment` solo al CREAR partners de leads
+# web («Creado desde el lead PP-...»), que nunca contiene esta marca.
+MARCA_COMODIN = "no es un cliente: comodin de la vista previa de Vender"
+
+
+def _marca_comodin(usuario):
+    """La marca completa, una por empleada — el mismo patrón que la orden
+    fija (`VISTA PREVIA <usuario>` en client_order_ref). El separador al
+    final del usuario evita que «ana» calce con el comodín de «anabel»
+    en la búsqueda por `like`."""
+    return f"{REF_VISTA_PREVIA} {usuario} — {MARCA_COMODIN}"
+
+
+def _sin_comodines(dominio):
+    """El mismo dominio, dejando FUERA los partners comodín de la vista
+    previa: el comodín lleva el nombre y el teléfono del ÚLTIMO cliente
+    previsualizado, así que sin esta condición la búsqueda por teléfono o
+    por nombre podría devolverlo y una venta real quedaría colgada del
+    comodín. En Odoo `not like` incluye a los que tienen comment vacío
+    (agrega el IS NULL solo), o sea a todos los clientes reales."""
+    return [["comment", "not like", MARCA_COMODIN]] + dominio
+
+
 _NOMBRE_FISCAL = {"vat": "RUC/Tax ID", "ref": "cédula (referencia)"}
 
 
@@ -1413,8 +1441,7 @@ def _usar_existente(partner_id, nombre_existente, valores_extra, confirmar):
 
 
 def buscar_o_crear_cliente(nombre, celular="", datos=None, decision=None,
-                           celular_tal_cual=False, confirmar_fiscal=None,
-                           recordado=None):
+                           celular_tal_cual=False, confirmar_fiscal=None):
     """LA única puerta para resolver el cliente de una orden (B.2,
     2/10/2026) — la usan Nueva Venta, las cotizaciones de servicio y la
     personalizada, para que la regla sea UNA:
@@ -1438,11 +1465,13 @@ def buscar_o_crear_cliente(nombre, celular="", datos=None, decision=None,
     - `celular_tal_cual` guarda el phone como lo digitó la empleada (Nueva
       Venta, histórico con guion); sin él se guardan solo los dígitos
       (cotizaciones de servicio, histórico también).
-    - `recordado` es el partner que la vista previa de ESTA misma venta ya
-      creó/usó (cliente_de_vista_previa, que solo lo devuelve si nombre y
-      teléfono siguen iguales): si el que se iba a preguntar es ÉL, se
-      reusa sin volver a preguntar — la pregunta ya se respondió al hacer
-      la vista previa. Una decisión explícita «nuevo» le gana.
+    - Las dos búsquedas dejan FUERA el partner comodín de la vista previa
+      (_sin_comodines, 5/10/2026): el comodín carga el nombre y el teléfono
+      del último vistazo y NUNCA puede resolverse como el cliente de una
+      venta real. [La exención «recordado» del 2/10 se retiró ese día: la
+      vista previa ya no crea ni usa partners reales, así que no hay
+      partner previo que eximir — la pregunta vive solo aquí, al
+      concretar.]
     """
     nombre = (nombre or "").strip()
     valores_extra = valores_de_cliente(datos)
@@ -1450,7 +1479,8 @@ def buscar_o_crear_cliente(nombre, celular="", datos=None, decision=None,
     crear_aparte = decision == "nuevo"
     if digitos:
         ids = _ejecutar(
-            "res.partner", "search", [_dominio_telefono(digitos)], {"limit": 1})
+            "res.partner", "search",
+            [_sin_comodines(_dominio_telefono(digitos))], {"limit": 1})
         if ids:
             existente = _ejecutar("res.partner", "read", [[ids[0]]],
                                   {"fields": ["name", "phone"]})[0]
@@ -1463,27 +1493,17 @@ def buscar_o_crear_cliente(nombre, celular="", datos=None, decision=None,
                 return _usar_existente(ids[0], existente.get("name"),
                                        valores_extra, confirmar_fiscal)
             if not crear_aparte:
-                if recordado == ids[0]:
-                    # La vista previa de esta misma venta ya usó este
-                    # cliente con estos mismos datos: no se pregunta dos
-                    # veces (2/10/2026).
-                    return _usar_existente(ids[0], existente.get("name"),
-                                           valores_extra, confirmar_fiscal)
                 raise ClienteAjeno(ids[0], existente.get("name"),
                                    motivo="telefono",
                                    telefono=existente.get("phone") or "")
     if nombre and not crear_aparte:
         ids = _ejecutar("res.partner", "search",
-                        [[["name", "=ilike", nombre]]], {"limit": 1})
+                        [_sin_comodines([["name", "=ilike", nombre]])],
+                        {"limit": 1})
         if ids:
             existente = _ejecutar("res.partner", "read", [[ids[0]]],
                                   {"fields": ["name", "phone"]})[0]
-            if decision == f"usar-{ids[0]}" or recordado == ids[0]:
-                # Decisión explícita, o el partner que la vista previa de
-                # esta misma venta ya creó/usó (el caso típico: la vista
-                # previa crea el cliente y «Generar cotización» lo vuelve
-                # a encontrar por nombre — preguntar ahí sería preguntar
-                # por el cliente que nosotros mismos acabamos de crear).
+            if decision == f"usar-{ids[0]}":
                 return _usar_existente(ids[0], existente.get("name"),
                                        valores_extra, confirmar_fiscal)
             raise ClienteAjeno(ids[0], existente.get("name"), motivo="nombre",
@@ -1498,7 +1518,7 @@ def buscar_o_crear_cliente(nombre, celular="", datos=None, decision=None,
 
 
 def _cliente_id(nombre, celular="", datos=None, decision=None,
-                confirmar_fiscal=None, recordado=None):
+                confirmar_fiscal=None):
     """El partner para la orden de Nueva Venta: el genérico "Cliente Local"
     si no dieron nombre; si lo dieron, la puerta única
     (buscar_o_crear_cliente), con el phone tal cual lo digitó la empleada."""
@@ -1507,8 +1527,7 @@ def _cliente_id(nombre, celular="", datos=None, decision=None,
         return _id_config("VENTA_CLIENTE_LOCAL")
     return buscar_o_crear_cliente(nombre, celular, datos, decision,
                                   celular_tal_cual=True,
-                                  confirmar_fiscal=confirmar_fiscal,
-                                  recordado=recordado)
+                                  confirmar_fiscal=confirmar_fiscal)
 
 
 def _linea_de_planta(linea):
@@ -1548,12 +1567,12 @@ def crear_cotizacion(empleada, nombre_cliente, celular="", datos=None,
     # B.2-R1: el formulario puede traer todavía en pantalla los datos del
     # cliente anterior (ver datos_del_cliente_actual) — ese eco no viaja.
     datos = datos_del_cliente_actual(usuario, nombre_cliente, celular, datos)
-    # El cliente que la vista previa de ESTA venta ya resolvió (si nombre
-    # y teléfono siguen iguales) se reusa sin volver a preguntar.
+    # El cliente real nace o se resuelve AQUÍ, por la puerta única, con
+    # sus avisos (ClienteAjeno / ConfirmarDatoFiscal): la vista previa ya
+    # no crea ni usa clientes reales (5/10/2026), así que esta es la
+    # primera y única vez que se pregunta por este cliente.
     partner = _cliente_id(nombre_cliente, celular, datos, decision_cliente,
-                          confirmar_fiscal,
-                          recordado=cliente_de_vista_previa(
-                              usuario, nombre_cliente, celular))
+                          confirmar_fiscal)
     # El PP-XXXXX del lead pendiente (si hay): se resuelve ANTES de crear
     # la orden y ANTES de que _espejar_en_crm consuma el lead pendiente.
     pp_lead, aviso_lead = _pp_del_lead_pendiente(usuario)
@@ -1632,12 +1651,53 @@ def crear_cotizacion(empleada, nombre_cliente, celular="", datos=None,
 # app no tiene permiso para borrar pedidos en Odoo (lo mismo que se
 # descubrió con la cotización de muestra), y reusarla evita que se acumulen.
 #
+# Y desde el 5/10/2026 (bug Nº2) también necesita un partner, con el MISMO
+# patrón: UN comodín por empleada, reutilizable, al que cada vistazo le
+# reescribe los datos tecleados. Antes la vista previa creaba/reusaba el
+# res.partner REAL del cliente, y si la venta nunca se concretaba el
+# cliente quedaba huérfano en Odoo (docs/problema-conocido-vista-previa-
+# crea-cliente.md del repo plantaspanama).
+#
 # Lo importante: NO es la cotización. No crea el registro local, no limpia
-# el carrito, no abre oportunidad en el CRM y no toca la pestaña Retail —
-# todo eso pasa recién cuando la empleada toca "Generar cotización".
+# el carrito, no abre oportunidad en el CRM, no toca la pestaña Retail y
+# NO toca clientes reales ni pregunta decisiones de cliente — todo eso
+# pasa recién cuando la empleada toca "Generar cotización".
 # ---------------------------------------------------------------------------
 
 REF_VISTA_PREVIA = "VISTA PREVIA"
+
+
+def _partner_vista_previa(usuario, nombre, celular="", datos=None):
+    """El partner comodín de la vista previa: UNO por empleada, que se
+    busca por su marca en `comment` (ver MARCA_COMODIN) y se crea UNA sola
+    vez si no existe — el precedente de la orden fija, aplicado al cliente.
+
+    En cada vistazo se le reescriben TODOS los datos tecleados (nombre,
+    teléfono, RUC/cédula, correo, dirección), vaciando lo que no se
+    tecleó: así el PDF sale idéntico a hoy —imprime el nombre del partner
+    y su Tax ID (vat/ref deciden la etiqueta Cédula/RUC en el addon)— y
+    ningún dato del vistazo anterior se cuela en el de este cliente. Es
+    una reescritura completa a un partner NUESTRO, no un completar sobre
+    un cliente real: la regla B.2 (fiscales solo con confirmación) sigue
+    intacta en la puerta única, que es donde viven los clientes reales.
+
+    Nace con customer_rank 0 para que ningún listado de clientes lo
+    cuente, y las búsquedas de la puerta única y de buscar_clientes lo
+    excluyen por la marca (_sin_comodines)."""
+    marca = _marca_comodin(usuario)
+    valores = {"name": nombre,
+               "phone": (celular or "").strip() or False,
+               "vat": False, "ref": False, "email": False, "street": False,
+               **valores_de_cliente(datos)}
+    ids = _ejecutar("res.partner", "search",
+                    [[["comment", "like", marca]]], {"limit": 1})
+    if ids:
+        _ejecutar("res.partner", "write", [[ids[0]], valores])
+        return ids[0]
+    nuevo = _ejecutar("res.partner", "create", [{
+        **valores, "comment": marca, "customer_rank": 0,
+        "company_type": "person"}])
+    return nuevo[0] if isinstance(nuevo, list) else nuevo
 
 
 def _orden_vista_previa(usuario, partner, lineas, banderas=None):
@@ -1665,32 +1725,36 @@ def _orden_vista_previa(usuario, partner, lineas, banderas=None):
 
 
 def pdf_vista_previa(empleada, nombre_cliente, celular="", datos=None, cargos=None,
-                     banderas=None, decision_cliente=None, confirmar_fiscal=None):
+                     banderas=None):
     """El PDF de la cotización tal como saldría, sin crear la venta.
 
     Mismas líneas que crear_cotizacion —las plantas del carrito con el
     precio a mano cuando la empleada lo editó (si no, el que ponga Odoo),
     los renglones libres de planta personalizada con su precio a mano, y
     los cargos con monto— para que lo que se ve sea lo que después se
-    genera."""
+    genera.
+
+    El cliente NO se toca (5/10/2026, bug Nº2): el PDF se arma sobre el
+    partner comodín de la empleada con los datos tecleados encima
+    (_partner_vista_previa) — mismo report, mismo PDF, cero partners
+    reales creados o reusados. Por eso aquí tampoco hay decisiones de
+    cliente que preguntar (ClienteAjeno / ConfirmarDatoFiscal): esas
+    preguntas viven SOLO al concretar, en la puerta única."""
     usuario = empleada["id"]
     lineas, _total = carrito_de(usuario)
     lineas_libres = lineas_de_renglones_planta(renglones_planta_de(usuario))
     if not lineas and not lineas_libres:
         raise ValueError("Agrega al menos una planta para ver la cotización.")
     datos = datos_del_cliente_actual(usuario, nombre_cliente, celular, datos)
-    # La segunda vista previa seguida tampoco vuelve a preguntar por el
-    # cliente que la primera ya creó/usó (mismo nombre y teléfono).
-    partner = _cliente_id(nombre_cliente, celular, datos, decision_cliente,
-                          confirmar_fiscal,
-                          recordado=cliente_de_vista_previa(
-                              usuario, nombre_cliente, celular))
-    if (nombre_cliente or "").strip():
-        # Se recuerda SOLO dentro de esta venta (el borrador es por
-        # empleada): al crear con el mismo nombre y teléfono no se vuelve
-        # a preguntar por el cliente que esta vista previa resolvió. El
+    nombre = (nombre_cliente or "").strip()
+    if nombre:
+        partner = _partner_vista_previa(usuario, nombre, celular, datos)
+        # Se recuerda el TEXTO tecleado, solo dentro de esta venta (el
+        # borrador es por empleada), para el pre-llenado al concretar. El
         # genérico "Cliente Local" (sin nombre) no se recuerda.
-        recordar_cliente_vista_previa(usuario, partner, nombre_cliente, celular)
+        recordar_cliente_vista_previa(usuario, nombre_cliente, celular)
+    else:
+        partner = _id_config("VENTA_CLIENTE_LOCAL")
     orden = _orden_vista_previa(usuario, partner, [
         _linea_de_planta(l) for l in lineas]
         + lineas_libres + lineas_de_cargos(cargos), banderas)

@@ -276,7 +276,10 @@ def _cliente_id(nombre, celular, datos=None, decision=None, confirmar=None):
 
 def buscar_clientes(texto):
     """Clientes existentes por nombre o teléfono, para que la empleada vea
-    si ya hay uno antes de escribir uno nuevo por error (máx. 8)."""
+    si ya hay uno antes de escribir uno nuevo por error (máx. 8). Los
+    partners comodín de la vista previa quedan fuera (_sin_comodines,
+    5/10/2026): llevan el nombre y el teléfono del último vistazo, pero
+    no son clientes."""
     texto = (texto or "").strip()
     if not texto:
         return []
@@ -285,7 +288,8 @@ def buscar_clientes(texto):
     if digitos:
         condiciones += [["phone", "ilike", variante]
                         for variante in _variantes_telefono(digitos)]
-    dominio = ["|"] * (len(condiciones) - 1) + condiciones
+    dominio = ventas._sin_comodines(
+        ["|"] * (len(condiciones) - 1) + condiciones)
     filas = ventas._ejecutar(
         "res.partner", "search_read", [dominio],
         {"fields": ["name", "phone"], "limit": 8})

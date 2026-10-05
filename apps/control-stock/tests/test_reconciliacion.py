@@ -146,7 +146,7 @@ class OdooReconcilia:
     def agregar_orden(self, partner_id, name, state="draft", dias_atras=1,
                       amount_total=0.0, validity_date=None, facturas=(),
                       salidas=(), oportunidad=None, create_date=None,
-                      creado_por="Admin Odoo"):
+                      creado_por="Admin Odoo", client_order_ref=False):
         oid = self._nuevo("orden")
         self.ordenes[oid] = {
             "id": oid, "name": name, "state": state,
@@ -158,7 +158,7 @@ class OdooReconcilia:
             "picking_ids": list(salidas),
             "opportunity_id": ([oportunidad, "Oportunidad"]
                                if oportunidad else False),
-            "client_order_ref": False,
+            "client_order_ref": client_order_ref,
             "tag_ids": [],
             # Si nadie lo dice, la orden se creó cuando dice su fecha:
             # ayer por defecto, así las pruebas viejas no caen en la
@@ -752,6 +752,29 @@ def test_creado_hoy_aparece_con_su_creador(odoo):
     assert hoy_creado["pagos"][0]["sospecha"] == ""
     assert hoy_creado["pagos"][0]["historica"] is False
     assert hoy_creado["total_ordenes"] == 500.0
+
+
+def test_las_ordenes_internas_quedan_fuera_del_informe_y_de_creado_hoy(odoo):
+    """La orden fija de la vista previa (apuntando al partner comodín) y
+    la muestra del PDF son utilería de la app, no ventas: ni clase, ni
+    contador, ni renglón en «Creado hoy» — aunque el comodín cargue el
+    nombre y el teléfono del último cliente previsualizado (bug Nº2,
+    5/10/2026)."""
+    comodin = odoo.agregar_partner("Marta", "6000-0000")
+    odoo.agregar_orden(comodin, "S00140", state="draft", amount_total=35.0,
+                       create_date=_hace(0),
+                       client_order_ref="VISTA PREVIA genesis")
+    muestra = odoo.agregar_partner("Cliente Local")
+    odoo.agregar_orden(muestra, "S00141", state="draft", amount_total=10.0,
+                       client_order_ref="MUESTRA-PDF")
+    real = odoo.agregar_partner("Clienta Real", "6111-3333")
+    odoo.agregar_orden(real, "S00142", state="draft", dias_atras=2,
+                       amount_total=50.0)
+    datos_informe = reconciliacion.informe_datos()
+    assert [v["nombre"] for v in datos_informe["ventas"]] == ["S00142"]
+    assert datos_informe["contadores"]["A"] == 1
+    assert datos_informe["creado_hoy"]["ordenes"] == []
+    assert datos_informe["creado_hoy"]["total_ordenes"] == 0.0
 
 
 def test_limite_de_creado_hoy_es_la_medianoche_de_panama(odoo):

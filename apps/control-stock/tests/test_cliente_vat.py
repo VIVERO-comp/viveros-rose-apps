@@ -40,22 +40,58 @@ class OdooClientes:
     def _condicion(self, p, c):
         campo, op, valor = c
         val = str(p.get(campo) or "")
+        if op in ("=", "=="):
+            return val == str(valor)
         if op == "=ilike":
             return val.lower() == str(valor).lower()
         if op == "ilike":
             return str(valor).lower() in val.lower()
+        if op == "like":
+            return str(valor) in val
+        if op == "not like":
+            # Como en Odoo: el partner sin ese campo también pasa.
+            return str(valor) not in val
         return False
 
+    def _evaluar(self, dominio, p):
+        """La notación polaca de Odoo ("|", "&", "!" como prefijos; AND
+        implícito entre criterios sueltos): desde la exclusión del comodín
+        (_sin_comodines, 5/10/2026) el dominio mezcla un AND arriba con el
+        OR de teléfonos, y un fake que haga any() de todo ya no sirve."""
+        def parcial(i):
+            token = dominio[i]
+            if token == "|":
+                a, i = parcial(i + 1)
+                b, i = parcial(i)
+                return a or b, i
+            if token == "&":
+                a, i = parcial(i + 1)
+                b, i = parcial(i)
+                return a and b, i
+            if token == "!":
+                a, i = parcial(i + 1)
+                return not a, i
+            return self._condicion(p, token), i + 1
+
+        i, resultado = 0, True
+        while i < len(dominio):
+            r, i = parcial(i)
+            resultado = resultado and r
+        return resultado
+
     def search(self, args, kw):
-        condiciones = [c for c in args[0] if isinstance(c, list)]
         ids = [i for i, p in self.partners.items()
-               if any(self._condicion(p, c) for c in condiciones)]
+               if self._evaluar(args[0], p)]
         limite = kw.get("limit")
         return ids[:limite] if limite else ids
 
     def read(self, args, kw):
         return [{"id": i, **{c: self.partners[i].get(c) for c in kw.get("fields", [])}}
                 for i in args[0] if i in self.partners]
+
+    def search_read(self, args, kw):
+        # Lo usa cotizaciones.buscar_clientes (el autocompletado).
+        return self.read([self.search(args, kw)], kw)
 
     def write(self, args, kw):
         for pid in args[0]:
@@ -513,107 +549,112 @@ def test_cotizaciones_tambien_avisa_por_nombre_sin_telefono(odoo):
         cotizaciones._cliente_id("María López", "")
 
 
-# --- La exención de la vista previa (2/10/2026, aprobada por Korto) -----------
-# «Vista previa → Generar cotización» no pregunta dos veces por el cliente
-# que la propia vista previa creó/usó: el partner se recuerda en el borrador
-# (por empleada) junto al nombre y teléfono con que se hizo la vista previa,
-# y se reusa SOLO si al crear siguen iguales. Se olvida al cambiar de
-# cliente (R1) y al terminar/cancelar la venta (_limpiar_borrador).
+# --- La vista previa y el cliente (bug Nº2, 5/10/2026) -----------------------
+# La vista previa ya NO crea ni usa partners reales: trabaja sobre el
+# comodín de la empleada (probado en test_ventas.py), y la puerta única
+# lo deja FUERA de sus búsquedas aunque cargue el nombre y el teléfono del
+# último vistazo. El recuerdo del borrador guarda solo el TEXTO tecleado
+# (nunca un partner id) y se olvida al cambiar de cliente y al terminar la
+# venta. [La exención «recordado» del 2/10 se retiró: las preguntas por el
+# cliente viven SOLO al concretar.]
 
-def test_vista_previa_y_crear_con_los_mismos_datos_no_pregunta(odoo):
-    # (a) La vista previa creó el cliente (caso R3: sin teléfono); crear
-    # con el mismo nombre lo reusa SIN ClienteAjeno.
+def _sembrar_comodin(odoo, usuario, nombre, phone=""):
+    pid = ventas._partner_vista_previa(usuario, nombre, phone)
+    assert ventas.MARCA_COMODIN in odoo.partners[pid]["comment"]
+    return pid
+
+
+def test_el_comodin_no_se_encuentra_por_telefono(odoo):
+    # El vistazo dejó al comodín con el teléfono de Marta; concretar con
+    # ese mismo teléfono NO tropieza con él: crea el cliente real.
+    comodin = _sembrar_comodin(odoo, "genesis", "Marta", "6000-0000")
+    pid = ventas.buscar_o_crear_cliente("Marta", "6000-0000")
+    assert pid != comodin
+    assert odoo.partners[pid]["name"] == "Marta"
+    assert "comment" not in odoo.partners[pid]
+
+
+def test_el_comodin_no_se_encuentra_por_nombre(odoo):
+    # Tampoco por nombre (el caso R3 sin teléfono): sin la exclusión, el
+    # homónimo que levanta ClienteAjeno sería el propio comodín y la
+    # empleada podría colgarle la venta real con «usar».
+    comodin = _sembrar_comodin(odoo, "genesis", "María López")
     pid = ventas.buscar_o_crear_cliente("María López", "")
-    ventas.recordar_cliente_vista_previa("genesis", pid, "María López", "")
-    recordado = ventas.cliente_de_vista_previa("genesis", " maría  lópez ", "")
-    assert recordado == pid
-    assert ventas.buscar_o_crear_cliente("maría lópez", "",
-                                         recordado=recordado) == pid
-    assert len(odoo.partners) == 1  # ni duplicado ni pregunta
+    assert pid != comodin
+    assert len(odoo.partners) == 2  # comodín + la María real nueva
 
 
-def test_dos_vistas_previas_seguidas_tampoco_preguntan(odoo):
-    # (b) La segunda vista previa resuelve el cliente igual que la primera.
-    pid = ventas.buscar_o_crear_cliente("María López", "")
-    ventas.recordar_cliente_vista_previa("genesis", pid, "María López", "")
-    otra_vez = ventas.buscar_o_crear_cliente(
-        "María López", "",
-        recordado=ventas.cliente_de_vista_previa("genesis", "María López", ""))
-    assert otra_vez == pid
-    ventas.recordar_cliente_vista_previa("genesis", otra_vez, "María López", "")
-    assert ventas.cliente_de_vista_previa("genesis", "María López", "") == pid
+def test_un_cliente_real_homonimo_si_pregunta_al_concretar(odoo):
+    # Los avisos B.2 quedan intactos: con una María REAL en Odoo, la
+    # pregunta llega (al concretar, nunca en el vistazo) y señala a la
+    # real, no al comodín.
+    _sembrar_comodin(odoo, "genesis", "María López")
+    odoo.partners[7] = {"name": "María López", "phone": ""}
+    with pytest.raises(ventas.ClienteAjeno) as cayo:
+        ventas.buscar_o_crear_cliente("María López", "")
+    assert cayo.value.partner_id == 7
 
 
-def test_cambiar_el_nombre_tras_la_vista_previa_si_pregunta(odoo):
-    # (c) El recuerdo era de María: con otro nombre no aplica y la regla
-    # normal pregunta (ClienteAjeno).
-    odoo.partners[7] = {"name": "Zoila González", "phone": "6567-3062"}
-    pid = ventas.buscar_o_crear_cliente("María López", "")
-    ventas.recordar_cliente_vista_previa("genesis", pid, "María López", "")
-    assert ventas.cliente_de_vista_previa("genesis", "Zoila González", "") is None
-    with pytest.raises(ventas.ClienteAjeno):
-        ventas.buscar_o_crear_cliente(
-            "Zoila González", "",
-            recordado=ventas.cliente_de_vista_previa(
-                "genesis", "Zoila González", ""))
+def test_el_comodin_se_crea_una_sola_vez_por_empleada(odoo):
+    a = ventas._partner_vista_previa("genesis", "Marta", "6000-0000")
+    b = ventas._partner_vista_previa("genesis", "Rosa Díaz", "6111-2222")
+    assert a == b
+    assert odoo.partners[a]["name"] == "Rosa Díaz"
+    assert odoo.partners[a]["phone"] == "6111-2222"
+    assert ventas._partner_vista_previa("ruben", "Marta") != a
 
 
-def test_cambiar_el_telefono_tras_la_vista_previa_olvida_el_recuerdo(odoo):
-    # El teléfono compara por sus últimos 8 dígitos; distinto = se olvida.
-    pid = ventas.buscar_o_crear_cliente("María López", "6567-3062")
-    ventas.recordar_cliente_vista_previa("genesis", pid,
-                                         "María López", "6567-3062")
-    assert ventas.cliente_de_vista_previa(
-        "genesis", "María López", "65673062") == pid  # mismos 8 dígitos
-    assert ventas.cliente_de_vista_previa(
-        "genesis", "María López", "6999-0000") is None
-    assert ventas.cliente_de_vista_previa(
-        "genesis", "María López", "") is None  # lo borró: ya no es igual
+def test_el_comodin_de_ana_no_es_el_de_anabel(odoo):
+    # El separador de la marca evita que «ana» calce con el comodín de
+    # «anabel» en la búsqueda por like (y al revés).
+    anabel = ventas._partner_vista_previa("anabel", "Cliente X")
+    ana = ventas._partner_vista_previa("ana", "Cliente Y")
+    assert ana != anabel
+    assert len(odoo.partners) == 2
 
 
-def test_el_recuerdo_es_por_empleada_no_global(odoo):
-    # (d) Otro empleado con el mismo nombre NO hereda el recuerdo: a él
-    # la regla normal le pregunta.
-    pid = ventas.buscar_o_crear_cliente("María López", "")
-    ventas.recordar_cliente_vista_previa("genesis", pid, "María López", "")
-    assert ventas.cliente_de_vista_previa("ruben", "María López", "") is None
-    with pytest.raises(ventas.ClienteAjeno):
-        ventas.buscar_o_crear_cliente(
-            "María López", "",
-            recordado=ventas.cliente_de_vista_previa("ruben", "María López", ""))
+def test_buscar_clientes_no_lista_el_comodin(odoo):
+    # El autocompletado de las cotizaciones tampoco lo ofrece.
+    _sembrar_comodin(odoo, "genesis", "Marta", "6000-0000")
+    odoo.partners[7] = {"name": "Marta Real", "phone": "6000-0000"}
+    resultados = cotizaciones.buscar_clientes("Marta")
+    assert [r["id"] for r in resultados] == [7]
 
 
-def test_el_recuerdo_se_olvida_al_cambiar_de_cliente_en_el_borrador(odoo):
-    pid = ventas.buscar_o_crear_cliente("María López", "6567-3062")
-    ventas.recordar_cliente_vista_previa("genesis", pid,
-                                         "María López", "6567-3062")
+def test_el_recuerdo_guarda_solo_el_texto_tecleado(db_limpia):
+    ventas.recordar_cliente_vista_previa("genesis", "María López", "6567-3062")
+    assert ventas.cliente_de_vista_previa("genesis") == {
+        "nombre": "María López", "celular": "6567-3062"}
+    assert ventas.cliente_de_vista_previa("ruben") is None  # por empleada
+
+
+def test_un_recuerdo_viejo_con_partner_id_ya_no_aplica(db_limpia):
+    # Un borrador guardado por la versión del 2/10 (con partner id) no
+    # puede volver como exención: se trata como ausencia.
+    import json as _json
+    with ventas._db() as con:
+        con.execute(
+            "INSERT INTO venta_borrador (usuario, preview_partner)"
+            " VALUES (?,?)",
+            ("genesis", _json.dumps({"id": 7, "nombre": "María López",
+                                     "celular": ""})))
+    assert ventas.cliente_de_vista_previa("genesis") is None
+
+
+def test_el_recuerdo_se_olvida_al_cambiar_de_cliente_en_el_borrador(db_limpia):
+    ventas.recordar_cliente_vista_previa("genesis", "María López", "6567-3062")
     # El mismo cliente en el borrador no borra nada.
     ventas.guardar_borrador("genesis", "María López", "6567-3062")
-    assert ventas.cliente_de_vista_previa(
-        "genesis", "María López", "6567-3062") == pid
+    assert ventas.cliente_de_vista_previa("genesis")["nombre"] == "María López"
     # Cambió el cliente (la lógica R1/_es_otro_cliente): se olvida.
     ventas.guardar_borrador("genesis", "Beto Mendoza", "6111-0000")
-    assert ventas.cliente_de_vista_previa(
-        "genesis", "Beto Mendoza", "6111-0000") is None
-    assert ventas.cliente_de_vista_previa(
-        "genesis", "María López", "6567-3062") is None
+    assert ventas.cliente_de_vista_previa("genesis") is None
 
 
-def test_el_recuerdo_se_olvida_al_terminar_la_venta(odoo):
-    pid = ventas.buscar_o_crear_cliente("María López", "")
-    ventas.recordar_cliente_vista_previa("genesis", pid, "María López", "")
+def test_el_recuerdo_se_olvida_al_terminar_la_venta(db_limpia):
+    ventas.recordar_cliente_vista_previa("genesis", "María López", "")
     ventas._limpiar_borrador("genesis")
-    assert ventas.cliente_de_vista_previa("genesis", "María López", "") is None
-
-
-def test_decision_nuevo_le_gana_al_recuerdo(odoo):
-    # Si la empleada eligió explícitamente «crear uno nuevo», el recuerdo
-    # de la vista previa no la contradice.
-    pid = ventas.buscar_o_crear_cliente("María López", "")
-    nuevo = ventas.buscar_o_crear_cliente("María López", "",
-                                          decision="nuevo", recordado=pid)
-    assert nuevo != pid
-    assert len(odoo.partners) == 2
+    assert ventas.cliente_de_vista_previa("genesis") is None
 
 
 # --- R4: ninguna opción viene preseleccionada ---------------------------------
