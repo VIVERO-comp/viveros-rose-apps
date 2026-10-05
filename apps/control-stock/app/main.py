@@ -243,20 +243,17 @@ def _cookie_segura():
 
 
 def _admins():
-    """Emails (o usuarios) que ven la pestaña Ajustes e invitan gente
-    (AJUSTES_ADMINS, separados por coma)."""
-    return {a.strip().lower() for a in os.environ.get("AJUSTES_ADMINS", "").split(",")
-            if a.strip()}
+    """Los emails fijados en el servidor (AJUSTES_ADMINS). Solo para el
+    login con Google (entran sin invitación); la decisión de quién es
+    admin vive en seguridad.es_admin()."""
+    return seguridad.admins_fijados()
 
 
 def _es_admin(empleada):
-    admins = _admins()
-    # El email cuenta solo VERIFICADO (confirmado entrando con Google): el
-    # que la empleada anota a mano en Mi cuenta no da privilegios, si no
-    # cualquiera se anotaría el email de una admin.
-    return (empleada["id"].lower() in admins
-            or ((empleada.get("email") or "").lower() in admins
-                and bool(empleada.get("email_verificado"))))
+    """LA puerta de admin de todas las pantallas. Desde el 5/10/2026 la
+    regla vive en seguridad.es_admin(): fijado en AJUSTES_ADMINS (email
+    solo verificado) o hecho admin desde la pantalla de Ajustes."""
+    return seguridad.es_admin(empleada)
 
 
 def _redirect_uri(request):
@@ -569,7 +566,8 @@ def inicio(request: Request, refrescar: int = 0, crear: str = "",
     # a FICHAS_EDITORES (y el POST /fichas lo verifica en el servidor).
     puede_fichas = fichas.es_editora(request.state.empleada["id"])
     # La pestaña Ajustes la ven todos (cada quien guarda su email en Mi
-    # cuenta); las invitaciones y accesos, solo los admins (AJUSTES_ADMINS).
+    # cuenta); las invitaciones y accesos, solo los admins (AJUSTES_ADMINS
+    # o hechos admin desde la pantalla: seguridad.es_admin).
     es_admin = _es_admin(request.state.empleada)
     # Números de coworkers (chats internos que no se vuelven leads): la lista
     # vive en la base `tienda` del droplet; si no responde, Ajustes lo dice
@@ -589,7 +587,8 @@ def inicio(request: Request, refrescar: int = 0, crear: str = "",
         "empleada": request.state.empleada,
         "puede_fichas": puede_fichas,
         "es_admin": es_admin,
-        "empleadas": seguridad.listar() if es_admin else [],
+        "empleadas": (_empleadas_para_ajustes(request.state.empleada)
+                      if es_admin else []),
         "invitaciones": seguridad.invitaciones_pendientes() if es_admin else [],
         "coworkers": lista_coworkers,
         "coworkers_error": coworkers_error,
@@ -1046,6 +1045,68 @@ async def ajustes_revocar(request: Request):
         return RedirectResponse("/?tab=ajustes", status_code=303)
     seguridad.desactivar(usuario)
     return RedirectResponse("/?tab=ajustes", status_code=303)
+
+
+def _empleadas_para_ajustes(yo):
+    """Las filas de «Con acceso» con todo ya decidido en Python: si es
+    admin, de dónde le viene (servidor o pantalla), qué botón va en su
+    fila y el rastro del último cambio. La plantilla solo pinta.
+
+    Reglas de los botones (5/10/2026): solo un admin llega aquí; nadie se
+    quita el admin a sí mismo (botón deshabilitado, y el POST lo rechaza
+    igual); a quien está fijado en AJUSTES_ADMINS no se le puede quitar
+    por pantalla — la variable queda como semilla y respaldo."""
+    filas = seguridad.listar()
+    for e in filas:
+        fijado = seguridad.fijado_en_servidor(
+            e["usuario"], e.get("email"), e.get("email_verificado"))
+        e["admin"] = fijado or bool(e.get("es_admin"))
+        e["origen_admin"] = ("servidor" if fijado else "pantalla") if e["admin"] else ""
+        if not e["admin"]:
+            e["boton_admin"], e["nota_admin"] = "hacer", ""
+        elif fijado:
+            e["boton_admin"], e["nota_admin"] = "", "fijado en el servidor"
+        elif e["usuario"] == yo["id"]:
+            e["boton_admin"], e["nota_admin"] = "", "nadie se quita el admin a sí mismo"
+        else:
+            e["boton_admin"], e["nota_admin"] = "quitar", ""
+        # El rastro discreto, solo del admin dado por pantalla (el fijado
+        # no tiene quién/cuándo: viene del .env).
+        e["rastro_admin"] = (
+            bool(e.get("es_admin")) and not fijado and bool(e.get("admin_cambiado_en")))
+    return filas
+
+
+@app.post("/ajustes/admin")
+async def ajustes_admin(request: Request):
+    """Hacer o quitar admin desde la pantalla, sin tocar el .env ni
+    redesplegar. Solo un admin llama esto; los rechazos repiten en el
+    servidor lo que la pantalla ya deshabilita (que no te quedes afuera)."""
+    if (rechazo := _solo_admin(request)) is not None:
+        return rechazo
+    form = await request.form()
+    usuario = (form.get("usuario") or "").strip()
+    dar = form.get("dar") == "1"
+    if not usuario:
+        return RedirectResponse("/?tab=ajustes", status_code=303)
+    yo = request.state.empleada
+    if not dar:
+        # Nadie se quita el admin a sí mismo: siempre queda un admin adentro.
+        if usuario == yo["id"]:
+            return RedirectResponse("/?tab=ajustes&aviso=admin-propio",
+                                    status_code=303)
+        # Los de AJUSTES_ADMINS no se quitan por pantalla: son la semilla.
+        fila = next((e for e in seguridad.listar() if e["usuario"] == usuario), None)
+        if fila is not None and seguridad.fijado_en_servidor(
+                fila["usuario"], fila.get("email"), fila.get("email_verificado")):
+            return RedirectResponse("/?tab=ajustes&aviso=admin-fijado",
+                                    status_code=303)
+    quien = yo.get("nombre") or yo["id"]
+    if seguridad.fijar_admin(usuario, dar, quien) == "no_existe":
+        return RedirectResponse("/?tab=ajustes&aviso=admin-no-existe",
+                                status_code=303)
+    aviso = "admin-dado" if dar else "admin-quitado"
+    return RedirectResponse(f"/?tab=ajustes&aviso={aviso}", status_code=303)
 
 
 # ---------------------------------------------------------------------------

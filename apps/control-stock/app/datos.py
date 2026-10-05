@@ -492,6 +492,17 @@ def iniciar_db():
         if "email_verificado" not in columnas:
             con.execute("ALTER TABLE empleadas ADD COLUMN email_verificado "
                         "INTEGER NOT NULL DEFAULT 0")
+        # Migración (5/10/2026): admin desde la pantalla de Ajustes.
+        # es_admin=1 da los mismos poderes que AJUSTES_ADMINS, sin tocar el
+        # .env ni recrear el contenedor. Las dos columnas de rastro guardan
+        # quién hizo el último cambio y cuándo (texto ISO de ahora_iso()).
+        if "es_admin" not in columnas:
+            con.execute("ALTER TABLE empleadas ADD COLUMN es_admin "
+                        "INTEGER NOT NULL DEFAULT 0")
+        if "admin_cambiado_por" not in columnas:
+            con.execute("ALTER TABLE empleadas ADD COLUMN admin_cambiado_por TEXT")
+        if "admin_cambiado_en" not in columnas:
+            con.execute("ALTER TABLE empleadas ADD COLUMN admin_cambiado_en TEXT")
 
 
 def ahora_iso():

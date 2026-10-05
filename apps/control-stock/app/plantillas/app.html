@@ -371,8 +371,9 @@
 
   <!-- ================= AJUSTES ================= -->
   {# Mi cuenta (email de Google) la ve cualquiera; las invitaciones y los
-     accesos, solo los admins (AJUSTES_ADMINS). Las rutas /ajustes/* de
-     admin también lo verifican en el servidor. #}
+     accesos, solo los admins (AJUSTES_ADMINS, o hechos admin desde esta
+     misma pantalla — seguridad.es_admin). Las rutas /ajustes/* de admin
+     también lo verifican en el servidor. #}
   <section class="tab" id="tab-ajustes">
     {# La hamburguesa de computadora (28/09/2026), sola, arriba a la
        izquierda del contenido. En el teléfono no existe (la de arriba ya
@@ -543,7 +544,12 @@
     <div class="aviso-ok">Invitación creada. Comparte el link (por WhatsApp, por ejemplo): quien lo abra entra con su cuenta de Google.
       {% if inv_nueva %}<button class="btn btn-dorado btn-chico btn-copiar" type="button" data-link="{{ base_publica }}/invitacion/{{ inv_nueva }}" onclick="copiarLink(this)">Copiar link</button>{% endif %}
     </div>
-    {% elif aviso_ajustes == 'ya-activa' %}<div class="aviso-ok">Ese email ya tiene acceso a la app.</div>{% endif %}
+    {% elif aviso_ajustes == 'ya-activa' %}<div class="aviso-ok">Ese email ya tiene acceso a la app.</div>
+    {% elif aviso_ajustes == 'admin-dado' %}<div class="aviso-ok">Listo: ahora es admin. Ya ve Revisar, Conversaciones y los poderes completos de Ajustes.</div>
+    {% elif aviso_ajustes == 'admin-quitado' %}<div class="aviso-ok">Admin quitado. Sigue entrando a la app como empleada.</div>
+    {% elif aviso_ajustes == 'admin-propio' %}<div class="aviso-error">Nadie se quita el admin a sí mismo: pídeselo a otro admin.</div>
+    {% elif aviso_ajustes == 'admin-fijado' %}<div class="aviso-error">Ese admin está fijado en el servidor y no se puede quitar desde la pantalla.</div>
+    {% elif aviso_ajustes == 'admin-no-existe' %}<div class="aviso-error">Esa empleada ya no está activa.</div>{% endif %}
 
     <div class="seccion-titulo">Invitar a alguien</div>
     <form class="form-invitar" method="post" action="/ajustes/invitar">
@@ -576,16 +582,43 @@
     {% endfor %}
 
     <div class="seccion-titulo">Con acceso</div>
+    {# Admin desde la pantalla (5/10/2026): cada fila trae su decisión ya
+       tomada en Python (_empleadas_para_ajustes): el chip Admin con su
+       origen (servidor = AJUSTES_ADMINS del .env, la semilla que no se
+       quita por pantalla; pantalla = dado desde acá), el rastro de quién
+       lo cambió, y qué botón —si alguno— le toca. #}
     {% for e in empleadas if e.activa %}
     <div class="historial-item acceso-item">
-      <div><b>{{ e.nombre }}</b><small>{{ e.email or e.usuario }}</small></div>
-      {% if e.usuario != empleada.id %}
-      <form method="post" action="/ajustes/revocar"
-            onsubmit="return confirm('¿Quitarle el acceso a {{ e.nombre }}? Ya no podrá entrar a la app (ni con Google ni con contraseña) hasta que se le vuelva a invitar.')">
-        <input type="hidden" name="usuario" value="{{ e.usuario }}">
-        <button class="btn btn-linea btn-chico" type="submit">Revocar</button>
-      </form>
-      {% endif %}
+      <div><b>{{ e.nombre }}</b>
+        {% if e.admin %}<span class="badge b-admin">Admin · {{ e.origen_admin }}</span>{% else %}<span class="admin-no">—</span>{% endif %}
+        <small>{{ e.email or e.usuario }}{% if e.rastro_admin %} · admin desde {{ e.admin_cambiado_en | fecha_bonita }} por {{ e.admin_cambiado_por }}{% endif %}{% if e.nota_admin %} · {{ e.nota_admin }}{% endif %}</small></div>
+      <div class="acciones-acceso">
+        {% if e.boton_admin == 'hacer' %}
+        <form method="post" action="/ajustes/admin"
+              onsubmit="return confirm('¿Hacer admin a {{ e.nombre }}? Verá Revisar, Conversaciones y los poderes completos de Ajustes, y podrá invitar o revocar gente.')">
+          <input type="hidden" name="usuario" value="{{ e.usuario }}">
+          <input type="hidden" name="dar" value="1">
+          <button class="btn btn-linea btn-chico" type="submit">Hacer admin</button>
+        </form>
+        {% elif e.boton_admin == 'quitar' %}
+        <form method="post" action="/ajustes/admin"
+              onsubmit="return confirm('¿Quitarle el admin a {{ e.nombre }}? Seguirá entrando a la app como empleada, sin los poderes de admin.')">
+          <input type="hidden" name="usuario" value="{{ e.usuario }}">
+          <input type="hidden" name="dar" value="0">
+          <button class="btn btn-linea btn-chico" type="submit">Quitar admin</button>
+        </form>
+        {% elif e.admin %}
+        <button class="btn btn-linea btn-chico" type="button" disabled
+                title="{{ e.nota_admin }}">Quitar admin</button>
+        {% endif %}
+        {% if e.usuario != empleada.id %}
+        <form method="post" action="/ajustes/revocar"
+              onsubmit="return confirm('¿Quitarle el acceso a {{ e.nombre }}? Ya no podrá entrar a la app (ni con Google ni con contraseña) hasta que se le vuelva a invitar.')">
+          <input type="hidden" name="usuario" value="{{ e.usuario }}">
+          <button class="btn btn-linea btn-chico" type="submit">Revocar</button>
+        </form>
+        {% endif %}
+      </div>
     </div>
     {% endfor %}
 
