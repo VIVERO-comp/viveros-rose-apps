@@ -341,9 +341,10 @@ async function guardarStock() {
   }
 }
 
-/* ---------- modal foto de producto (ver, descargar, cambiar) ---------- */
+/* ---------- modal foto de producto (ver, descargar, cambiar, quitar) ---------- */
 let fotoSku = null;
 let subiendoFoto = false;
+let quitandoFoto = false;
 
 function pintarFotoGrande(p) {
   const caja = document.getElementById("foto-grande");
@@ -387,12 +388,15 @@ function abrirFoto(sku) {
   // queda solo de zoom y descarga.
   document.getElementById("btn-pincel").hidden = !DATOS.puedeSubir;
   document.getElementById("foto-nota").hidden = !DATOS.puedeSubir;
+  // «Quitar foto» solo si hay foto PROPIA puesta desde la app (p.fp, lo
+  // decidió el servidor): sin ella no hay nada que quitar y no sale.
+  document.getElementById("btn-quitar-foto").hidden = !p.fp;
   mostrarErrorFoto("");
   pintarFotoGrande(p);
   document.getElementById("modal-foto").classList.add("abierto");
 }
 function cerrarFoto() {
-  if (subiendoFoto) return; // no cerrar a mitad de subida
+  if (subiendoFoto || quitandoFoto) return; // no cerrar a mitad de subida/quitada
   document.getElementById("modal-foto").classList.remove("abierto");
   fotoSku = null;
 }
@@ -429,6 +433,8 @@ async function subirFoto(input) {
     p.img = r.img;
     p.imgG = r.grande;
     p.imgD = r.descarga;
+    p.fp = true; // ya tiene foto propia: «Quitar foto» aparece
+    document.getElementById("btn-quitar-foto").hidden = false;
     pintarFotoGrande(p);
     pintar();
     toast("✓ Foto de " + p.n + " actualizada");
@@ -436,6 +442,47 @@ async function subirFoto(input) {
     mostrarErrorFoto("Sin conexión. Intenta de nuevo.");
   } finally {
     subiendoFoto = false;
+    boton.disabled = false;
+    boton.innerHTML = texto;
+  }
+}
+
+async function quitarFoto(boton) {
+  if (!fotoSku || subiendoFoto || quitandoFoto) return;
+  const p = plantas.find(x => x.sku === fotoSku);
+  if (!p || !p.fp) return;
+  // Es un borrado visible: confirm antes. La letra la puso la plantilla
+  // (data-confirma), aquí solo se muestra.
+  if (!confirm(boton.dataset.confirma)) return;
+  quitandoFoto = true;
+  const texto = boton.innerHTML;
+  boton.disabled = true;
+  boton.textContent = "Quitando…";
+  mostrarErrorFoto("");
+  try {
+    const respuesta = await fetch("/fotos/" + encodeURIComponent(fotoSku) + "/quitar", {
+      method: "POST",
+    });
+    const r = await respuesta.json();
+    if (!respuesta.ok) {
+      mostrarErrorFoto(r.mensaje || "No se pudo quitar la foto. Intenta de nuevo.");
+      return;
+    }
+    // La foto que queda debajo (catálogo/Odoo) la decidió el servidor;
+    // con null queda el emoji de siempre. Sin navegación: el modal y la
+    // lista repintan en el sitio y no se pierde pestaña ni búsqueda.
+    p.img = r.img || null;
+    p.imgG = r.grande || null;
+    p.imgD = r.descarga || null;
+    p.fp = false;
+    boton.hidden = true;
+    pintarFotoGrande(p);
+    pintar();
+    toast("✓ Foto de " + p.n + " quitada");
+  } catch (e) {
+    mostrarErrorFoto("Sin conexión. Intenta de nuevo.");
+  } finally {
+    quitandoFoto = false;
     boton.disabled = false;
     boton.innerHTML = texto;
   }

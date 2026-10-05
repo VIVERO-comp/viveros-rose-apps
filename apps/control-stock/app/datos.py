@@ -480,6 +480,20 @@ def iniciar_db():
             subida_en TEXT NOT NULL,
             subida_por TEXT NOT NULL
         );
+        -- Papelera de «Quitar foto» (5/10/2026): el puntero quitado no se
+        -- destruye, se muda aquí con quién y cuándo lo quitó. La imagen
+        -- sigue viva en Cloudinary bajo apps/{sku}/{hash} (nunca se borra
+        -- de allá), así que revertir a mano es volver a insertar la fila
+        -- en fotos_subidas. Vive en el volumen /datos, como fotos_subidas.
+        CREATE TABLE IF NOT EXISTS fotos_quitadas (
+            n INTEGER PRIMARY KEY AUTOINCREMENT,
+            sku TEXT NOT NULL,
+            hash TEXT NOT NULL,
+            subida_en TEXT NOT NULL,
+            subida_por TEXT NOT NULL,
+            quitada_en TEXT NOT NULL,
+            quitada_por TEXT NOT NULL
+        );
         """)
         # Migración: las empleadas que entran con Google se identifican por
         # email; las de contraseña quedan con email NULL. email_verificado
@@ -553,6 +567,32 @@ def fijar_foto_subida(sku, hash_foto, empleada):
             "subida_por=excluded.subida_por",
             (sku, hash_foto, ahora_iso(), empleada),
         )
+
+
+def quitar_foto_subida(sku, empleada):
+    """«Quitar foto»: muda el puntero de la foto propia a la papelera
+    (fotos_quitadas) y lo borra de fotos_subidas, en una sola transacción.
+    Devuelve el hash quitado, o None si el sku no tenía foto propia.
+
+    Nada se destruye: la imagen sigue en Cloudinary bajo apps/{sku}/{hash}
+    (el mismo trato que ya le da el pincel a la foto reemplazada) y la fila
+    queda entera en la papelera; revertir a mano es re-insertarla en
+    fotos_subidas."""
+    with _db() as con:
+        fila = con.execute(
+            "SELECT hash, subida_en, subida_por FROM fotos_subidas WHERE sku=?",
+            (sku,)).fetchone()
+        if fila is None:
+            return None
+        con.execute(
+            "INSERT INTO fotos_quitadas "
+            "(sku, hash, subida_en, subida_por, quitada_en, quitada_por) "
+            "VALUES (?,?,?,?,?,?)",
+            (sku, fila["hash"], fila["subida_en"], fila["subida_por"],
+             ahora_iso(), empleada),
+        )
+        con.execute("DELETE FROM fotos_subidas WHERE sku=?", (sku,))
+        return fila["hash"]
 
 
 # ---------------------------------------------------------------------------

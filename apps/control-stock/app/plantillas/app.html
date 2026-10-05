@@ -791,6 +791,18 @@
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
         Compartir
       </button>
+      {# Quitar foto (Abraham, 5/10/2026): solo sale si el producto tiene
+         foto PROPIA puesta desde la app (p.fp, lo decide el servidor en
+         _fotos_de). El POST muda el puntero a la papelera fotos_quitadas
+         —reversible a mano, nada se borra de Cloudinary— y vuelve la foto
+         de debajo (catálogo/Odoo) o el emoji. La tienda online no cambia.
+         El texto del confirm vive aquí (data-confirma), no en el JS. #}
+      <button type="button" class="btn btn-linea" id="btn-quitar-foto" hidden
+              onclick="quitarFoto(this)"
+              data-confirma="¿Quitar la foto puesta desde las apps? Vuelve la foto de siempre (o el emoji). La tienda online no cambia.">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        Quitar foto
+      </button>
     </div>
     <p class="edit-nota" id="foto-nota">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>

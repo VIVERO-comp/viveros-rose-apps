@@ -515,12 +515,16 @@ def inicio(request: Request, refrescar: int = 0, crear: str = "",
         # decide por el `type` real del archivo, no por esta extensión.
         info = fotos.info_foto(p["sku"], subidas.get(p["sku"]))
         nombre_compartir = f"{ventas.slug(p['nombre']) or p['sku'].lower()}.jpg"
+        # fp: tiene foto PROPIA puesta desde la app (el puntero de
+        # fotos_subidas). Es lo único que «Quitar foto» puede quitar: sin
+        # puntero el botón no sale, aunque haya foto del catálogo o de Odoo.
+        propia = p["sku"] in subidas
         if info:
             return {"img": info["img"], "imgG": info["grande"], "imgD": info["descarga"],
-                    "nombreCompartir": nombre_compartir}
+                    "nombreCompartir": nombre_compartir, "fp": propia}
         respaldo = f"/stock/foto/{quote(p['sku'])}" if ventas.configurado() else None
         return {"img": respaldo, "imgG": respaldo, "imgD": respaldo,
-                "nombreCompartir": nombre_compartir}
+                "nombreCompartir": nombre_compartir, "fp": propia}
 
     plantas = [
         {
@@ -2628,6 +2632,39 @@ async def cambiar_foto(request: Request, sku: str, archivo: UploadFile):
     datos.fijar_foto_subida(sku, hash_foto, request.state.empleada["id"])
     info = fotos.info_foto(sku, hash_foto)
     return {"resultado": "aplicada", **info}
+
+
+@app.post("/fotos/{sku}/quitar")
+def quitar_foto(request: Request, sku: str):
+    """El botón «Quitar foto» del modal: muda el puntero sku → hash a la
+    papelera (tabla fotos_quitadas, en el mismo volumen /datos) y responde
+    con la foto que queda debajo —fotos-apps.json, catálogo o el respaldo
+    de Odoo—, armada igual que en la pantalla de Stock (_fotos_de). Sin
+    ninguna, los null dejan el emoji de siempre.
+
+    Nada se borra de Cloudinary y la tienda online no cambia: solo se deja
+    de apuntar a la foto interna. Reversible a mano re-insertando la fila
+    de la papelera en fotos_subidas. Mismo candado que «Cambiar foto»: la
+    sesión de empleada (el middleware); no exige Cloudinary configurado,
+    porque aquí no se sube nada."""
+    def error(codigo, clave, mensaje):
+        return Response(json.dumps({"error": clave, "mensaje": mensaje}),
+                        status_code=codigo, media_type="application/json")
+
+    if not re.fullmatch(r"[A-Za-z0-9-]{1,80}", sku):
+        return error(400, "sku_invalido", "SKU inválido.")
+    hash_quitado = datos.quitar_foto_subida(sku, request.state.empleada["id"])
+    if hash_quitado is None:
+        # El botón solo sale con foto propia; llegar acá es una carrera
+        # (dos pestañas) o un POST a mano. No hay nada que quitar.
+        return error(404, "sin_foto_propia",
+                     "Este producto no tiene una foto puesta desde las apps.")
+    info = fotos.info_foto(sku)
+    if info:
+        return {"resultado": "quitada", **info}
+    respaldo = f"/stock/foto/{quote(sku)}" if ventas.configurado() else None
+    return {"resultado": "quitada", "img": respaldo, "grande": respaldo,
+            "descarga": respaldo}
 
 
 @app.post("/fichas/{sku}")
