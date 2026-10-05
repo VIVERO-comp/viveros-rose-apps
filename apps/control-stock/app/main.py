@@ -30,7 +30,8 @@ from . import (acceso_google, agenda, altas, avisos, calculos, calendario,
                calendario_ics, conteos, control, conversaciones, cot_lead,
                cotizaciones, coworkers, crm_twenty, datos, datos_roles,
                fichas, fotos, linear_leads, mantenimiento, proveedores,
-               resumen, seguridad, vehiculos, ventas, wa_autor)
+               resumen, seguridad, vehiculos, venta_estado, ventas,
+               wa_autor)
 
 app = FastAPI(title="Control Viverorose")
 
@@ -229,6 +230,8 @@ calendario_google.iniciar_tablas()
 # términos por defecto. Mismo patrón: crear al importar es idempotente, y
 # la semilla solo entra si la tabla nace vacía.
 datos_roles.iniciar_tablas()
+# Items 5-6-7 de Jay (5/10/2026): los 3 estados con sus dos hechos.
+venta_estado.iniciar_tablas()
 calendario_google.arrancar_hilo()
 # El calendario arranca calentándose en fondo (catálogo + mes en curso):
 # ni la primera visita del día espera a Linear (velocidad, 22/09/2026).
@@ -2660,45 +2663,75 @@ async def venta_pagar(request: Request):
     except Exception as error:
         return _redirigir_venta(f"Odoo no aceptó el pedido: {ventas._mensaje_de_error(error)}",
                                 nueva=True)
-    return RedirectResponse(f"/venta/cobrar/{registro['n']}", status_code=303)
+    return RedirectResponse(f"/venta/pago/{registro['n']}", status_code=303)
 
+
+# El botón único que facturaba, pagaba Y entregaba de un golpe era el
+# defecto central (reply de Jay del 5/10, §3): pagar y entregar son
+# hechos distintos. La ruta vieja /venta/cobrar NO desaparece: cae en el
+# flujo nuevo — el GET redirige a la pantalla de pago, y el POST registra
+# el pago (sin entregar), igual que /venta/pago.
 
 @app.get("/venta/cobrar/{n}")
 def venta_cobrar(request: Request, n: int):
+    return RedirectResponse(f"/venta/pago/{n}", status_code=303)
+
+
+@app.get("/venta/pago/{n}")
+def venta_pago(request: Request, n: int):
     registro = ventas.obtener_venta(n)
     if registro is None or registro["estado"] == "pagado":
         return RedirectResponse("/venta", status_code=303)
-    return plantillas.TemplateResponse(request, "venta_cobrar.html", {
+    return plantillas.TemplateResponse(request, "venta_pago.html", {
         "v": {**registro, "fecha_texto": _fecha_venta(registro["creado_en"]),
               "etiqueta_estado": ventas.ETIQUETAS_ESTADO[registro["estado"]]},
     })
 
 
-@app.post("/venta/cobrar/{n}")
-async def venta_cobrar_confirmar(request: Request, n: int):
+async def _registrar_pago_venta(request: Request, n: int):
     form = await request.form()
     metodo = form.get("metodo", "")
     if metodo not in ("yappy", "efectivo"):
-        return RedirectResponse(f"/venta/cobrar/{n}", status_code=303)
-    registro = ventas.cobrar(n, metodo)
+        return RedirectResponse(f"/venta/pago/{n}", status_code=303)
+    registro = ventas.registrar_pago(
+        n, metodo, por=request.state.empleada.get("nombre")
+        or request.state.empleada["id"])
     if registro is None:
         return RedirectResponse("/venta", status_code=303)
     if registro["estado"] != "pagado":
-        # Quedó a medias: la pantalla de cobro muestra el estado real y el
+        # Quedó a medias: la pantalla de pago muestra el estado real y el
         # error, y el mismo botón reintenta desde el paso que faltó.
-        return RedirectResponse(f"/venta/cobrar/{n}", status_code=303)
+        return RedirectResponse(f"/venta/pago/{n}", status_code=303)
     metodo_texto = "Yappy" if metodo == "yappy" else "Efectivo"
     return plantillas.TemplateResponse(request, "venta_exito.html", {
-        "titulo": "Venta cobrada",
+        "titulo": "Pago registrado",
         "sub": f"{registro['orden']} · {registro['cliente']}",
+        # El pago NO entrega (items 5-7, 5/10/2026): el aviso lo dice,
+        # para que la plata sola no se celebre como trabajo terminado.
+        "aviso": "La entrega queda pendiente: la marca quien carga el "
+                 "deber de system manager, desde «Estado / Entrega» de "
+                 "la venta.",
         "filas": [("Factura", registro["factura"], None),
                   ("Total", dinero_venta(registro["total"]), "ok"),
-                  ("Método", metodo_texto, None)],
+                  ("Método", metodo_texto, None),
+                  ("Entrega", "Pendiente de marcar", "dorado")],
         "pdf_href": f"/venta/{n}/factura.pdf",
         "pdf_texto": "Descargar / Compartir factura",
         "pdf_nombre": ventas.nombre_de_pdf(
             (registro["factura"] or str(n)).replace("/", "-"), registro["cliente"]),
     })
+
+
+@app.post("/venta/pago/{n}")
+async def venta_pago_confirmar(request: Request, n: int):
+    return await _registrar_pago_venta(request, n)
+
+
+@app.post("/venta/cobrar/{n}")
+async def venta_cobrar_confirmar(request: Request, n: int):
+    # La URL vieja sigue aceptando el POST (nada desaparece), pero hace
+    # lo NUEVO: registrar el pago sin entregar.
+    return await _registrar_pago_venta(request, n)
 
 
 def cabeceras_descarga(nombre):
@@ -2786,8 +2819,12 @@ def factura_publica(request: Request, token: str):
     if not es_factura and registro["estado"] != "cotizacion":
         return Response("Documento no disponible.", status_code=404)
     try:
-        lineas = (ventas.lineas_de_factura(registro) if es_factura
-                  else ventas.lineas_de_cotizacion(registro))
+        # El detalle sale SIEMPRE de la orden (qué compró el cliente).
+        # Desde los items 5-7 (5/10/2026) la factura del pago puede ser un
+        # anticipo del 100% —cuando se cobró antes de entregar— y su única
+        # línea («Anticipo») no le dice nada al cliente; las líneas de la
+        # orden son idénticas a las de la factura en el camino viejo.
+        lineas = ventas.lineas_de_cotizacion(registro)
     except Exception:
         lineas = []
     fecha = datetime.fromisoformat(registro["creado_en"])

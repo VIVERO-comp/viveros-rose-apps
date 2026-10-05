@@ -129,14 +129,15 @@
       <span>
         {% if item.estado == "cotizacion" %}
           {# Facturar/Pagado + el PDF de la cotización (dueño, 30/09/2026:
-             "pon compartir al lado de facturar y pon facturar/pagado") —
-             reemplaza el "Solo Facturar" del 23/09/2026. La pantalla destino
-             (/venta/cobrar) sigue siendo la misma, solo cambió el rótulo; y
-             se agrega el mismo control «Descargar / Compartir (PDF)» que ya
-             usan las tarjetas hermanas (data-pdf: en iPhone abre la hoja
-             nativa de compartir.js, en Android/computadora descarga en
-             pestaña nueva con el nombre calculado en Python). #}
-          <a href="/venta/cobrar/{{ item.n }}">Facturar / Pagado</a>
+             "pon compartir al lado de facturar y pon facturar/pagado").
+             Desde los items 5-7 (5/10/2026) la pantalla destino es
+             /venta/pago: registra el pago SIN marcar la entrega — la
+             entrega la marca el system manager aparte. El control
+             «Descargar / Compartir (PDF)» es el mismo de las tarjetas
+             hermanas (data-pdf: en iPhone abre la hoja nativa de
+             compartir.js, en Android/computadora descarga en pestaña
+             nueva con el nombre calculado en Python). #}
+          <a href="/venta/pago/{{ item.n }}">Facturar / Pagado</a>
           · <a href="/venta/{{ item.n }}/cotizacion.pdf" target="_blank" rel="noopener" download="{{ item.nombre_cotizacion_pdf }}" data-pdf>Descargar / Compartir (PDF)</a>
           · {% with form_action="/venta/cancelar/" + item.n|string,
                     form_confirm="Cancela la cotización " + (item.orden or "sin número") + " también en Odoo y no tiene marcha atrás desde la app: para revivirla habría que crear la venta de nuevo. ¿Cancelar?",
@@ -172,7 +173,7 @@
           <a class="enlace-sub" href="{{ item.whatsapp }}" target="_blank" rel="noopener">Mandar factura</a>
           {% endif %}
         {% else %}
-          <a href="/venta/cobrar/{{ item.n }}">Reintentar</a>
+          <a href="/venta/pago/{{ item.n }}">Reintentar</a>
         {% endif %}
       </span>
       <span class="venta-monto">{{ item.total | dinero }}</span>

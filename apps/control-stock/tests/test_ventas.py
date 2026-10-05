@@ -139,7 +139,10 @@ class OdooFalso:
             # lead_ref (28/09/2026): el PP-XXXXX del lead pendiente, cuando
             # lo hay. Campo nuevo de sale.order (addon 19.0.1.55.0).
             "lead_ref": vals.get("lead_ref"),
-            "amount_total": round(total, 2), "state": "draft", "invoice_ids": [],
+            "amount_total": round(total, 2),
+            # Sin ITBMS: el negocio va exento, así que coincide.
+            "amount_untaxed": round(total, 2),
+            "state": "draft", "invoice_ids": [],
         }
         return nuevo
 
@@ -160,6 +163,7 @@ class OdooFalso:
                 orden["amount_total"] = round(
                     sum(l["product_uom_qty"] * self._precio(l)
                         for l in lineas if not l.get("display_type")), 2)
+                orden["amount_untaxed"] = orden["amount_total"]
             for campo in ("partner_id", "client_order_ref"):
                 if campo in vals:
                     orden[campo] = vals[campo]
@@ -222,11 +226,35 @@ class OdooFalso:
 
     # ---- factura ----
     def sale_advance_payment_inv_create(self, args, kw):
-        return self._nuevo_id()
+        asistente = self._nuevo_id()
+        # Desde los items 5-7 el asistente puede venir como anticipo
+        # ('fixed'): se guardan los valores para que create_invoices sepa
+        # qué factura armar, como en el Odoo real.
+        self.asistentes_factura = getattr(self, "asistentes_factura", {})
+        self.asistentes_factura[asistente] = dict(args[0])
+        return asistente
 
     def sale_advance_payment_inv_create_invoices(self, args, kw):
         orden_id = kw["context"]["active_ids"][0]
         orden = self.ordenes[orden_id]
+        valores = getattr(self, "asistentes_factura", {}).get(
+            args[0][0], {"advance_payment_method": "delivered"})
+        if valores.get("advance_payment_method") == "fixed":
+            # El anticipo factura el monto fijo SIN exigir la entrega — y
+            # con UNA sola línea («Anticipo»), como el Odoo real: la
+            # factura del pago no lista las plantas.
+            if orden["state"] != "sale":
+                raise xmlrpc.client.Fault(1, "...\norden sin confirmar")
+            monto = round(float(valores.get("fixed_amount") or 0), 2)
+            factura = self._nuevo_id()
+            self.facturas[factura] = {
+                "name": f"INV/2026/{factura}", "state": "draft",
+                "amount_total": monto, "payment_state": "not_paid",
+                "lineas": [{"name": "Anticipo", "quantity": 1,
+                            "price_unit": monto, "price_subtotal": monto}],
+            }
+            orden["invoice_ids"].append(factura)
+            return True
         entregado = any(p["sale_id"] == orden_id and p["state"] == "done"
                         for p in self.pickings.values())
         if orden["state"] != "sale" or not entregado:
@@ -455,21 +483,45 @@ def test_cotizar_con_carrito_vacio_avisa(cliente_venta):
     assert r.status_code == 303 and "error=" in r.headers["location"]
 
 
-def test_cobro_completo_con_yappy(cliente_venta, odoo):
+def test_registrar_pago_completo_con_yappy(cliente_venta, odoo):
+    """El flujo nuevo (items 5-7, 5/10/2026): «Registrar pago» confirma,
+    factura y paga — y la ENTREGA NO SE TOCA. El candado en este sentido:
+    pagar jamás valida la salida en Odoo ni escribe el hecho de entrega."""
     _agregar(cliente_venta, 501)
     _agregar(cliente_venta, 502)
     r = cliente_venta.post("/venta/pagar", data={"cliente": "María"}, follow_redirects=False)
-    assert r.status_code == 303 and r.headers["location"].startswith("/venta/cobrar/")
+    assert r.status_code == 303 and r.headers["location"].startswith("/venta/pago/")
     n = r.headers["location"].rsplit("/", 1)[1]
-    r = cliente_venta.post(f"/venta/cobrar/{n}", data={"metodo": "yappy"})
-    assert "Venta cobrada" in r.text
+    r = cliente_venta.post(f"/venta/pago/{n}", data={"metodo": "yappy"})
+    assert "Pago registrado" in r.text
+    assert "La entrega queda pendiente" in r.text
     registro = ventas.obtener_venta(int(n))
     assert registro["estado"] == "pagado" and registro["metodo"] == "yappy"
     assert registro["factura"].startswith("INV/")
     assert odoo.pagos == [{"journal_id": 9, "factura_id": registro["factura_id"]}]
     assert "María" in odoo.partners.values()  # cliente con nombre: partner creado
-    # La entrega quedó validada (sin eso Odoo no habría facturado).
-    assert all(p["state"] == "done" for p in odoo.pickings.values())
+    # EL CANDADO: ninguna salida quedó validada — el pago no entrega.
+    assert all(p["state"] != "done" for p in odoo.pickings.values())
+    # Y el hecho local quedó: pago confirmado (estado 2), sin entrega.
+    from app import venta_estado
+    hechos = venta_estado.estado_de("venta", int(n))
+    assert hechos["pago_confirmado"] == 1 and hechos["estado"] == 2
+    assert hechos["entrega_marcada"] == 0 and hechos["fecha_entrega"] is None
+    assert hechos["pago_monto"] == 8.75  # amount_untaxed (3.50 + 5.25)
+
+
+def test_la_url_vieja_de_cobrar_sigue_viva_y_hace_lo_nuevo(cliente_venta, odoo):
+    """/venta/cobrar no desaparece: el GET redirige a /venta/pago y el
+    POST registra el pago — sin entregar, igual que la ruta nueva."""
+    _agregar(cliente_venta, 501)
+    r = cliente_venta.post("/venta/pagar", data={"cliente": ""}, follow_redirects=False)
+    n = r.headers["location"].rsplit("/", 1)[1]
+    r = cliente_venta.get(f"/venta/cobrar/{n}", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == f"/venta/pago/{n}"
+    r = cliente_venta.post(f"/venta/cobrar/{n}", data={"metodo": "yappy"})
+    assert "Pago registrado" in r.text
+    assert ventas.obtener_venta(int(n))["estado"] == "pagado"
+    assert all(p["state"] != "done" for p in odoo.pickings.values())
 
 
 def test_efectivo_usa_su_diario(cliente_venta, odoo):
@@ -485,21 +537,22 @@ def test_fallo_a_medias_queda_reflejado_y_reintenta(cliente_venta, odoo):
     r = cliente_venta.post("/venta/pagar", data={"cliente": ""}, follow_redirects=False)
     n = int(r.headers["location"].rsplit("/", 1)[1])
 
-    # Revienta al publicar la factura: la venta queda "entregada" con el
-    # error guardado, y la factura ya creada espera en borrador.
+    # Revienta al publicar la factura: la venta queda "confirmada" (el
+    # flujo nuevo ya no pasa por "entregada") con el error guardado, y la
+    # factura ya creada espera en borrador.
     odoo.fallar_una_vez = ("account.move", "action_post")
-    r = cliente_venta.post(f"/venta/cobrar/{n}", data={"metodo": "yappy"},
+    r = cliente_venta.post(f"/venta/pago/{n}", data={"metodo": "yappy"},
                            follow_redirects=False)
-    assert r.status_code == 303  # de vuelta a la pantalla de cobro
+    assert r.status_code == 303  # de vuelta a la pantalla de pago
     registro = ventas.obtener_venta(n)
-    assert registro["estado"] == "entregada"
+    assert registro["estado"] == "confirmada"
     assert "odoo dijo que no" in registro["ultimo_error"]
-    pantalla = cliente_venta.get(f"/venta/cobrar/{n}")
+    pantalla = cliente_venta.get(f"/venta/pago/{n}")
     assert "REINTENTAR" in pantalla.text
 
     # El reintento retoma desde ahí: publica ESA factura (no crea otra) y paga.
-    r = cliente_venta.post(f"/venta/cobrar/{n}", data={"metodo": "yappy"})
-    assert "Venta cobrada" in r.text
+    r = cliente_venta.post(f"/venta/pago/{n}", data={"metodo": "yappy"})
+    assert "Pago registrado" in r.text
     registro = ventas.obtener_venta(n)
     assert registro["estado"] == "pagado" and registro["ultimo_error"] is None
     assert len(next(iter(odoo.ordenes.values()))["invoice_ids"]) == 1
@@ -1069,14 +1122,14 @@ def test_la_factura_baja_con_target_blank_y_download(cliente_venta, odoo):
 
 def test_la_pantalla_de_exito_tambien_baja_con_target_blank_y_download(
         cliente_venta, odoo):
-    """El botón grande de "Venta cobrada" (venta_exito.html) usa `pdf_href`:
+    """El botón grande de "Pago registrado" (venta_exito.html) usa `pdf_href`:
     misma regla del 28/09/2026 que el enlace de Factura en /venta."""
     _agregar(cliente_venta, 501)
     r = cliente_venta.post("/venta/pagar", data={"cliente": "María"},
                            follow_redirects=False)
     n = r.headers["location"].rsplit("/", 1)[1]
     pagina = cliente_venta.post(f"/venta/cobrar/{n}", data={"metodo": "yappy"}).text
-    assert "Venta cobrada" in pagina
+    assert "Pago registrado" in pagina
     encontrado = False
     for trozo in pagina.split("<a ")[1:]:
         enlace = trozo.split(">")[0]

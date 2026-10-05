@@ -15,9 +15,14 @@ intentar el siguiente: si Odoo falla a la mitad, el historial refleja el
 estado real (ej. "confirmada, factura pendiente") y el botón Reintentar
 continúa desde ahí sin duplicar nada (la factura se reutiliza si ya existe).
 
-Los productos facturan por cantidad ENTREGADA (invoice_policy delivery),
-así que el cobro valida primero la salida de inventario — correcto además
-para una venta local: el cliente se lleva las plantas en el momento.
+Los productos facturan por cantidad ENTREGADA (invoice_policy delivery).
+Hasta el 5/10/2026 el cobro validaba primero la salida de inventario y
+entregaba de un golpe; ese golpe era el defecto central de la reply de
+Jay (§3): pagar y entregar son hechos distintos. Hoy «Registrar pago»
+(registrar_pago) confirma, factura y paga SIN tocar la entrega —si la
+salida sigue abierta, la factura es un anticipo del 100%— y la salida la
+valida «Marcar entregada» (validar_salida, llamada desde entregas.py por
+el system manager), y no antes.
 """
 
 import base64
@@ -1741,15 +1746,21 @@ def _confirmar_orden(venta):
     _actualizar_venta(venta["n"], estado="confirmada", total=total)
 
 
-def _entregar_orden(venta):
-    """Valida las salidas de la orden con todo entregado: la venta local se
-    lleva en el momento, y sin entrega Odoo no deja facturar (los productos
-    facturan por cantidad entregada)."""
-    pickings = _ejecutar("stock.picking", "search_read",
-                         [[["sale_id", "=", venta["orden_id"]],
-                           ["state", "not in", ["done", "cancel"]]]],
-                         {"fields": ["state"]})
-    for picking in pickings:
+def _salidas_pendientes(orden_id):
+    """Las salidas de la orden que no están ni validadas ni canceladas."""
+    return _ejecutar("stock.picking", "search_read",
+                     [[["sale_id", "=", orden_id],
+                       ["state", "not in", ["done", "cancel"]]]],
+                     {"fields": ["state"]})
+
+
+def validar_salida(orden_id):
+    """Valida en Odoo las salidas pendientes de la orden con todo
+    entregado. Es LA escritura de entrega en Odoo, y desde los items 5-7
+    (5/10/2026) vive SOLA: la llama «Marcar entregada» (entregas.py), y
+    ya no el cobro — el pago nunca escribe la entrega. No toca el
+    registro local: cada llamador lleva su propio rastro."""
+    for picking in _salidas_pendientes(orden_id):
         movimientos = _ejecutar("stock.move", "search_read",
                                 [[["picking_id", "=", picking["id"]]]],
                                 {"fields": ["product_uom_qty"]})
@@ -1758,13 +1769,22 @@ def _entregar_orden(venta):
                       [[movimiento["id"]],
                        {"quantity": movimiento["product_uom_qty"], "picked": True}])
         _ejecutar("stock.picking", "button_validate", [[picking["id"]]])
+
+
+def _entregar_orden(venta):
+    """El paso de entrega del flujo VIEJO (el botón único). Ya no corre
+    en el cobro — queda solo para re-sellar una venta vieja que haya
+    quedado a medias en 'confirmada' antes del cambio."""
+    validar_salida(venta["orden_id"])
     _actualizar_venta(venta["n"], estado="entregada")
 
 
-def _facturar_orden(venta):
+def _facturar_orden(venta, valores_asistente=None):
     """Crea (o reutiliza) la factura de la orden y la publica. Reutilizar es
     lo que hace al reintento seguro: si el intento anterior creó la factura
-    pero no llegó a publicarla, no se crea otra."""
+    pero no llegó a publicarla, no se crea otra. `valores_asistente` son
+    los del asistente de facturación de Odoo; sin ellos, lo de siempre
+    (facturar lo entregado)."""
     orden = _ejecutar("sale.order", "read", [[venta["orden_id"]]],
                       {"fields": ["invoice_ids"]})[0]
     factura_id = None
@@ -1778,7 +1798,8 @@ def _facturar_orden(venta):
         contexto = {"active_model": "sale.order", "active_ids": [venta["orden_id"]],
                     "active_id": venta["orden_id"]}
         asistente = _ejecutar("sale.advance.payment.inv", "create",
-                              [{"advance_payment_method": "delivered"}],
+                              [valores_asistente
+                               or {"advance_payment_method": "delivered"}],
                               {"context": contexto})
         if isinstance(asistente, list):
             asistente = asistente[0]
@@ -1818,17 +1839,47 @@ def _pagar_factura(venta, metodo):
     _actualizar_venta(venta["n"], estado="pagado", metodo=metodo)
 
 
-_PASOS_COBRO = (
-    ("cotizacion", _confirmar_orden),
-    ("confirmada", _entregar_orden),
-    ("entregada", _facturar_orden),
-)
+def _facturar_para_pago(venta):
+    """La factura del PAGO, sin tocar la entrega (items 5-7, 5/10/2026).
+
+    Las plantas facturan por cantidad ENTREGADA, así que facturarlas
+    directo exigiría validar la salida — y el pago nunca escribe la
+    entrega. Por eso: si la orden ya no tiene salidas pendientes (todo
+    validado, o puros servicios), se factura como siempre ('delivered');
+    si la salida sigue abierta, la factura es un ANTICIPO del 100% del
+    total ('fixed') — la plata completa queda facturada y pagada hoy, la
+    salida la valida «Marcar entregada» después, y la factura del saldo
+    (que en un anticipo del 100% es $0) sigue la mecánica de siempre.
+    LIMITACIÓN conocida: la factura de anticipo imprime una sola línea
+    («Anticipo»), no las plantas — por eso el enlace público /f/ muestra
+    el detalle desde la orden."""
+    valores = None
+    if _salidas_pendientes(venta["orden_id"]):
+        total = _ejecutar("sale.order", "read", [[venta["orden_id"]]],
+                          {"fields": ["amount_total"]})[0]["amount_total"]
+        valores = {"advance_payment_method": "fixed", "fixed_amount": total}
+    _facturar_orden(venta, valores)
 
 
-def cobrar(n, metodo):
-    """Corre los pasos que falten hasta dejar la venta pagada. Devuelve el
-    registro final; si un paso falla, el registro queda en el último estado
-    sellado con el error guardado, y volver a llamar retoma desde ahí."""
+def monto_sin_impuesto(orden_id):
+    """El total sin ITBMS de la orden (para las dos cifras del item 10),
+    o None si Odoo no lo da — nunca se inventa."""
+    try:
+        fila = _ejecutar("sale.order", "read", [[orden_id]],
+                         {"fields": ["amount_untaxed"]})[0]
+        return round(float(fila.get("amount_untaxed") or 0), 2) or None
+    except Exception:
+        return None
+
+
+def registrar_pago(n, metodo, por=""):
+    """«Registrar pago» (items 5-7, 5/10/2026): confirma la orden, factura
+    y registra el pago en Odoo — y NADA más. La entrega NO se toca: eso
+    es «Marcar entregada», otro hecho, de otra persona (el system
+    manager). Deja el hecho del pago en venta_estado (estado 2 con su
+    rastro). Corre por pasos sellados como el flujo de siempre: si Odoo
+    falla a la mitad, el registro queda en el último paso logrado y
+    volver a llamar retoma desde ahí sin duplicar nada."""
     if metodo not in ("yappy", "efectivo"):
         raise ValueError("Método de pago desconocido.")
     venta = obtener_venta(n)
@@ -1836,10 +1887,14 @@ def cobrar(n, metodo):
         return None
     _actualizar_venta(n, metodo=metodo, ultimo_error=None)
     try:
-        for estado, paso in _PASOS_COBRO:
-            venta = obtener_venta(n)
-            if venta["estado"] == estado:
-                paso(venta)
+        venta = obtener_venta(n)
+        if venta["estado"] == "cotizacion":
+            _confirmar_orden(venta)
+        venta = obtener_venta(n)
+        # "entregada": una venta vieja que el flujo anterior dejó a medias
+        # — su salida ya está validada, se factura normal desde ahí.
+        if venta["estado"] in ("confirmada", "entregada"):
+            _facturar_para_pago(venta)
         venta = obtener_venta(n)
         if venta["estado"] == "facturada":
             _pagar_factura(venta, metodo)
@@ -1848,7 +1903,32 @@ def cobrar(n, metodo):
     venta = obtener_venta(n)
     if venta["estado"] == "pagado":
         _avanzar_crm_pagada(venta)
+        _sellar_hecho_pago(venta, por or venta["empleada"])
     return venta
+
+
+def _sellar_hecho_pago(venta, por):
+    """El hecho del pago en venta_estado (best-effort: el cobro ya quedó
+    sellado en Odoo y esto no lo tumba). En plantas el pago del flujo es
+    el total, así que va completo; el monto, sin ITBMS si Odoo lo da."""
+    from . import venta_estado  # diferido: evitar el import en frío
+    try:
+        venta_estado.abrir("venta", venta["n"], venta_estado.TIPO_PLANTAS, por)
+        venta_estado.registrar_pago(
+            "venta", venta["n"], por,
+            monto=monto_sin_impuesto(venta["orden_id"]), completo=True,
+            detalle=f"pago {venta.get('metodo') or ''} por Vender".strip())
+    except Exception as error:
+        print(f"ventas: hecho de pago de la venta {venta['n']} no quedó "
+              f"anotado: {error!r}", flush=True)
+
+
+def cobrar(n, metodo):
+    """El nombre del botón VIEJO (facturaba, pagaba Y entregaba de un
+    golpe). Ese golpe era el defecto (reply de Jay del 5/10, §3): ahora
+    delega en registrar_pago — cobra sin entregar. La entrega vive
+    aparte, en «Marcar entregada»."""
+    return registrar_pago(n, metodo)
 
 
 def _avanzar_crm_pagada(venta):

@@ -1,18 +1,18 @@
 {% extends "base.html" %}
-{% block titulo %}Facturar — Control Viverorose{% endblock %}
+{% block titulo %}Registrar pago — Control Viverorose{% endblock %}
 
 {% block contenido %}
 {# La barra única del teléfono (artefacto aprobado, 23/09/2026). #}
-{% with bm_titulo='Facturar', bm_volver='/venta' %}{% include '_barra_movil.html' %}{% endwith %}
+{% with bm_titulo='Registrar pago', bm_volver='/venta' %}{% include '_barra_movil.html' %}{% endwith %}
 <header>
   <div class="brand">
     <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
     <div>
-      <h1>Facturar</h1>
+      <h1>Registrar pago</h1>
       <small>{{ v.orden }} · {{ v.cliente }}</small>
     </div>
   </div>
-  <a class="x-salir" href="/venta" aria-label="Salir sin facturar">✕</a>
+  <a class="x-salir" href="/venta" aria-label="Salir sin registrar el pago">✕</a>
 </header>
 
 <main class="angosto">
@@ -35,7 +35,7 @@
     {{ v.ultimo_error }}. Al confirmar se reintenta desde ese paso, sin duplicar nada.</div>
   {% endif %}
 
-  <form method="post" action="/venta/cobrar/{{ v.n }}">
+  <form method="post" action="/venta/pago/{{ v.n }}">
     <div class="seccion-titulo">¿Cómo pagó el cliente?</div>
     <p class="nota-cobro">Verifica el pago tú misma antes de confirmar; la app
       no lo comprueba sola.</p>
@@ -53,14 +53,16 @@
     </div>
     <div class="botones-venta">
       <button class="btn btn-dorado btn-grande" type="submit">
-        {% if v.ultimo_error %}REINTENTAR FACTURACIÓN{% else %}FACTURAR{% endif %}
+        {% if v.ultimo_error %}REINTENTAR REGISTRO DEL PAGO{% else %}REGISTRAR PAGO{% endif %}
       </button>
-      <a class="btn btn-linea btn-grande" href="/venta">Volver sin facturar</a>
+      <a class="btn btn-linea btn-grande" href="/venta">Volver sin registrar</a>
     </div>
     <p class="edit-nota" style="margin-top:14px">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      Esto confirma el pedido en Odoo, saca las plantas del inventario, publica
-      la factura y registra el pago. No tiene deshacer automático.
+      Esto confirma el pedido en Odoo, publica la factura y registra el pago.
+      <b>No marca la entrega</b>: la entrega es otro hecho y la marca el
+      system manager aparte, en «Estado / Entrega». No tiene deshacer
+      automático.
     </p>
   </form>
 </main>
