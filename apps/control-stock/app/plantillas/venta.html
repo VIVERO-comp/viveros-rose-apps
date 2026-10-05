@@ -48,6 +48,12 @@
   <div class="aviso-error">{{ error_venta }}</div>
   {% endif %}
 
+  {# La cola «Pagos por confirmar» (item 6): solo la ven los tres
+     deberes (lo decide Python: pagos_confirmar.puede_ver). #}
+  {% if cola_pagos_visible %}
+  <p style="margin:0 0 8px"><a href="/pagos-por-confirmar">Pagos por confirmar →</a></p>
+  {% endif %}
+
   {# El aviso honesto cuando Odoo no contestó al armar la lista: sin él,
      las cotizaciones salían sin Editar ni Quitar y parecían «raras»
      (2/10/2026). Lo decide Python (main._cotizaciones_con_estado). #}

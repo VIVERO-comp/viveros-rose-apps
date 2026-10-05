@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block titulo %}Pagos por confirmar — Control Viverorose{% endblock %}
+
+{% block contenido %}
+<style>
+  /* Local a esta pantalla. La cola no es contabilidad: tarjetas simples. */
+  .pc-fila{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline}
+  .pc-monto{font-weight:800;font-variant-numeric:tabular-nums}
+  .pc-motivo{font-size:12px;color:var(--texto-suave);margin:4px 0 0}
+  .pc-fuera{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;background:#fef3c7;color:#a16207}
+  .pc-form{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+  .pc-form select,.pc-form input[type=text]{width:100%;box-sizing:border-box}
+  .pc-hist{list-style:none;padding:0;margin:6px 0 0;font-size:12.5px;color:var(--texto-suave)}
+  .pc-hist li{padding:4px 0;border-top:1px dashed var(--noche-3)}
+</style>
+{% with bm_titulo='Pagos por confirmar', bm_volver='/venta' %}{% include '_barra_movil.html' %}{% endwith %}
+<header>
+  <div class="brand">
+    <div class="logo"><img src="/static/logo.jpg" alt="Vivero Rose"></div>
+    <div>
+      <h1>Pagos por confirmar</h1>
+      <small>La cola del dinero que nadie confirmó que llegó</small>
+    </div>
+  </div>
+  <a class="x-salir" href="/venta" aria-label="Volver a Vender">✕</a>
+</header>
+
+<main class="angosto">
+  <a class="volver" href="/venta">← Volver a Vender</a>
+
+  {% if error_aviso %}<div class="aviso-error">{{ error_aviso }}</div>{% endif %}
+  {% if aviso %}<div class="aviso-ok">{{ aviso }}</div>{% endif %}
+
+  {# Nada se inventa: si el informe trae huecos, acá se dicen. #}
+  {% for hueco in huecos %}
+  <div class="aviso-error">{{ hueco }}</div>
+  {% endfor %}
+
+  <p class="edit-nota" style="margin-top:4px">Operaciones reporta lo que
+    llegó al banco; el system manager marca la venta. Confirmar registra
+    quién marcó, cuándo y qué vio. Esto no es conciliación bancaria: es
+    la cola de lo que falta confirmar, sobre el mismo motor de Revisar.</p>
+
+  <div class="seccion-titulo">Por confirmar · {{ pendientes | length }}</div>
+  {% if not pendientes and not huecos %}
+  <p class="nada-venta">Nada por confirmar: la cola está limpia.</p>
+  {% endif %}
+  {% for p in pendientes %}
+  <div class="venta-item parcial" id="orden-{{ p.orden_id }}">
+    <div class="pc-fila">
+      <b>{{ p.orden }} · {{ p.cliente or "—" }}</b>
+      <span class="pc-monto">
+        {% if p.fuera_de_odoo %}informado fuera de Odoo{% else %}{{ p.pagado | dinero }}{% endif %}
+        {% if p.debe > 0 %} · debe {{ p.debe | dinero }}{% endif %}
+      </span>
+    </div>
+    <p class="pc-motivo">{{ p.motivo }}
+      {% if p.fuera_de_odoo %}<span class="pc-fuera">verificar: Odoo no tiene la plata</span>{% endif %}
+    </p>
+    {% if puedo_confirmar %}
+    <form class="pc-form" method="post" action="/pagos-por-confirmar/confirmar">
+      <input type="hidden" name="orden_id" value="{{ p.orden_id }}">
+      <select name="evidencia" required>
+        <option value="">— ¿Qué viste? —</option>
+        {% for clave, texto in evidencias.items() %}
+        <option value="{{ clave }}">{{ texto }}</option>
+        {% endfor %}
+      </select>
+      <input type="text" name="nota" maxlength="500"
+             placeholder="Nota (opcional): referencia, fecha del voucher…">
+      <div><button class="btn btn-dorado" type="submit">Confirmar que llegó</button></div>
+    </form>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% if pendientes and not puedo_confirmar %}
+  <p class="edit-nota">Confirmar es del system manager; esta vista es de
+    lectura para operaciones y el owner view.</p>
+  {% endif %}
+
+  {% if historial %}
+  <div class="seccion-titulo" style="margin-top:16px">Confirmados</div>
+  <div class="inv-card">
+    <ul class="pc-hist" style="margin-top:0">
+      {% for h in historial %}
+      <li><b>{{ h.orden }}</b> · {{ h.cliente or "—" }}
+        {% if h.monto is not none %} · {{ h.monto | dinero }}{% endif %}
+        — {{ evidencias.get(h.evidencia, h.evidencia) }}
+        {% if h.nota %} · «{{ h.nota }}»{% endif %}
+        · {{ h.por }} · {{ h.en[:16] }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</main>
+{% endblock %}

@@ -30,8 +30,8 @@ from . import (acceso_google, agenda, altas, avisos, calculos, calendario,
                calendario_ics, conteos, control, conversaciones, cot_lead,
                cotizaciones, coworkers, crm_twenty, datos, datos_roles,
                entregas, fichas, fotos, linear_leads, mantenimiento,
-               proveedores, resumen, seguridad, vehiculos, venta_estado,
-               ventas, wa_autor)
+               pagos_confirmar, proveedores, resumen, seguridad, vehiculos,
+               venta_estado, ventas, wa_autor)
 
 app = FastAPI(title="Control Viverorose")
 
@@ -234,6 +234,7 @@ datos_roles.iniciar_tablas()
 # entrega como obligación nombrada (dirección + asignado).
 venta_estado.iniciar_tablas()
 entregas.iniciar_tablas()
+pagos_confirmar.iniciar_tablas()
 calendario_google.arrancar_hilo()
 # El calendario arranca calentándose en fondo (catálogo + mes en curso):
 # ni la primera visita del día espera a Linear (velocidad, 22/09/2026).
@@ -1489,6 +1490,9 @@ def venta(request: Request, error: str = "", lead: str = "",
             pass
     lista, aviso_lista = _lista_vender(request)
     return plantillas.TemplateResponse(request, "venta.html", {
+        # La cola de pagos (item 6) es de los tres deberes: el enlace
+        # solo existe para quien la puede abrir.
+        "cola_pagos_visible": pagos_confirmar.puede_ver(usuario),
         "lead_pendiente": ventas.lead_pendiente(usuario),
         # El menu de abajo muestra Fichas con la misma regla del principal.
         "puede_fichas": fichas.es_editora(request.state.empleada["id"]),
@@ -2929,6 +2933,70 @@ async def venta_estado_obligacion(request: Request, origen: str, n: int):
     aviso = "" if error else "Entrega guardada."
     return RedirectResponse(_url_estado(origen, n, error or "", aviso),
                             status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# «Pagos por confirmar» (item 6 de Jay): la cola del dinero que nadie
+# confirmó que llegó, sobre el MISMO motor de /revisar (solo lectura
+# hacia Odoo/Linear). La ven los tres deberes; confirma el system
+# manager. /revisar queda exactamente como está.
+# ---------------------------------------------------------------------------
+
+@app.get("/pagos-por-confirmar")
+def pagos_por_confirmar(request: Request, error: str = "", aviso: str = ""):
+    usuario = request.state.empleada["id"]
+    if not pagos_confirmar.puede_ver(usuario):
+        return Response("Esta pantalla es de los deberes system manager, "
+                        "operaciones y owner view (Ajustes → Roles).",
+                        status_code=403)
+    pendientes, huecos = pagos_confirmar.cola()
+    return plantillas.TemplateResponse(request, "pagos_confirmar.html", {
+        "empleada": request.state.empleada,
+        "pendientes": pendientes,
+        "huecos": huecos,
+        "historial": pagos_confirmar.historial(),
+        "evidencias": pagos_confirmar.EVIDENCIAS,
+        "puedo_confirmar": pagos_confirmar.puede_confirmar(usuario),
+        "error_aviso": error or None,
+        "aviso": aviso or None,
+    })
+
+
+@app.post("/pagos-por-confirmar/confirmar")
+async def pagos_por_confirmar_confirmar(request: Request):
+    usuario, nombre = _quien_es(request)
+    if not pagos_confirmar.puede_ver(usuario):
+        return Response("Solo los tres deberes.", status_code=403)
+    form = await request.form()
+    orden_id = (form.get("orden_id") or "").strip()
+    # La fila se relee de la COLA REAL: el monto y el «saldo en 0» salen
+    # del informe, nunca de campos del navegador — un POST armado a mano
+    # no puede convertir un depósito en pago completo.
+    pendientes, _huecos = pagos_confirmar.cola()
+    fila = next((p for p in pendientes
+                 if str(p["orden_id"]) == orden_id), None)
+    if fila is None:
+        return RedirectResponse(
+            "/pagos-por-confirmar?error="
+            + quote("Esa venta ya no está en la cola (recarga)."),
+            status_code=303)
+    codigo = pagos_confirmar.confirmar(
+        fila["orden_id"], fila["orden"], fila["cliente"], fila["pagado"],
+        form.get("evidencia") or "", form.get("nota") or "",
+        usuario, nombre, completo=fila["completo"])
+    if codigo:
+        textos = {
+            "solo_system_manager": "Confirmar es del system manager: "
+                                   "operaciones reporta, él marca.",
+            "evidencia_invalida": "Elegí qué evidencia viste (tarjeta, "
+                                  "Yappy, transferencia o el reporte).",
+        }
+        return RedirectResponse(
+            "/pagos-por-confirmar?error=" + quote(textos.get(codigo, codigo)),
+            status_code=303)
+    return RedirectResponse(
+        "/pagos-por-confirmar?aviso="
+        + quote(f"Pago de {fila['orden']} confirmado."), status_code=303)
 
 
 @app.post("/venta/estado/{origen}/{n}/entregada")
