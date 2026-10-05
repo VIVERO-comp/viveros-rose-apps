@@ -35,6 +35,9 @@
 
   {% with form_cargos="form-servicio", cargos=borrador %}{% include "_cargos.html" %}{% endwith %}
   {% with form_casillas="form-servicio" %}{% include "_casillas.html" %}{% endwith %}
+  {# Términos de pago (item 5 de Jay, 5/10/2026): sin tipo propio, el
+     personalizado cae en «other» (a medida); el override queda registrado. #}
+  {% with form_terminos="form-servicio" %}{% include "_terminos.html" %}{% endwith %}
 
   {# ---- Plantas del catálogo (opcional): con el precio de Odoo ---- #}
   <div class="seccion-titulo" style="margin-top:16px">Plantas y materiales</div>

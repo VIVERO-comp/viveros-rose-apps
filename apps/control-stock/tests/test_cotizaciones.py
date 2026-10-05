@@ -1596,3 +1596,31 @@ def test_venta_nueva_se_pinta_aunque_el_borrador_traiga_basura(cliente, odoo):
     assert r.status_code == 204
     pagina = cliente.get("/venta/nueva")
     assert pagina.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Términos en la cotización de servicio (item 5 de Jay, 5/10/2026)
+# ---------------------------------------------------------------------------
+
+def test_termino_de_renta_se_muestra_y_se_guarda(cliente, odoo):
+    from app import venta_estado
+    pagina = cliente.get("/venta/servicio/renta").text
+    assert "Términos de pago" in pagina
+    assert "50% depósito, 50% al cumplir" in pagina
+    r = cliente.post("/venta/servicio/renta",
+                     data={"cliente": "María", "celular": "",
+                           "servicio_texto": "Alquiler de 20 plantas",
+                           "servicio_monto": "850",
+                           "termino": "30% ahora, 70% al armar"})
+    assert "Cotización de servicio creada" in r.text
+    n = cotizaciones.cotizaciones_todas()[0]["n"]
+    guardado = venta_estado.termino_de("servicio", n)
+    assert guardado["termino"] == "30% ahora, 70% al armar"
+    assert guardado["tipo_venta"] == "rental event"
+    registros = venta_estado.overrides_de("servicio", n)
+    assert len(registros) == 1
+    assert registros[0]["default_que_habia"] == "50% depósito, 50% al cumplir"
+    # La cotización nace en el estado 1 con su tipo: la conversión por
+    # tipo (un depósito no cierra un evento) se decide con esto.
+    hechos = venta_estado.estado_de("servicio", n)
+    assert hechos["estado"] == 1 and hechos["tipo_venta"] == "rental event"

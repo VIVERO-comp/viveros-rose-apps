@@ -1381,3 +1381,46 @@ def test_sin_envio_sigue_ignorando_el_campo_aunque_sea_ilegible(db_limpia):
     se ignora entero)."""
     assert ventas.resolver_envio({"envio_opcion": "", "envio": "abc"}) == {
         "envio": 0.0, "envio_opcion": "", "envio_nota": ""}
+
+
+# ---------------------------------------------------------------------------
+# Términos en la cotización (item 5 de Jay, 5/10/2026): el default del
+# tipo se muestra y se guarda con la venta; el override queda registrado
+# con quién, cuándo y qué decía el default.
+# ---------------------------------------------------------------------------
+
+def test_el_formulario_muestra_el_termino_default_de_plantas(cliente_venta):
+    _agregar(cliente_venta, 501)
+    pagina = cliente_venta.get("/venta/nueva").text
+    assert "Términos de pago" in pagina
+    assert "100% antes de proceder" in pagina
+
+
+def test_cotizar_guarda_el_termino_default_sin_override(cliente_venta):
+    from app import venta_estado
+    _agregar(cliente_venta, 501)
+    cliente_venta.post("/venta/cotizar", data={"cliente": "", "termino": ""})
+    n = ventas.ventas_todas()[0]["n"]
+    guardado = venta_estado.termino_de("venta", n)
+    assert guardado["termino"] == "100% antes de proceder"
+    assert guardado["tipo_venta"] == "plant retail"
+    assert venta_estado.overrides_de("venta", n) == []
+    # Y la venta nació en el estado 1 con su tipo (conversión por tipo).
+    hechos = venta_estado.estado_de("venta", n)
+    assert hechos["estado"] == 1 and hechos["tipo_venta"] == "plant retail"
+
+
+def test_override_del_termino_queda_registrado(cliente_venta):
+    from app import venta_estado
+    _agregar(cliente_venta, 501)
+    cliente_venta.post("/venta/cotizar",
+                       data={"cliente": "Ana",
+                             "termino": "50% ahora, 50% al entregar"})
+    n = ventas.ventas_todas()[0]["n"]
+    assert venta_estado.termino_de("venta", n)["termino"] == \
+        "50% ahora, 50% al entregar"
+    registros = venta_estado.overrides_de("venta", n)
+    assert len(registros) == 1
+    assert registros[0]["default_que_habia"] == "100% antes de proceder"
+    assert registros[0]["por"] == "Génesis"
+    assert registros[0]["en"]

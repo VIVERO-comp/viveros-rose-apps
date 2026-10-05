@@ -351,13 +351,21 @@ def poner_estado_manual(origen, venta, estado, por_usuario, por_nombre=None):
 # override queda registrado con su rastro.
 # ---------------------------------------------------------------------------
 
+def tipo_info(tipo_venta):
+    """La fila del catálogo tipos_venta que calza con este tipo (por
+    nombre normalizado), o None: de ahí salen el término por defecto y si
+    el override se ofrece a la vista."""
+    for tipo in datos_roles.tipos_venta_activos():
+        if _plano(tipo["nombre"]) == _plano(tipo_venta):
+            return tipo
+    return None
+
+
 def termino_default_de(tipo_venta):
     """El término por defecto del tipo, leído de datos_roles (Settings es
     quien lo edita). '' si el tipo no está en el catálogo."""
-    for tipo in datos_roles.tipos_venta_activos():
-        if _plano(tipo["nombre"]) == _plano(tipo_venta):
-            return tipo["termino_default"] or ""
-    return ""
+    info = tipo_info(tipo_venta)
+    return (info or {}).get("termino_default") or ""
 
 
 def guardar_termino(origen, venta, tipo_venta, termino, por):

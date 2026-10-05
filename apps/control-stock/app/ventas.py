@@ -1214,7 +1214,12 @@ CAMPOS_EXTRA = (CAMPOS_CLIENTE
                 + ("envio_opcion", "envio_nota")
                 # La casilla del PDF y su marcador (28/09/2026). [1/10/2026:
                 # el pago 50/50 se retiró; queda solo la garantía.]
-                + ("casillas", "con_garantia"))
+                + ("casillas", "con_garantia")
+                # Los términos de pago de la cotización (item 5 de Jay,
+                # 5/10/2026): sobreviven a los reloads igual que los
+                # cargos. NO es un dato del cliente: el filtro del eco
+                # (CAMPOS_CLIENTE) no lo toca.
+                + ("termino",))
 
 
 def banderas_de(form, marcada_por_defecto):

@@ -1707,6 +1707,9 @@ def venta_nueva(request: Request, q: str = "", error: str = "", campo: str = "",
                                                  avisar=False)
     # La casilla del PDF (garantía): en venta normal nace DESMARCADA.
     contexto["casillas"] = ventas.banderas_de(contexto["borrador"], False)
+    # Los términos de pago (item 5): la venta de plantas es plant retail.
+    contexto["terminos"] = _contexto_terminos(venta_estado.TIPO_PLANTAS,
+                                              contexto["borrador"])
     contexto["total_con_cargos"] = (
         contexto["total_carrito"] + contexto["total_renglones_planta"]
         + sum(v for v in contexto["cargos_montos"].values()
@@ -2118,6 +2121,8 @@ async def venta_cotizar(request: Request):
     except Exception as error:
         return _redirigir_venta(f"Odoo no aceptó la cotización: {ventas._mensaje_de_error(error)}",
                                 nueva=True)
+    _sellar_estado_y_termino("venta", registro["n"], venta_estado.TIPO_PLANTAS,
+                             form, request.state.empleada)
     return plantillas.TemplateResponse(request, "venta_exito.html", {
         "titulo": "Cotización creada",
         "sub": f"{registro['orden']} · {registro['cliente']}",
@@ -2164,6 +2169,8 @@ async def venta_vender(request: Request):
     except Exception as error:
         return _redirigir_venta(f"Odoo no aceptó la venta: {ventas._mensaje_de_error(error)}",
                                 nueva=True)
+    _sellar_estado_y_termino("venta", registro["n"], venta_estado.TIPO_PLANTAS,
+                             form, request.state.empleada)
     return plantillas.TemplateResponse(request, "venta_exito.html", {
         "titulo": "Venta confirmada",
         "sub": f"{registro['orden']} · {registro['cliente']}",
@@ -2185,6 +2192,35 @@ async def venta_vender(request: Request):
 # haber un formulario en curso a la vez (igual que hoy con Nueva Venta).
 # ---------------------------------------------------------------------------
 
+def _contexto_terminos(tipo_venta, borrador):
+    """Los términos de pago del formulario (item 5 de Jay, 5/10/2026): el
+    default del TIPO DE VENTA (Settings · datos_roles), lo que el
+    borrador traiga escrito, y si el cambio se ofrece a la vista
+    (override_visible — plantas lo lleva plegado: su default es pagar
+    completo y el override es raro, pero nunca imposible)."""
+    info = venta_estado.tipo_info(tipo_venta) or {}
+    default = info.get("termino_default") or ""
+    valor = (borrador.get("termino") or "").strip() or default
+    return {"tipo": info.get("nombre") or tipo_venta, "default": default,
+            "valor": valor, "editable": bool(info.get("override_visible", 1))}
+
+
+def _sellar_estado_y_termino(origen, n, tipo_venta, form, empleada):
+    """Tras crear la venta/cotización: la fila de los 3 estados (nace en
+    1, con su tipo — la conversión por tipo se decide con esto) y el
+    término guardado con la venta (override registrado si difiere del
+    default). Best-effort: la orden ya está creada en Odoo y esto no la
+    tumba — pero el fallo queda en el log, nunca mudo del todo."""
+    por = empleada.get("nombre") or empleada["id"]
+    try:
+        venta_estado.abrir(origen, n, tipo_venta, por)
+        venta_estado.guardar_termino(origen, n, tipo_venta,
+                                     form.get("termino") or "", por)
+    except Exception as error:
+        print(f"venta_estado: el estado/término de {origen} {n} no quedó "
+              f"anotado: {error!r}", flush=True)
+
+
 def _contexto_servicio(request, tipo, q="", error=None, servicios=None):
     """El contexto del mini-formulario de un tipo. Lo comparten el GET y el
     POST que no pudo crear la cotización: así un error no borra los
@@ -2203,6 +2239,8 @@ def _contexto_servicio(request, tipo, q="", error=None, servicios=None):
         "cobro": cobro, "por_planta": por_planta,
         "resultados": None, "carrito": [], "total_carrito": 0.0,
         "borrador": borrador, "servicios": servicios or [{"texto": "", "monto": "", "descripcion": ""}],
+        "terminos": _contexto_terminos(
+            venta_estado.TIPO_DE_SERVICIO.get(tipo, "other"), borrador),
         "error_venta": error or None,
     }
     if contexto["ventas_activo"]:
@@ -2295,6 +2333,9 @@ async def venta_servicio_crear(request: Request, tipo: str):
             status_code=200)
     ventas.vaciar_carrito(usuario)
     ventas._limpiar_borrador(usuario)
+    _sellar_estado_y_termino("servicio", registro["n"],
+                             venta_estado.TIPO_DE_SERVICIO.get(tipo, "other"),
+                             form, request.state.empleada)
     filas = [("Tipo", cotizaciones.etiqueta_de(tipo), None),
              ("Total", dinero_venta(registro["total"]), None),
              ("Estado", "Cotización (borrador en Odoo)", "dorado")]
@@ -2326,6 +2367,9 @@ def _contexto_personalizada(request, q="", error=None, renglones=None,
         "borrador": borrador, "error_venta": error or None,
         # La casilla del PDF (garantía): en el personalizado nace MARCADA.
         "casillas": ventas.banderas_de(borrador, True),
+        # Términos (item 5): el personalizado no tiene tipo propio — cae
+        # en "other" (a medida, override a la vista).
+        "terminos": _contexto_terminos("other", borrador),
         "renglones": renglones or [{"texto": "", "cantidad": "", "precio": "", "descripcion": ""}],
         "servicios": servicios or [{"texto": "", "monto": "", "descripcion": ""}],
     }
@@ -2409,6 +2453,8 @@ async def venta_personalizada_crear(request: Request):
                 renglones=renglones, servicios=servicios))
     ventas.vaciar_carrito(usuario)
     ventas._limpiar_borrador(usuario)
+    _sellar_estado_y_termino("servicio", registro["n"], "other",
+                             form, request.state.empleada)
     return plantillas.TemplateResponse(request, "venta_exito.html", {
         "titulo": "Cotización creada",
         "sub": f"{registro['orden']} · {registro['cliente']}",
@@ -2663,6 +2709,8 @@ async def venta_pagar(request: Request):
     except Exception as error:
         return _redirigir_venta(f"Odoo no aceptó el pedido: {ventas._mensaje_de_error(error)}",
                                 nueva=True)
+    _sellar_estado_y_termino("venta", registro["n"], venta_estado.TIPO_PLANTAS,
+                             form, request.state.empleada)
     return RedirectResponse(f"/venta/pago/{registro['n']}", status_code=303)
 
 
