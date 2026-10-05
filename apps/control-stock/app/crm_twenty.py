@@ -208,6 +208,58 @@ def ficha_de_lead(lead):
     return dato
 
 
+def mensaje_legible(m):
+    """Un mensaje crudo de Twenty -> lo que pinta el hilo.
+
+    `fecha` cruda además de la bonita: el hilo de la ficha ordena los
+    mensajes contra los sucesos del sistema, y para eso hace falta algo
+    comparable, no "24/09 · 08:05".
+    """
+    cruda = m.get("fecha") or m.get("createdAt") or ""
+    return {
+        "texto": m.get("texto") or "",
+        "salida": (m.get("direccion") or "") == "SALIENTE",
+        "cuando": _cuando_bonito(cruda),
+        "fecha": cruda,
+        "dia": dia_legible(cruda),
+        "hora": hora_legible(cruda),
+        # Quién lo escribió (Fase B). Vacío mientras WAHA no lo haya
+        # anotado todavía: entonces el hilo dice «Vivero», que es lo
+        # único cierto, en vez de inventar un nombre.
+        "autor": (m.get("autor") or "").strip(),
+    }
+
+
+def _telefonos_candidatos(celular):
+    """Las grafías con que ese celular puede estar en `mensajesWhatsapp`.
+
+    El issue guarda "6552-0966"; Twenty guarda lo que vio WAHA, que para
+    Panamá es "50765520966" (y a veces los 8 dígitos pelados). Se buscan
+    las dos — en UN solo filter con or(): dos `filter=` en la misma URL
+    no se suman, el segundo pisa al primero.
+    """
+    digitos = "".join(c for c in str(celular or "") if c.isdigit())
+    if not digitos:
+        return []
+    if digitos.startswith("507") and len(digitos) == 11:
+        return [digitos, digitos[3:]]
+    if len(digitos) == 8:
+        return ["507" + digitos, digitos]
+    return [digitos]
+
+
+def _mensajes_por_telefono(celular, limite=60):
+    """Los mensajes crudos de ese teléfono, de viejo a nuevo ([] si nada)."""
+    candidatos = _telefonos_candidatos(celular)
+    if not candidatos:
+        return []
+    condiciones = ",".join(f"telefono[eq]:%22{quote(t)}%22" for t in candidatos)
+    filtro = f"or({condiciones})" if len(candidatos) > 1 else condiciones
+    j = _twenty(f"mensajesWhatsapp?filter={filtro}"
+                f"&order_by=createdAt[AscNullsFirst]&limit={int(limite)}")
+    return (j.get("data") or {}).get("mensajesWhatsapp") or []
+
+
 def _buscar_ficha(lead):
     lead_web = None
     if lead.get("id"):
@@ -218,43 +270,45 @@ def _buscar_ficha(lead):
         j = _twenty(f'leadsWeb?filter=codigoRef[eq]:%22{quote(lead["pp"])}%22&limit=1')
         filas = (j.get("data") or {}).get("leadsWeb") or []
         lead_web = filas[0] if filas else None
-    if not lead_web:
+
+    persona_id = (lead_web or {}).get("personaId") or ""
+    crudos = []
+    if persona_id:
+        j = _twenty("mensajesWhatsapp?filter=personaId[eq]:%22" + quote(persona_id)
+                    + "%22&order_by=createdAt[AscNullsFirst]&limit=60")
+        crudos = (j.get("data") or {}).get("mensajesWhatsapp") or []
+
+    if not crudos:
+        # El reintento del casamiento (Nº12 de la lista de bugs, 5/10/2026):
+        # antes esto casaba UNA sola vez, al entrar el mensaje, y si fallaba
+        # la ficha decía «Sin chat disponible» para siempre aunque Twenty
+        # tuviera la conversación completa. Ahora, al abrir la ficha sin
+        # conversación casada, se vuelve a buscar por teléfono. Solo
+        # LECTURA: el amarre no se escribe en Twenty — con resolver en
+        # caliente basta, y el caché de 60 s de `ficha_de_lead` evita
+        # martillear.
+        crudos = _mensajes_por_telefono(lead.get("celular"))
+        if not persona_id:
+            persona_id = next(
+                (m.get("personaId") for m in crudos if m.get("personaId")), "")
+
+    if not lead_web and not crudos:
+        # De verdad no hay nada: «Sin chat disponible» sigue siendo cierto.
         return None
 
-    persona_id = lead_web.get("personaId") or ""
     telefono = wa = ""
     if persona_id:
         p = (_twenty(f"people/{quote(persona_id)}").get("data") or {}).get("person") or {}
         telefono = telefono_legible(p.get("phones"))
         wa = telefono_wame(p.get("phones"))
 
-    mensajes = []
-    if persona_id:
-        j = _twenty("mensajesWhatsapp?filter=personaId[eq]:%22" + quote(persona_id)
-                    + "%22&order_by=createdAt[AscNullsFirst]&limit=60")
-        for m in (j.get("data") or {}).get("mensajesWhatsapp") or []:
-            # `fecha` cruda además de la bonita: el hilo de la ficha ordena
-            # los mensajes contra los sucesos del sistema, y para eso hace
-            # falta algo comparable, no "24/09 · 08:05".
-            cruda = m.get("fecha") or m.get("createdAt") or ""
-            mensajes.append({
-                "texto": m.get("texto") or "",
-                "salida": (m.get("direccion") or "") == "SALIENTE",
-                "cuando": _cuando_bonito(cruda),
-                "fecha": cruda,
-                "dia": dia_legible(cruda),
-                "hora": hora_legible(cruda),
-                # Quién lo escribió (Fase B). Vacío mientras WAHA no lo haya
-                # anotado todavía: entonces el hilo dice «Vivero», que es lo
-                # único cierto, en vez de inventar un nombre.
-                "autor": (m.get("autor") or "").strip(),
-            })
+    mensajes = [mensaje_legible(m) for m in crudos]
 
     llego = ""
-    if lead_web.get("createdAt"):
+    if lead_web and lead_web.get("createdAt"):
         llego = calendario.dmy(str(lead_web["createdAt"])[:10])
     return {
-        "pp": lead_web.get("codigoRef") or lead.get("pp") or "",
+        "pp": (lead_web or {}).get("codigoRef") or lead.get("pp") or "",
         "telefono": telefono,
         "wa": wa,
         "llego": llego,
@@ -333,3 +387,61 @@ def issue_de_persona(persona_id):
                 + "%22&limit=1")
     filas = (j.get("data") or {}).get("leadsWeb") or []
     return (filas[0].get("linearIssueId") or "") if filas else ""
+
+
+# ---------------------------------------------------------------------------
+# Las conversaciones completas (ITEM 11 de Jay, 5/10/2026): la pantalla
+# /conversaciones lee TODOS los mensajes recientes, casados o no con un
+# lead. Solo lectura; estas dos funciones LANZAN si Twenty no contesta —
+# quien llama (app/conversaciones.py) decide qué decir en pantalla.
+# ---------------------------------------------------------------------------
+
+# Twenty responde de a 60 por página: pedir más se pagina acá adentro con
+# el cursor, para que quien llama hable de "los últimos 300" sin saberlo.
+_PAGINA_TWENTY = 60
+
+
+def _paginado(ruta_base, coleccion, limite):
+    """(filas, hay_mas) de una colección REST, paginando con el cursor."""
+    filas, cursor = [], ""
+    hay_mas = False
+    while len(filas) < limite:
+        tanda = min(_PAGINA_TWENTY, limite - len(filas))
+        ruta = f"{ruta_base}&limit={tanda}"
+        if cursor:
+            ruta += f"&starting_after={quote(cursor)}"
+        j = _twenty(ruta)
+        pagina = (j.get("data") or {}).get(coleccion) or []
+        filas.extend(pagina)
+        info = j.get("pageInfo") or (j.get("data") or {}).get("pageInfo") or {}
+        sigue = info.get("hasNextPage")
+        if sigue is None:
+            # Sin pageInfo no se inventa: una página llena PUEDE tener más.
+            sigue = len(pagina) == tanda
+        cursor = info.get("endCursor") or ""
+        if not pagina or not sigue:
+            break
+        if not cursor:
+            # Hay más pero no hay con qué pedirlo: se dice, no se niega.
+            hay_mas = True
+            break
+    else:
+        hay_mas = True
+    return filas[:limite], hay_mas
+
+
+def mensajes_recientes(limite=300):
+    """(mensajes crudos, hay_mas): los últimos de TODO el WhatsApp, del
+    más nuevo al más viejo."""
+    return _paginado(
+        "mensajesWhatsapp?order_by=fecha[DescNullsLast]",
+        "mensajesWhatsapp", int(limite))
+
+
+def mensajes_de_chat(chat_id, limite=400):
+    """Los mensajes crudos de UN chat, de viejo a nuevo."""
+    filtro = f"chatId[eq]:%22{quote(str(chat_id))}%22"
+    filas, _ = _paginado(
+        f"mensajesWhatsapp?filter={filtro}&order_by=fecha[AscNullsFirst]",
+        "mensajesWhatsapp", int(limite))
+    return filas
