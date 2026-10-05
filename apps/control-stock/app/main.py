@@ -1456,7 +1456,7 @@ def _enlace_whatsapp(request, venta):
 
 @app.get("/venta")
 def venta(request: Request, error: str = "", lead: str = "",
-          cliente: str = "", cel: str = ""):
+          cliente: str = "", cel: str = "", abrir: str = ""):
     # La pestaña: el botón grande "+ Venta" (arriba de los servicios,
     # dueño 28/09/2026) y el historial local.
     usuario = request.state.empleada["id"]
@@ -1482,7 +1482,7 @@ def venta(request: Request, error: str = "", lead: str = "",
                        + len(ventas.renglones_planta_de(usuario)))
         except Exception:
             pass
-    lista, aviso_lista = _lista_vender(request)
+    filas, aviso_lista = _lista_vender(request)
     return plantillas.TemplateResponse(request, "venta.html", {
         "lead_pendiente": ventas.lead_pendiente(usuario),
         # El menu de abajo muestra Fichas con la misma regla del principal.
@@ -1492,8 +1492,19 @@ def venta(request: Request, error: str = "", lead: str = "",
         "en_curso": en_curso,
         "tipos_servicio": [(t, cotizaciones.etiqueta_para_cotizar(t))
                           for t in cotizaciones.ORDEN_TIPOS],
-        "vender_lista": lista,
+        "vender_lista": filas,
         "aviso_lista": aviso_lista,
+        # Diseño Orquesta (2/10/2026): la misma lista única, agrupada en
+        # columnas por su estado de HOY — la agrupación es presentación,
+        # cada tarjeta conserva sus mismas acciones y rutas.
+        "vender_columnas": _vender_columnas(filas),
+        # La tarjeta abierta (?abrir=v3 | ?abrir=s3): panel a la derecha en
+        # computadora, pantalla completa en el teléfono. Mismo patrón
+        # servidor-y-enlaces que «Ventas a revisar» (revisar_ventas.html).
+        "abierta": _vender_abierta(filas, abrir),
+        # Los tiles del resumen (pantalla 09): cómo pagaron las pagadas,
+        # por método — solo restata lo que la lista ya trae.
+        "vender_pagos": _vender_pagos(filas),
     })
 
 
@@ -1532,6 +1543,16 @@ def _fila_venta(request, v):
             (v["orden"] or "").replace("/", "-"), v["cliente"]),
         "nombre_factura_pdf": ventas.nombre_de_pdf(
             (v["factura"] or str(v["n"])).replace("/", "-"), v["cliente"]),
+        # Diseño Orquesta (2/10/2026): color según el interés — una venta
+        # de plantas es retail (familia green de la paleta única).
+        "acento": colores.acento_servicio("retail"),
+        "chip_estilo": colores.chip_estilo("green"),
+        "chip_texto": "Plantas",
+        "contacto": _contacto_de(v.get("celular")),
+        # El ancla de la tarjeta (no perder el lugar en la lista) y la URL
+        # que abre su panel (?abrir=, mismo patrón que Ventas a revisar).
+        "ancla": f"v-{v['n']}",
+        "abrir_url": f"/venta?abrir=v{v['n']}#v-{v['n']}",
     }
 
 
@@ -1549,13 +1570,116 @@ def _lista_vender(request):
     filas = (
         [_fila_venta(request, v) for v in ventas.ventas_todas()
          if v["estado"] != "cancelada"]
-        + [{**c, "tipo": "servicio"} for c in servicios
+        + [_fila_servicio(c) for c in servicios
            if not c["cancelada"]]
     )
     filas.sort(key=lambda f: (_numero_de_orden(f["orden"]) is not None,
                               _numero_de_orden(f["orden"]) or 0),
               reverse=True)
     return filas, aviso
+
+
+def _fila_servicio(c):
+    """Una cotización de servicio, vestida para la lista única. "tipo"
+    pasa a ser el discriminador de la plantilla ("servicio") y el tipo de
+    NEGOCIO (renta, boda, …) sobrevive en "tipo_servicio" — antes se
+    pisaba y el color del interés no tenía de dónde salir."""
+    return {
+        **c, "tipo": "servicio", "tipo_servicio": c["tipo"],
+        "acento": colores.acento_servicio(c["tipo"]),
+        "chip_estilo": colores.chip_servicio(c["tipo"]),
+        "chip_texto": c["etiqueta_tipo"],
+        "contacto": _contacto_de(c.get("celular")),
+        "ancla": f"cot-{c['n']}",
+        "abrir_url": f"/venta?abrir=s{c['n']}#cot-{c['n']}",
+    }
+
+
+def _contacto_de(celular):
+    """Los enlaces de contacto del panel (llamar y abrir el chat de
+    WhatsApp) a partir del celular guardado; None si no hay. Un celular
+    local de 8 dígitos se completa con 507, igual que _enlace_whatsapp."""
+    if not celular:
+        return None
+    digitos = "".join(c for c in celular if c.isdigit())
+    if not digitos:
+        return None
+    if len(digitos) == 8:
+        digitos = "507" + digitos
+    return {"tel": f"tel:+{digitos}", "wa": f"https://wa.me/{digitos}"}
+
+
+# Las tres columnas del tablero de Vender (diseño Orquesta). Son los
+# estados que EXISTEN hoy — no las columnas soñadas del lienzo (Abonado,
+# Pagado esta semana), que piden datos de pagos que esta lista no lee.
+COLUMNAS_VENDER = (
+    ("cotizado", "Cotizado",
+     "No aparta plantas. El pedido nace cuando el cliente paga o abona."),
+    ("confirmado", "Confirmado · falta cobrar",
+     "El cobro vive en el kanban de Odoo."),
+    ("pagado", "Pagado", "Cobradas por completo."),
+)
+
+
+def _columna_vender(f):
+    """En qué columna cae una fila de la lista única, según su estado de
+    HOY: cotización (planta o servicio sin facturar) · confirmado (vendida,
+    facturada o a medio pipeline) · pagado."""
+    if f["tipo"] == "servicio":
+        return "confirmado" if f["facturada"] else "cotizado"
+    if f["estado"] == "cotizacion":
+        return "cotizado"
+    if f["estado"] == "pagado":
+        return "pagado"
+    return "confirmado"
+
+
+def _vender_columnas(filas):
+    """Las columnas del tablero, armadas en Python (regla 10): la lista
+    única de siempre repartida por estado, con cuenta y total por
+    columna. El ORDEN dentro de cada columna es el de la lista (número de
+    orden descendente): agrupar es presentación, no otro orden."""
+    columnas = []
+    for clave, titulo, pista in COLUMNAS_VENDER:
+        items = [f for f in filas if _columna_vender(f) == clave]
+        columnas.append({
+            "clave": clave, "titulo": titulo, "pista": pista,
+            "items": items, "cuenta": len(items),
+            "total": sum((f["total"] or 0) for f in items),
+        })
+    return columnas
+
+
+def _vender_pagos(filas):
+    """Cómo pagaron las ventas PAGADAS de la lista, agrupadas por método
+    (Yappy · Efectivo · Sin método), para el resumen lateral del tablero.
+    Nada se inventa: si no hay pagadas, la lista sale vacía y la
+    plantilla no pinta el bloque."""
+    nombres = {"yappy": "Yappy", "efectivo": "Efectivo"}
+    grupos = {}
+    for f in filas:
+        if f["tipo"] != "venta" or f["estado"] != "pagado":
+            continue
+        nombre = nombres.get(f.get("metodo"), "Sin método")
+        grupo = grupos.setdefault(nombre, {"nombre": nombre, "cuenta": 0,
+                                           "monto": 0.0})
+        grupo["cuenta"] += 1
+        grupo["monto"] += f["total"] or 0
+    return sorted(grupos.values(), key=lambda g: -g["monto"])
+
+
+def _vender_abierta(filas, abrir):
+    """La fila que pide ?abrir= (v3 = venta n.º 3, s3 = cotización de
+    servicio n.º 3); None si el parámetro no apunta a nada — una URL
+    vieja o manoseada no rompe la pantalla, solo no abre panel."""
+    if len(abrir or "") < 2 or abrir[0] not in "vs" or not abrir[1:].isdigit():
+        return None
+    tipo = "venta" if abrir[0] == "v" else "servicio"
+    n = int(abrir[1:])
+    for f in filas:
+        if f["tipo"] == tipo and f["n"] == n:
+            return f
+    return None
 
 
 def _cotizaciones_con_estado():

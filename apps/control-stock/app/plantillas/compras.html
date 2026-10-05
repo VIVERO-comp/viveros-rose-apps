@@ -19,8 +19,15 @@
    control.js de siempre, que lee el destino y el campo de la propia
    columna (data-destino / data-campo). El servidor arma todo. #}
 <link rel="stylesheet" href="/static/calendario.css?v={{ v_estaticos }}">
+{# Diseño Orquesta (2/10/2026): tipografía Geist y la capa base del
+   menú nuevo, DESPUÉS de calendario.css para ganar por orden. #}
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/diseno-base.css?v={{ v_estaticos }}">
+{# …y la piel propia de Compras (pantallas 12/13/28/29 del lienzo), que
+   se prende con la clase `cpd` del body y no toca a las otras pestañas. #}
+<link rel="stylesheet" href="/static/diseno-compras.css?v={{ v_estaticos }}">
 </head>
-<body class="{{ 'menu-oculto' if request.cookies.get('menu') == '0' }}">
+<body class="cpd {{ 'menu-oculto' if request.cookies.get('menu') == '0' }}">
 
 <div class="app">
   <aside class="lado">
@@ -59,7 +66,7 @@
   <div class="tablero">
     {% with bm_titulo='Compras', bm_sub='Lo que le compramos al proveedor',
             bm_accion_url=('/compras?nueva=1' if puede_mover else ''),
-            bm_accion_texto='+ Compra' %}{% include '_barra_movil.html' %}{% endwith %}
+            bm_accion_texto='+ Anotar compra' %}{% include '_barra_movil.html' %}{% endwith %}
     {# La copia del teléfono del segmento de vistas: bajo 768px la `.barra`
        está escondida, y sin esto no habría cómo llegar a Proveedores desde
        el celular. #}
@@ -80,7 +87,7 @@
       </span>
       {# El único botón negro de la pantalla. #}
       {% if puede_mover %}
-      <a class="btn oro" href="/compras?nueva=1">+ Compra</a>
+      <a class="btn oro" href="/compras?nueva=1">+ Anotar compra</a>
       {% endif %}
     </div>
 
@@ -120,12 +127,19 @@
        la columna sola — sin una línea de JavaScript. #}
     <div class="ret-tablero" id="cp-tablero">
       {% for col in columnas %}
-      <div class="ret-col" id="col-{{ col.clave }}">
+      {# El color de la columna viaja como variable CSS (--cpd-col) y el
+         contador con el chip pastel de la paleta: los dos salen de
+         paleta.json por compras.ESTADOS — la piel nueva no trae ni un hex
+         de estado propio. #}
+      <div class="ret-col" id="col-{{ col.clave }}" style="--cpd-col:{{ col.color }}">
         <div class="ret-cab">
           <span class="pt-leyenda" style="background:{{ col.color }}"></span>
           <b>{{ col.titulo }}</b><span class="crece"></span>
-          <span class="ret-cuenta">{{ col.compras|length }}</span>
+          <span class="ret-cuenta" style="{{ col.chip }}">{{ col.compras|length }}</span>
         </div>
+        {# El pie de la columna va ACÁ, como el hint bajo el título del
+           lienzo («ya se le pidió»); antes vivía abajo de la lista. #}
+        <div class="ret-pie">{{ col.pie }}</div>
         {# El arrastre es el control.js de Control, sin tocarlo: la columna
            dice a dónde va el POST y cómo se llama el campo. #}
         <div class="ret-lista" data-columna="{{ col.clave }}"
@@ -189,7 +203,6 @@
           </div>
           {% endfor %}
         </div>
-        <div class="ret-pie">{{ col.pie }}</div>
       </div>
       {% endfor %}
     </div>
@@ -215,7 +228,11 @@
   <div class="cab-panel">
     <div><span class="tenue">{{ abierta.ref }}</span>
       <h4>{{ abierta.que_compro }}</h4></div>
-    <a class="btn chico" href="{{ vuelta }}">Cerrar</a>
+    {# La X del lienzo (pantalla 13): mismo enlace de cerrar de siempre,
+       ahora como botón cuadrado con icono. Cerrar vuelve a SU tarjeta. #}
+    <a class="cpd-x" href="{{ vuelta }}" aria-label="Cerrar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </a>
   </div>
   <div class="dato"><b>Columna</b><span>{{ abierta.estado_ficha.titulo }}</span></div>
   {% if abierta.proveedor %}
@@ -267,9 +284,11 @@
      (`compras.falta_la_orden` / `compras.desde_pedido`), no la plantilla.
 
      Cada botón es su propio <form>: dentro de una tarjeta arrastrable no
-     hay formularios, y acá en el panel sí — son dos acciones distintas y
-     ninguna es LA acción principal de la pantalla, así que van grises (el
-     botón negro de Compras es «+ Compra»). #}
+     hay formularios, y acá en el panel sí. Con el Diseño Orquesta
+     (pantalla 13) la acción del PANEL va en negro: la regla del lienzo es
+     «al abrir una tarjeta, un solo botón negro: el paso que toca ahora» —
+     y en el panel ese paso es crear la orden o registrar lo que llegó.
+     El del tablero sigue siendo «+ Anotar compra». #}
   {% if abierta.falta_orden %}
   <div class="campo-caja">
     <label>Orden de compra</label>
@@ -280,7 +299,7 @@
     <form method="post" action="/compras/orden">
       <input type="hidden" name="ref" value="{{ abierta.ref }}">
       <div class="acciones">
-        <button class="btn" type="submit" data-guardando="Creando…">Crear la orden en Odoo</button>
+        <button class="btn oro" type="submit" data-guardando="Creando…">Crear la orden en Odoo</button>
       </div>
     </form>
     <span class="pie-nota">Se crea con el proveedor y los productos de
@@ -291,7 +310,7 @@
   <div class="campo-caja">
     <label>Lo que llegó</label>
     <div class="acciones">
-      <a class="btn" href="/compras/recibir?ref={{ abierta.ref | urlencode }}#cp-recibir">Registrar lo que llegó</a>
+      <a class="btn oro" href="/compras/recibir?ref={{ abierta.ref | urlencode }}#cp-recibir">Registrar lo que llegó</a>
     </div>
     <span class="pie-nota">Cuánto llegó y cuántas llegaron dañadas. Lo bueno
       sube el stock por la entrada de {{ abierta.orden_compra }}; lo que

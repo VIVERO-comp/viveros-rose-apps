@@ -188,6 +188,17 @@ def chip_servicio(tipo):
     return chip_estilo(FAMILIA_TIPO_SERVICIO.get(tipo, "gray"))
 
 
+def acento_servicio(tipo):
+    """El color de ACENTO de un tipo de negocio (el borde izquierdo de la
+    tarjeta y el borde superior del panel en Vender, diseño Orquesta): el
+    tono de texto de su familia, el mismo que ya pintan los chips. Gris si
+    el tipo no se conoce. Una venta de plantas (retail) es familia green —
+    el llamador pasa "retail"."""
+    if tipo == "retail":
+        return texto_hex("green")
+    return texto_hex(FAMILIA_TIPO_SERVICIO.get(tipo, "gray"))
+
+
 def chip_etiqueta_orden(nombre_tag):
     """Estilo del chip de un crm.tag de Odoo (gris si no se conoce)."""
     return chip_estilo(FAMILIA_ETIQUETA_ORDEN.get((nombre_tag or "").upper(), "gray"))
@@ -199,3 +210,38 @@ COLOR_CATEGORIA_COMPRA = {
     "paisajismo": texto_hex("turquoise"),
     "mantenimiento": texto_hex("blue"),
 }
+
+# ---------------------------------------------------------------------------
+# El interes de un lead (tablero Control, diseno Orquesta 2/10/2026): las 5
+# etiquetas del grupo Interes de Linear, cada una con su clave en
+# asignaciones.tipo_interes de paleta.json — el color de la tarjeta y el
+# chip salen SIEMPRE de la paleta, nunca de un hex escrito a mano. Lookup
+# con .get() a proposito: un interes que la paleta no conozca deja la
+# tarjeta neutra, jamas revienta el import (la trampa de linear_leads).
+# ---------------------------------------------------------------------------
+
+_INTERES_LEAD_A_TIPO = {
+    "Plantas": "PLANTAS_RETAIL",
+    "Eventos": "EVENTOS",
+    "Paisajismo": "PAISAJISMO",
+    "Mantenimiento": "MANTENIMIENTO",
+    "Mayorista": "MAYORISTA",
+}
+
+
+def familia_interes(nombre):
+    """La familia de la paleta para una etiqueta de Interes, o ""."""
+    tipo = _INTERES_LEAD_A_TIPO.get((nombre or "").strip())
+    return ASIGNACIONES["tipo_interes"].get(tipo, "") if tipo else ""
+
+
+def color_interes(nombre):
+    """El tono fuerte del interes (borde de la tarjeta y de la ficha), o
+    "" si el interes no se conoce: la tarjeta queda neutra, sin color."""
+    familia_i = familia_interes(nombre)
+    return FAMILIAS[familia_i]["solido_hex"] if familia_i else ""
+
+
+def chip_interes(nombre):
+    """El chip pastel del interes (gris si no se conoce)."""
+    return chip_estilo(familia_interes(nombre) or "gray")

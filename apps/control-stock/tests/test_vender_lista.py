@@ -92,13 +92,18 @@ def test_numero_de_orden_sin_digitos_es_none():
 # Un solo título, una sola lista
 # ---------------------------------------------------------------------------
 
-def test_un_solo_titulo_de_lista(cliente, odoo):
+def test_un_solo_tablero_de_lista(cliente, odoo):
+    """El FONDO que ya verificaba el título único: ventas de plantas y
+    cotizaciones de servicio viven en UNA sola lista, sin una sección
+    "Cotizaciones de servicios" aparte. Con el diseño Orquesta el título
+    se volvió un tablero único (.vd-tablero) — uno solo."""
     _insertar_venta(501, "S00050")
     n_serv = _insertar_servicio(601, "S00049")
     odoo.ordenes[601] = {"state": "sale", "invoice_ids": []}
     pagina = cliente.get("/venta").text
-    assert pagina.count("Ventas y cotizaciones locales") == 1
+    assert pagina.count('class="vd-tablero"') == 1
     assert "Cotizaciones de servicios" not in pagina
+    assert "Ana" in pagina and "Beto" in pagina  # los dos, en el mismo tablero
     assert n_serv  # la fila sí se creó (evita el "insertado pero no usado")
 
 

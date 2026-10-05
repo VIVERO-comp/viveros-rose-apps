@@ -18,6 +18,13 @@
   <div class="marca">
     <img src="/static/logo.jpg" alt="Vivero Rose">
     <span>Control Viverorose</span>
+    {# La X del cajón del teléfono (pantalla 16 del diseño Orquesta): solo
+       se ve en móvil (diseno-base.css). Sin JS propio — el click burbujea
+       al document y menu.js ya cierra el cajón con cualquier toque fuera
+       de la hamburguesa. #}
+    <button class="nav-cerrar" type="button" aria-label="Cerrar el menú">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
   </div>
   <a href="/calendario" class="{{ 'on' if activa == 'calendario' }}"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></span>Calendario</a>
   <a href="/?tab=stock" class="{{ 'on' if activa == 'stock' }}"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M12 10C12 6 9 3 4 3c0 5 3 8 8 7z"/><path d="M12 13c0-3.5 2.5-6 7-6 0 4.5-2.5 7-7 6z"/><path d="M7 21h10"/></svg></span>Stock</a>

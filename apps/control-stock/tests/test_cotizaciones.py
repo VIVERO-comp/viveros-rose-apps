@@ -650,8 +650,10 @@ def test_crear_cotizacion_de_renta_por_http(cliente, odoo):
     assert "S" in r.text
     pagina = cliente.get("/venta")
     # Lista unificada (30/09/2026): ya no hay un título "Cotizaciones de
-    # servicios" aparte, todo vive bajo "Ventas y cotizaciones locales".
-    assert "Ventas y cotizaciones locales" in pagina.text
+    # servicios" aparte — desde el diseño Orquesta todo vive en el
+    # tablero único (.vd-tablero).
+    assert pagina.text.count('class="vd-tablero"') == 1
+    assert "Cotizaciones de servicios" not in pagina.text
     assert "María" in pagina.text
 
 

@@ -1,0 +1,183 @@
+/* Diseño Orquesta (Korto, 2/10/2026) — la capa BASE compartida por todas
+   las pestañas: los tokens del diseño (colores, radios, tipografía) y el
+   menú lateral nuevo, en sus dos pieles de siempre:
+
+   - la piel de styles.css (el <nav> de _nav.html: sidebar en computadora,
+     cajón en el teléfono) — Stock, Vender, Ajustes, Crear producto;
+   - la piel de calendario.css (el sidebar .lado + el mismo <nav> como
+     cajón móvil) — Control, Calendario, Compras, Proveedores, Recibir,
+     Ventas a revisar.
+
+   Este archivo se carga DESPUÉS de styles.css / calendario.css: los
+   selectores copian la forma de los originales para empatar especificidad
+   y ganar por orden, sin !important. La fuente de verdad del aspecto son
+   los .html de docs/diseno-orquesta/ (pantallas 09, 16 y hermanas).
+
+   El DOM no cambia aquí: mismo _nav.html, mismo menu.js, misma cookie
+   `menu`. Solo cambia cómo se ve. */
+
+:root{
+  /* Tipografía del diseño: Geist (Inter queda de respaldo). */
+  --d-fuente:'Geist','Inter',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;
+  /* Tinta y grises del lienzo. */
+  --d-tinta:#111111;
+  --d-suave:#5E5E5E;
+  --d-gris-activo:#F1F1F1;     /* pestaña activa del menú, chips neutros */
+  --d-col:#F7F7F7;             /* fondo de una columna de tablero */
+  --d-borde:#E7E7E7;           /* bordes de paneles y separadores */
+  --d-borde-pil:#E1E1E1;       /* borde de las píldoras del menú */
+  --d-borde-boton:#DCDCDC;     /* borde de los botones cuadrados (hamb, X) */
+  --d-borde-campo:#CFCFCF;     /* borde de campos y botones secundarios */
+  --d-borde-tarjeta:#EAEAEA;   /* borde de una tarjeta del tablero */
+  /* Dinero que se debe o algo por revisar (la única familia roja). */
+  --d-rojo:#A1190E;
+  --d-rojo-fondo:#FBEAE8;
+  /* Pagado / en verde. */
+  --d-verde:#17603A;
+  --d-verde-fondo:#E6F4EA;
+  /* Radios del diseño. */
+  --d-radio-boton:10px;        /* botones cuadrados y campos */
+  --d-radio-pil:12px;          /* píldoras del menú, alertas */
+  --d-radio-tarjeta:14px;      /* tarjetas del tablero */
+  --d-radio-col:16px;          /* columnas y tiles del resumen */
+  --d-sombra:0 18px 50px rgba(0,0,0,.18);
+}
+
+body{font-family:var(--d-fuente);background:#fff}
+
+/* ==================== piel styles.css (el <nav> compartido) ============ */
+
+/* La X del cajón móvil (_nav.html): en computadora no existe. */
+.nav-cerrar{display:none}
+
+@media (min-width: 900px){
+  /* El lienzo deja de flotar como tarjeta: pantalla completa en blanco,
+     con el menú de 240px pegado al borde (pantalla 09). */
+  .phone{
+    margin:0;height:100vh;height:100dvh;max-width:none;
+    border-radius:0;border:none;box-shadow:none;
+    grid-template-columns:240px 1fr;
+  }
+  nav{
+    background:#fff;border-right:1px solid var(--d-borde);
+    border-radius:0;padding:20px 16px;gap:10px;
+  }
+  nav .marca{display:flex;align-items:center;gap:10px;padding:4px 6px 14px}
+  nav .marca img{width:34px;height:34px;border:1px solid var(--d-borde-campo)}
+  nav .marca span{font-size:15px;font-weight:700;color:var(--d-tinta)}
+  nav button, nav a{
+    height:48px;padding:0 14px;align-items:center;
+    border:1px solid var(--d-borde-pil);border-radius:var(--d-radio-pil);
+    font-size:15px;font-weight:600;color:var(--d-tinta);gap:12px;
+  }
+  nav button.on, nav a.on{
+    background:var(--d-gris-activo);border-color:var(--d-gris-activo);
+    color:var(--d-tinta);
+  }
+  /* La hamburguesa de la zona de contenido: botón cuadrado de 44px. */
+  .hamb{
+    width:44px;height:44px;border:1px solid var(--d-borde-boton);
+    border-radius:var(--d-radio-boton);background:#fff;color:var(--d-tinta);
+    display:grid;place-items:center;padding:0;
+  }
+}
+
+@media (max-width: 899px){
+  /* El cajón del teléfono (pantalla 16): 300px, blanco, con su cabecera
+     de logo · nombre · X y píldoras de 52px. */
+  nav{
+    width:min(80vw,300px);padding:16px;gap:10px;
+    border-right:1px solid var(--d-borde);
+  }
+  nav .marca{
+    display:flex;align-items:center;gap:10px;padding:2px 2px 12px;
+  }
+  nav .marca img{
+    display:block;width:34px;height:34px;border-radius:50%;
+    border:1px solid var(--d-borde-campo);object-fit:cover;
+  }
+  nav .marca span{flex:1;min-width:0;font-size:15px;font-weight:700;color:var(--d-tinta)}
+  .nav-cerrar{
+    display:grid;place-items:center;width:44px;height:44px;flex:0 0 auto;
+    border:1px solid var(--d-borde-boton);border-radius:var(--d-radio-boton);
+    background:#fff;color:var(--d-tinta);padding:0;cursor:pointer;
+  }
+  nav button, nav a{
+    height:52px;min-height:52px;padding:0 14px;align-items:center;gap:12px;
+    border:1px solid var(--d-borde-pil);border-radius:var(--d-radio-pil);
+    font-size:16px;font-weight:600;color:var(--d-tinta);background:#fff;
+  }
+  nav button.on, nav a.on{
+    background:var(--d-gris-activo);border-color:var(--d-gris-activo);
+    color:var(--d-tinta);font-weight:600;
+  }
+  body.menu-abierto::before{background:rgba(17,17,17,.35)}
+  body.menu-abierto nav{box-shadow:var(--d-sombra)}
+  /* Los botones de la barra de arriba, cuadrados de 44px como el diseño. */
+  .hamb-movil,.bm-volver{
+    min-width:44px;height:44px;border:1px solid var(--d-borde-boton);
+    border-radius:var(--d-radio-boton);
+  }
+}
+
+/* ==================== piel calendario.css (.lado + cajón) ============= */
+
+/* El marco deja de flotar: pantalla completa, menú de 240px. Solo en
+   computadora (≥861px, el corte de calendario.css): en tablet el .lado es
+   la fila horizontal de siempre y en el teléfono manda el cajón — esas
+   dos caras no se tocan aquí. */
+@media (min-width:861px){
+  .app{
+    margin:0;height:100vh;height:100dvh;border:none;border-radius:0;
+    box-shadow:none;grid-template-columns:240px 1fr;
+  }
+  body.menu-oculto .app{grid-template-columns:0px 1fr}
+  .lado{background:#fff;border-right:1px solid var(--d-borde);padding:20px 16px;gap:10px}
+  .lado .marca{padding:4px 6px 14px;gap:10px}
+  .lado .marca img{width:34px;height:34px;border:1px solid var(--d-borde-campo)}
+  .lado .marca span{font-size:15px;font-weight:700;color:var(--d-tinta)}
+  .lado .pil{
+    height:48px;min-height:48px;padding:0 14px;display:flex;align-items:center;gap:12px;
+    border:1px solid var(--d-borde-pil);border-radius:var(--d-radio-pil);
+    background:#fff;box-shadow:none;font-size:14px;font-weight:600;color:var(--d-tinta);
+  }
+  .lado .pil svg{color:var(--d-tinta)}
+  .lado .pil:hover{background:var(--d-gris-activo)}
+  .lado .pil.on{background:var(--d-gris-activo);border-color:var(--d-gris-activo);font-weight:600}
+  .lado .pie{color:var(--d-suave);font-size:13px}
+}
+@media (max-width:767.98px){
+  /* El cajón móvil de estas pantallas es el mismo <nav> de _nav.html:
+     misma receta que arriba, y la marca que calendario.css escondía
+     vuelve como cabecera del cajón (pantalla 16). */
+  body>nav{
+    width:min(80vw,300px);padding:16px;gap:10px;
+    border-right:1px solid var(--d-borde);
+  }
+  body>nav .marca{
+    display:flex;align-items:center;gap:10px;padding:2px 2px 12px;
+  }
+  body>nav .marca img{
+    display:block;width:34px;height:34px;border-radius:50%;
+    border:1px solid var(--d-borde-campo);object-fit:cover;
+  }
+  body>nav .marca span{flex:1;min-width:0;font-size:15px;font-weight:700;color:var(--d-tinta)}
+  /* La X del cajón: especificidad por encima de `body>nav button:not(.hamb)`
+     de calendario.css, que si no la convertiría en píldora. */
+  body>nav .marca .nav-cerrar{
+    display:grid;place-items:center;width:44px;height:44px;min-height:44px;
+    flex:0 0 auto;padding:0;border:1px solid var(--d-borde-boton);
+    border-radius:var(--d-radio-boton);background:#fff;color:var(--d-tinta);
+    cursor:pointer;
+  }
+  body>nav a, body>nav button:not(.hamb){
+    min-height:52px;padding:0 14px;align-items:center;gap:12px;
+    border:1px solid var(--d-borde-pil);border-radius:var(--d-radio-pil);
+    font-size:16px;font-weight:600;color:var(--d-tinta);background:#fff;
+  }
+  body>nav a.on{
+    background:var(--d-gris-activo);border-color:var(--d-gris-activo);font-weight:600;
+  }
+  body.menu-abierto::before{background:rgba(17,17,17,.35)}
+  body.menu-abierto>nav{box-shadow:var(--d-sombra)}
+}
