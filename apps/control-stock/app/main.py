@@ -6780,35 +6780,49 @@ def conversaciones_respuestas(request: Request):
 
 # --- p37: contactos ---
 # La pantalla CONTACTOS (BLOQUE 37, item 2 de Jay; diseño corto
-# docs/DISENO-ITEM2-contactos.md, lienzo v3 abraham-contactos). SOLO
-# LECTURA: el casamiento por teléfono normalizado se calcula EN LECTURA
-# al armar la vista (app/contactos.py) y nada se escribe en Odoo, Twenty
-# ni Linear — este bloque no registra ni una ruta POST (hay prueba que
-# recorre app.routes). La puerta es la sesión del middleware (Inventario
-# ya quedó afuera por su puerta global); el candado fino por rol llega
-# con el frente 1. Bloque autocontenido a propósito: otro worker edita
-# main.py en otras zonas.
+# docs/DISENO-ITEM2-contactos.md) y, desde el BLOQUE 43, sus TRES
+# pantallas del lienzo: la lista a todo el ancho (abraham-contactos),
+# la página del contacto abierto (abraham-contacto-abierto) y su pestaña
+# de chat (contacto-whatsapp). SOLO LECTURA: el casamiento por teléfono
+# normalizado se calcula EN LECTURA al armar la vista (app/contactos.py)
+# y nada se escribe en Odoo, Twenty ni Linear — este bloque no registra
+# ni una ruta POST (hay prueba que recorre app.routes). La puerta de
+# entrada es la sesión del middleware (Inventario ya quedó afuera por su
+# puerta global); el candado FINO del dinero y del chat lo decide
+# contactos._permiso() con la sesión que se arma aquí, en el servidor.
+# Bloque autocontenido a propósito: otro worker edita main.py en otras
+# zonas.
 from . import contactos  # noqa: E402
+
+
+def _sesion_contactos(request):
+    """Quién mira, para el candado del dinero y del chat. Se arma una vez
+    por request y viaja al módulo: la pantalla nunca decide esto."""
+    empleada = request.state.empleada
+    return contactos.sesion_de(empleada, _es_admin(empleada))
 
 
 @app.get("/contactos")
 def contactos_lista(request: Request, q: str = "", f: str = "",
                     error: str = ""):
-    """La lista del lienzo: buscador server-rendered (?q=) y filtros
-    como enlaces GET (?f=). Todo lo que se pinta lo decide
-    contactos.lista() (regla 10)."""
+    """La lista del lienzo, a TODO EL ANCHO: buscador server-rendered
+    (?q=) y filtros como enlaces GET (?f=); tocar un contacto abre su
+    página. Todo lo que se pinta lo decide contactos.lista() (regla 10),
+    el candado del dinero incluido."""
     return plantillas.TemplateResponse(request, "contactos.html", {
         "empleada": request.state.empleada,
-        "v": contactos.lista(q=q, filtro=f),
+        "v": contactos.lista(q=q, filtro=f, sesion=_sesion_contactos(request)),
         "error_aviso": error,
     })
 
 
 @app.get("/contactos/{cid}")
-def contactos_ficha_pantalla(request: Request, cid: str):
-    """La ficha agrupada de un contacto. Un id que ya no existe no es un
-    500: es el mismo «ya no está» de Compras, Control y Proveedores."""
-    v = contactos.ficha(cid)
+def contactos_ficha_pantalla(request: Request, cid: str, panel: str = ""):
+    """La página del contacto abierto. Las dos pestañas del panel derecho
+    son enlaces GET (?panel=leads|whatsapp) que resuelve Python. Un id que
+    ya no existe no es un 500: es el mismo «ya no está» de Compras,
+    Control y Proveedores."""
+    v = contactos.ficha(cid, sesion=_sesion_contactos(request), panel=panel)
     if v is None:
         return RedirectResponse(
             "/contactos?error="
