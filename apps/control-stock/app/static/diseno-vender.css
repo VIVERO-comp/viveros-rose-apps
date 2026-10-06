@@ -208,10 +208,15 @@
 }
 @media (min-width: 1200px){
   /* En pantalla ancha las columnas van a su ancho del diseño (276px) y
-     el resumen lateral ocupa el resto; más angosto, el resumen se guarda
-     y las columnas se reparten el ancho. */
+     el resumen lateral ocupa el resto. El tablero dimensiona por su
+     CONTENIDO (flex-basis auto): con flex:1 en los dos hermanos, el
+     resumen se llevaba la mitad del lienzo y la tercera columna quedaba
+     clipeada debajo (visto en vivo a 1500px). Si el lienzo no alcanza,
+     el tablero cede (shrink) y scrollea adentro; el resumen nunca baja
+     de sus 236px de tiles. */
   .vd-col{flex:0 0 276px}
-  .vd-res{display:flex;flex:1;min-width:0;flex-direction:column;gap:10px}
+  .vd-tablero{flex:0 1 auto}
+  .vd-res{display:flex;flex:1;min-width:236px;flex-direction:column;gap:10px}
 }
 
 /* ---------- teléfono ---------- */
