@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Control — Control Viverorose</title>
+<title>CRM — Control Viverorose</title>
 <link rel="icon" type="image/jpeg" href="/static/logo.jpg">
 <link rel="apple-touch-icon" href="/static/logo.jpg">
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Control">
+<meta name="apple-mobile-web-app-title" content="CRM">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 {# La pestaña Control, Fase 5 (24/09/2026): dos vistas sobre el MISMO
@@ -34,48 +34,23 @@
 <body class="{{ 'menu-oculto' if request.cookies.get('menu') == '0' }}">
 
 <div class="app">
-  <aside class="lado">
-    <div class="marca">
-      <img src="/static/logo.jpg" alt="Vivero Rose">
-      <span>Control Viverorose</span>
-    </div>
-    <a class="pil" href="/calendario">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>Calendario
-    </a>
-    <a class="pil" href="/?tab=stock">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M12 10C12 6 9 3 4 3c0 5 3 8 8 7z"/><path d="M12 13c0-3.5 2.5-6 7-6 0 4.5-2.5 7-7 6z"/></svg>Stock
-    </a>
-    <a class="pil" href="/venta">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2 2h2l2.7 12.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 1.9-1.6L22 6H5"/></svg>Vender
-    </a>
-    <span class="pil on">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Control
-    </span>
-    <a class="pil" href="/compras">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><path d="M2 4h20v4H2z"/><path d="M10 12h4"/></svg>Compras
-    </a>
-    <a class="pil" href="/?tab=ajustes">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Ajustes
-    </a>
-    <div class="pie">
-      <b>{{ empleada.nombre or empleada.id }}</b>
-      <span>
-        {% if modo == 'muestra' %}Leads de muestra (sin Linear)
-        {% elif modo == 'lectura' %}Solo lectura del tablero real
-        {% else %}Equipo LEAD · Linear{% endif %}
-      </span>
-    </div>
-  </aside>
+  {# El costado es UNO solo para todas las pantallas y lo arma el rol
+     (_lado.html + request.state.menu_nav, regla 10): el menú de cada
+     persona es el mismo en todas partes. #}
+  {% with activa='crm', lado_pie_extra=("Leads de muestra (sin Linear)" if modo == 'muestra' else "Solo lectura del tablero real" if modo == 'lectura' else "Equipo LEAD · Linear") %}{% include '_lado.html' %}{% endwith %}
 
   <div class="tablero">
     {# La barra única del teléfono (artefacto aprobado, 23/09/2026). #}
-    {% with bm_titulo='Control', bm_sub='El trabajo del equipo' %}{% include '_barra_movil.html' %}{% endwith %}
+    {% with bm_titulo='CRM', bm_sub=crm_marca %}{% include '_barra_movil.html' %}{% endwith %}
     <div class="barra">
       <button class="btn icono hamb" type="button" aria-label="Mostrar u ocultar el menú"
               aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
-      <h3>Control</h3>
+      {# BLOQUE 35: la pestaña se llama CRM para todos (la ruta /control
+         se queda). La marca de al lado la decide Python (crm_marca). #}
+      <h3>CRM</h3>
+      <span class="tenue" style="font-size:12px">{{ crm_marca }}</span>
       {# El segmento de vistas: el dueño tiene las dos, el empleado solo
          "Por estado" — y no es que se le esconda el botón, es que el
          servidor no le arma la otra. #}
@@ -97,14 +72,20 @@
         {% elif not alc.admin %}Todo el tablero · todavía no te toca ningún lead
         {% else %}Arrastrar entre estados es una corrección: pide el motivo{% endif %}
       </span>
-      {# La puerta a /conversaciones (ITEM 11 de Jay): discreta y solo
-         para el admin — es supervisión. El menú lateral está congelado
-         por otra tanda y no se toca. #}
-      {% if alc.admin %}
-      <a class="tenue" href="/conversaciones" style="font-size:12px;white-space:nowrap">Conversaciones</a>
+      {# Conversaciones ya no cuelga de acá: es una entrada del menú por
+         rol (BLOQUE 36.1), y el menú lo decide Python para todos. #}
+      {% if volver_mi_crm %}
+      {# BLOQUE 39.2: quien llegó por «Ver todos» tiene cómo volver a lo
+         suyo sin buscarlo en el menú. #}
+      <a class="tenue" href="/mi-crm" style="font-size:12px;white-space:nowrap">← Mi CRM</a>
       {% endif %}
     </div>
 
+    {# El rebote honesto (BLOQUE 39.3): el que pidió una pestaña que su
+       rol no usa aterriza acá y LEE por qué, en vez de encontrarse en
+       otra pantalla sin explicación. #}
+    {% if rebote %}<div class="franja"><b>Ojo.</b> <span>{{ rebote }}</span>
+      <a class="cierra-banner" href="/control?vista={{ vista }}" aria-label="Cerrar el aviso">×</a></div>{% endif %}
     {# La X del banner (29/09/2026): un error o un aviso se quedaban en la
        pantalla hasta la próxima navegación, porque viven en el query. La X
        es solo un enlace a la misma vista SIN el query — cero JS. #}
@@ -226,7 +207,7 @@
   </div>
 </div>
 
-{% set activa = 'control' %}{% include '_nav.html' %}
+{% set activa = 'crm' %}{% include '_nav.html' %}
 
 {% if abierta %}
 <a class="telon" href="/control?vista={{ vista }}" aria-label="Cerrar"></a>

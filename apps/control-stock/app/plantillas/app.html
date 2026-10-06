@@ -377,10 +377,15 @@
   </section>
 
   <!-- ================= AJUSTES ================= -->
-  {# Mi cuenta (email de Google) la ve cualquiera; las invitaciones y los
-     accesos, solo los admins (AJUSTES_ADMINS, o hechos admin desde esta
-     misma pantalla — seguridad.es_admin). Las rutas /ajustes/* de admin
-     también lo verifican en el servidor. #}
+  {# La partición de la V2 (BLOQUE 28/29, docs/ANALISIS-rol-manda-sobre-admin):
+     la pestaña la VE quien Python diga (`ve_ajustes`: un admin, la
+     Dirección, o el fail-open de transición de quien todavía no tiene un
+     rol que acote); de adentro, lo TÉCNICO —quién entra, coworkers,
+     dispositivos, precios de envío— es solo del admin (`es_admin`) y lo
+     de NEGOCIO —roles, deberes y catálogos— es del admin O la Dirección
+     (`puede_negocio`). Las rutas /ajustes/* lo verifican igual en el
+     servidor: esto solo deja de ofrecer lo que no se puede. #}
+  {% if ve_ajustes %}
   <section class="tab" id="tab-ajustes">
     {# La hamburguesa de computadora (28/09/2026), sola, arriba a la
        izquierda del contenido. En el teléfono no existe (la de arriba ya
@@ -706,13 +711,20 @@
       </label>
       <button class="boton" type="submit">Agregar número</button>
     </form>
+    {% else %}
+    {# Un no-admin que llega acá (la Dirección) no ve un panel vacío: se le
+       dice de quién es, en vez de dejarle la caja muda. #}
+    <p class="pie-ajuste">Quién entra a la app, los números de coworkers y
+      los dispositivos de WhatsApp son del <b>administrador</b>: esto es
+      sistema, no negocio.</p>
     {% endif %}
 
     </div>
     </details>
 
-    {% if es_admin %}
+    {% if puede_negocio %}
     {# Item 1 de Jay (5/10/2026): roles, deberes y catálogos de venta. Todo
+       es NEGOCIO (V2): lo abre el admin Y la Dirección sin ser admin. Todo
        son datos locales (datos_roles): nada de esto toca Linear, Twenty ni
        Odoo, y nada se borra — los catálogos se DESACTIVAN. Los nombres de
        personas vienen de la base (semilla + pantalla), nunca del código. #}
@@ -893,6 +905,11 @@
       </div>
     </details>
 
+    {% endif %}
+
+    {% if es_admin %}
+    {# Precios de envío: TÉCNICO (config del sistema de envío) — sigue
+       siendo solo del admin, como las invitaciones. #}
     <details class="ajuste-d">
       <summary><span class="que"><b>Precios de envío</b><span>Lo que cobra Vender por llevar el pedido · sin desplegar</span></span><span class="flecha">›</span></summary>
       <div class="ajuste-cuerpo">
@@ -932,6 +949,7 @@
       <button class="btn btn-linea" type="submit" style="margin:0 auto">Cerrar sesión · {{ empleada.nombre }}</button>
     </form>
   </section>
+  {% endif %}
 </main>
 
 <!-- panel de alertas -->
@@ -1106,30 +1124,37 @@
 
 <div class="toast" id="toast"></div>
 
-{# Inventario ya no está en el menú (sus rutas y su pestaña siguen vivas en
-   /?tab=inv). Fichas tampoco: la descripción y la guía se editan en la
-   vista de detalle del producto (tocar una tarjeta del Stock). #}
+{# EL MENÚ, por rol (BLOQUE 39.1). La lista llega YA DECIDIDA de Python
+   (datos_roles.acceso_de → request.state.menu_nav, regla 10) y acá solo
+   se pinta — es la MISMA lista de _nav.html y _lado.html, así que este
+   Inicio ofrece exactamente lo que el rol puede abrir. Esconder una
+   pestaña NO es el permiso: el permiso es _puerta_por_rol, en el
+   servidor.
+
+   La única diferencia con _nav.html: en ESTA pantalla Stock y Ajustes no
+   son otra página, son dos secciones de aquí mismo — así que esas dos
+   claves salen como <button data-tab> (lo que app.js ya sabe manejar) y
+   el resto como enlaces. Inventario sigue sin entrada: su pestaña vive
+   en /?tab=inv. #}
+{% import '_iconos.html' as ic %}
 <nav>
-  {# La marca arriba del todo (28/09/2026), igual que el sidebar de Control
-     (calendario.css .marca). La hamburguesa que vivía aquí se mudó a la
-     zona de contenido: la de Stock (fila Stock online/global), la de
-     Inicio y la de Ajustes (arriba a la izquierda de cada una). Misma
-     cookie `menu`, mismo menu.js. #}
+  {# La marca arriba del todo: el monograma VR del lienzo Roles v3. #}
   <div class="marca">
-    <img src="/static/logo.jpg" alt="Vivero Rose">
+    <span class="logo-vr" aria-hidden="true">VR</span>
     <span>Control Viverorose</span>
   </div>
-  {# Sin "Inicio" y con Calendario de primero (dueño, 22/09/2026). #}
-  <a href="/calendario"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></span>Calendario</a>
-  <button data-tab="stock" onclick="tab('stock',this)"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M12 10C12 6 9 3 4 3c0 5 3 8 8 7z"/><path d="M12 13c0-3.5 2.5-6 7-6 0 4.5-2.5 7-7 6z"/><path d="M7 21h10"/></svg></span>Stock</button>
-  <a href="/venta"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg></span>Vender</a>
-  <a href="/control"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>Control</a>
-  {# Compras (Fase 1, 30/09/2026): el tablero del proyecto COMPRAS del
-     equipo VIV de Linear. Sin interruptor — la Compras VIEJA (la de
-     COMPRAS_ACTIVAS, que este comentario seguía nombrando aunque su
-     pantalla se borró en la Fase 5) no tiene nada que ver con esta. #}
-  <a href="/compras"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><path d="M2 4h20v4H2z"/><path d="M10 12h4"/></svg></span>Compras</a>
-  <button data-tab="ajustes" onclick="tab('ajustes',this)"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>Ajustes</button>
+  {% for p in request.state.menu_nav %}
+  {% if p.clave in ('stock', 'ajustes') %}
+  <button data-tab="{{ p.clave }}" onclick="tab('{{ p.clave }}',this)"><span class="ic">{{ ic.icono(p.clave) }}</span>{{ p.titulo }}</button>
+  {% else %}
+  <a href="{{ p.href }}"><span class="ic">{{ ic.icono(p.clave) }}</span>{{ p.titulo }}</a>
+  {% endif %}
+  {% endfor %}
+  {# El pie del costado: nombre y rol de quien mira (rotulo_de). #}
+  <div class="pie">
+    <b>{{ request.state.empleada.nombre or request.state.empleada.id }}</b>
+    <span>{{ request.state.rol_rotulo }}</span>
+  </div>
 </nav>
 {% endblock %}
 

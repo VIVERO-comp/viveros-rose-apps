@@ -36,6 +36,12 @@
     <span class="mc-tag">Solo lo tuyo{% if v.resp %} · {{ v.resp }}{% endif %}</span>
   </div>
   <div class="mc-acciones">
+    {# «Ver todos» (BLOQUE 39.2): el tablero completo desde el CRM chico.
+       Quién lo lleva lo decide Python (ver_todos) y si esa vista es de
+       solo lectura también (ver_todos_lectura) — acá solo se pinta. #}
+    {% if ver_todos %}
+    <a class="mc-ver-todos" href="/control">Ver todos{% if ver_todos_lectura %} — solo lectura{% endif %}</a>
+    {% endif %}
     {# Los dos botones del diseño, APAGADOS: pedir una compra y crear un
        lead llegan con sus propias partes. #}
     <button class="mc-apagado" type="button" disabled>Pedir compra — Todavía no</button>
@@ -45,18 +51,34 @@
 <p class="mc-sub">Arriba ves a quién le debes respuesta y a quién le toca seguimiento. Abajo, tu tablero.</p>
 
 <main class="mc-main">
+  {# El rebote honesto de la puerta (BLOQUE 39.3): quien pidió una pestaña
+     que su rol no usa aterriza acá y LEE por qué. #}
+  {% if rebote %}<div class="mc-alerta">{{ rebote }}</div>{% endif %}
   {% if v.aviso_fuente %}<div class="mc-alerta">{{ v.aviso_fuente }}</div>{% endif %}
   {% if v.aviso_resp %}<div class="mc-alerta">{{ v.aviso_resp }}</div>{% endif %}
 
   {# ================= COMPUTADORA ================= #}
   <div class="mc-pc">
     <div class="mc-work">
+      {# La columna izquierda del lienzo lleva DOS cajas (Peticiones y
+         Compras que pediste), así que va envuelta: sin el envoltorio la
+         segunda rompería el grid de dos columnas. #}
+      <div class="mc-izq">
       <section class="mc-pet" aria-label="Peticiones">
         <div class="mc-ph"><span>Peticiones</span><span class="mc-cnt num">{{ v.peticiones.filas | length }}</span></div>
         <p class="mc-hueco">{{ v.peticiones.aviso }}</p>
         <div class="mc-lab">Aceptadas · falta cotizar</div>
         <p class="mc-hueco">{{ v.falta_cotizar.aviso }}</p>
       </section>
+      {# El hueco HONESTO del lienzo (la caja «Compras que pediste», debajo
+         de Peticiones): la parte que la llena todavía no existe, así que
+         la caja está y lo dice — ni se finge un 0 ni se esconde el lugar
+         que el diseño le dio. #}
+      <section class="mc-pet q" aria-label="Compras que pediste">
+        <div class="mc-ph"><span>Compras que pediste</span></div>
+        <p class="mc-hueco">Sin compras pedidas. Esta parte llega después.</p>
+      </section>
+      </div>
       <div class="mc-der">
         <div class="mc-hoy">
           <section class="mc-bx" aria-label="Por responder">
@@ -151,5 +173,5 @@
   </div>
 </main>
 
-{% set activa = 'mi_crm' %}{% include '_nav.html' %}
+{% set activa = 'crm' %}{% include '_nav.html' %}
 {% endblock %}

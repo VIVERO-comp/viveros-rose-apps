@@ -181,3 +181,27 @@ body{font-family:var(--d-fuente);background:#fff}
   body.menu-abierto::before{background:rgba(17,17,17,.35)}
   body.menu-abierto>nav{box-shadow:var(--d-sombra)}
 }
+
+/* ============ la marca y el pie del menú (diseño Roles v3) ============ */
+/* El monograma «VR» reemplaza al logo en el costado y en el cajón: mismo
+   tamaño que tenía la imagen en cada corte, así nada se mueve. Y el pie
+   lleva nombre y rol de quien mira — lo decide Python (rotulo_de). */
+.marca .logo-vr{
+  flex:0 0 auto;border-radius:50%;display:grid;place-items:center;
+  border:1px solid var(--d-borde-campo);color:var(--d-tinta);
+  font-weight:700;letter-spacing:.3px;
+}
+nav .pie, .lado .pie{
+  margin-top:auto;display:flex;flex-direction:column;gap:2px;
+  padding:10px 6px 2px;font-size:13px;color:var(--d-suave);
+}
+nav .pie b, .lado .pie b{color:var(--d-tinta);font-weight:700}
+@media (min-width: 900px){
+  nav .marca .logo-vr{width:34px;height:34px;font-size:12px}
+}
+@media (max-width: 899px){
+  nav .marca .logo-vr{width:34px;height:34px;font-size:12px}
+}
+@media (min-width:861px){
+  .lado .marca .logo-vr{width:34px;height:34px;font-size:12px}
+}

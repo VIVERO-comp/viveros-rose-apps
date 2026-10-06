@@ -8,9 +8,14 @@
    la captura la toma la coordinadora antes de darla por buena.
 
    El menú de este rol es [Stock] y nada más: no se incluye _nav.html
-   (Vender, Control, Compras y Ajustes no existen para esta persona; el
-   middleware ya corta esas rutas — esto solo deja de ofrecerlas). Lista
-   única sin pestañas de categoría, buscador arriba, orden por nombre.
+   (Vender, CRM, Compras y Ajustes no existen para esta persona; el
+   middleware ya corta esas rutas — esto solo deja de ofrecerlas). La
+   ÚNICA excepción es el timón: si quien mira es admin, su menú trae
+   Ajustes (RUTAS_SISTEMA, V2 del BLOQUE 29) y acá se ofrece — un admin
+   con el rol Inventario mal puesto tiene que poder ir a quitárselo. Lo
+   decide Python: esta plantilla solo recorre request.state.menu_nav.
+   Lista única sin pestañas de categoría, buscador arriba, orden por
+   nombre.
    Cada fila guarda la CANTIDAD ABSOLUTA contada con un POST normal y
    vuelve anclada al mismo producto (#p-SKU). Sin una línea de JS. #}
 <main class="plano">
@@ -22,10 +27,19 @@
         <span>{{ empleada.nombre }}</span>
       </div>
     </div>
-    <form method="post" action="/logout">
-      <button class="plano-salir" type="submit">Salir</button>
-    </form>
+    <div class="plano-acciones">
+      {% for p in request.state.menu_nav %}{% if p.clave != 'stock' %}
+      <a class="plano-salida" href="{{ p.href }}">{{ p.titulo }}</a>
+      {% endif %}{% endfor %}
+      <form method="post" action="/logout">
+        <button class="plano-salir" type="submit">Salir</button>
+      </form>
+    </div>
   </header>
+
+  {# El rebote honesto (BLOQUE 39.3): esta es la casa del rol, así que
+     acá aterriza el aviso de la pestaña que no le toca. #}
+  {% if rebote %}<p class="plano-rebote" role="status">{{ rebote }}</p>{% endif %}
 
   <form method="get" action="/stock" class="plano-buscar">
     <input type="search" name="q" value="{{ q }}" placeholder="Buscar por nombre o referencia…" aria-label="Buscar producto">

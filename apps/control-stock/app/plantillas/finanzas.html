@@ -25,6 +25,9 @@
 </header>
 
 <main class="fz-main">
+  {# El rebote honesto de la puerta (BLOQUE 39.3): Finanzas es la casa del
+     rol, así que los avisos de pestaña ajena aterrizan acá. #}
+  {% if rebote %}<div class="fz-alerta">{{ rebote }}</div>{% endif %}
   {# El hueco se dice SIEMPRE: con Odoo caído los números dependientes
      salen «sin dato», jamás un $0 fingido. #}
   {% if f.huecos %}
