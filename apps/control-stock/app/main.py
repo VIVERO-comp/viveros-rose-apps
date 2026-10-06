@@ -4366,13 +4366,20 @@ def control_pantalla(request: Request):
     leads = linear_leads.listar(
         refrescar=request.query_params.get("refrescar") == "1")
 
+    # «Ver a:» (BLOQUE 43, lienzo de Roles): una vista, no un permiso —
+    # filtra lo que se pinta y nada más. Los avisos y la caché de espera
+    # siguen mirando el tablero COMPLETO, abajo.
+    ver = request.query_params.get("ver", "")
+    filtros_ver = control.filtros_ver(leads, ver, vista)
+    vistos = control.filtrar_por_ver(leads, ver)
+
     # El alcance viaja al tablero (BLOQUE 43): decide de qué tarjetas se
     # lee el monto de la orden real — la plata de un lead la ven quien lo
     # atiende, el Director y Finanzas, y de nadie más se pide a Odoo.
     if vista == "empleado":
-        columnas = control.tablero_por_empleado(leads, alc)
+        columnas = control.tablero_por_empleado(vistos, alc)
     else:
-        columnas = control.tablero_por_estado(leads, alc)
+        columnas = control.tablero_por_estado(vistos, alc)
 
     # El celular del encargado suena cuando un lead gana «Te toca»; una
     # sola vez por lead, y por detrás para que la pantalla no espere.
@@ -4416,6 +4423,11 @@ def control_pantalla(request: Request):
         "modo": linear_leads.modo(),
         "alc": alc,
         "vista": vista,
+        # La tira «Ver a:» y el pedacito de query que la mantiene puesta
+        # al abrir una tarjeta o cerrar el panel (lo arma Python: la
+        # plantilla no concatena URLs).
+        "filtros_ver": filtros_ver,
+        "ver_query": ("&ver=" + quote(ver)) if ver else "",
         "columnas": columnas,
         "abierta": abierta,
         "asignando": asignando,

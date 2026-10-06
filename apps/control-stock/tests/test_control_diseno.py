@@ -429,7 +429,7 @@ def test_sin_orden_real_no_hay_numero_y_el_panel_dice_por_que(cliente,
     panel = _panel(cliente.get("/control", params={"abrir": "LEAD-86",
                                                    "vista": "estado"}).text)
     assert "dc-monto-amt" not in panel       # ni un $0.00 de relleno
-    assert "Sin cotización conectada: todavía no hay monto." in panel
+    assert "Todavía no hay monto: falta la cotización real." in panel
 
 
 def test_odoo_caido_no_se_confunde_con_sin_cotizacion(cliente, de_dueno,
@@ -458,11 +458,44 @@ def test_la_fila_del_seguimiento_va_apagada_con_su_todavia_no(cliente,
 
 
 def test_sin_twenty_la_fila_del_ultimo_mensaje_lo_dice(cliente, de_dueno):
-    # En modo muestra no hay Twenty: la fila dice «sin mensajes», nunca
-    # inventa uno ni deja el renglón mudo.
+    # En el 8095 (y en modo muestra) Twenty no está conectado: la fila lo
+    # DICE, en vez de pasar por «sin mensajes» — que sería inventar una
+    # respuesta sobre una conversación que no se pudo mirar.
     panel = _panel(cliente.get("/control", params={"abrir": "LEAD-91",
                                                    "vista": "estado"}).text)
-    assert "Sin mensajes todavía" in panel
+    assert "Twenty no está conectado en esta instancia" in panel
+    assert "Sin mensajes todavía" not in panel
+
+
+def test_twenty_caido_y_twenty_sin_conectar_no_se_confunden(monkeypatch):
+    # Tres cosas distintas, tres textos distintos.
+    lead = linear_leads.uno("LEAD-91")
+    monkeypatch.setattr(control.crm_twenty, "ficha_de_lead",
+                        lambda l: {"fallo": "Twenty no contesta; la conversación…"})
+    caido = control.ficha("LEAD-91")["filas"][2]
+    assert "no contesta" in caido["valor"]
+    monkeypatch.setattr(control.crm_twenty, "ficha_de_lead", lambda l: None)
+    sin_conectar = control.ficha("LEAD-91")["filas"][2]
+    assert "no está conectado" in sin_conectar["valor"]
+    monkeypatch.setattr(control.crm_twenty, "ficha_de_lead",
+                        lambda l: {"mensajes": []})
+    vacio = control.ficha("LEAD-91")["filas"][2]
+    assert vacio["valor"] == "Sin mensajes todavía"
+    assert lead["ref"] == "LEAD-91"
+
+
+def test_el_ultimo_mensaje_es_el_mas_nuevo_con_quien_lo_escribio(monkeypatch):
+    monkeypatch.setattr(control.crm_twenty, "ficha_de_lead", lambda l: {
+        "mensajes": [
+            {"fecha": "2026-10-01T10:00:00Z", "texto": "Hola",
+             "salida": False, "cuando": "1 oct · 10:00", "autor": ""},
+            {"fecha": "2026-10-02T17:14:00Z",
+             "texto": "Perfecto, espero la versión nueva.",
+             "salida": False, "cuando": "ayer · 17:14", "autor": ""},
+        ]})
+    fila = control.ficha("LEAD-91")["filas"][2]
+    assert fila["valor"] == "«Perfecto, espero la versión nueva.»"
+    assert fila["detalle"] == "Tamara · ayer · 17:14"
 
 
 # ---- el candado de la plata (E del encargo: ninguno se afloja) ----
@@ -662,3 +695,117 @@ def test_el_cuadro_pliega_el_panel_una_capa_a_la_vez(cliente, de_dueno):
     assert 'class="panel-der"' not in cuerpo
     assert cuerpo.count('class="telon"') == 1
     assert 'href="/control?vista=estado&amp;abrir=LEAD-91"' in cuerpo
+
+
+# ---------------------------------------------------------------------------
+# Fidelidad al lienzo de Roles: NINGÚN elemento se omite. Lo que todavía
+# no tiene dato ni flujo se pinta IGUAL, en su lugar, apagado con su
+# «Todavía no» — nunca se borra de la pantalla ni se reacomoda.
+# ---------------------------------------------------------------------------
+
+def test_nuevo_lead_esta_en_su_esquina_apagado(cliente, de_dueno):
+    # El lienzo lo pone arriba a la derecha. Los leads nacen del mensaje
+    # del cliente, así que no hay camino: apagado, pero presente.
+    cuerpo = cliente.get("/control", params={"vista": "estado"}).text
+    assert "+ Nuevo lead — Todavía no" in cuerpo
+    boton = cuerpo[cuerpo.index("+ Nuevo lead") - 260:cuerpo.index("+ Nuevo lead")]
+    assert "disabled" in boton
+
+
+def test_la_tira_ver_a_trae_a_todos_y_el_hueco_con_su_cuenta(cliente, de_dueno):
+    cuerpo = cliente.get("/control", params={"vista": "estado"}).text
+    tira = cuerpo[cuerpo.index('class="dc-fl"'):]
+    tira = tira[:tira.index("</div>")]
+    assert "Ver a:" in tira
+    assert ">Todos</a>" in tira
+    for nombre in linear_leads.responsables():
+        assert f">{nombre}</a>" in tira
+    # El conteo de «Sin asignar» es real: los vivos sin `Resp:`.
+    vivos = [c for c in control.tablero_por_estado() for c in c["leads"]]
+    sin_dueno = len([l for l in control._vivos(vivos) if not l["resp"]])
+    assert f">Sin asignar {sin_dueno}</a>" in tira
+
+
+def test_ver_a_filtra_lo_que_se_pinta_y_nada_mas(cliente, de_dueno):
+    cuerpo = cliente.get("/control", params={"vista": "estado",
+                                             "ver": "Mary"}).text
+    # LEAD-89 es de Mary; LEAD-91, de Ruben.
+    assert 'data-ref="LEAD-89"' in cuerpo
+    assert 'data-ref="LEAD-91"' not in cuerpo
+    # El filtro se queda puesto al abrir una tarjeta y al cerrar el panel
+    # (el &amp; es Jinja escapando el ampersand del query, como debe).
+    assert "/control?vista=estado&amp;ver=Mary&abrir=LEAD-89" in cuerpo
+    panel = cliente.get("/control", params={"vista": "estado", "ver": "Mary",
+                                            "abrir": "LEAD-89"}).text
+    assert 'class="telon" href="/control?vista=estado&amp;ver=Mary"' in panel
+
+
+def test_un_filtro_inventado_no_deja_la_pantalla_en_blanco(cliente, de_dueno):
+    cuerpo = cliente.get("/control", params={"vista": "estado",
+                                             "ver": "Fulano"}).text
+    assert 'data-ref="LEAD-91"' in cuerpo
+    assert 'data-ref="LEAD-89"' in cuerpo
+
+
+def test_ver_a_no_toca_ningun_permiso():
+    # Es una vista, no un candado: filtrar no cambia lo que se puede
+    # mover ni lo que se puede ver de plata.
+    leads = linear_leads.listar()
+    solo_mary = control.filtrar_por_ver(leads, "Mary")
+    assert solo_mary and all(l["resp"] == "Mary" for l in solo_mary)
+    assert control.filtrar_por_ver(leads, "") == leads
+    sin_dueno = control.filtrar_por_ver(leads, control.VER_SIN_ASIGNAR)
+    assert sin_dueno and all(not l["resp"] for l in sin_dueno)
+
+
+def test_las_dos_cajas_de_peticiones_estan_en_su_lugar_apagadas(cliente,
+                                                                 de_dueno):
+    # El lienzo las pone entre los filtros y el tablero. Las peticiones
+    # llegan en el punto 2 del plan de roles: las cajas se pintan igual,
+    # apagadas, y SIN una sola fila de ejemplo.
+    cuerpo = cliente.get("/control", params={"vista": "estado"}).text
+    tira = cuerpo[cuerpo.index('class="dc-strip"'):cuerpo.index('class="ret-tablero"')]
+    assert "Peticiones que mandaste · esperando" in tira
+    assert "Dijeron que no pueden" in tira
+    assert tira.count("Todavía no") == 3      # las dos cajas y Reasignar
+    assert "Reasignar — Todavía no" in tira
+    # Ni un nombre ni un número inventado: no hay datos de peticiones.
+    for nombre in linear_leads.responsables():
+        assert nombre not in tira
+
+
+def test_las_cajas_de_peticiones_son_del_director(cliente):
+    # Es él quien manda las peticiones; a un empleado no le dicen nada.
+    cuerpo = cliente.get("/control", params={"vista": "estado"}).text
+    assert "dc-strip" not in cuerpo
+
+
+def test_cobrar_se_pinta_siempre_aunque_no_haya_saldo(cliente, de_dueno,
+                                                       monkeypatch):
+    # El botón grande del pie es del lienzo: esconderlo dejaba el pie
+    # vacío. Sin saldo conocido dice «Cobrar» a secas — nunca un $0.00.
+    monkeypatch.setattr(ventas, "_ejecutar", OdooCotLead().ejecutar)
+    panel = _panel(cliente.get("/control", params={"abrir": "LEAD-86",
+                                                   "vista": "estado"}).text)
+    assert "Cobrar — Todavía no" in panel
+    assert "$0.00" not in panel
+
+
+def test_ver_contacto_es_el_enlace_del_lienzo(cliente, de_dueno):
+    # La ficha de Contactos casa por teléfono EN LECTURA, así que el
+    # camino honesto es su buscador con el celular puesto: siempre
+    # resuelve y cae en el contacto si existe.
+    panel = _panel(cliente.get("/control", params={"abrir": "LEAD-91",
+                                                   "vista": "estado"}).text)
+    celular = linear_leads.uno("LEAD-91")["celular"]
+    assert celular == "6552-0966"
+    assert 'href="/contactos?q=6552-0966"' in panel
+    assert ">Ver contacto</a>" in panel
+
+
+def test_sin_telefono_ver_contacto_va_apagado(cliente, de_dueno):
+    # LEAD-83 (Monica Gama) no tiene celular: no hay por dónde buscarlo.
+    panel = _panel(cliente.get("/control", params={"abrir": "LEAD-83",
+                                                   "vista": "estado"}).text)
+    assert "Ver contacto — Todavía no" in panel
+    assert 'href="/contactos?q="' not in panel

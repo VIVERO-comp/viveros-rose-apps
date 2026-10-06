@@ -536,6 +536,56 @@ def tablero_por_estado(leads=None, alcance_actual=None):
     return columnas
 
 
+# ---------------------------------------------------------------------------
+# «Ver a:» — la tira de filtros del lienzo de Roles, arriba del tablero.
+# Es SOLO una vista: no esconde permisos ni cambia lo que se puede tocar.
+# El valor viaja en el query (?ver=), como todo acá: cero JS.
+# ---------------------------------------------------------------------------
+
+VER_SIN_ASIGNAR = "sin"
+
+
+def filtrar_por_ver(leads, ver):
+    """Los leads que se pintan con el filtro puesto. "" = todos (lo de
+    siempre). Un nombre que no existe cae en todos: un filtro roto nunca
+    deja la pantalla en blanco."""
+    ver = (ver or "").strip()
+    if not ver:
+        return leads
+    if ver == VER_SIN_ASIGNAR:
+        return [l for l in leads if not (l.get("resp") or "")]
+    if ver not in linear_leads.responsables():
+        return leads
+    return [l for l in leads if (l.get("resp") or "") == ver]
+
+
+def filtros_ver(leads, ver, vista):
+    """[{clave, titulo, cuenta, on, href}] — los chips de «Ver a:».
+
+    El conteo de «Sin asignar» es REAL (los leads vivos que hoy no tienen
+    `Resp:`), que es justo lo que el lienzo muestra ahí: lo que falta
+    repartir. Los demás chips van sin número, como en el lienzo.
+    """
+    ver = (ver or "").strip()
+    if ver != VER_SIN_ASIGNAR and ver not in linear_leads.responsables():
+        ver = ""
+    sin_dueno = len([l for l in _vivos(leads) if not (l.get("resp") or "")])
+
+    def liga(clave):
+        base = "/control?vista=" + quote(vista or "estado")
+        return base + ("&ver=" + quote(clave) if clave else "")
+
+    chips = [{"clave": "", "titulo": "Todos", "cuenta": None,
+              "on": ver == "", "href": liga("")}]
+    for nombre in linear_leads.responsables():
+        chips.append({"clave": nombre, "titulo": nombre, "cuenta": None,
+                      "on": ver == nombre, "href": liga(nombre)})
+    chips.append({"clave": VER_SIN_ASIGNAR, "titulo": SIN_ASIGNAR,
+                  "cuenta": sin_dueno, "on": ver == VER_SIN_ASIGNAR,
+                  "href": liga(VER_SIN_ASIGNAR)})
+    return chips
+
+
 def alcance(empleada, es_admin):
     """Qué vistas puede ver quien está en la sesión, y qué puede mover.
 
@@ -1105,12 +1155,22 @@ def _fila_seguimiento(abierta):
                  todavia_no="Todavía no")
 
 
-def _fila_ultimo_mensaje(abierta, mensajes, nombre_cliente):
-    """Lo último que se dijo en el chat, tal cual lo tiene Twenty. Twenty
-    caído no es «sin mensajes»: son cosas distintas y la fila las
-    distingue (Nº12 del lote, 2/10/2026)."""
+def _fila_ultimo_mensaje(abierta, mensajes, nombre_cliente, sin_twenty=False):
+    """Lo último que se dijo en el chat, tal cual lo tiene Twenty.
+
+    Tres cosas distintas que la fila NO mezcla: Twenty caído (Nº12 del
+    lote, 2/10/2026), Twenty que ni siquiera está conectado en esta
+    instancia (el 8095, con los tokens neutralizados) y un lead que de
+    verdad no tiene un solo mensaje. Decir «sin mensajes» en los dos
+    primeros casos sería inventar una respuesta.
+    """
     if abierta.get("hilo_error"):
         return _fila("mensaje", "Último mensaje", abierta["hilo_error"],
+                     href="#dc-conversacion")
+    if sin_twenty:
+        return _fila("mensaje", "Último mensaje",
+                     "Twenty no está conectado en esta instancia",
+                     detalle="La conversación vive allá; acá no se puede leer.",
                      href="#dc-conversacion")
     ultimo = max(mensajes, key=lambda m: m.get("fecha") or "") if mensajes else None
     if ultimo is None:
@@ -1184,8 +1244,12 @@ def _monto_del_panel(cot, ve_plata):
                 "nota": "No se pudo leer Odoo: " + (cot.get("error") or "")}
     plata = cot.get("plata")
     if not plata:
+        # A propósito NO se dice «Sin cotización conectada»: esa frase
+        # exacta es la de la sección de abajo, y repetirla acá volvía
+        # ambiguo cualquier texto que la buscara — la fila «Cotización»
+        # es la que distingue «ninguna» de «ninguna marcada la real».
         return {"total": None, "texto": "",
-                "nota": "Sin cotización conectada: todavía no hay monto."}
+                "nota": "Todavía no hay monto: falta la cotización real."}
     if plata["saldo"] <= 0:
         cobro = "pagado completo"
     elif plata["pagado"]:
@@ -1235,7 +1299,13 @@ def ficha(ref, buscar_cotizacion="", vista="", ve_plata=True):
         motivo_recordatorio(lead["ref"])
         if lead["estado"] == "RECORDATORIO" else "")
 
-    ficha_twenty = crm_twenty.ficha_de_lead(lead) or {}
+    # `None` = Twenty ni siquiera está conectado en esta instancia (el
+    # 8095, con los tokens neutralizados); `{"fallo": …}` = está
+    # conectado y no contestó. Son cosas distintas y la fila del último
+    # mensaje las dice distinto.
+    bruto_twenty = crm_twenty.ficha_de_lead(lead)
+    sin_twenty = bruto_twenty is None
+    ficha_twenty = bruto_twenty or {}
     # Twenty caído no es «sin chat»: la ficha lo dice (Nº12, 2/10/2026).
     abierta["hilo_error"] = ficha_twenty.get("fallo") or ""
     mensajes = ficha_twenty.get("mensajes") or []
@@ -1263,7 +1333,8 @@ def ficha(ref, buscar_cotizacion="", vista="", ve_plata=True):
     abierta["filas"] = [
         _fila_atiende(abierta, vista),
         _fila_seguimiento(abierta),
-        _fila_ultimo_mensaje(abierta, mensajes, lead.get("nombre") or ""),
+        _fila_ultimo_mensaje(abierta, mensajes, lead.get("nombre") or "",
+                             sin_twenty=sin_twenty),
         _fila_cotizacion(abierta["cot"], ve_plata),
         _fila_historial(abierta, len(historial), ultimo_apunte),
     ]

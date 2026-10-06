@@ -240,6 +240,10 @@ def test_el_panel_va_en_el_orden_del_lienzo(cliente, de_dueno, monkeypatch):
     los busca cuando abre la ficha para contestarle a alguien. Todo lo
     demás conserva su lugar. Con un Odoo fingido sin órdenes: así "Sin
     cotización conectada" de verdad sale en pantalla (28/09/2026).
+
+    Con el lienzo de ROLES (BLOQUE 43) el responsable dejó de ser renglón
+    de datos y es la primera de las cinco filas, «Lo atiende» — sigue
+    arriba y en el mismo tramo, que es lo que esta prueba cuida.
     """
     from test_cot_lead import OdooCotLead
     monkeypatch.setattr(ventas, "_ejecutar", OdooCotLead().ejecutar)
@@ -247,13 +251,17 @@ def test_el_panel_va_en_el_orden_del_lienzo(cliente, de_dueno, monkeypatch):
     panel = cuerpo[cuerpo.index('class="panel-der"'):]
     orden = [panel.index(t) for t in (
         "dc-ics",                     # llamar y chatear
-        "<b>Responsable</b>",
+        ">Lo atiende</span>",         # el responsable, en su fila
         "🔴 Responder",
-        "Sin cotización conectada",
+        # La SECCIÓN de cotizaciones, no su resumen: con el lienzo de
+        # Roles la fila «Cotización» dice la misma frase más arriba.
+        'ficha-cot-vacia">Sin cotización conectada.',
         "Conversación",
         "Notas internas",
     )]
     assert orden == sorted(orden)
+    # Y el nombre de quien lo atiende se sigue leyendo en esa fila.
+    assert "Ruben" in panel[orden[1]:orden[2]]
 
 
 def test_responder_ya_no_es_un_boton_de_mentira(cliente, de_dueno):

@@ -127,6 +127,46 @@
 
 @media (min-width:861px), (max-width:767.98px){
 
+  /* ---- «Ver a:» (lienzo de Roles): la tira de filtros de vista, en
+     píldoras de 34px; la puesta va con borde doble y negrita, como el
+     `.fc.on` del canon. ---- */
+  .dc-fl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding-bottom:2px}
+  .dc-fc{
+    height:34px;padding:0 12px;box-sizing:border-box;
+    display:inline-flex;align-items:center;
+    border:1px solid var(--d-borde-campo);border-radius:17px;
+    background:#fff;color:var(--d-tinta);
+    font-size:13.5px;text-decoration:none;white-space:nowrap;
+  }
+  .dc-fc.on{border:2px solid var(--d-tinta);font-weight:700}
+
+  /* ---- Las dos cajas de peticiones del lienzo, arriba del tablero.
+     La segunda («Dijeron que no pueden») lleva el borde negro del
+     canon: es la que pide una decisión. ---- */
+  .dc-strip{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .dc-box{
+    border:1px solid var(--d-borde);border-radius:14px;padding:12px 14px;
+    display:flex;flex-direction:column;gap:6px;min-width:0;
+  }
+  .dc-box.k{border-color:var(--d-tinta)}
+  .dc-box-cab{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    font-size:14.5px;font-weight:700;
+  }
+  .dc-box .tenue{font-size:12.5px;line-height:1.4}
+  .dc-box-ln{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  /* El apagado chico: el mismo gris del grande, a la medida de un botón
+     de barra o de caja (el `.ob`/`.btn` del lienzo). Va sin anidar bajo
+     `.panel-der` porque estos dos viven en la barra y en las cajas, no
+     en la ficha. Apagado se ve apagado, igual que el grande. */
+  .btn.dc-apagado.chico{
+    width:auto;min-height:0;height:32px;padding:0 12px;
+    display:inline-flex;align-items:center;justify-content:center;
+    border-radius:16px;font-size:12.5px;font-weight:600;
+    background:var(--d-col);border:1px solid var(--d-borde);
+    color:var(--d-suave);opacity:1;white-space:nowrap;
+  }
+
   /* La marca «Todos» del lienzo de Roles, al lado del título: una
      píldora gris que dice de quién es el tablero que se está viendo.
      En las dos caras — en el teléfono el título ya ocupa su renglón
@@ -323,6 +363,16 @@
      cambiar ni el layout ni los espacios de la columna del panel. */
   .dc-seccion{display:contents}
 
+  /* El pie de la ficha del lienzo: el botón grande y, centrado debajo,
+     el enlace chico «Ver contacto» (el `.lk` del canon). */
+  .dc-pie{display:flex;flex-direction:column;gap:12px;align-items:stretch}
+  .dc-lk{
+    align-self:center;height:28px;display:inline-flex;align-items:center;
+    font-size:14px;color:var(--d-tinta);text-decoration:underline;
+    text-underline-offset:2px;
+  }
+  .dc-lk-off{color:var(--d-suave);text-decoration:none}
+
   /* El botón negro del lienzo es «COBRAR SALDO $X», que acá no existe:
      va apagado (ver control.html). Apagado se ve apagado — nunca con la
      cara del botón vivo. */
@@ -394,6 +444,9 @@
    cotizaciones si algún corte lo dejara fuera. */
 @media (max-width:767.98px){
   .panel-der .campo-caja .campo{font-size:16px}
+  /* En el teléfono las dos cajas de peticiones se apilan: lado a lado
+     no caben sin partir sus títulos. */
+  .dc-strip{grid-template-columns:minmax(0,1fr)}
   /* En el teléfono el cuadro de asignar es pantalla completa (lo hace
      `.modal` de calendario.css) y la nota y la fecha se apilan: 150px
      para la fecha al lado de la nota no caben. */
