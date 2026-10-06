@@ -155,3 +155,20 @@ def test_la_advertencia_de_cancelar_es_la_de_siempre(cliente):
     cuerpo = _abrir(cliente, abrir=a["id"]).text
     assert "No se borra nada" in cuerpo
     assert a["ref"] in cuerpo
+
+
+def test_los_botones_de_contacto_van_apagados_todavia_no(cliente):
+    # Pantallas 02 y 18: Llamar · WhatsApp · Cómo llegar viven en la ficha,
+    # pero la actividad no guarda teléfono ni mapa — van APAGADOS, nunca
+    # fingiendo que funcionan (BLOQUE 37, fidelidad).
+    a = _una("pend")
+    cuerpo = _abrir(cliente, abrir=a["id"]).text
+    assert 'class="pan-ics"' in cuerpo
+    for clase, rotulo in (("c-tel", "Llamar"), ("c-wa", "WhatsApp"),
+                          ("c-map", "Cómo llegar")):
+        boton = cuerpo.split(f'class="pan-ic {clase}"')[1].split(">")[0]
+        assert "disabled" in boton
+        assert f'aria-label="{rotulo} — Todavía no"' in cuerpo
+    # Y el recordatorio de cierre es honesto: sin prometer la tecla Esc.
+    assert "Se cierra con la X o haciendo clic afuera." in cuerpo
+    assert "tecla Esc" not in cuerpo

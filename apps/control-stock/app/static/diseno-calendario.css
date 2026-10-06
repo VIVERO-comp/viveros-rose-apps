@@ -172,6 +172,21 @@ body{font-size:15px}
 /* La barrita «← Atrás · Actividad» del celular (pantalla 18): en
    computadora no existe. */
 .pan-atras{display:none}
+/* El telón detrás del panel, con el tinte del lienzo (pantalla 02). */
+.telon{background:rgba(17,17,17,.35)}
+/* Los tres botones de contacto (pantallas 02 y 18): Llamar · WhatsApp ·
+   Cómo llegar, con los tintes fijos del lienzo (no son colores de tipo:
+   paleta.json no pinta aquí). Hoy van apagados «Todavía no». */
+.pan-ics{display:flex;gap:8px}
+.pan-ic{
+  width:44px;height:44px;padding:0;display:grid;place-items:center;
+  border:1px solid var(--d-borde-campo);border-radius:var(--d-radio-boton);
+  background:#fff;color:var(--d-tinta);
+}
+.pan-ic.c-tel{background:#EDF2FE;border-color:#EDF2FE;color:#3A5BC7}
+.pan-ic.c-wa{background:var(--d-verde-fondo);border-color:var(--d-verde-fondo);color:var(--d-verde)}
+.pan-ic.c-map{background:#F7EDFD;border-color:#F7EDFD;color:#8145B5}
+.pan-ic:disabled{opacity:.45}
 /* Títulos de sección (QUÉ DEBE · NOTAS), como .d-sec del diseño. */
 .sec-tit{
   font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
@@ -270,6 +285,7 @@ body{font-size:15px}
   .cal-bar-nueva .btn{
     width:100%;height:52px;justify-content:center;border:0;border-radius:12px;
     background:var(--d-tinta);color:#fff;font-size:16px;font-weight:600;
+    text-transform:uppercase; /* + NUEVA ACTIVIDAD, pantalla 17 */
   }
   .tablero{padding-bottom:calc(88px + env(safe-area-inset-bottom))}
 
@@ -297,4 +313,6 @@ body{font-size:15px}
   .panel-der .cab-panel{position:static;margin:0;padding:0;box-shadow:none}
   .panel-der .acciones .btn{height:44px;flex:1;justify-content:center}
   .panel-der .acciones .btn.pan-principal{height:52px;flex-basis:100%}
+  /* «Más opciones» centrado en el teléfono (pantalla 18). */
+  .mas-opciones>summary{width:100%;justify-content:center}
 }
