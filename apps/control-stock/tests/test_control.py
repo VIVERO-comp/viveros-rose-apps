@@ -1206,6 +1206,9 @@ def test_la_tarjeta_es_de_dos_lineas_sin_chip_de_interes(cliente, de_dueno):
     assert "LEAD-91 ·" not in t91
     assert 'aria-label="Abrir chat"' in t91 and "💬" in t91
     # El resaltado del «hace»: LEAD-88 (5 días) lo lleva; LEAD-91 (1), no.
+    # Con el lienzo de ROLES (BLOQUE 43) el «hace» se mudó al rincón de
+    # arriba de la tarjeta (`ctl-hace`) cuando no hay monto — el
+    # resaltado se mudó con él, que es lo que esta prueba cuida.
     t88 = cuerpo[cuerpo.index('data-ref="LEAD-88"'):][:1400]
-    assert 'class="hace-alerta"' in t88
-    assert 'class="hace-alerta"' not in t91
+    assert "hace-alerta" in t88
+    assert "hace-alerta" not in t91
