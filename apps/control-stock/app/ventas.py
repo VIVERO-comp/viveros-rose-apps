@@ -798,6 +798,17 @@ def iniciar_tablas():
             con.execute("ALTER TABLE ventas_locales ADD COLUMN lead_url TEXT")
         if "oportunidad_id" not in columnas:
             con.execute("ALTER TABLE ventas_locales ADD COLUMN oportunidad_id INTEGER")
+        # Migración suave: la factura de la ENTREGA (F3, 6/10/2026) — la
+        # que sale al marcar entregada, con TODOS los renglones y el
+        # anticipo descontado. Va en columnas PROPIAS porque `factura_id`
+        # es la factura del COBRO y ahí vive la plata: `_pagar_factura`
+        # paga ESE id, y pisarlo con la final (que queda en $0 después de
+        # netear el anticipo) dejaría el pago apuntando a una factura sin
+        # monto. Ver facturar_entrega().
+        if "factura_final_id" not in columnas:
+            con.execute("ALTER TABLE ventas_locales ADD COLUMN factura_final_id INTEGER")
+        if "factura_final" not in columnas:
+            con.execute("ALTER TABLE ventas_locales ADD COLUMN factura_final TEXT")
         # El lead "pendiente" de cada empleada: al tocar "Cotizar en Vender"
         # en la ficha de Retail queda anotado aquí, y la próxima
         # venta/cotización que esa empleada cree nace vinculada a él.
@@ -1844,22 +1855,62 @@ def validar_salida(orden_id):
         _ejecutar("stock.picking", "button_validate", [[picking["id"]]])
 
 
-def _facturar_orden(venta, valores_asistente=None):
+# Lo que se le pide al asistente de Odoo para la factura de la ENTREGA:
+# facturar lo entregado DESCONTANDO los anticipos. `deduct_down_payments`
+# ya viene en True de fábrica (sale/wizard/sale_make_invoice_advance.py:31)
+# y así entran las líneas de anticipo en negativo bajo su sección — se
+# manda EXPLÍCITO igual, porque de eso depende que la final netee: un
+# default de Odoo que cambie no debe cambiar nuestra factura en silencio.
+VALORES_FACTURA_ENTREGA = {"advance_payment_method": "delivered",
+                           "deduct_down_payments": True}
+
+
+def _facturar_orden(venta, valores_asistente=None, final=False):
     """Crea (o reutiliza) la factura de la orden y la publica. Reutilizar es
     lo que hace al reintento seguro: si el intento anterior creó la factura
     pero no llegó a publicarla, no se crea otra. `valores_asistente` son
     los del asistente de facturación de Odoo; sin ellos, lo de siempre
-    (facturar lo entregado)."""
+    (facturar lo entregado).
+
+    `final=True` es la factura de la ENTREGA (F3, 6/10/2026), y cambia dos
+    cosas, las dos a propósito:
+
+    - **Qué se reutiliza.** Una orden cobrada por anticipo ya tiene UNA
+      factura no cancelada (el anticipo), así que la búsqueda de siempre
+      —«la primera que no esté cancelada»— la encontraría y la final no se
+      crearía nunca. Con `final` se saltan las facturas del OTRO papel
+      (`factura_id` es la del cobro; `factura_final_id`, la de la entrega),
+      así que solo se reutiliza un borrador del papel que se está pidiendo
+      — que es exactamente lo que el reintento necesita retomar.
+    - **Qué se sella.** La final queda en $0 cuando el anticipo ya cubrió
+      todo, así que NO toca `estado`, NI `factura_id`, NI `total`: el total
+      de la venta es el del trato, no el que queda después de netear. Sin
+      esto la lista de Vender mostraría $0.00 en cada venta entregada.
+
+    Devuelve el id de la factura, o None si `final` y no quedaba nada por
+    facturar (no se inventa una factura vacía)."""
+    campos_orden = ["invoice_ids"] + (["invoice_status"] if final else [])
     orden = _ejecutar("sale.order", "read", [[venta["orden_id"]]],
-                      {"fields": ["invoice_ids"]})[0]
+                      {"fields": campos_orden})[0]
+    # La factura del otro papel: con `final`, la del cobro; sin él, la de
+    # la entrega (defensivo — el cobro corre antes de que exista).
+    ajena = (venta.get("factura_id") if final
+             else venta.get("factura_final_id"))
     factura_id = None
     for candidata in _ejecutar("account.move", "read", [orden["invoice_ids"]],
                                {"fields": ["state"]}) if orden["invoice_ids"] else []:
-        if candidata["state"] != "cancel":
+        if candidata["state"] != "cancel" and candidata["id"] != ajena:
             factura_id = candidata["id"]
             estado_factura = candidata["state"]
             break
     if factura_id is None:
+        # El orden importa: PRIMERO se busca lo reutilizable y solo después
+        # se pregunta si falta algo por facturar. Un borrador de la final ya
+        # cuenta como facturado para Odoo (`qty_invoiced` incluye los
+        # borradores), así que preguntar antes dejaría ese borrador sin
+        # publicar para siempre.
+        if final and orden["invoice_status"] != "to invoice":
+            return None
         contexto = {"active_model": "sale.order", "active_ids": [venta["orden_id"]],
                     "active_id": venta["orden_id"]}
         asistente = _ejecutar("sale.advance.payment.inv", "create",
@@ -1880,8 +1931,13 @@ def _facturar_orden(venta, valores_asistente=None):
         _ejecutar("account.move", "action_post", [[factura_id]])
     leida = _ejecutar("account.move", "read", [[factura_id]],
                       {"fields": ["name", "amount_total"]})[0]
-    _actualizar_venta(venta["n"], estado="facturada", factura_id=factura_id,
-                      factura=leida["name"], total=leida["amount_total"])
+    if final:
+        _actualizar_venta(venta["n"], factura_final_id=factura_id,
+                          factura_final=leida["name"])
+    else:
+        _actualizar_venta(venta["n"], estado="facturada", factura_id=factura_id,
+                          factura=leida["name"], total=leida["amount_total"])
+    return factura_id
 
 
 def _pagar_factura(venta, metodo):
@@ -1915,15 +1971,61 @@ def _facturar_para_pago(venta):
     total ('fixed') — la plata completa queda facturada y pagada hoy, la
     salida la valida «Marcar entregada» después, y la factura del saldo
     (que en un anticipo del 100% es $0) sigue la mecánica de siempre.
-    LIMITACIÓN conocida: la factura de anticipo imprime una sola línea
-    («Anticipo»), no las plantas — por eso el enlace público /f/ muestra
-    el detalle desde la orden."""
+    La factura de anticipo imprime una sola línea («Anticipo»), no las
+    plantas: el detalle le llega al cliente por dos caminos, el enlace
+    público /f/ (que lo lee de la orden) y la factura de la ENTREGA, que
+    sale al marcar entregada — ver facturar_entrega()."""
     valores = None
     if _salidas_pendientes(venta["orden_id"]):
         total = _ejecutar("sale.order", "read", [[venta["orden_id"]]],
                           {"fields": ["amount_total"]})[0]["amount_total"]
         valores = {"advance_payment_method": "fixed", "fixed_amount": total}
     _facturar_orden(venta, valores)
+
+
+def facturar_entrega(venta):
+    """La factura de la ENTREGA (F3, 6/10/2026): la que el cliente
+    reconoce, con TODOS los renglones y el anticipo descontado.
+
+    Por qué existe. Hasta los items 5-7 el botón único validaba la salida
+    ANTES de facturar, así que la única factura de la venta salía con sus
+    plantas renglón por renglón. Partido el botón, el COBRO ya no tiene
+    nada entregado que facturar y cae en un anticipo de una sola línea
+    («Anticipo»): el cliente dejaría de ver qué compró. Esta es la pieza
+    que lo devuelve — y es el down payment estándar de Odoo, nada
+    programado allá: el asistente en modo 'delivered' con
+    `deduct_down_payments` lista los renglones, abre la sección
+    «Anticipos» y mete el anticipo en negativo, así que la final queda en
+    $0 cuando el anticipo ya cubrió todo.
+
+    Cuándo NO hace nada (devuelve None, sin tocar Odoo ni la base):
+
+    - **Sin factura de cobro.** Una entrega marcada antes de cobrar no
+      tiene anticipo que netear, y la factura con renglones la hará el
+      pago por el camino de siempre ('delivered'), ya con la salida
+      validada. Emitir una aquí sería una factura que nadie pidió.
+    - **Sin nada por facturar** (`invoice_status != 'to invoice'`): el
+      cobro ya salió con renglones (servicios, o una venta entregada
+      antes de cobrar) — una segunda factura no agrega nada.
+
+    Idempotente a propósito: la llama «Marcar entregada» y un reintento
+    tiene que retomar sin duplicar. El sello de que ya corrió vive donde
+    corresponde —la factura en Odoo, `factura_final_id` en la base— y un
+    borrador que quedó sin publicar se publica en la pasada siguiente
+    (ver `_facturar_orden(final=True)`)."""
+    if not venta.get("factura_id"):
+        return None
+    return _facturar_orden(venta, VALORES_FACTURA_ENTREGA, final=True)
+
+
+def factura_del_cliente(venta):
+    """(id, nombre) de la factura que se le MANDA al cliente: la de la
+    entrega cuando existe —es la que trae los renglones— y si no, la del
+    cobro. Un solo lugar para esa elección: la usan el PDF de la ficha y
+    el nombre del archivo en la lista de Vender."""
+    if venta.get("factura_final_id"):
+        return venta["factura_final_id"], venta.get("factura_final") or ""
+    return venta.get("factura_id"), venta.get("factura") or ""
 
 
 def monto_sin_impuesto(orden_id):
@@ -2062,10 +2164,17 @@ def lineas_de_factura(venta):
 
 
 def lineas_de_cotizacion(venta):
-    """Las líneas de la orden en Odoo, para la cotización pública."""
+    """Las líneas de la orden en Odoo, para la cotización pública.
+
+    `is_downpayment` fuera (F3, 6/10/2026): al cobrar por anticipo, Odoo
+    cuelga de la orden una línea de anticipo con cantidad 0 y subtotal 0
+    que NO es display_type, así que pasaba el filtro y el cliente veía un
+    renglón fantasma «Anticipo · 0 × $68.25 · $0.00» en su documento. El
+    anticipo no es algo que el cliente compró."""
     filas = _ejecutar("sale.order.line", "search_read",
                       [[["order_id", "=", venta["orden_id"]],
-                        ["display_type", "=", False]]],
+                        ["display_type", "=", False],
+                        ["is_downpayment", "=", False]]],
                       {"fields": ["name", "product_uom_qty", "price_unit",
                                   "price_subtotal"]})
     return [{"nombre": f["name"], "cantidad": int(f["product_uom_qty"]),
