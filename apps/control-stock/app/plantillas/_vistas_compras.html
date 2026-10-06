@@ -21,8 +21,10 @@
    - vc_clase    clase extra (hoy solo 'seg-movil' para la copia del
                  teléfono); vacío para la de la barra #}
 <div class="segmento {{ vc_clase or '' }}">
+  {# El lienzo fresco (12/13/14) llama «Compras» a la primera cara del
+     segmento, no «Tablero»: mismo enlace, misma vista, solo la palabra. #}
   <a class="{{ 'on' if vc_activa == 'tablero' }}" href="/compras"
-     {{ 'aria-current="page"' if vc_activa == 'tablero' }}>Tablero</a>
+     {{ 'aria-current="page"' if vc_activa == 'tablero' }}>Compras</a>
   <a class="{{ 'on' if vc_activa == 'proveedores' }}" href="/compras/proveedores"
      {{ 'aria-current="page"' if vc_activa == 'proveedores' }}>Proveedores</a>
 </div>

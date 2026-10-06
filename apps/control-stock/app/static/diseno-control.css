@@ -59,15 +59,24 @@
   }
   .ret-pie{padding:0 12px 10px;font-size:11px;color:var(--d-suave)}
 
-  /* ---- la tarjeta: blanca, 14px, borde izquierdo del interés ---- */
+  /* ---- la tarjeta: blanca, 14px, borde izquierdo del interés. El
+     lienzo la hace de 78px con las dos filas separadas (height:78px,
+     space-between); aquí es un mínimo porque Recordatorio y «Ya llegó»
+     agregan filas que un alto fijo cortaría. ---- */
   .ret-tarjeta{
     background:#fff;border:1px solid var(--d-borde-tarjeta);
     border-left:3px solid var(--dc-interes, var(--d-borde-tarjeta));
     border-radius:var(--d-radio-tarjeta);padding:9px 10px;
+    min-height:78px;display:flex;flex-direction:column;
+    justify-content:space-between;gap:6px;
     transition:box-shadow .12s;
   }
   .ret-tarjeta:hover{box-shadow:0 2px 10px rgba(17,17,17,.08);transform:none}
-  .ret-tarjeta .t-cab b{font-size:13.5px;font-weight:700}
+  /* El nombre a los 15px del lienzo (la base .s es 15px y .nm no achica). */
+  .ret-tarjeta .t-cab b{
+    font-size:15px;font-weight:700;min-width:0;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
 }
 
 /* ==================== teléfono (pantallas 21 y 22) ==================== */
@@ -118,21 +127,36 @@
 
 @media (min-width:861px), (max-width:767.98px){
 
-  /* ---- los chips de la tarjeta, como los del lienzo ---- */
+  /* ---- los chips de la tarjeta, a la medida EXACTA del lienzo:
+     22px de alto, radio 11, letra 12 (.chip del canon). ---- */
   .dc-chip-interes{
-    display:inline-flex;align-items:center;height:20px;padding:0 8px;
-    border-radius:10px;border:1px solid transparent;
-    font-size:11px;font-weight:600;white-space:nowrap;
+    display:inline-flex;align-items:center;height:22px;padding:0 8px;
+    border-radius:11px;border:1px solid transparent;
+    font-size:12px;font-weight:600;white-space:nowrap;
     /* fondo, texto y borde llegan en el style= que compone Python
        (colores.chip_interes, paleta.json). */
   }
   .ctl-pie-tarjeta{gap:6px}
-  .ret-tarjeta .t-sub{font-size:11.5px;color:var(--d-suave)}
+  /* El texto suelto de la fila de abajo («hace 3 días») es el .hint
+     de 12.5px del lienzo. */
+  .ret-tarjeta .t-sub{font-size:12.5px;color:var(--d-suave)}
   .chip-est,.etq-pago{
-    display:inline-flex;align-items:center;height:20px;padding:0 8px;
-    border:1px solid transparent;border-radius:10px;
+    display:inline-flex;align-items:center;height:22px;padding:0 8px;
+    border:1px solid transparent;border-radius:11px;
     background:var(--d-gris-activo);color:#3F3F3F;
-    font-size:11px;font-weight:600;white-space:nowrap;margin-right:0;
+    font-size:12px;font-weight:600;white-space:nowrap;margin-right:0;
+  }
+  /* El rincón derecho de la primera fila (lienzo .acts): el 🔴 de «Te
+     toca» y el círculo del responsable, juntos y pegados al borde. El
+     margin-left:auto del punto (calendario.css) se apaga adentro. */
+  .ctl-acts{margin-left:auto;display:inline-flex;align-items:center;gap:6px;flex-shrink:0}
+  .ctl-acts .ctl-alerta{margin-left:0}
+  /* La inicial del responsable en círculo (lienzo .av.sm: 22px). */
+  .ctl-av{
+    width:22px;height:22px;border-radius:50%;
+    background:var(--d-gris-activo);color:#3F3F3F;
+    display:inline-grid;place-items:center;
+    font-size:10.5px;font-weight:700;flex-shrink:0;
   }
   /* Rojo solo para plata que se debe; verde para lo saldado (la clase la
      decide Python: control._clase_pago). */
@@ -155,6 +179,27 @@
   .panel-der h4{font-size:20px;font-weight:700;line-height:1.2}
   .panel-der .cab-panel{box-shadow:0 8px 10px -10px rgba(17,17,17,.35)}
 
+  /* La cabecera del lienzo (06/22): el nombre dentro del cab-panel y la
+     línea de abajo con el chip del interés y el «LEAD-NN · llegó por…». */
+  .dc-cab-tit{flex:1;min-width:0}
+  .panel-der .cab-panel h4{margin:0}
+  .dc-cab-sub{
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    margin-top:4px;font-size:12.5px;color:var(--d-suave);
+  }
+
+  /* Los atajos de llamar y chatear (lienzo .d-ic/.ic con .c-tel/.c-wa):
+     cuadrados de 44px en pastel, con los MISMOS hex del canon. */
+  .dc-ics{display:flex;gap:8px}
+  .dc-ic{
+    width:44px;height:44px;box-sizing:border-box;flex-shrink:0;
+    border:1px solid var(--d-borde-campo);border-radius:10px;
+    background:#fff;color:var(--d-tinta);
+    display:grid;place-items:center;text-decoration:none;
+  }
+  .dc-ic.dc-tel{background:#EDF2FE;border-color:#EDF2FE;color:#3A5BC7}
+  .dc-ic.dc-wa{background:#E6F4EA;border-color:#E6F4EA;color:#17603A}
+
   /* Los titulitos de sección, como el .d-sec del lienzo: mayúscula
      chica con su raya arriba. */
   .panel-der .grupo-tit,
@@ -165,13 +210,9 @@
     border-top:1px solid var(--d-borde);padding-top:12px;
   }
 
-  /* Un solo botón negro por pantalla: en la ficha es abrir el chat (el
-     .btn.oro de siempre — var(--dorado) ya es la tinta), a lo ancho como
-     el .d-btn del lienzo. Los demás botones quedan blancos con borde. */
-  .panel-der .acciones .btn.oro{
-    width:100%;min-height:48px;justify-content:center;
-    border-radius:12px;font-size:15px;font-weight:600;
-  }
+  /* En la ficha ya no hay botón negro: el chat es el ícono verde del
+     lienzo, y el .d-btn negro del canon es «Cobrar saldo», que todavía
+     no existe como acción. Los botones quedan blancos con borde. */
   .panel-der .btn{border-color:var(--d-borde-campo);border-radius:var(--d-radio-boton)}
   .panel-der .btn.fantasma{border-style:dashed;border-color:var(--d-borde-campo)}
 
@@ -181,7 +222,31 @@
     background:var(--d-gris-activo);color:#3F3F3F;
   }
   .panel-der .etq.at{background:var(--d-rojo-fondo);color:var(--d-rojo)}
-  .panel-der .dato{border-bottom-color:var(--d-borde)}
+
+  /* Los renglones de dato, con la forma del `.d-kv` del lienzo (06/22):
+     la clave gris y chica a la izquierda, el valor pegado a la derecha y
+     SIN raya debajo — en el canon las rayas son solo los `.d-sec`, que
+     separan secciones, no datos. Mismo lenguaje que ya usan el panel de
+     Compras y el de Proveedores. */
+  .panel-der .dato{
+    display:flex;justify-content:space-between;align-items:baseline;gap:16px;
+    border-bottom:0;padding:3px 0;font-size:13.5px;
+  }
+  .panel-der .dato b{
+    font-size:13px;font-weight:400;color:var(--d-suave);
+    text-transform:none;letter-spacing:0;flex-shrink:0;
+  }
+  .panel-der .dato span{text-align:right;min-width:0}
+
+  /* El botón negro del lienzo es «COBRAR SALDO $X», que acá no existe:
+     va apagado (ver control.html). Apagado se ve apagado — nunca con la
+     cara del botón vivo. */
+  .panel-der .dc-apagado{
+    width:100%;min-height:48px;justify-content:center;
+    border-radius:12px;font-size:14px;font-weight:600;
+    background:var(--d-col);border:1px solid var(--d-borde);
+    color:var(--d-suave);opacity:1;
+  }
 
   /* «Más opciones» (lienzo 06/22): lo delicado, plegado. El summary se ve
      como el enlace subrayado del lienzo (.d-lnk); cero JS. */
@@ -205,7 +270,12 @@
    solo en ≥861px, para no pisar el width:100% del teléfono ni tocar la
    tablet. */
 @media (min-width:861px){
-  .panel-der{width:min(480px,94vw);border-left:1px solid var(--d-borde)}
+  .panel-der{width:min(480px,94vw);border-left:1px solid var(--d-borde);padding:20px 24px}
+  /* El cab-panel pegajoso de calendario.css está calzado a 20px: con el
+     padding de 24px del lienzo hay que recalzarle los márgenes para que
+     siga sangrando hasta el borde. El top:-20px no cambia (el padding
+     de ARRIBA sigue siendo 20px). */
+  .panel-der .cab-panel{margin:-20px -24px 0;padding:20px 24px 0}
 }
 
 /* Los campos de escritura del teléfono ya crecen a 16px en calendario.css

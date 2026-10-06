@@ -917,9 +917,18 @@ def test_ganado_y_perdido_no_traen_el_chip_de_responsable(cliente, de_dueno):
     cuerpo = cliente.get("/control", params={"vista": "estado"}).text
     # LEAD-84 es Ganado y de Abraham: esas columnas no se reparten, así
     # que su chip de responsable no debería aparecer en ningún lado.
-    tarjeta = cuerpo[cuerpo.index('data-ref="LEAD-84"'):][:700]
+    # La tarjeta ENTERA, hasta donde empieza la siguiente: con la fidelidad
+    # P37 creció (el rincón `ctl-acts` de la primera fila) y un recorte fijo
+    # se quedaba corto justo antes de la etiqueta de pago.
+    desde = cuerpo.index('data-ref="LEAD-84"')
+    resto = cuerpo[desde + 10:]
+    corta = resto.index("data-ref=") if "data-ref=" in resto else len(resto)
+    tarjeta = cuerpo[desde:desde + 10 + corta]
     assert "Abraham" not in tarjeta
     assert "chip-nadie" not in tarjeta
+    # Un cerrado tampoco estrena el círculo del responsable del lienzo: esa
+    # columna no se reparte, y la inicial sería el mismo ruido que el chip.
+    assert "ctl-av" not in tarjeta
     # Y sigue trayendo lo que sí aporta: el interés y la etiqueta de pago.
     assert "Plantas" in tarjeta and "Pagado 100%" in tarjeta
 
@@ -1132,8 +1141,11 @@ def test_la_ficha_agrupa_acciones_y_senales(cliente, de_dueno):
     assert cuerpo.count('class="grupo-tit"') == 2
     assert ">Acciones</div>" in cuerpo and ">Señales</div>" in cuerpo
     assert cuerpo.index(">Acciones</div>") < cuerpo.index(">Señales</div>")
-    # Los mismos botones de siempre, cada uno en su grupo.
-    assert "💬 WhatsApp" in cuerpo and "Responder" in cuerpo
+    # Los mismos botones de siempre, cada uno en su grupo. Abrir el chat
+    # sigue estando (fidelidad P37: pasó del botón «💬 WhatsApp» al ícono
+    # verde de arriba, pantallas 06/22 — mismo enlace, otro lugar).
+    assert 'class="dc-ic dc-wa"' in cuerpo and "Responder" in cuerpo
+    assert "https://wa.me/507" in cuerpo
     # Cotizar es formulario POST desde el punto 1 de roles (precisión 2:
     # el GET /venta?lead= mutaba).
     assert 'action="/venta/lead"' in cuerpo and ">Cotizar</button>" in cuerpo

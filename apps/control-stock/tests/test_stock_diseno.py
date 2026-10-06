@@ -167,6 +167,24 @@ def test_el_detalle_conserva_sus_acciones():
         assert campo in plantilla, campo
 
 
+def test_el_detalle_sigue_el_lienzo_fresco():
+    """La pasada de fidelidad del BLOQUE 37 contra el lienzo refrescado
+    (04 Mac / 20 celular): los vehículos de «Entrega en línea» se ven
+    como chips —la casilla marcada rellena el chip con la familia verde
+    de Planta del lienzo, sin JS (:has)— y el − cantidad + de Modificar
+    stock mide lo del lienzo en cada cara (40px en Mac, 56px en el
+    teléfono con el número a 32px)."""
+    css = open(CSS).read()
+    # El chip marcado: verde del lienzo, pintado por :has (cero JS).
+    assert "#tab-detalle .campo-veh .veh-fila label:has(input:checked)" in css
+    assert "#E6F6EB" in css and "#00713F" in css
+    # El stepper: chico en Mac (regla base), grande en el teléfono.
+    base, movil = css.split("@media (max-width:899px)", 1)
+    assert "width:40px;height:40px" in base.split("#modal-editar .qty-btn", 1)[1]
+    assert "width:56px;height:56px" in movil.split("#modal-editar .qty-btn", 1)[1]
+    assert "font-size:32px" in movil
+
+
 def test_los_modales_conservan_sus_acciones():
     plantilla = open(PLANTILLA).read()
     # Modificar stock: − / +, Guardar en Odoo, cancelar.

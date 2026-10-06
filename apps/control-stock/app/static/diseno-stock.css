@@ -162,12 +162,30 @@
   color:var(--d-suave);border-top:1px solid var(--d-borde);padding-top:12px;
 }
 
-/* Los campos de la ficha, con el borde y el radio del diseño. */
+/* Los campos de la ficha, con el borde y el radio del diseño. El lienzo
+   fresco los escribe a 16px en las DOS caras (.f input de 04 y de 20),
+   no solo en el teléfono. */
 #tab-detalle .ficha-form .campo input,
 #tab-detalle .ficha-form .campo select,
 #tab-detalle .ficha-form .campo textarea{
   background:#fff;border:1px solid var(--d-borde-campo);
-  border-radius:var(--d-radio-boton);color:var(--d-tinta);
+  border-radius:var(--d-radio-boton);color:var(--d-tinta);font-size:16px;
+}
+
+/* Entrega en línea: los tres vehículos como los chips del lienzo (04 en
+   Mac, 20 en celular) — píldoras de borde fino a lo ancho; la marcada se
+   rellena con la familia verde de Planta del lienzo (#E6F6EB / #00713F,
+   sin token — literal, como los grises). La casilla sigue siendo casilla
+   (misma función, mismo POST): :has solo pinta el chip alrededor. */
+#tab-detalle .campo-veh .veh-fila{gap:6px}
+#tab-detalle .campo-veh .veh-fila label{
+  flex:1;justify-content:center;height:44px;
+  border:1px solid var(--d-borde-campo);border-radius:var(--d-radio-boton);
+  background:#fff;font-size:14px;font-weight:500;color:var(--d-tinta);
+}
+#tab-detalle .campo-veh .veh-fila input{accent-color:var(--d-tinta)}
+#tab-detalle .campo-veh .veh-fila label:has(input:checked){
+  border:2px solid #00713F;background:#E6F6EB;font-weight:700;
 }
 
 /* El interruptor de la tienda: prendido va en tinta, no en dorado. */
@@ -186,17 +204,18 @@
   border-radius:var(--d-radio-boton);background:#fff;color:var(--d-tinta);
   display:grid;place-items:center;
 }
-/* El − cantidad + de Modificar stock: los cuadrados del lienzo
-   (pantalla 20: bordes #CFCFCF, radio 14, número grande tabular). */
+/* El − cantidad + de Modificar stock: los cuadrados del lienzo fresco.
+   En Mac (pantalla 04) son chicos: 40px, radio 10, número a 22px; el
+   teléfono (pantalla 20) los agranda abajo en su media query. */
 #modal-editar .qty-btn{
-  width:48px;height:48px;border:1px solid var(--d-borde-campo);
-  border-radius:var(--d-radio-pil);background:#fff;color:var(--d-tinta);
-  font-size:22px;
+  width:40px;height:40px;border:1px solid var(--d-borde-campo);
+  border-radius:var(--d-radio-boton);background:#fff;color:var(--d-tinta);
+  font-size:20px;
 }
 #modal-editar #edit-input{
-  border:1px solid var(--d-borde-campo);border-radius:var(--d-radio-pil);
-  background:#fff;color:var(--d-tinta);font-weight:700;
-  font-variant-numeric:tabular-nums;
+  height:40px;border:1px solid var(--d-borde-campo);
+  border-radius:var(--d-radio-boton);background:#fff;color:var(--d-tinta);
+  font-weight:700;font-size:22px;font-variant-numeric:tabular-nums;
 }
 #modal-agregar .campo input,#modal-agregar .campo select{
   background:#fff;border:1px solid var(--d-borde-campo);
@@ -237,15 +256,20 @@
 /* ==================== el teléfono (pantallas 19 y 20) ================== */
 
 @media (max-width:899px){
-  /* Campos de escritura a 16px SIEMPRE (regla de la tanda). */
+  /* Campos de escritura a 16px SIEMPRE (regla de la tanda; los de la
+     ficha ya van a 16px en las dos caras, arriba). */
   #tab-stock .buscador{height:48px}
   #tab-stock .buscador input{font-size:16px}
-  #modal-editar #edit-input{font-size:24px}
   #modal-agregar .campo input,#modal-agregar .campo select{font-size:16px}
-  #tab-detalle .ficha-form .campo input,
-  #tab-detalle .ficha-form .campo select,
-  #tab-detalle .ficha-form .campo textarea{font-size:16px}
   #panel .umbral-form input{font-size:16px}
+
+  /* El − cantidad + del teléfono (pantalla 20): cuadrados de 56px,
+     radio 14 (literal del lienzo, sin token) y el número bien grande. */
+  #modal-editar .qty-btn{width:56px;height:56px;border-radius:14px;font-size:24px}
+  #modal-editar #edit-input{height:56px;border-radius:14px;font-size:32px}
+
+  /* Los chips de vehículo del celular (pantalla 20): opciones de 48px. */
+  #tab-detalle .campo-veh .veh-fila label{height:48px}
 
   /* Los chips del celular (pantalla 19): chicos, grises, la activa
      rellena en negro. */

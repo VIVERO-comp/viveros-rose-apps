@@ -13,9 +13,13 @@
    de tarjeta/miniatura). Evaluando (ámbar) y los tintes que los tokens no
    tienen conservan su color de calendario.css — acá solo cambia la forma.
 
-   Esta pantalla sigue SIN botón negro, a propósito (la decisión vieja de
-   la plantilla): los dos negros del lienzo —«+ Nuevo proveedor» y «ANOTAR
-   COMPRA»— son funciones que hoy no existen y una piel no las inventa. */
+   Esta pantalla sigue SIN botón negro VIVO, a propósito: los dos negros
+   del lienzo —«+ Nuevo proveedor» y «ANOTAR COMPRA $X»— son funciones que
+   hoy no existen y una piel no las inventa. El primero se pinta en su
+   lugar pero APAGADO (un proveedor nace al anotar su compra, y esconder
+   el botón solo haría que alguien lo busque); el segundo depende de los
+   contadores por producto del lienzo, que no existen en ningún lado, así
+   que no se pinta. */
 
 /* ==================== la barra de arriba ============================== */
 
@@ -55,6 +59,22 @@ body.pvd .btn{
   border-radius:var(--d-radio-boton);color:var(--d-tinta);
 }
 body.pvd .btn:hover{background:var(--d-gris-activo)}
+/* «+ Nuevo proveedor»: el negro del lienzo, apagado. Se ve apagado — la
+   píldora gris de un botón que no se puede apretar. */
+body.pvd .barra .btn.pvd-apagado{
+  height:36px;padding:0 16px;border-radius:18px;font-size:13.5px;
+  font-weight:600;background:var(--d-col);border:1px solid var(--d-borde);
+  color:var(--d-suave);
+}
+body.pvd .barra .btn.pvd-apagado:hover{background:var(--d-col)}
+/* El atajo de llamar de la cabecera del panel (pantalla 14): el cuadrado
+   pastel de 44px del canon, con sus mismos hex. */
+body.pvd .pvd-ic{
+  width:44px;height:44px;box-sizing:border-box;flex:0 0 auto;padding:0;
+  border:1px solid var(--d-borde-campo);border-radius:10px;
+  display:grid;place-items:center;text-decoration:none;
+}
+body.pvd .pvd-ic.c-tel{background:#EDF2FE;border-color:#EDF2FE;color:#3A5BC7}
 
 /* ==================== las tarjetas de proveedor ======================= */
 
@@ -120,6 +140,9 @@ body.pvd .panel-der .cab-panel{
   box-shadow:0 8px 10px -10px rgba(17,17,17,.3);
 }
 body.pvd .panel-der h4{font-size:20px;font-weight:700;line-height:1.2}
+/* El contacto bajo el nombre (pantalla 14: «6204-5511 · Las Cumbres»):
+   los mismos datos que antes eran filas Teléfono/Correo/Ciudad. */
+body.pvd .pvd-contacto{display:block;font-size:12.5px;color:var(--d-suave);margin-top:2px}
 body.pvd .pvd-av-panel{width:52px;height:52px;font-size:17px}
 /* La X del panel: el mismo enlace «Cerrar» de siempre, como botón
    cuadrado de 36px (patrón cpd-x de Compras). */

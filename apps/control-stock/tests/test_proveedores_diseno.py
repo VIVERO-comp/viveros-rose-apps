@@ -168,6 +168,11 @@ def test_el_panel_conserva_su_catalogo_editable(cliente, con_un_proveedor,
     assert 'class="pvd-x"' in panel
     assert 'aria-label="Cerrar"' in panel
     assert 'href="/compras/proveedores#pv-11"' in panel
+    # El contacto subió a la cabecera como renglón tenue (pantalla 14:
+    # «6204-5511 · Las Cumbres»): mismos datos que las filas de antes,
+    # el lugar del lienzo. Solo los que existen, nada inventado.
+    assert 'class="pvd-contacto"' in panel
+    assert "6204-5511 · lc@vivero.com · Las Cumbres" in panel
     # Las cuatro escrituras del catálogo, intactas.
     assert 'action="/compras/proveedores/producto"' in panel
     for accion in ('name="guardar"', 'name="quitar"',
@@ -179,15 +184,36 @@ def test_el_panel_conserva_su_catalogo_editable(cliente, con_un_proveedor,
     assert 'method="get" action="/compras/proveedores"' in panel
 
 
-def test_la_pantalla_sigue_sin_boton_negro():
-    """Los dos negros del lienzo («+ Nuevo proveedor», «ANOTAR COMPRA»)
-    no existen hoy: la piel no los inventa ni asciende otro botón."""
+def test_la_pantalla_sigue_sin_boton_negro_vivo():
+    """Los dos negros del lienzo («+ Nuevo proveedor», «ANOTAR COMPRA $X»)
+    no existen hoy: la piel no los inventa ni asciende otro botón.
+
+    Fidelidad P37: «+ Nuevo proveedor» sí se PINTA, en el lugar del
+    lienzo y apagado con su «Todavía no» — un proveedor nace al anotar la
+    compra que se le hace. «ANOTAR COMPRA $X» depende de los contadores
+    por producto, que no existen en ningún lado: ese no se pinta."""
     plantilla = open(PLANTILLA).read()
-    assert "Nuevo proveedor" not in plantilla
+    assert "+ Nuevo proveedor — Todavía no" in plantilla
+    nuevo = plantilla[plantilla.index("+ Nuevo proveedor") - 400:]
+    assert "disabled" in nuevo[:420]
     assert "ANOTAR COMPRA" not in plantilla
     assert "btn oro" not in plantilla
     css = open(CSS).read()
     assert ".oro" not in css
+
+
+def test_llamar_al_proveedor_marca_su_telefono_de_verdad(cliente,
+                                                         con_un_proveedor):
+    """El atajo de la pantalla 14: el teléfono que ya estaba en la ficha,
+    ahora marcable. El verde de WhatsApp del lienzo NO se pinta: un
+    proveedor no toca WhatsApp, y un botón que no escribe a nadie sería
+    peor que no tenerlo."""
+    cuerpo = cliente.get("/compras/proveedores?abrir=11").text
+    panel = cuerpo[cuerpo.index('class="panel-der"'):]
+    assert 'class="pvd-ic c-tel"' in panel
+    assert 'href="tel:62045511"' in panel
+    assert "wa.me" not in panel
+    assert "c-wa" not in panel
 
 
 # ---------------------------------------------------------------------------

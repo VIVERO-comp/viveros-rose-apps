@@ -151,6 +151,22 @@ def test_la_tarjeta_conserva_sus_enlaces(cliente, de_dueno):
     assert f'data-ref="{nueva["ref"]}"' in texto
 
 
+def test_el_resumen_de_la_pantalla_12_va_apagado(cliente):
+    """El `.res` del lienzo (Hay que comprar / Por llegar / Recibido este
+    mes) existe, pero sus números no se calculan en ningún lado todavía:
+    los tiles dicen «Todavía no» — nunca un monto inventado — y el de
+    Proveedores enlaza a la vista real."""
+    texto = cliente.get("/compras").text
+    aside = texto.split('class="cpd-res"')[1].split("</aside>")[0]
+    for titulo in ("Hay que comprar", "Por llegar", "Recibido este mes",
+                   "Proveedores"):
+        assert titulo in aside, titulo
+    assert aside.count("Todavía no") == 3
+    assert 'href="/compras/proveedores"' in aside
+    # Ni un número con pinta de plata dentro del resumen apagado.
+    assert "$" not in aside
+
+
 # ---------------------------------------------------------------------------
 # El panel de la compra abierta (pantallas 13 y 29)
 # ---------------------------------------------------------------------------
@@ -163,9 +179,60 @@ def test_el_panel_conserva_sus_renglones_y_su_cerrar(cliente, de_dueno):
     assert 'class="cpd-x"' in panel
     assert 'aria-label="Cerrar"' in panel
     assert f'href="/compras#c-{nueva["ref"]}"' in panel
+    # El estado ya no es un renglón «Columna»: la pantalla 13 lo pone en
+    # la cabecera, junto a la referencia («P00030 · Pedida, por llegar»).
+    # El dato sigue ahí, solo cambió de lugar.
+    titulo = compras.POR_CLAVE["POR_PEDIR"]["titulo"]  # crear() nace ahí
+    assert f"{nueva['ref']} · {titulo}" in panel
     # Los renglones de siempre.
-    for renglon in ("Columna", "Cómo llega", "Responsable", "Productos ("):
+    for renglon in ("Cómo llega", "Responsable", "Productos ("):
         assert renglon in panel, renglon
+
+
+def test_los_atajos_del_proveedor_van_apagados(cliente, de_dueno):
+    """Pantallas 13 y 29: los dos íconos de llamar y escribirle al
+    proveedor. Control no guarda su teléfono (vive en Odoo) y los
+    proveedores no tocan WhatsApp, así que los dos se pintan en su lugar
+    pero APAGADOS, con su «Todavía no» — nunca un número inventado."""
+    nueva = compras.crear("Pedido de octubre", autor="G")
+    panel = cliente.get(f"/compras?abrir={nueva['ref']}").text
+    atajos = panel.split('class="cpd-ics"')[1].split("</div>")[0]
+    assert atajos.count("disabled") == 2
+    assert atajos.count('title="Todavía no"') == 2
+    assert "cpd-ic c-tel" in atajos and "cpd-ic c-wa" in atajos
+    # Ni un href: apagado es apagado, no un enlace que no marca a nadie.
+    assert "href=" not in atajos
+    assert "tel:" not in atajos and "wa.me" not in atajos
+
+
+def test_ver_proveedor_abre_su_ficha_de_verdad(cliente, de_dueno):
+    """El enlace chico del pie del lienzo (13): la ficha del proveedor ya
+    existe y la compra guardó su id, así que abre SU tarjeta. Sin
+    proveedor anotado no se pinta nada."""
+    con = compras.crear("Macetas", proveedor_nombre="Vivero Las Cumbres",
+                        proveedor_id=77, autor="G")
+    panel = cliente.get(f"/compras?abrir={con['ref']}").text
+    assert '/compras/proveedores?abrir=77#pv-77' in panel
+    assert ">Ver proveedor</a>" in panel
+    sin = compras.crear("Tierra negra", autor="G")
+    assert "Ver proveedor" not in cliente.get(f"/compras?abrir={sin['ref']}").text
+
+
+def test_la_tarjeta_con_orden_ofrece_recibir(cliente, de_dueno):
+    """El botón del rincón de la tarjeta (lienzo 12/28). Es el MISMO
+    enlace del panel —ni una ruta nueva— y solo donde tiene sentido: una
+    compra sin su orden de compra en Odoo todavía no puede recibirse."""
+    nueva = compras.crear("Tierra negra", autor="G")
+    enlace = f'/compras/recibir?ref={nueva["ref"]}#cp-recibir'
+    # El enlace lleva la ref adentro, así que basta buscarlo en el tablero:
+    # no puede venir de la tarjeta de otra compra.
+    assert enlace not in cliente.get("/compras").text
+    compras.guardar_orden(nueva["ref"], 7, "P00007")
+    tablero = cliente.get("/compras").text
+    assert f'<a class="cpd-ob" draggable="false"\n               href="{enlace}"' in tablero
+    assert ">Recibir</a>" in tablero
+    # Y es el MISMO destino que ofrece el panel de esa compra.
+    assert enlace in cliente.get(f"/compras?abrir={nueva['ref']}").text
 
 
 def test_las_acciones_del_panel_van_en_negro():

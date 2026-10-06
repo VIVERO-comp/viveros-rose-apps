@@ -104,9 +104,11 @@ def test_las_dos_pantallas_usan_el_segmento_de_control(cliente):
 
 
 def test_cada_pantalla_marca_su_propia_vista(cliente):
+    # El lienzo fresco (12/13/14) llama «Compras» a la primera cara del
+    # segmento (antes decía «Tablero» — mismo enlace, misma vista).
     for seg in _segmentos(cliente.get("/compras").text):
         activo = seg.split('class="on"')[1].split("</a>")[0]
-        assert "Tablero" in activo
+        assert "Compras" in activo
     for seg in _segmentos(cliente.get("/compras/proveedores").text):
         activo = seg.split('class="on"')[1].split("</a>")[0]
         assert "Proveedores" in activo

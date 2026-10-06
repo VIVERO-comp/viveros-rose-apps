@@ -9,7 +9,16 @@
    columnas congeladas, la plata, los filtros. Abrir una tarjeta lleva a
    la ficha Estado/Entrega EXISTENTE — el panel del lienzo (08/24) ES esa
    ficha, no se duplica pantalla. «Marcar entregada» tampoco vive acá:
-   sigue solo en la ficha. #}
+   sigue solo en la ficha.
+
+   Fidelidad P37: la tarjeta sigue la anatomía del lienzo (nombre + fecha
+   + inicial del responsable; chip del tipo + palomita verde si está
+   pagado; «Cobrar $X» como píldora roja que abre la ficha). El chip del
+   tipo y el acento de la tarjeta salen con color SOLO si Python algún
+   día los manda (t.chip_estilo / t.acento — la familia por tipo_venta es
+   una decisión de vocabulario que no se inventa acá); mientras, chip
+   neutro. La vista «Agenda» del lienzo no existe: queda apagada con su
+   «Todavía no». #}
 <link rel="stylesheet" href="/static/diseno-pedidos.css?v={{ v_estaticos }}">
 
 {% with bm_titulo='Pedidos', bm_sub='El pedido nace cuando el cliente paga o abona' %}{% include '_barra_movil.html' %}{% endwith %}
@@ -22,10 +31,16 @@
     </button>
     <h1 class="pd-titulo">Pedidos</h1>
   </div>
-  <span class="pd-nace">Un pedido aparece aquí cuando el cliente paga o abona.
-    <span class="pd-leyenda"><span class="pd-dot-ok" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span> Pagado</span>
-    <span class="pd-leyenda"><span class="pd-lej-debe">Debe</span> Falta cobrar</span>
+  {# El selector de vista del lienzo: solo existe el Tablero. La Agenda
+     queda apagada y lo dice — nada se finge clicable. #}
+  <span class="pd-seg">
+    <span class="pd-seg-on">Tablero</span>
+    <span class="pd-seg-off" aria-disabled="true" title="Todavía no">Agenda <span class="pd-seg-nota">Todavía no</span></span>
   </span>
+  <span class="pd-sp"></span>
+  <span class="pd-nace">Un pedido aparece aquí cuando el cliente paga o abona.</span>
+  <span class="pd-leyenda"><span class="pd-pg" role="img" aria-label="Pagado" title="Pagado"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span> Pagado</span>
+  <span class="pd-leyenda"><span class="pd-lej-debe">Cobrar</span> Falta cobrar</span>
 </header>
 
 <main class="pd-main">
@@ -37,7 +52,8 @@
   {% endif %}
 
   {# Las capas por tipo de venta (item 1): chips-enlace, lo decide
-     Python. «Todas» quita el filtro. #}
+     Python. «Todas» quita el filtro. El lienzo Mac no las dibuja, pero
+     son función viva — se quedan. #}
   {% if tablero.filtros %}
   <div class="pd-capas">
     <span class="pd-pista">Capas</span>
@@ -58,32 +74,39 @@
       <div class="pd-ch"><span class="pd-ch-t">{{ col.titulo }}<span class="pd-cnt num">{{ col.cuenta }}</span></span></div>
       <span class="pd-pista">{{ col.pista }}</span>
       {% for t in col.tarjetas %}
-      {# Arrastrable solo si Python le puso gesto (pedidos.gesto_arrastre:
-         únicamente «Por programar» → «Programado»): el drop NAVEGA al
-         editor de fecha de la ficha, nunca escribe. Los <a> internos van
-         con draggable="false" (la trampa del 29/09 de control.js). #}
-      <article class="pd-card"{% if t.arrastre %} draggable="true" data-arrastre-url="{{ t.arrastre.url }}" data-arrastre-destinos="{{ t.arrastre.destinos | join(' ') }}"{% endif %}>
+      {# La anatomía del lienzo (07/23) + los ganchos del arrastre: la
+         tarjeta es arrastrable solo si Python le puso gesto
+         (pedidos.gesto_arrastre: únicamente «Por programar» →
+         «Programado») y el drop NAVEGA al editor de fecha de la ficha,
+         nunca escribe. Los <a> internos van con draggable="false" (la
+         trampa del 29/09 de control.js). #}
+      <article class="pd-card"{% if t.acento %} style="border-left-color:{{ t.acento }}"{% endif %}{% if t.arrastre %} draggable="true" data-arrastre-url="{{ t.arrastre.url }}" data-arrastre-destinos="{{ t.arrastre.destinos | join(' ') }}"{% endif %}>
         <div class="pd-fila">
           <a class="pd-abrir" draggable="false" href="{{ t.href }}">{{ t.cliente }}</a>
-          <b class="pd-monto num">{% if t.total is not none %}{{ t.total | dinero }}{% else %}—{% endif %}</b>
+          <span class="pd-acts">
+            {% if col.clave == 'entregado' %}
+            <span class="pd-fecha num">Entregada {{ t.fecha_entrega }}</span>
+            {% elif t.fecha_programada %}
+            <span class="pd-fecha num">{{ t.fecha_programada }}</span>
+            {% endif %}
+            {% if t.asignado %}<span class="pd-av" role="img" aria-label="Responsable: {{ t.asignado }}" title="Responsable: {{ t.asignado }}">{{ t.asignado[:1] | upper }}</span>{% endif %}
+          </span>
         </div>
         <div class="pd-fila">
-          <span class="pd-hint num">{{ t.orden }}{% if t.tipo_venta %} · {{ t.tipo_venta }}{% endif %}</span>
-          {% if col.clave == 'entregado' %}
-          <span class="pd-fecha num">Entregada {{ t.fecha_entrega }}</span>
-          {% elif t.fecha_programada %}
-          <span class="pd-fecha num">{{ t.fecha_programada }}</span>
-          {% endif %}
+          <span class="pd-meta">
+            {% if t.tipo_venta %}<span class="pd-tipo"{% if t.chip_estilo %} style="{{ t.chip_estilo }}"{% endif %}>{{ t.tipo_venta }}</span>{% endif %}
+            {% if t.plata.clase == 'pagado' %}<span class="pd-pg" role="img" aria-label="Pagado" title="Pagado"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span>
+            {% elif t.plata.clase == 'sin_dato' %}<span class="pd-plata pd-sin-dato">{{ t.plata.texto }}</span>{% endif %}
+          </span>
+          <span class="pd-acts">
+            {% if t.plata.clase == 'debe' %}
+            <a class="pd-ob pd-cob num" draggable="false" href="{{ t.href }}">Cobrar {{ t.plata.debe | dinero }}</a>
+            {% elif col.clave == 'por_programar' and not col.solo_lectura %}
+            <a class="pd-ob" draggable="false" href="{{ t.href }}">Programar</a>
+            {% endif %}
+          </span>
         </div>
-        {% if t.direccion or t.asignado %}
-        <span class="pd-hint">{{ t.direccion or "Sin dirección" }}{% if t.asignado %} · {{ t.asignado }}{% endif %}</span>
-        {% endif %}
-        <div class="pd-fila">
-          <span class="pd-plata {{ 'pd-debe' if t.plata.clase == 'debe' else ('pd-pagado' if t.plata.clase == 'pagado' else 'pd-sin-dato') }} num">{{ t.plata.texto }}</span>
-          {% if col.clave == 'por_programar' and not col.solo_lectura %}
-          <a class="pd-chip" draggable="false" href="{{ t.href }}" style="text-decoration:none">Programar →</a>
-          {% endif %}
-        </div>
+        <span class="pd-hint num">{{ t.orden }}{% if t.total is not none %} · {{ t.total | dinero }}{% endif %}{% if t.direccion %} · {{ t.direccion }}{% endif %}</span>
         {# «Mover a» (BLOQUE 40): el gesto del arrastre para el celular,
            como enlaces al editor de fecha — decidido en Python. #}
         {% with mover_a=t.mover_a %}{% include "_mover_a.html" %}{% endwith %}

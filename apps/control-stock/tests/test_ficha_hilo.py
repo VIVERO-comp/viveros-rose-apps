@@ -230,24 +230,28 @@ def de_dueno(monkeypatch):
     monkeypatch.setenv("AJUSTES_ADMINS", "genesis")
 
 
-def test_el_panel_va_en_el_orden_de_c1(cliente, de_dueno, monkeypatch):
-    """Cabecera, botones, cotización, conversación, notas y datos al final.
+def test_el_panel_va_en_el_orden_del_lienzo(cliente, de_dueno, monkeypatch):
+    """Cabecera, atajos, datos, botones, cotización, conversación, notas.
 
-    El orden es la decisión de diseño del 25/09/2026 (C1): se mira de
-    arriba abajo en el orden en que se usa, y los datos, que se consultan
-    y no se leen, quedan de último. Con un Odoo fingido sin órdenes: así
-    "Sin cotización conectada" de verdad sale en pantalla (28/09/2026).
+    El orden venía de C1 (25/09/2026), que dejaba los datos de ÚLTIMO
+    porque se consultan y no se leen. La fidelidad P37 (pantallas 06 y 22
+    del lienzo fresco) los sube: el teléfono y el responsable van arriba,
+    pegados a los dos atajos de llamar y chatear, que es donde la persona
+    los busca cuando abre la ficha para contestarle a alguien. Todo lo
+    demás conserva su lugar. Con un Odoo fingido sin órdenes: así "Sin
+    cotización conectada" de verdad sale en pantalla (28/09/2026).
     """
     from test_cot_lead import OdooCotLead
     monkeypatch.setattr(ventas, "_ejecutar", OdooCotLead().ejecutar)
     cuerpo = cliente.get("/control", params={"abrir": "LEAD-91"}).text
     panel = cuerpo[cuerpo.index('class="panel-der"'):]
     orden = [panel.index(t) for t in (
+        "dc-ics",                     # llamar y chatear
+        "<b>Responsable</b>",
         "🔴 Responder",
         "Sin cotización conectada",
         "Conversación",
         "Notas internas",
-        "Responsable",
     )]
     assert orden == sorted(orden)
 
