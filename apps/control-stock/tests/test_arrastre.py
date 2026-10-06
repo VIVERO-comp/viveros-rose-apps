@@ -91,17 +91,29 @@ def test_ningun_destino_de_vender_mira_hacia_atras():
             assert orden_columnas.index(destino) > propia
 
 
-def test_mover_a_de_vender_son_los_mismos_destinos_en_enlaces():
-    """El bloque «Mover a» del panel (celular) lo decide el servidor y
-    es el MISMO gesto: un enlace por destino, todos al panel de cobro."""
+def test_mover_a_de_vender_no_repite_la_puerta_del_boton_negro():
+    """El «Mover a» del celular es el mismo gesto, pero NO duplica lo
+    que el panel ya ofrece. En una cotización el botón negro ES
+    «Facturar / Pagado» → el mismo /venta/pago/<n> del arrastre, así
+    que el bloque queda vacío: una sola puerta, no tres."""
     fila = {"tipo": "venta", "estado": "cotizacion", "n": 5}
     fila["arrastre"] = main._arrastre_vender(fila)
-    assert main._mover_a_vender(fila) == [
-        {"texto": "Confirmado · falta cobrar", "href": "/venta/pago/5"},
-        {"texto": "Pagado", "href": "/venta/pago/5"},
-    ]
+    panel = {"boton": {"texto": "Facturar / Pagado", "href": "/venta/pago/5"}}
+    assert main._mover_a_vender(fila, panel) == []
     assert main._mover_a_vender({"tipo": "venta", "estado": "pagado",
-                                 "n": 9, "arrastre": None}) == []
+                                 "n": 9, "arrastre": None}, panel) == []
+
+
+def test_mover_a_aparece_donde_el_panel_no_tiene_puerta_al_cobro():
+    """En una confirmada el botón negro es el PDF y el panel no lleva
+    al cobro por ningún lado: ahí «Mover a → Pagado» es el ÚNICO camino
+    del celular, donde no hay arrastre. Eso es lo que el bloque aporta."""
+    fila = {"tipo": "venta", "estado": "vendida", "n": 7}
+    fila["arrastre"] = main._arrastre_vender(fila)
+    panel = {"boton": {"texto": "Descargar / Compartir PDF",
+                       "href": "/venta/7/cotizacion.pdf"}}
+    assert main._mover_a_vender(fila, panel) == [
+        {"texto": "Pagado", "href": "/venta/pago/7"}]
 
 
 # ---------------------------------------------------------------------------
@@ -134,13 +146,25 @@ def test_una_confirmada_solo_ofrece_pagado(cliente):
     assert 'data-arrastre-destinos="confirmado pagado"' not in pagina
 
 
-def test_panel_de_cotizacion_trae_mover_a_decidido_en_servidor(cliente):
-    n = _venta_local()
+def test_panel_de_confirmada_trae_mover_a_decidido_en_servidor(cliente):
+    """La confirmada es el caso que lo necesita: su botón negro es el
+    PDF, así que el único enlace al cobro de toda la pantalla es el
+    «Mover a → Pagado» que armó Python."""
+    n = _venta_local(estado="vendida")
     pagina = cliente.get(f"/venta?abrir=v{n}").text
     assert "Mover a" in pagina
-    assert pagina.count(f'class="mover-a-ln" href="/venta/pago/{n}"') == 2
-    assert "Confirmado · falta cobrar →" in pagina
+    assert pagina.count(f'class="mover-a-ln" href="/venta/pago/{n}"') == 1
     assert "Pagado →" in pagina
+
+
+def test_panel_de_cotizacion_no_repite_el_boton_negro(cliente):
+    """La cotización ya tiene su puerta («Facturar / Pagado»): el panel
+    no estrena un «Mover a» que lleve al mismo lado, y en toda la
+    pantalla sigue habiendo UN solo enlace a /venta/pago/<n>."""
+    n = _venta_local()
+    pagina = cliente.get(f"/venta?abrir=v{n}").text
+    assert 'class="mover-a"' not in pagina
+    assert pagina.count(f'href="/venta/pago/{n}"') == 1
 
 
 def test_panel_de_pagada_no_ofrece_mover_a(cliente):

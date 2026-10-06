@@ -1838,13 +1838,26 @@ def _arrastre_vender(f):
     return {"url": f"/venta/pago/{f['n']}", "destinos": destinos}
 
 
-def _mover_a_vender(f):
+def _mover_a_vender(f, panel):
     """El bloque «Mover a» del panel (BLOQUE 40): el MISMO gesto del
     arrastre para el celular (≤899px, sin drag), como enlaces {texto,
     href} ya decididos acá (regla 10). Cada enlace navega al panel de
-    cobro existente — tocar nunca escribe, igual que soltar."""
+    cobro existente — tocar nunca escribe, igual que soltar.
+
+    NO se repite la puerta que el panel YA tiene. Si el botón negro
+    lleva al mismo lugar que el gesto, «Mover a» queda vacío: en una
+    cotización ese botón ES «Facturar / Pagado» → /venta/pago/<n>, el
+    mismo destino del arrastre y con mejor nombre, así que ofrecerlo de
+    nuevo serían tres puertas al mismo cuarto (y rompería la regla de
+    siempre: un solo botón negro, las acciones una sola vez).
+
+    Donde SÍ aporta es en una confirmada: ahí el botón negro es el PDF
+    y el panel no tiene ninguna puerta al cobro, así que en el celular
+    —sin arrastre— «Mover a → Pagado» es el ÚNICO camino."""
     gesto = f.get("arrastre")
     if not gesto:
+        return []
+    if gesto["url"] == ((panel.get("boton") or {}).get("href") or ""):
         return []
     return [{"texto": _TITULOS_VENDER[destino], "href": gesto["url"]}
             for destino in gesto["destinos"]]
@@ -1897,8 +1910,9 @@ def _vender_abierta(filas, abrir):
             f = dict(f)
             f["panel"] = _panel_vender(f)
             # «Mover a» (BLOQUE 40): el gesto del arrastre, en enlaces,
-            # para el celular. Lo decide Python, no la plantilla.
-            f["panel"]["mover_a"] = _mover_a_vender(f)
+            # para el celular. Lo decide Python, no la plantilla — y
+            # mirando el panel, para no repetir el botón negro.
+            f["panel"]["mover_a"] = _mover_a_vender(f, f["panel"])
             return f
     return None
 
