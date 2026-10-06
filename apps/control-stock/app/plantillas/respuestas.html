@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Respuestas a clientes — Control Viverorose</title>
+<link rel="icon" type="image/jpeg" href="/static/logo.jpg">
+<link rel="apple-touch-icon" href="/static/logo.jpg">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Respuestas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
+{# RESPUESTAS A CLIENTES (BLOQUE 21, esqueleto navegable 6/10/2026;
+   diseño: pantalla jordan-respuestas-a-clientes). Vista «Respuestas»
+   DENTRO de Conversaciones: misma piel (calendario.css + el sidebar
+   .lado de conversaciones.html) más su CSS propio. SOLO LECTURA, ni un
+   <form>; el cálculo real llega en la parte (d) — hoy cada métrica sale
+   «—» con su descripción y los huecos DECLARADOS. Nada inventado. #}
+<link rel="stylesheet" href="/static/calendario.css?v={{ v_estaticos }}">
+<link rel="stylesheet" href="/static/diseno-base.css?v={{ v_estaticos }}">
+<link rel="stylesheet" href="/static/diseno-respuestas.css?v={{ v_estaticos }}">
+</head>
+<body class="{{ 'menu-oculto' if request.cookies.get('menu') == '0' }}">
+
+<div class="app">
+  <aside class="lado">
+    <div class="marca">
+      <img src="/static/logo.jpg" alt="Vivero Rose">
+      <span>Control Viverorose</span>
+    </div>
+    <a class="pil" href="/calendario">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>Calendario
+    </a>
+    <a class="pil" href="/control">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Control
+    </a>
+    <a class="pil" href="/conversaciones">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/></svg>Conversaciones
+    </a>
+    <div class="pie">
+      <b>{{ empleada.nombre or empleada.id }}</b>
+      <span>Respuestas · solo lectura</span>
+    </div>
+  </aside>
+
+  <div class="tablero">
+    {% with bm_titulo='Respuestas', bm_sub='Cuánto esperó el cliente' %}{% include '_barra_movil.html' %}{% endwith %}
+    <div class="barra">
+      <button class="btn icono hamb" type="button" aria-label="Mostrar u ocultar el menú"
+              aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <h3>Conversaciones</h3>
+      <span class="rp-toggle on">Respuestas</span>
+      <a class="rp-toggle" href="/conversaciones">Todos los chats</a>
+      <span class="crece"></span>
+      <button class="rp-apagado" type="button" disabled>Elegir período — Todavía no</button>
+    </div>
+
+    {# El hueco de la instancia se dice primero: sin Twenty no hay nada
+       que medir, y eso no es «0». #}
+    {% if r.aviso_twenty %}
+    <div class="franja"><b>Ojo.</b> <span>{{ r.aviso_twenty }}</span></div>
+    {% endif %}
+    <div class="rp-nota">{{ r.aviso_calculo }} El umbral es el mismo dato de Ajustes que usa «Por responder»: hoy {{ r.umbral_min }} min, y cuenta siempre, también fuera de horario.</div>
+
+    <div class="rp-g4">
+      {% for t in r.tarjetas %}
+      <div class="rp-c">
+        <span class="rp-ct">{{ t.titulo }}</span>
+        <span class="rp-kv num">{% if t.valor is none %}—{% else %}{{ t.valor }}{% endif %}</span>
+        <span class="rp-hint">{{ t.hint }}</span>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="rp-g2">
+      <div class="rp-stack">
+        <div class="rp-c">
+          <span class="rp-ct">Por persona</span>
+          <div class="rp-hr">{% for c in r.por_persona.columnas %}<span>{{ c }}</span>{% endfor %}</div>
+          {% for fila in r.por_persona.filas %}
+          <div class="rp-r">{% for celda in fila %}<span class="num">{{ celda }}</span>{% endfor %}</div>
+          {% else %}
+          <p class="rp-hueco">Sin filas todavía: {{ r.aviso_calculo }}</p>
+          {% endfor %}
+          <span class="rp-hint">{{ r.por_persona.nota }} «Respuesta típica» será la del medio (mediana): así un chat olvidado no daña el número.</span>
+        </div>
+        <div class="rp-c">
+          <span class="rp-ct">Cuánto esperó el cliente</span>
+          {% for f in r.franjas %}
+          <div class="rp-br"><span>{{ f.texto }}</span><div class="rp-track" aria-hidden="true"></div><b class="num">—</b></div>
+          {% endfor %}
+          <span class="rp-hint">El reparto se llena con el cálculo; las barras no se dibujan con números inventados.</span>
+        </div>
+      </div>
+      <div class="rp-c">
+        <span class="rp-ct">Para leer · cómo respondieron</span>
+        {# BLOQUE 29: «Ver chat» apunta a la ruta FUTURA /chat/<ref>
+           (data-href), hoy APAGADO — la ruta no existe todavía. #}
+        {% for fila in r.para_leer.filas %}
+        <div class="rp-it">
+          <span class="rp-quien"><b>{{ fila.nombre }}</b><span class="rp-hint">{{ fila.detalle }}</span></span>
+          <button class="rp-apagado chico" type="button" disabled
+                  data-href="{{ fila.chat_href }}"
+                  title="Abrirá {{ fila.chat_href }} cuando exista la ruta de chat">Ver chat — Todavía no</button>
+        </div>
+        {% else %}
+        <p class="rp-hueco">La lista llega con el cálculo: saldrán los más lentos y algunos al azar.</p>
+        {% endfor %}
+        <span class="rp-hint">{{ r.para_leer.nota }}</span>
+      </div>
+    </div>
+
+    <div class="rp-c" style="margin-top:14px">
+      <span class="rp-ct">Los huecos del dato, declarados</span>
+      <ul class="rp-huecos">
+        {% for h in r.huecos_declarados %}<li>{{ h }}</li>{% endfor %}
+      </ul>
+      <span class="rp-hint">La pantalla dice los huecos, nunca los tapa.</span>
+    </div>
+  </div>
+</div>
+
+{% set activa = '' %}{% include '_nav.html' %}
+<script src="/static/menu.js?v={{ v_estaticos }}"></script>
+</body>
+</html>

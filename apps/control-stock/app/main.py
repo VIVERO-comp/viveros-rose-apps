@@ -6208,3 +6208,79 @@ def conversaciones_whatsapp(request: Request):
         "n": n,
         "ver_mas": ver_mas,
     })
+
+
+# ===========================================================================
+# ESQUELETO DE ROLES (BLOQUES 20-25 y 29, 6/10/2026): pantallas NAVEGABLES
+# en solo lectura, cada una con su módulo y su plantilla propios. Regla
+# dura de Abraham: nada que parezca funcionar y no guarde — lo que no
+# funciona es un <button disabled> con «Todavía no». NINGUNO de estos
+# módulos registra rutas POST (hay prueba que recorre app.routes). Hasta
+# la fusión con la rama roles-menu estas rutas no están en _nav: se llega
+# por URL directa. Los imports van aquí adentro a propósito: el bloque es
+# autocontenido y no toca el import de arriba (otra sesión edita main.py
+# en paralelo).
+# ===========================================================================
+
+# --- esqueleto roles: mi_crm (GET /mi-crm) ---
+from . import mi_crm  # noqa: E402
+
+# El panel «Hoy» de /calendario pinta sus cajas-hueco con esta función
+# (global de plantilla, mismo patrón que envio_precios): así el route del
+# calendario no se toca y la fusión con roles-menu no choca.
+plantillas.env.globals["esq_panel_hoy"] = mi_crm.panel_hoy
+
+
+@app.get("/mi-crm")
+def mi_crm_pantalla(request: Request, pestana: str = "", etapa: str = ""):
+    """El CRM chico: SOLO lo del responsable en sesión (la etiqueta
+    `Resp:` que casa con su usuario — el mismo casamiento de siempre).
+    La puerta es la sesión: cada quien ve únicamente lo suyo, y el rol
+    Inventario ya quedó afuera por su puerta global del middleware."""
+    empleada = request.state.empleada
+    return plantillas.TemplateResponse(request, "mi_crm.html", {
+        "empleada": empleada,
+        "v": mi_crm.vista(empleada, _es_admin(empleada),
+                          pestana=pestana, etapa=etapa),
+    })
+
+
+# --- esqueleto roles: finanzas (GET /finanzas) ---
+from . import finanzas  # noqa: E402
+
+
+@app.get("/finanzas")
+def finanzas_pantalla(request: Request):
+    """La pantalla de Finanzas, SOLO LECTURA. Nace cerrada (BLOQUE
+    22.7): hoy la abren los admins y los tres deberes de la cola de
+    pagos — la misma puerta del dinero que /pagos-por-confirmar. El rol
+    Finanzas entrará cuando roles-menu la abra para él, server-side."""
+    empleada = request.state.empleada
+    if not (_es_admin(empleada)
+            or pagos_confirmar.puede_ver(empleada["id"])):
+        return Response(
+            "La pantalla Finanzas es de los administradores y de los "
+            "deberes de la cola de pagos (Ajustes → Roles).",
+            status_code=403)
+    return plantillas.TemplateResponse(request, "finanzas.html", {
+        "empleada": empleada,
+        "f": finanzas.resumen(),
+    })
+
+
+# --- esqueleto roles: respuestas (GET /conversaciones/respuestas) ---
+from . import respuestas  # noqa: E402
+
+
+@app.get("/conversaciones/respuestas")
+def conversaciones_respuestas(request: Request):
+    """La vista «Respuestas» de Conversaciones (BLOQUE 21), SOLO
+    LECTURA. Nace cerrada con el MISMO candado de /conversaciones
+    (_solo_admin); cuando roles-menu exista la verán Finanzas y el
+    Director, server-side."""
+    if (rechazo := _solo_admin(request)) is not None:
+        return rechazo
+    return plantillas.TemplateResponse(request, "respuestas.html", {
+        "empleada": request.state.empleada,
+        "r": respuestas.vista(),
+    })

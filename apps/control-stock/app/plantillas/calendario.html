@@ -64,6 +64,49 @@
    desaparecían): en la columna derecha .cal-lado de la computadora ancha
    y en .leads-abajo, debajo del calendario, para tablet y celular. Los
    filtros NO viajan aquí: en pantalla chica ceden el espacio, los leads no. #}
+{# ESQUELETO DE ROLES (BLOQUE 20 · Calendario, 6/10/2026): el panel
+   «Hoy» — las actividades del día SELECCIONADO (los MISMOS datos que la
+   pantalla ya tiene en `movil`, así que al tocar otro día el panel lo
+   sigue solo, como siempre) más las cajas «Por responder» y
+   «Seguimientos» con su estado hueco honesto y el aviso de peticiones
+   (hoy 0 fijo — esa parte llega después). Lo decide Python
+   (mi_crm.panel_hoy, global esq_panel_hoy); clases de esta misma
+   pantalla, nada nuevo que mantener. BLOQUE 29: si el cálculo llena
+   filas, el «Ver chat» va APAGADO con su data-href /chat/<ref>. #}
+{% set esq = esq_panel_hoy() %}
+<div class="leads-lado panel-hoy">
+  <div class="leads-tit">{{ movil.subtitulo }}<span>{{ movil.total }} actividades</span></div>
+  {% for a in movil.actividades %}
+  <div class="lead-it" style="cursor:default">
+    <span class="pt" style="background:{{ a.color }}"></span>
+    <span class="ln"><b>{{ a.cliente }}</b><small>{{ cal.nombre_de_tipo(a.tipo) }} · {{ a.rango or a.hora }}</small></span>
+  </div>
+  {% else %}
+  <div class="lead-vacio">Sin actividades ese día.</div>
+  {% endfor %}
+  <div class="leads-tit" style="margin-top:6px">Por responder<span>llega después</span></div>
+  {% for fila in esq.por_responder.filas %}
+  <div class="lead-it" style="cursor:default">
+    <span class="ln"><b>{{ fila.nombre }}</b><small>{{ fila.detalle }}</small></span>
+    <button class="btn chico" type="button" disabled
+            data-href="{{ fila.chat_href }}"
+            title="Abrirá {{ fila.chat_href }} cuando exista la ruta de chat">Ver chat — Todavía no</button>
+  </div>
+  {% else %}
+  <div class="lead-vacio">{{ esq.por_responder.aviso }}</div>
+  {% endfor %}
+  <div class="leads-tit" style="margin-top:6px">Seguimientos de hoy<span>llega después</span></div>
+  {% for fila in esq.seguimientos.filas %}
+  <div class="lead-it" style="cursor:default">
+    <span class="ln"><b>{{ fila.nombre }}</b><small>{{ fila.detalle }}</small></span>
+    <button class="btn chico" type="button" disabled>Hecho — Todavía no</button>
+  </div>
+  {% else %}
+  <div class="lead-vacio">{{ esq.seguimientos.aviso }}</div>
+  {% endfor %}
+  <div class="lead-vacio"><a href="/mi-crm">{{ esq.peticiones }} peticiones por aceptar</a> — {{ esq.texto_peticiones }}.</div>
+</div>
+
 {# Log de leads de servicio por agendar: solo alquiler/mantenimiento/
    eventos — nada de venta retail. Un toque abre "Nueva actividad"
    con el tipo y el cliente ya puestos; el lead sale solo del log

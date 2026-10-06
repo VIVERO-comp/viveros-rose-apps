@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block titulo %}Finanzas — Control Viverorose{% endblock %}
+
+{% block contenido %}
+{# FINANZAS (BLOQUES 20 y 22, esqueleto navegable 6/10/2026; diseño:
+   pantalla jordan-finanzas). TODO lo que se pinta llegó decidido de
+   Python (app/finanzas.py, regla 10) y sale de los MOTORES de la casa
+   (informe de /revisar, cola de pagos, cifras.py). SOLO LECTURA: ni un
+   <form>; «Confirmar» va APAGADO con «Todavía no — falta el sí de Jay»
+   (BLOQUE 22.1) — confirmar de verdad sigue en /pagos-por-confirmar. #}
+<link rel="stylesheet" href="/static/diseno-finanzas.css?v={{ v_estaticos }}">
+
+{% with bm_titulo='Finanzas', bm_sub='Solo lectura' %}{% include '_barra_movil.html' %}{% endwith %}
+
+<header class="fz-top">
+  <div class="cab-izq">
+    <button class="hamb" type="button" aria-label="Mostrar u ocultar el menú"
+            aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+    <h1 class="fz-titulo">Finanzas</h1>
+    <span class="fz-tag">Solo lectura</span>
+  </div>
+  <button class="fz-apagado" type="button" disabled>Descargar reporte — Todavía no</button>
+</header>
+
+<main class="fz-main">
+  {# El hueco se dice SIEMPRE: con Odoo caído los números dependientes
+     salen «sin dato», jamás un $0 fingido. #}
+  {% if f.huecos %}
+  <div class="fz-alerta">Esta foto tiene huecos: {{ f.huecos | join(' · ') }}</div>
+  {% endif %}
+  {% if f.descuadre is not none %}
+  <div class="fz-alerta">Los cuatro números no cierran entre sí por ${{ '%.2f' | format(f.descuadre | abs) }} — la foto fina está en /revisar. Acá se dice, no se esconde.</div>
+  {% endif %}
+
+  <div class="fz-g4">
+    {% for t in f.tarjetas %}
+    <div class="fz-c">
+      <span class="fz-ct">{{ t.titulo }}</span>
+      <span class="fz-kv num {{ 'rojo' if t.rojo }} {{ 'sin-dato' if t.monto is none }}">{{ t.texto }}</span>
+      <span class="fz-hint">{{ t.hint }}</span>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="fz-g2">
+    <section class="fz-c" aria-label="Pagos por confirmar">
+      <span class="fz-ct">Pagos por confirmar{% if f.con_datos %} · {{ f.pendientes | length }}{% endif %}</span>
+      {% for p in f.pendientes %}
+      <div class="fz-r">
+        <span class="fz-quien"><b>{{ p.orden or '—' }}</b><span class="fz-hint">{{ p.cliente or 'Sin cliente' }}{% if p.fuera_de_odoo %} · pago informado FUERA de Odoo{% endif %}{% if p.aviso_reentrada %} · {{ p.aviso_reentrada }}{% endif %}</span></span>
+        <b class="num">${{ '%.2f' | format(p.monto_nuevo) }}</b>
+        <button class="fz-apagado chico" type="button" disabled>Confirmar — {{ f.boton_confirmar }}</button>
+      </div>
+      {% else %}
+      <p class="fz-hueco">{% if f.con_datos %}La cola está vacía: nada marcado sin revisar.{% else %}La cola no se pudo leer — el hueco está dicho arriba.{% endif %}</p>
+      {% endfor %}
+      <span class="fz-hint">Es LA MISMA cola de /pagos-por-confirmar, en solo lectura. Confirmar guarda quién revisó, cuándo y qué vio, y no marca la entrega — acá queda apagado hasta el sí de Jay.</span>
+    </section>
+    <section class="fz-c" aria-label="Cifras a revisar">
+      <span class="fz-ct">Cifras a revisar</span>
+      {% for c in f.cifras %}
+      <div class="fz-it">
+        <span>{{ c.texto }}<span class="fz-hint"> — {{ c.rotulo }}</span></span>
+        <button class="fz-apagado chico" type="button" disabled>Ver — Todavía no</button>
+      </div>
+      {% endfor %}
+      <span class="fz-hint">Las dos cifras a propósito de la casa (cifras.py). Aquí se revisan, no se corrigen solas.</span>
+    </section>
+  </div>
+
+  <section class="fz-c" aria-label="Reportes">
+    <span class="fz-ct">Reportes</span>
+    <div class="fz-rep">
+      {% for r in f.reportes %}
+      <button class="fz-apagado" type="button" disabled>{{ r }} — Todavía no</button>
+      {% endfor %}
+    </div>
+    <span class="fz-hint">Gastos y ganancias todavía no: faltan costos confiables.</span>
+  </section>
+</main>
+
+{% set activa = '' %}{% include '_nav.html' %}
+{% endblock %}
