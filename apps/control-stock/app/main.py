@@ -271,33 +271,77 @@ def _es_admin(empleada):
     return seguridad.es_admin(empleada)
 
 
-def _puerta_rol_inventario(request, empleada):
-    """El candado global del rol Inventario, colgado del predicado ÚNICO
-    (datos_roles.solo_inventario). Para quien es solo-inventario:
+def _ruta_en_alcance(ruta, prefijos):
+    """¿La ruta cae dentro de alguno de los prefijos del alcance?
+    Un prefijo "/x" cubre "/x" exacto y "/x/...", nunca "/xy"; el
+    prefijo "/" cubre SOLO la raíz (el tablero de ?tab=…), jamás es un
+    comodín."""
+    return any(ruta == p or (p != "/" and ruta.startswith(p + "/"))
+               for p in prefijos)
 
-    - /stock (la vista plana), /stock/* (su POST de cantidad y ver fotos)
-      y /logout pasan — sin loop: /stock nunca redirige a sí misma y
-      salir siempre se puede; /login y los estáticos ya pasaron ANTES de
-      la sesión, en la lista exenta del middleware (ruta de salud pública
-      no hay: si algún día nace, nacerá exenta allá, antes de la sesión);
-    - cualquier otro GET → 303 a /stock (el menú del rol es [Stock]);
-    - cualquier otra ESCRITURA → 403. Esto cubre TODOS los POST de la
-      app, los viejos y los bulk incluidos (crear producto, publicar,
-      fotos, fichas, Excel del conteo, Vender, Compras, Ajustes…): un
-      endpoint nuevo nace cerrado para este rol sin acordarse de nada.
 
-    Dentro de /stock/*, /stock/cambios se defiende solo (_solo_admin).
+def _texto_403_rol(slugs):
+    """El rechazo de una escritura fuera de alcance, con texto claro.
+    El del rol Inventario es EXACTAMENTE el del BLOQUE 13 (sus tests lo
+    citan); los demás nombran el modo, nunca a una persona."""
+    if slugs == {datos_roles.SLUG_INVENTARIO}:
+        return ("Tu usuario es solo de inventario: esta acción no está "
+                "permitida. Pídesela al encargado.")
+    if slugs == {datos_roles.SLUG_FINANZAS}:
+        return ("Tu rol de Finanzas es de solo ver: esta acción no está "
+                "permitida. Pídesela al encargado.")
+    return ("Tu rol no permite esta acción aquí. Pídesela al encargado.")
+
+
+def _puerta_por_rol(request, empleada, alcance):
+    """LA puerta global por rol (BLOQUE 20 punto 1): generaliza la del rol
+    Inventario (BLOQUE 13) sin cambiarle ni un pelo la semántica. Recibe
+    `alcance` ya calculado por datos_roles.acceso_de (la MISMA fuente del
+    menú, precisión 4). Con alcance None (director, sin rol, o un rol sin
+    slug) no corta nada: el fail-open de transición es decisión explícita
+    (precisión 8), fijada con test.
+
+    - La EXCEPCIÓN DEL ADMIN vive SOLO aquí: hoy un admin pasa siempre,
+      igual que pasaba con solo_inventario, y _solo_admin sigue aparte e
+      intacto. BLOQUE 29 aprobado: la v2 quita la excepción admin y parte
+      Ajustes en negocio/técnico — ver
+      docs/ANALISIS-rol-manda-sobre-admin.md del repo plantaspanama. Ese
+      cambio es un ciclo aparte; aquí queda el punto único a tocar.
+    - /logout pasa siempre (precisión 9); /login y los estáticos ya
+      pasaron ANTES de la sesión, en la lista exenta del middleware.
+    - Ruta dentro del alcance → pasa (adentro, cada pantalla conserva sus
+      candados propios: /stock/cambios con _solo_admin, etc.).
+    - Otro GET/HEAD → pasa si el rol es de ver-todo (finanzas: modo ver
+      de verdad, abre fichas), si no 303 a su casa.
+    - Cualquier otra escritura (POST/PUT/PATCH/DELETE) → 403: un endpoint
+      nuevo nace cerrado para estos roles sin acordarse de nada, y
+      finanzas no tiene NINGUNA escritura (sin lista blanca de POST hasta
+      el sí de Jay — BLOQUE 22.1).
+
     Devuelve la respuesta que corta, o None si puede seguir."""
-    if not datos_roles.solo_inventario(empleada):
+    if alcance is None:
+        return None
+    if seguridad.es_admin(empleada):
         return None
     ruta = request.url.path
-    if ruta == "/stock" or ruta.startswith("/stock/") or ruta == "/logout":
+    if ruta == "/logout" or _ruta_en_alcance(ruta, alcance["prefijos"]):
         return None
     if request.method in ("GET", "HEAD"):
-        return RedirectResponse("/stock", status_code=303)
-    return PlainTextResponse(
-        "Tu usuario es solo de inventario: esta acción no está permitida. "
-        "Pídesela al encargado.", status_code=403)
+        if alcance["ver_todo"]:
+            return None
+        return RedirectResponse(alcance["casa"], status_code=303)
+    return PlainTextResponse(_texto_403_rol(set(alcance["slugs"])),
+                             status_code=403)
+
+
+def _entrar_con(request, empleada):
+    """Deja la sesión y el menú por rol en request.state y aplica la
+    puerta. El menú viaja ya decidido en Python (regla 10) y _nav.html
+    solo lo recorre. Devuelve la respuesta que corta, o None."""
+    request.state.empleada = empleada
+    acceso = datos_roles.acceso_de(empleada)
+    request.state.menu_nav = acceso["menu"]
+    return _puerta_por_rol(request, empleada, acceso["alcance"])
 
 
 def _redirect_uri(request):
@@ -350,8 +394,7 @@ async def exigir_sesion(request: Request, call_next):
     if usuario_dev:
         empleada = seguridad.empleada_por_usuario(usuario_dev)
         if empleada is not None:
-            request.state.empleada = empleada
-            if (corte := _puerta_rol_inventario(request, empleada)) is not None:
+            if (corte := _entrar_con(request, empleada)) is not None:
                 return corte
             return await call_next(request)
     empleada = seguridad.empleada_de_sesion(request.cookies.get("sesion"))
@@ -360,10 +403,10 @@ async def exigir_sesion(request: Request, call_next):
         # el de siempre vive en otro dominio y su cookie no sirve aquí.
         destino = "/crm/login" if ruta.startswith("/crm/") else "/login"
         return RedirectResponse(destino, status_code=303)
-    request.state.empleada = empleada
-    # El rol Inventario vive en su vista plana: todo lo demás se corta
-    # aquí, ANTES de cualquier handler (ver _puerta_rol_inventario).
-    if (corte := _puerta_rol_inventario(request, empleada)) is not None:
+    # La puerta por rol corta aquí, ANTES de cualquier handler (ver
+    # _puerta_por_rol): el rol Inventario vive en su vista plana, los
+    # roles del BLOQUE 20 en sus pestañas, finanzas en modo ver.
+    if (corte := _entrar_con(request, empleada)) is not None:
         return corte
     return await call_next(request)
 
@@ -1239,8 +1282,10 @@ async def ajustes_rol_duplicar(request: Request):
     if (rechazo := _solo_admin(request)) is not None:
         return rechazo
     form = await request.form()
+    yo = request.state.empleada
     error, _ = datos_roles.duplicar_rol(_n_entero(form.get("rol")),
-                                        form.get("nombre"))
+                                        form.get("nombre"),
+                                        por=yo.get("nombre") or yo["id"])
     return _vuelta_ajustes(_AVISOS_ROLES.get(error, "rol-duplicado"))
 
 
@@ -1264,8 +1309,10 @@ async def ajustes_rol_persona_quitar(request: Request):
     if (rechazo := _solo_admin(request)) is not None:
         return rechazo
     form = await request.form()
+    yo = request.state.empleada
     error = datos_roles.quitar_persona(_n_entero(form.get("rol")),
-                                       (form.get("usuario") or "").strip())
+                                       (form.get("usuario") or "").strip(),
+                                       por=yo.get("nombre") or yo["id"])
     return _vuelta_ajustes(_AVISOS_ROLES.get(error, "persona-quitada"))
 
 
@@ -1531,23 +1578,15 @@ def _enlace_whatsapp(request, venta):
 
 
 @app.get("/venta")
-def venta(request: Request, error: str = "", lead: str = "",
-          cliente: str = "", cel: str = "", abrir: str = ""):
+def venta(request: Request, error: str = "", abrir: str = ""):
     # La pestaña: el botón grande "+ Venta" (arriba de los servicios,
     # dueño 28/09/2026) y el historial local.
+    #
+    # Este GET ya NO recibe ?lead= (auditoría de GETs que mutan,
+    # precisión 2 del review de roles): dejar el lead pendiente ESCRIBE
+    # en la base, así que ese camino ahora es POST /venta/lead. Un enlace
+    # viejo con ?lead= simplemente pinta la pestaña, sin tocar nada.
     usuario = request.state.empleada["id"]
-    if lead:
-        # "Cotizar en Vender" desde la ficha de Retail: queda anotado el
-        # lead y la próxima cotización/venta de esta empleada nace
-        # vinculada a él. Directo al formulario de Nueva venta con el
-        # nombre y el celular del lead ya puestos (dueño, 23/09/2026:
-        # "debería abrir automáticamente venta de lo que es y el form con
-        # el nombre y número ya puestos"); los leads de Retail son ventas
-        # de plantas, así que "lo que es" siempre es Nueva venta.
-        ventas.poner_lead_pendiente(usuario, lead, cliente)
-        ventas.guardar_borrador(usuario, cliente.strip()[:120],
-                                cel.strip()[:30])
-        return RedirectResponse("/venta/nueva", status_code=303)
     en_curso = 0
     if ventas.configurado():
         try:
@@ -1803,6 +1842,25 @@ def _cotizaciones_con_estado():
             "nombre_pdf": ventas.nombre_de_pdf(c["orden"].replace("/", "-"), c["cliente"]),
         })
     return resultado, aviso
+
+
+@app.post("/venta/lead")
+async def venta_lead_poner(request: Request):
+    """El «Cotizar» de la ficha de Control: deja anotado el lead y la
+    próxima cotización/venta de esta empleada nace vinculada a él, con el
+    nombre y el celular ya puestos en el borrador (dueño, 23/09/2026).
+    Era GET /venta?lead=… y MUTABA: ahora es POST (auditoría de la
+    precisión 2 del review de roles — un GET no escribe)."""
+    form = await request.form()
+    lead = (form.get("lead") or "").strip()[:80]
+    if not lead:
+        return RedirectResponse("/venta", status_code=303)
+    usuario = request.state.empleada["id"]
+    cliente = (form.get("cliente") or "").strip()
+    ventas.poner_lead_pendiente(usuario, lead, cliente)
+    ventas.guardar_borrador(usuario, cliente[:120],
+                            (form.get("cel") or "").strip()[:30])
+    return RedirectResponse("/venta/nueva", status_code=303)
 
 
 @app.post("/venta/lead/quitar")
@@ -3181,7 +3239,7 @@ async def venta_estado_obligacion(request: Request, origen: str, n: int):
 # modelo de Jay — el pedido nace cuando el cliente paga o abona. Todo lo
 # que se pinta lo decide app/pedidos.py (regla 10); la tarjeta abre la
 # ficha Estado/Entrega EXISTENTE. La ven todos MENOS el rol Inventario:
-# su puerta global (_puerta_rol_inventario, en el middleware) ya corta
+# su puerta global (_puerta_por_rol, en el middleware) ya corta
 # cualquier ruta nueva — GET → 303 a /stock, POST → 403 — sin acordarse
 # de nada; hay prueba por request directa (el patrón de los 27+).
 # ---------------------------------------------------------------------------

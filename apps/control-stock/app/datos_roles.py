@@ -27,6 +27,7 @@ listar_roles(), marcas_activas(), tipos_venta_activos(), llegadas_activas()
 y quien_ocupa(deber) de aquí, sin re-trabajo.
 """
 
+import time
 import unicodedata
 
 from . import seguridad
@@ -52,12 +53,133 @@ DEBERES = {
 LARGO_NOMBRE = 60
 LARGO_TERMINO = 120
 
-# El rol Inventario (BLOQUE 13, 5/10/2026) se identifica por este SLUG
-# INMUTABLE, nunca por el nombre visible: renombrar la fila desde la
-# pantalla no suelta ni un candado (la trampa es_maceta, que compara por
-# nombre, ya mordió una vez). El slug solo lo escribe la migración de
-# iniciar_tablas; ninguna ruta lo toca.
+# Los roles con comportamiento en código (BLOQUE 13 + BLOQUE 20 punto 1)
+# se identifican por SLUG INMUTABLE, nunca por el nombre visible: renombrar
+# la fila desde la pantalla no suelta ni un candado (la trampa es_maceta,
+# que compara por nombre, ya mordió una vez). El slug solo lo escribe la
+# migración de iniciar_tablas; ninguna ruta lo toca.
+SLUG_DIRECTOR = "director"
+SLUG_OPERACIONES = "operaciones"
+SLUG_ATENCION = "atencion"
 SLUG_INVENTARIO = "inventario"
+SLUG_FINANZAS = "finanzas"
+
+# Las 5 filas que la migración asegura: (slug, nombre visible de la
+# semilla). El nombre se puede renombrar por pantalla; el slug jamás.
+# Los roles nuevos nacen SIN personas (la asignación es dato, por la
+# pantalla de Ajustes); nombres de personas JAMÁS en código.
+ROLES_CON_SLUG = (
+    (SLUG_DIRECTOR, "Director General"),
+    (SLUG_OPERACIONES, "Gerente de Operaciones"),
+    (SLUG_ATENCION, "Atención al Cliente"),
+    (SLUG_INVENTARIO, "Inventario"),
+    (SLUG_FINANZAS, "Finanzas"),
+)
+
+# ---------------------------------------------------------------------------
+# El menú y el alcance por rol (punto 1 del plan de roles, precisión 4 del
+# review: menú y autorización salen de la MISMA fuente). Esto es CÓDIGO,
+# no dato editable por pantalla (precisión 6).
+#
+# PESTANAS es la fuente única: cada pestaña trae su enlace del nav Y los
+# prefijos de ruta que esa pantalla usa. MENU_DE_ROL dice qué pestañas
+# lleva cada slug (en su orden); ALCANCE_DE_ROL deriva los prefijos
+# permitidos de esas MISMAS pestañas. Un prefijo "/x" permite "/x" y
+# "/x/...", nunca "/xy".
+# ---------------------------------------------------------------------------
+
+PESTANAS = {
+    "calendario": {"titulo": "Calendario", "href": "/calendario",
+                   # /crm es el calendario dentro de Twenty (otro dominio,
+                   # mismo trabajo); /calendario/* incluye agendar, mover,
+                   # Google Calendar y la suscripción.
+                   "prefijos": ("/calendario", "/crm")},
+    "stock": {"titulo": "Stock", "href": "/?tab=stock",
+              # El tablero del stock vive en "/" (?tab=stock); el resto es
+              # su utilería: ajustar, crear/publicar productos, fotos,
+              # fichas, conteos y alertas. "/" es EXACTO (no un comodín).
+              "prefijos": ("/", "/stock", "/ajustar", "/productos", "/fotos",
+                           "/fichas", "/conteos", "/revisiones",
+                           "/plantilla.xlsx", "/alertas", "/umbral")},
+    "vender": {"titulo": "Vender", "href": "/venta", "prefijos": ("/venta",)},
+    "control": {"titulo": "Control", "href": "/control",
+                "prefijos": ("/control",)},
+    # Las 3 pantallas nuevas del plan de roles: aquí viven SOLO el enlace
+    # del menú y la puerta que las deja pasar — las rutas las construye
+    # otra rama (esqueleto-pantallas).
+    "mi_crm": {"titulo": "Mi CRM", "href": "/mi-crm", "prefijos": ("/mi-crm",)},
+    "pedidos": {"titulo": "Pedidos", "href": "/pedidos",
+                "prefijos": ("/pedidos",)},
+    "compras": {"titulo": "Compras", "href": "/compras",
+                "prefijos": ("/compras",)},
+    "finanzas": {"titulo": "Finanzas", "href": "/finanzas",
+                 "prefijos": ("/finanzas",)},
+    "respuestas": {"titulo": "Respuestas", "href": "/conversaciones/respuestas",
+                   "prefijos": ("/conversaciones/respuestas",)},
+    "ajustes": {"titulo": "Ajustes", "href": "/?tab=ajustes",
+                "prefijos": ("/", "/ajustes", "/avisos", "/equipo",
+                             "/resumen")},
+}
+
+# El menú completo de hoy (lo que ve un director, un admin sin rol o una
+# empleada sin rol): el orden es el del _nav de siempre.
+MENU_COMPLETO = ("calendario", "stock", "vender", "control", "pedidos",
+                 "compras", "ajustes")
+
+MENU_DE_ROL = {
+    SLUG_DIRECTOR: MENU_COMPLETO,
+    SLUG_OPERACIONES: ("calendario", "stock", "vender", "control", "mi_crm",
+                       "pedidos", "compras"),
+    SLUG_ATENCION: ("calendario", "vender", "control", "mi_crm", "pedidos"),
+    # El rol Inventario no lleva menú: su vista plana (stock_plano) no
+    # incluye _nav.html y su puerta redirige todo lo demás a /stock.
+    SLUG_INVENTARIO: (),
+    # Finanzas según el diseño (precisión 10): Finanzas · Respuestas · y
+    # las pestañas de ver. SIN Ajustes (_solo_admin es otra puerta y sigue
+    # aparte e intacta).
+    SLUG_FINANZAS: ("finanzas", "respuestas", "calendario", "stock", "vender",
+                    "control", "pedidos", "compras"),
+}
+
+
+def _prefijos_de_menu(claves):
+    """Los prefijos de ruta de un juego de pestañas, aplanados y sin
+    repetir — la derivación que hace de PESTANAS la fuente única."""
+    vistos = []
+    for clave in claves:
+        for prefijo in PESTANAS[clave]["prefijos"]:
+            if prefijo not in vistos:
+                vistos.append(prefijo)
+    return tuple(vistos)
+
+
+# slug -> None (sin puerta: el director pasa todo, como hoy) o
+# {"casa", "prefijos", "ver_todo"}. `ver_todo` (solo finanzas) deja pasar
+# TODOS los GET/HEAD — modo ver de verdad: abre fichas — mientras
+# `prefijos` vacío vuelve 403 TODA escritura (sin lista blanca de POST
+# hasta que Jay dé el sí del botón de confirmar; prenderlo será agregar
+# UNA ruta aquí, con test).
+ALCANCE_DE_ROL = {
+    SLUG_DIRECTOR: None,
+    SLUG_OPERACIONES: {"casa": "/control",
+                       "prefijos": _prefijos_de_menu(MENU_DE_ROL[SLUG_OPERACIONES]),
+                       "ver_todo": False},
+    SLUG_ATENCION: {"casa": "/control",
+                    "prefijos": _prefijos_de_menu(MENU_DE_ROL[SLUG_ATENCION]),
+                    "ver_todo": False},
+    # Idéntico al comportamiento del BLOQUE 13: solo /stock (y /stock/*),
+    # casa /stock. Sus tests siguen verdes sin tocarse.
+    SLUG_INVENTARIO: {"casa": "/stock", "prefijos": ("/stock",),
+                      "ver_todo": False},
+    SLUG_FINANZAS: {"casa": "/control", "prefijos": (), "ver_todo": True},
+}
+
+# Con varios roles, la casa es la del primero de ESTA lista que la persona
+# tenga (prioridad explícita y estable, precisión 4). El director primero
+# (su casa es /control y además no tiene puerta); inventario al final: su
+# /stock es la casa solo cuando es el único rol.
+PRIORIDAD_CASA = (SLUG_DIRECTOR, SLUG_OPERACIONES, SLUG_ATENCION,
+                  SLUG_FINANZAS, SLUG_INVENTARIO)
 
 # ---------------------------------------------------------------------------
 # Semillas (DATO, no código). Se insertan solo si la tabla nace vacía; de
@@ -152,10 +274,22 @@ def iniciar_tablas():
             activo INTEGER NOT NULL DEFAULT 1,
             creado_en TEXT NOT NULL
         );
+        -- Bitácora de asignaciones de rol (precisión 7 del review de
+        -- roles): INSERT-only — nunca se actualiza ni se borra una fila.
+        -- `epoch` es UTC en segundos (regla de la casa: nada de texto de
+        -- hora entre máquinas); `accion` es 'alta' o 'baja'.
+        CREATE TABLE IF NOT EXISTS rol_persona_bitacora (
+            n INTEGER PRIMARY KEY AUTOINCREMENT,
+            rol INTEGER NOT NULL,
+            usuario TEXT NOT NULL,
+            accion TEXT NOT NULL,
+            por TEXT NOT NULL DEFAULT '',
+            epoch INTEGER NOT NULL
+        );
         """)
         _asegurar_columna_slug(con)
         _sembrar(con)
-        _asegurar_rol_inventario(con)
+        _asegurar_roles_con_slug(con)
 
 
 def _asegurar_columna_slug(con):
@@ -166,22 +300,28 @@ def _asegurar_columna_slug(con):
         con.execute("ALTER TABLE roles ADD COLUMN slug TEXT")
 
 
-def _asegurar_rol_inventario(con):
-    """El rol Inventario existe siempre, SIN persona (a Omar lo invita
-    Korto y le pone el rol por la pantalla del item 1). Si alguien ya
-    había creado a mano un rol llamado «Inventario», se adopta ESE (se le
-    estampa el slug) en vez de nacer un tocayo; si no, se inserta."""
-    if con.execute("SELECT 1 FROM roles WHERE slug=?",
-                   (SLUG_INVENTARIO,)).fetchone():
-        return
-    for fila in con.execute("SELECT n, nombre FROM roles"):
-        if _plano(fila["nombre"]) == SLUG_INVENTARIO:
-            con.execute("UPDATE roles SET slug=? WHERE n=?",
-                        (SLUG_INVENTARIO, fila["n"]))
-            return
-    con.execute(
-        "INSERT INTO roles (nombre, deber, slug, activo, creado_en) "
-        "VALUES (?,NULL,?,1,?)", ("Inventario", SLUG_INVENTARIO, ahora_iso()))
+def _asegurar_roles_con_slug(con):
+    """Los 5 roles del plan (ROLES_CON_SLUG) existen siempre, SIN persona
+    nueva (la asignación es dato: la hace Abraham por la pantalla o por
+    BD). Si alguien ya había creado a mano un rol con ese nombre (o con
+    el slug como nombre), se adopta ESE (se le estampa el slug) en vez de
+    nacer un tocayo; si no, se inserta. Generaliza la migración del rol
+    Inventario (BLOQUE 13) sin cambiarle el comportamiento."""
+    for slug, nombre in ROLES_CON_SLUG:
+        if con.execute("SELECT 1 FROM roles WHERE slug=?",
+                       (slug,)).fetchone():
+            continue
+        adoptado = False
+        for fila in con.execute("SELECT n, nombre FROM roles WHERE slug IS NULL"):
+            if _plano(fila["nombre"]) in (slug, _plano(nombre)):
+                con.execute("UPDATE roles SET slug=? WHERE n=?",
+                            (slug, fila["n"]))
+                adoptado = True
+                break
+        if not adoptado:
+            con.execute(
+                "INSERT INTO roles (nombre, deber, slug, activo, creado_en) "
+                "VALUES (?,NULL,?,1,?)", (nombre, slug, ahora_iso()))
 
 
 def _sembrar(con):
@@ -200,6 +340,7 @@ def _sembrar(con):
                     "INSERT OR IGNORE INTO rol_persona "
                     "(rol, usuario, puesto_por, puesto_en) VALUES (?,?,?,?)",
                     (fila.lastrowid, usuario, "semilla", ahora))
+                _anotar_bitacora(con, fila.lastrowid, usuario, "alta", "semilla")
     if con.execute("SELECT 1 FROM marcas LIMIT 1").fetchone() is None:
         for nombre in SEMILLA_MARCAS:
             con.execute("INSERT INTO marcas (nombre, activo, creado_en) "
@@ -338,6 +479,61 @@ def solo_inventario(empleada):
     return not seguridad.es_admin(empleada)
 
 
+def acceso_de(empleada):
+    """El menú y el alcance de UNA empleada, desde la misma fuente
+    (PESTANAS / MENU_DE_ROL / ALCANCE_DE_ROL — precisión 4 del review).
+
+    Devuelve {"menu": [...], "alcance": None | {...}}:
+
+    - menu: [{clave, titulo, href}] ya decidido en Python para _nav.html
+      (regla 10: cero lógica en la plantilla). Con varios roles es la
+      UNIÓN: las pestañas del primer rol (en orden de PRIORIDAD_CASA) y
+      detrás las que agreguen los demás, sin repetir. Sin ningún rol con
+      menú propio, el menú completo de hoy.
+    - alcance: None = sin puerta (como hoy). Es None cuando la persona no
+      tiene roles, o cuando ALGUNO de sus roles no acota (director, o un
+      rol sin slug como los pods: Eventos, PH…) — ese FAIL-OPEN de
+      transición es decisión explícita (precisión 8), fijada con test; la
+      excepción del ADMIN no vive aquí sino en main._puerta_por_rol.
+      Si todos sus roles acotan: {"prefijos": unión, "casa": la del
+      primer slug en PRIORIDAD_CASA, "ver_todo": True si algún rol lo es
+      (finanzas), "slugs": set} — la puerta del middleware lo aplica.
+    """
+    roles = roles_activos_de(empleada["id"])
+    slugs = [r["slug"] for r in roles if r["slug"] in ALCANCE_DE_ROL]
+    orden = [s for s in PRIORIDAD_CASA if s in slugs]
+
+    con_menu = [s for s in orden if MENU_DE_ROL.get(s)]
+    claves = []
+    for slug in con_menu:
+        for clave in MENU_DE_ROL[slug]:
+            if clave not in claves:
+                claves.append(clave)
+    if not claves:
+        claves = list(MENU_COMPLETO)
+    menu = [{"clave": c, "titulo": PESTANAS[c]["titulo"],
+             "href": PESTANAS[c]["href"]} for c in claves]
+
+    abierto = (not roles) or any(
+        r["slug"] not in ALCANCE_DE_ROL or ALCANCE_DE_ROL[r["slug"]] is None
+        for r in roles)
+    if abierto:
+        return {"menu": menu, "alcance": None}
+    prefijos = []
+    ver_todo = False
+    for slug in orden:
+        ver_todo = ver_todo or ALCANCE_DE_ROL[slug]["ver_todo"]
+        for p in ALCANCE_DE_ROL[slug]["prefijos"]:
+            if p not in prefijos:
+                prefijos.append(p)
+    return {"menu": menu, "alcance": {
+        "prefijos": tuple(prefijos),
+        "casa": ALCANCE_DE_ROL[orden[0]]["casa"],
+        "ver_todo": ver_todo,
+        "slugs": frozenset(orden),
+    }}
+
+
 def _catalogo(tabla, solo_activos):
     if tabla not in CATALOGOS:
         raise ValueError(f"catálogo desconocido: {tabla}")
@@ -374,6 +570,16 @@ def catalogo_completo(tabla):
 # ruta traduce a su aviso. Nada se borra nunca.
 # ---------------------------------------------------------------------------
 
+def _anotar_bitacora(con, rol_n, usuario, accion, por):
+    """UNA fila nueva en rol_persona_bitacora (precisión 7: asignar o
+    quitar un rol queda auditado — quién, cuándo, qué rol, a quién; fila
+    nueva, nunca cambio silencioso). Solo la llaman las escrituras de
+    rol_persona que de verdad cambiaron algo."""
+    con.execute(
+        "INSERT INTO rol_persona_bitacora (rol, usuario, accion, por, epoch) "
+        "VALUES (?,?,?,?,?)", (rol_n, usuario, accion, por, int(time.time())))
+
+
 def _nombre_valido(nombre):
     nombre = (nombre or "").strip()
     if not nombre or len(nombre) > LARGO_NOMBRE:
@@ -403,7 +609,7 @@ def renombrar_rol(n, nombre):
     return None
 
 
-def duplicar_rol(n, nombre=None):
+def duplicar_rol(n, nombre=None, por=""):
     """La copia para los pods: mismo equipo de personas, SIN el deber (un
     deber vive en un solo rol). Devuelve (error, n del nuevo)."""
     with _db() as con:
@@ -421,6 +627,11 @@ def duplicar_rol(n, nombre=None):
             "INSERT INTO rol_persona (rol, usuario, puesto_por, puesto_en) "
             "SELECT ?, usuario, puesto_por, ? FROM rol_persona WHERE rol=?",
             (nuevo.lastrowid, ahora, n))
+        # Cada persona copiada es una asignación nueva: a la bitácora
+        # (precisión 7), con quién hizo la copia.
+        for fila in con.execute("SELECT usuario FROM rol_persona WHERE rol=?",
+                                (nuevo.lastrowid,)):
+            _anotar_bitacora(con, nuevo.lastrowid, fila["usuario"], "alta", por)
         return None, nuevo.lastrowid
 
 
@@ -436,13 +647,17 @@ def poner_persona(rol_n, usuario, por):
             (usuario,)).fetchone()
         if empleada is None:
             return "empleada_invalida"
-        con.execute(
+        puesto = con.execute(
             "INSERT OR IGNORE INTO rol_persona (rol, usuario, puesto_por, "
             "puesto_en) VALUES (?,?,?,?)", (rol_n, usuario, por, ahora_iso()))
+        if puesto.rowcount:
+            # Solo si de verdad entró (re-ponerla es idempotente y no
+            # ensucia la bitácora con altas repetidas).
+            _anotar_bitacora(con, rol_n, usuario, "alta", por)
     return None
 
 
-def quitar_persona(rol_n, usuario):
+def quitar_persona(rol_n, usuario, por=""):
     """Quita a la persona del rol. Si el rol carga un deber y se queda sin
     nadie, el quite SE APLICA pero se devuelve 'deber_sin_persona': la ruta
     lo convierte en el aviso — reasignable, nunca silenciosamente vacío."""
@@ -450,8 +665,11 @@ def quitar_persona(rol_n, usuario):
         rol = _rol(con, rol_n)
         if rol is None:
             return "no_existe"
-        con.execute("DELETE FROM rol_persona WHERE rol=? AND usuario=?",
-                    (rol_n, usuario))
+        quitado = con.execute(
+            "DELETE FROM rol_persona WHERE rol=? AND usuario=?",
+            (rol_n, usuario))
+        if quitado.rowcount:
+            _anotar_bitacora(con, rol_n, usuario, "baja", por)
         if rol["deber"]:
             queda = con.execute(
                 "SELECT 1 FROM rol_persona WHERE rol=? LIMIT 1",

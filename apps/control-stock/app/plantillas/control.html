@@ -278,11 +278,17 @@
       {{ '🔴 Responder · prendido' if abierta.te_toca else 'Responder · apagado' }}
     </button>
     {% endif %}
-    {# Disponible siempre (pedido de Abraham, 28/09/2026): un enlace, no
-       un formulario — no toca el lead, solo abre Vender con el cliente
-       puesto. El camino ya existía para Retail (GET /venta?lead=...):
-       deja el lead pendiente y redirige a /venta/nueva. #}
-    <a class="btn" href="/venta?lead={{ abierta.ref | urlencode }}&cliente={{ abierta.nombre | urlencode }}&cel={{ abierta.celular | urlencode }}">Cotizar</a>
+    {# Disponible siempre (pedido de Abraham, 28/09/2026): no toca el
+       lead de Linear, solo abre Vender con el cliente puesto. Deja el
+       lead pendiente y el borrador y redirige a /venta/nueva. Era un
+       enlace GET (/venta?lead=...), pero ESCRIBE en la base: desde el
+       punto 1 de roles es POST (precisión 2 — un GET no muta). #}
+    <form method="post" action="/venta/lead">
+      <input type="hidden" name="lead" value="{{ abierta.ref }}">
+      <input type="hidden" name="cliente" value="{{ abierta.nombre }}">
+      <input type="hidden" name="cel" value="{{ abierta.celular }}">
+      <button class="btn" type="submit">Cotizar</button>
+    </form>
     {# Recordar (29/09/2026): parquear el lead porque el cliente espera
        que LLEGUE un producto. Es un enlace al MISMO modal del arrastre a
        mano (mover=…&a=RECORDATORIO), que pide qué espera. Solo en un lead
