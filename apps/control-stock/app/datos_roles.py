@@ -103,9 +103,11 @@ PESTANAS = {
                            "/plantilla.xlsx", "/alertas", "/umbral")},
     # UNA sola entrada «CRM» para todos (BLOQUE 35: «Control» desaparece
     # como nombre del menú). La ruta /control se queda; /mi-crm es el CRM
-    # chico. El href por defecto es /control; acceso_de() se lo cambia a
-    # /mi-crm al rol Atención (BLOQUE 39.2: su entrada primaria es su
-    # Mi CRM, y el CRM completo queda como «Ver todos» en solo lectura).
+    # chico. El href por defecto es /control —el CRM de todos, el lienzo
+    # de la Dirección— y acceso_de() se lo cambia a /mi-crm a quien
+    # `crm_chico` diga (Operaciones y Atención, cuyos lienzos son «Mi
+    # CRM»): de ahí el CRM completo se abre con «Ver todos», que para
+    # Atención además es de solo lectura (BLOQUE 39.2).
     "crm": {"titulo": "CRM", "href": "/control",
             "prefijos": ("/control", "/mi-crm")},
     # Contactos (BLOQUE 33): la construye otro worker — aquí viven solo el
