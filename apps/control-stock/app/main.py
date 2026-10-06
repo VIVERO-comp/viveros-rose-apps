@@ -6466,3 +6466,45 @@ def conversaciones_respuestas(request: Request):
         "empleada": request.state.empleada,
         "r": respuestas.vista(),
     })
+
+
+# --- p37: contactos ---
+# La pantalla CONTACTOS (BLOQUE 37, item 2 de Jay; diseño corto
+# docs/DISENO-ITEM2-contactos.md, lienzo v3 abraham-contactos). SOLO
+# LECTURA: el casamiento por teléfono normalizado se calcula EN LECTURA
+# al armar la vista (app/contactos.py) y nada se escribe en Odoo, Twenty
+# ni Linear — este bloque no registra ni una ruta POST (hay prueba que
+# recorre app.routes). La puerta es la sesión del middleware (Inventario
+# ya quedó afuera por su puerta global); el candado fino por rol llega
+# con el frente 1. Bloque autocontenido a propósito: otro worker edita
+# main.py en otras zonas.
+from . import contactos  # noqa: E402
+
+
+@app.get("/contactos")
+def contactos_lista(request: Request, q: str = "", f: str = "",
+                    error: str = ""):
+    """La lista del lienzo: buscador server-rendered (?q=) y filtros
+    como enlaces GET (?f=). Todo lo que se pinta lo decide
+    contactos.lista() (regla 10)."""
+    return plantillas.TemplateResponse(request, "contactos.html", {
+        "empleada": request.state.empleada,
+        "v": contactos.lista(q=q, filtro=f),
+        "error_aviso": error,
+    })
+
+
+@app.get("/contactos/{cid}")
+def contactos_ficha_pantalla(request: Request, cid: str):
+    """La ficha agrupada de un contacto. Un id que ya no existe no es un
+    500: es el mismo «ya no está» de Compras, Control y Proveedores."""
+    v = contactos.ficha(cid)
+    if v is None:
+        return RedirectResponse(
+            "/contactos?error="
+            + quote("Ese contacto ya no está en la lista."),
+            status_code=303)
+    return plantillas.TemplateResponse(request, "contactos_ficha.html", {
+        "empleada": request.state.empleada,
+        "v": v,
+    })

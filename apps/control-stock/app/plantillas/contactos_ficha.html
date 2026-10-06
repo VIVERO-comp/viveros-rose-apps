@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block titulo %}{{ v.contacto.nombre }} — Contactos — Control Viverorose{% endblock %}
+
+{% block contenido %}
+{# La FICHA de un contacto (BLOQUE 37; panel del lienzo v3
+   abraham-contactos, como pantalla propia). Versión mínima HONESTA:
+   datos del contacto + sus tratos reales (locales con href a /venta,
+   órdenes de Odoo con su S00xxx y monto), y las secciones del lienzo
+   sin fuente hoy (leads de Linear, último mensaje de Twenty, citas)
+   como cajas-hueco que dicen su verdad. SOLO LECTURA: ni un <form>;
+   lo que no funciona es un <button disabled> con «Todavía no». #}
+<link rel="stylesheet" href="/static/diseno-contactos.css?v={{ v_estaticos }}">
+
+{% with bm_titulo='Contactos', bm_sub=v.contacto.nombre %}{% include '_barra_movil.html' %}{% endwith %}
+
+<header class="ct-top">
+  <div class="cab-izq">
+    <button class="hamb" type="button" aria-label="Mostrar u ocultar el menú"
+            aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+    <a class="ct-volver" href="/contactos">← Contactos</a>
+  </div>
+</header>
+
+<main class="ct-main">
+  {% if v.aviso_odoo %}<div class="ct-alerta">{{ v.aviso_odoo }}</div>{% endif %}
+
+  <article class="ct-pan" aria-label="Contacto abierto">
+    <div class="ct-fila">
+      <span class="ct-pt">{{ v.contacto.nombre }}</span>
+      <span class="ct-chip">{{ v.contacto.tipo }}</span>
+    </div>
+    <div class="ct-fila">
+      <span class="num">{{ v.contacto.telefono or 'Sin teléfono' }}</span>
+      <span class="ct-pista">Fuente: {{ v.contacto.fuente_texto or '—' }}</span>
+    </div>
+
+    <div class="ct-k3">
+      <div class="ct-k"><span class="ct-pista">Comprado</span><b class="num">{% if v.contacto.ventas_total %}{{ v.contacto.ventas_total | dinero }}{% else %}—{% endif %}</b></div>
+      <div class="ct-k"><span class="ct-pista">Cotizado abierto</span><b class="num">{% if v.contacto.cotiz_total %}{{ v.contacto.cotiz_total | dinero }}{% else %}—{% endif %}</b></div>
+      <div class="ct-k"><span class="ct-pista">Ventas</span><b class="num">{{ v.contacto.ventas_n }}</b></div>
+    </div>
+
+    <div class="ct-sec">Lo que tiene con nosotros</div>
+    {% for t in v.tratos %}
+    <div class="ct-it">
+      <div class="ct-fila">
+        {% if t.href %}<a class="ct-abrir" href="{{ t.href }}">{{ t.titulo }}</a>
+        {% else %}<b>{{ t.titulo }}</b>{% endif %}
+        <b class="num">{% if t.total is not none and t.total != '' %}{{ t.total | dinero }}{% else %}—{% endif %}</b>
+      </div>
+      <div class="ct-fila">
+        <span class="ct-pista num">{{ t.orden }}</span>
+        <span class="ct-pista">{{ t.estado or '' }}</span>
+      </div>
+    </div>
+    {% else %}
+    <p class="ct-hueco">{{ v.sin_tratos }}</p>
+    {% endfor %}
+
+    {% if v.posibles %}
+    <div class="ct-sec">Posible mismo contacto</div>
+    {# El nombre plano SOLO sugiere — jamás amarra (diseño corto). #}
+    {% for p in v.posibles %}
+    <div class="ct-fila">
+      <a class="ct-abrir" href="/contactos/{{ p.id }}">{{ p.nombre }}</a>
+      <span class="ct-pista">{{ p.fuente_texto or '—' }}</span>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <div class="ct-sec">Leads</div>
+    <p class="ct-hueco">{{ v.aviso_leads }}</p>
+
+    <div class="ct-sec">Último mensaje</div>
+    <p class="ct-hueco">{{ v.aviso_twenty }}</p>
+
+    <div class="ct-sec">Citas</div>
+    <p class="ct-hueco">{{ v.aviso_citas }}</p>
+
+    <div class="ct-acciones" style="padding-top:6px">
+      {# Crear un lead escribe en Linear: APAGADO hasta su punto. #}
+      <button class="ct-apagado" type="button" disabled>Nuevo lead para este contacto — Todavía no</button>
+    </div>
+  </article>
+</main>
+{% endblock %}
