@@ -26,9 +26,11 @@
    navegador pre-renderiza la pestaña al apoyar el dedo o pasar el mouse
    (Chrome/Android; Safari lo ignora sin romper nada). Solo las pestañas
    del menú — los POST y los enlaces con estado no se tocan. #}
+{% block prerender %}
 <script type="speculationrules">
 {"prerender": [{"urls": ["/", "/?tab=stock", "/?tab=ajustes", "/venta", "/calendario"], "eagerness": "moderate"}]}
 </script>
+{% endblock %}
 </head>
 {# El menú lateral de computadora arranca como quedó la última vez (cookie
    `menu`, la voltea menu.js con la hamburguesa del sidebar). #}

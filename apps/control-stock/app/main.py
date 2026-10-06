@@ -265,6 +265,35 @@ def _es_admin(empleada):
     return seguridad.es_admin(empleada)
 
 
+def _puerta_rol_inventario(request, empleada):
+    """El candado global del rol Inventario, colgado del predicado ÚNICO
+    (datos_roles.solo_inventario). Para quien es solo-inventario:
+
+    - /stock (la vista plana), /stock/* (su POST de cantidad y ver fotos)
+      y /logout pasan — sin loop: /stock nunca redirige a sí misma y
+      salir siempre se puede; /login y los estáticos ya pasaron ANTES de
+      la sesión, en la lista exenta del middleware (ruta de salud pública
+      no hay: si algún día nace, nacerá exenta allá, antes de la sesión);
+    - cualquier otro GET → 303 a /stock (el menú del rol es [Stock]);
+    - cualquier otra ESCRITURA → 403. Esto cubre TODOS los POST de la
+      app, los viejos y los bulk incluidos (crear producto, publicar,
+      fotos, fichas, Excel del conteo, Vender, Compras, Ajustes…): un
+      endpoint nuevo nace cerrado para este rol sin acordarse de nada.
+
+    Dentro de /stock/*, /stock/cambios se defiende solo (_solo_admin).
+    Devuelve la respuesta que corta, o None si puede seguir."""
+    if not datos_roles.solo_inventario(empleada):
+        return None
+    ruta = request.url.path
+    if ruta == "/stock" or ruta.startswith("/stock/") or ruta == "/logout":
+        return None
+    if request.method in ("GET", "HEAD"):
+        return RedirectResponse("/stock", status_code=303)
+    return PlainTextResponse(
+        "Tu usuario es solo de inventario: esta acción no está permitida. "
+        "Pídesela al encargado.", status_code=403)
+
+
 def _redirect_uri(request):
     """El callback de Google. En producción PUBLIC_BASE_URL (detrás de nginx
     la URL que ve la app es la interna http); en desarrollo, la del request."""
@@ -316,6 +345,8 @@ async def exigir_sesion(request: Request, call_next):
         empleada = seguridad.empleada_por_usuario(usuario_dev)
         if empleada is not None:
             request.state.empleada = empleada
+            if (corte := _puerta_rol_inventario(request, empleada)) is not None:
+                return corte
             return await call_next(request)
     empleada = seguridad.empleada_de_sesion(request.cookies.get("sesion"))
     if empleada is None:
@@ -324,6 +355,10 @@ async def exigir_sesion(request: Request, call_next):
         destino = "/crm/login" if ruta.startswith("/crm/") else "/login"
         return RedirectResponse(destino, status_code=303)
     request.state.empleada = empleada
+    # El rol Inventario vive en su vista plana: todo lo demás se corta
+    # aquí, ANTES de cualquier handler (ver _puerta_rol_inventario).
+    if (corte := _puerta_rol_inventario(request, empleada)) is not None:
+        return corte
     return await call_next(request)
 
 
@@ -2946,6 +2981,174 @@ def factura_publica(request: Request, token: str):
         "fecha_larga": f"{fecha.day} de {MESES[fecha.month - 1]} de {fecha.year}",
         "fecha_corta": fecha.strftime("%d/%m/%Y"),
         "metodo": "Yappy" if registro["metodo"] == "yappy" else "Efectivo",
+    })
+
+
+# ---------------------------------------------------------------------------
+# La vista plana de Stock del rol Inventario (BLOQUE 13, 5/10/2026).
+# PROPUESTA: la captura la toma la coordinadora antes de darla por buena.
+# Lista única sin pestañas de categoría, buscador arriba, orden por nombre;
+# columnas nombre · cantidad (el FÍSICO, que es lo que se cuenta en el
+# vivero) · tamaño (alto de/a si existe) · precio de venta (costos NO);
+# la foto se abre al tocar, solo ver. Todo decidido en Python (regla 10).
+# ---------------------------------------------------------------------------
+
+def _productos_planos(q=""):
+    """(productos ya listos para la plantilla, error del proxy o None).
+    Filtra por nombre o SKU sin acentos ni mayúsculas y ordena por
+    nombre; sin costos de compra en ningún campo."""
+    try:
+        inventario, _ = datos.obtener_inventario()
+        error = None
+    except datos.SinConexion as fallo:
+        return [], str(fallo)
+    plana = datos_roles._plano
+    buscado = plana(q)
+    subidas = datos.fotos_subidas()
+    productos = []
+    for p in sorted(inventario, key=lambda p: plana(p["nombre"])):
+        if buscado and (buscado not in plana(p["nombre"])
+                        and buscado not in plana(p["sku"])):
+            continue
+        info = fotos.info_foto(p["sku"], subidas.get(p["sku"]))
+        foto = (info["grande"] if info
+                else f"/stock/foto/{quote(p['sku'])}" if ventas.configurado()
+                else None)
+        hmin, hmax = p.get("altura_min", 0), p.get("altura_max", 0)
+        productos.append({
+            "sku": p["sku"], "nombre": p["nombre"],
+            "fisico": p["fisico"],
+            "tamano": (f"{hmin}–{hmax} cm" if hmin and hmax
+                       else f"{hmin or hmax} cm" if (hmin or hmax) else ""),
+            "precio": calculos.precio_online(p.get("precio_centavos", 0)),
+            "foto": foto,
+        })
+    return productos, error
+
+
+def _pantalla_stock_plano(request, q="", aviso="", aviso_sku="", error="",
+                          campo_error="", error_campo_texto="",
+                          valores=None, estado=200):
+    """La pantalla, compartida por el GET y los rebotes del POST (regla 5:
+    el error va DEBAJO del campo que falló y lo tecleado no se borra)."""
+    productos, sin_proxy = _productos_planos(q)
+    respuesta = plantillas.TemplateResponse(request, "stock_plano.html", {
+        "empleada": request.state.empleada,
+        "productos": productos,
+        "q": q,
+        "sin_proxy": sin_proxy,
+        "aviso": aviso,
+        "aviso_sku": aviso_sku,
+        "error": error,
+        "campo_error": campo_error,
+        "error_campo_texto": error_campo_texto,
+        "valores": valores or {},
+    })
+    respuesta.status_code = estado
+    return respuesta
+
+
+@app.get("/stock")
+def stock_plano(request: Request, q: str = "", aviso: str = "",
+                sku: str = ""):
+    """La vista plana para quien SOLO tiene el rol Inventario (el
+    predicado único decide). Para cualquier otro perfil /stock es la
+    pestaña de siempre — así el redirect global del rol no hace loop y
+    nadie más pierde su pantalla."""
+    if not datos_roles.solo_inventario(request.state.empleada):
+        return RedirectResponse("/?tab=stock", status_code=303)
+    return _pantalla_stock_plano(request, q=q.strip()[:80],
+                                 aviso=aviso, aviso_sku=sku)
+
+
+@app.post("/stock/cantidad")
+async def stock_cantidad(request: Request):
+    """La cantidad ABSOLUTA contada (el conteo del rol Inventario).
+
+    Único camino de escritura: stock_escritura.escribir_stock (candado →
+    el «antes» lo lee Odoo al escribir → bitácora, con error ruidoso).
+    `esperada` es el candado optimista de la casa: si el stock se movió
+    en el medio, Odoo devuelve conflicto con el valor fresco y nada se
+    escribe. Texto, negativo o decimales se rechazan con el aviso bajo
+    el campo, conservando lo tecleado — jamás se vuelven 0 (regla del
+    lote de formularios). El éxito vuelve con el ancla #p-<sku>: la
+    pantalla se queda en el MISMO producto."""
+    form = await request.form()
+    sku = (form.get("sku") or "").strip()
+    q = (form.get("q") or "").strip()[:80]
+    crudo = form.get("cantidad")
+    valores = {f"cantidad-{sku}": str(crudo or "")}
+
+    def rebote(mensaje, estado=400):
+        return _pantalla_stock_plano(
+            request, q=q, campo_error=f"cantidad-{sku}",
+            error_campo_texto=mensaje, valores=valores, estado=estado)
+
+    if not re.fullmatch(r"[A-Za-z0-9-]{1,80}", sku):
+        return _pantalla_stock_plano(request, q=q, estado=400,
+                                     error="La petición no se entiende.")
+    cantidad, mensaje = stock_escritura.cantidad_contada(crudo)
+    if mensaje:
+        return rebote(mensaje)
+    try:
+        esperada = int(str(form.get("esperada") or "").strip())
+    except ValueError:
+        # El hidden no vino o vino roto: se repinta con el valor fresco.
+        return rebote("La pantalla quedó vieja: revisa la cantidad actual "
+                      "y guarda de nuevo.")
+    try:
+        respuesta = stock_escritura.escribir_stock(
+            [{"sku": sku, "cantidad": cantidad, "esperada": esperada}],
+            request.state.empleada["id"], "conteo_inventario")
+    except datos.SinConexion as fallo:
+        return rebote(f"No se pudo guardar: {fallo}. Intenta de nuevo.",
+                      estado=502)
+    resultado = respuesta["resultados"][0]
+    if resultado["resultado"] == "conflicto":
+        return rebote(f"El stock cambió en Odoo: ahora hay "
+                      f"{resultado['anterior']} físicas. Revisa la cantidad "
+                      "y guarda de nuevo.", estado=409)
+    if resultado["resultado"] == "no_existe":
+        return rebote("Este producto ya no existe en Odoo. Actualiza la "
+                      "lista.", estado=404)
+    if resultado["resultado"] not in ("aplicado", "sin_cambio"):
+        return rebote("Odoo rechazó el ajuste"
+                      + (f": {resultado['detalle']}" if resultado.get("detalle")
+                         else ". Intenta de nuevo o avisa al encargado."),
+                      estado=502)
+    if resultado["resultado"] == "aplicado":
+        datos.atender_alerta(sku, request.state.empleada["id"])
+    if respuesta["registro_fallo"]:
+        # Odoo quedó escrito y la bitácora no: error RUIDOSO en pantalla
+        # (banner), sin fingir que el guardado falló.
+        return _pantalla_stock_plano(request, q=q,
+                                     error=stock_escritura.AVISO_REGISTRO,
+                                     estado=200)
+    # De vuelta al MISMO producto (ancla de la casa), con la búsqueda viva.
+    destino = f"/stock?aviso=guardado&sku={quote(sku)}"
+    if q:
+        destino += f"&q={quote(q)}"
+    return RedirectResponse(destino + f"#p-{quote(sku)}", status_code=303)
+
+
+@app.get("/stock/cambios")
+def stock_cambios(request: Request, sku: str = ""):
+    """La bitácora de stock_cambio para admins: quién, cuándo, cuánto
+    había y cuánto quedó. La puerta vive en el enlace «Bitácora» de la
+    pestaña Stock; la fecha se pinta en hora de Panamá (en_epoch es
+    epoch UTC: quien muestra decide la zona)."""
+    if (rechazo := _solo_admin(request)) is not None:
+        return rechazo
+    sku = sku.strip()[:80]
+    cambios = [
+        {**c, "fecha": datetime.fromtimestamp(c["en_epoch"], tz=datos.ZONA_PANAMA)
+                               .strftime("%d/%m/%Y %I:%M %p").lower()}
+        for c in stock_escritura.cambios_recientes(sku)
+    ]
+    return plantillas.TemplateResponse(request, "stock_cambios.html", {
+        "empleada": request.state.empleada,
+        "cambios": cambios,
+        "sku": sku,
     })
 
 

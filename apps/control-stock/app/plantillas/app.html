@@ -178,7 +178,7 @@
       </div>
     </div>
     <div class="sync">
-      {% if hora_actualizado %}Actualizado hoy {{ hora_actualizado }} · {% endif %}<a href="/?refrescar=1">Actualizar ↻</a>
+      {% if hora_actualizado %}Actualizado hoy {{ hora_actualizado }} · {% endif %}<a href="/?refrescar=1">Actualizar ↻</a>{% if es_admin %} · <a href="/stock/cambios">Bitácora</a>{% endif %}
     </div>
     <div id="lista"></div>
   </section>

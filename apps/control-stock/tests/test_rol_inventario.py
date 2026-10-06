@@ -35,16 +35,6 @@ def _empleada(usuario):
             "email": None, "email_verificado": 0}
 
 
-def _entrar(usuario, nombre="Alguien"):
-    seguridad.crear_empleada(usuario, nombre, "clave-de-prueba")
-    c = TestClient(app)
-    r = c.post("/login",
-               data={"usuario": usuario, "contrasena": "clave-de-prueba"},
-               follow_redirects=False)
-    assert r.status_code == 303
-    return c
-
-
 @pytest.fixture
 def omar(db_limpia):
     """Omar: empleada activa con el rol Inventario y NADA más."""
@@ -155,3 +145,117 @@ def test_renombrar_el_rol_no_suelta_los_candados(omar):
     assert fila["nombre"] == "Conteo del vivero"
     assert fila["slug"] == datos_roles.SLUG_INVENTARIO
     assert datos_roles.solo_inventario(_empleada("omar")) is True
+
+
+# ---------------------------------------------------------------------------
+# La puerta global: menú=[Stock], redirect a /stock, candados POST
+# ---------------------------------------------------------------------------
+
+def test_redirect_global_a_stock_sin_loop(cliente_omar, con_inventario):
+    for ruta in ("/", "/?tab=stock", "/?tab=ajustes", "/venta", "/compras",
+                 "/control", "/calendario", "/productos/crear", "/revisar",
+                 "/conversaciones", "/resumen", "/equipo"):
+        r = cliente_omar.get(ruta, follow_redirects=False)
+        assert (r.status_code, r.headers.get("location")) == (303, "/stock"), ruta
+    # Sin loop: /stock se pinta (200), no redirige a sí misma.
+    assert cliente_omar.get("/stock", follow_redirects=False).status_code == 200
+
+
+def test_logout_y_estaticos_quedan_fuera_del_redirect(cliente_omar):
+    assert cliente_omar.get("/static/styles.css",
+                            follow_redirects=False).status_code == 200
+    r = cliente_omar.post("/logout", follow_redirects=False)
+    assert (r.status_code, r.headers["location"]) == (303, "/login")
+
+
+def test_menu_del_rol_es_solo_stock(cliente_omar, con_inventario):
+    pantalla = cliente_omar.get("/stock").text
+    assert "Salir" in pantalla
+    for enlace in ('href="/venta"', 'href="/compras"', 'href="/control"',
+                   'href="/calendario"', 'href="/?tab=ajustes"'):
+        assert enlace not in pantalla, enlace
+    # Ni siquiera el pre-render ofrece esas rutas (bloque vaciado).
+    assert "speculationrules" not in pantalla
+
+
+# Los endpoints PROHIBIDOS para el rol, enumerados (review del Arquitecto):
+# todo POST fuera de /stock/* rechaza con 403 en el servidor, botones
+# aparte. La lista nombra los que tocan productos (viejos y bulk
+# incluidos) y una muestra del resto de la app; la regla del middleware
+# cubre a TODOS los que no empiecen por /stock.
+PROHIBIDOS = [
+    ("/ajustar", {"json": {"sku": "PL-ROMERO", "cantidad": 7, "esperada": 2}}),
+    ("/productos/nuevo", {"json": {"nombre": "X", "sku": "PL-X",
+                                   "categoria": "Exterior",
+                                   "precioCentavos": 100}}),
+    ("/productos/crear", {"data": {"tipo": "maceta", "nombre": "M"}}),
+    ("/productos/PL-ROMERO/publicacion", {"json": {"publicado": False}}),
+    ("/fotos/PL-ROMERO", {"files": {"archivo": ("x.jpg", b"123", "image/jpeg")}}),
+    ("/fichas/PL-ROMERO", {"json": {"descripcion": "x"}}),
+    ("/conteos/importar", {"files": {"archivo": ("c.xlsx", b"123")}}),
+    ("/conteos/1/confirmar", {}),
+    ("/conteos/1/descartar", {}),
+    ("/conteos/pdf", {}),
+    ("/revisiones", {}),
+    ("/alertas/atender", {"data": {"sku": "PL-ROMERO"}}),
+    ("/umbral", {"data": {"umbral": "9"}}),
+    ("/venta/carrito/agregar", {"data": {"producto_id": 1, "cantidad": 1}}),
+    ("/venta/carrito/precio", {"data": {"producto_id": 1, "precio": "9"}}),
+    ("/venta/vender", {"data": {}}),
+    ("/venta/cotizar", {"data": {}}),
+    ("/compras/borrador", {"data": {}}),
+    ("/compras/nueva", {"data": {}}),
+    ("/compras/recibir", {"data": {"ref": "C-1"}}),
+    ("/compras/proveedores/producto", {"data": {}}),
+    ("/ajustes/envio", {"data": {}}),
+    ("/ajustes/invitar", {"data": {"email": "a@b.co"}}),
+    ("/ajustes/admin", {"data": {"usuario": "omar", "dar": "1"}}),
+    ("/ajustes/roles/renombrar", {"data": {"rol": "1", "nombre": "Z"}}),
+    ("/control/estado", {"data": {}}),
+    ("/control/responsable", {"data": {}}),
+    ("/calendario/actividad", {"data": {}}),
+    ("/fichas/PL-ROMERO", {"json": {}}),
+]
+
+
+def test_endpoints_prohibidos_rechazan_403_sin_efecto(
+        cliente_omar, con_inventario, ajustes_registrados):
+    for ruta, kwargs in PROHIBIDOS:
+        r = cliente_omar.post(ruta, **kwargs)
+        assert r.status_code == 403, ruta
+        assert "solo de inventario" in r.text, ruta
+    # Y de verdad no pasó nada: ni un ajuste viajó al order-api.
+    assert ajustes_registrados == []
+
+
+def test_el_candado_sobrevive_el_renombre_del_rol(cliente_omar, con_inventario):
+    assert datos_roles.renombrar_rol(_rol_inventario_n(), "Conteo") is None
+    r = cliente_omar.get("/venta", follow_redirects=False)
+    assert (r.status_code, r.headers["location"]) == (303, "/stock")
+    assert cliente_omar.post("/ajustar", json={
+        "sku": "PL-ROMERO", "cantidad": 7, "esperada": 2}).status_code == 403
+
+
+def test_con_otro_rol_ademas_no_hay_puerta(db_limpia, con_inventario):
+    seguridad.crear_empleada("mixta", "Mixta", "clave-de-prueba")
+    with datos._db() as con:
+        otro = con.execute("SELECT n FROM roles WHERE slug IS NULL "
+                           "AND activo=1 LIMIT 1").fetchone()["n"]
+    datos_roles.poner_persona(_rol_inventario_n(), "mixta", "x")
+    datos_roles.poner_persona(otro, "mixta", "x")
+    c = TestClient(app)
+    r = c.post("/login", data={"usuario": "mixta",
+                               "contrasena": "clave-de-prueba"},
+               follow_redirects=False)
+    assert r.status_code == 303
+    # Navega como cualquiera: /venta no redirige a /stock.
+    assert c.get("/venta", follow_redirects=False).status_code == 200
+    # Y /stock la manda a su pestaña de siempre (la vista plana es del rol).
+    r = c.get("/stock", follow_redirects=False)
+    assert (r.status_code, r.headers["location"]) == (303, "/?tab=stock")
+
+
+def test_la_bitacora_es_de_admins_tambien_dentro_de_stock(cliente_omar):
+    # /stock/cambios vive bajo el prefijo permitido, pero se defiende
+    # sola: el rol no es admin y recibe su 403.
+    assert cliente_omar.get("/stock/cambios").status_code == 403
