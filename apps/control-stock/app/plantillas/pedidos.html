@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block titulo %}Pedidos — Control Viverorose{% endblock %}
+
+{% block contenido %}
+{# La pestaña PEDIDOS (punto 4 del BLOQUE 12; diseño Orquesta, pantallas
+   07 en Mac y 23 en celular): una VISTA sobre el motor de los 3 estados.
+   El pedido nace cuando el cliente paga o abona (modelo de Jay). TODO lo
+   que se pinta llegó decidido de Python (app/pedidos.py, regla 10): las
+   columnas congeladas, la plata, los filtros. Abrir una tarjeta lleva a
+   la ficha Estado/Entrega EXISTENTE — el panel del lienzo (08/24) ES esa
+   ficha, no se duplica pantalla. «Marcar entregada» tampoco vive acá:
+   sigue solo en la ficha. #}
+<link rel="stylesheet" href="/static/diseno-pedidos.css?v={{ v_estaticos }}">
+
+{% with bm_titulo='Pedidos', bm_sub='El pedido nace cuando el cliente paga o abona' %}{% include '_barra_movil.html' %}{% endwith %}
+
+<header class="pd-top">
+  <div class="cab-izq">
+    <button class="hamb" type="button" aria-label="Mostrar u ocultar el menú"
+            aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+    <h1 class="pd-titulo">Pedidos</h1>
+  </div>
+  <span class="pd-nace">Un pedido aparece aquí cuando el cliente paga o abona.
+    <span class="pd-leyenda"><span class="pd-dot-ok" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span> Pagado</span>
+    <span class="pd-leyenda"><span class="pd-lej-debe">Debe</span> Falta cobrar</span>
+  </span>
+</header>
+
+<main class="pd-main">
+  {# El aviso honesto de la plata: con Odoo caído el tablero vive desde
+     el estado local y lo DICE — jamás $0 ni silencio. Si lo que se ve es
+     la última lectura buena, el aviso trae su edad. #}
+  {% if tablero.aviso_plata %}
+  <div class="pd-alerta">{{ tablero.aviso_plata }}</div>
+  {% endif %}
+
+  {# Las capas por tipo de venta (item 1): chips-enlace, lo decide
+     Python. «Todas» quita el filtro. #}
+  {% if tablero.filtros %}
+  <div class="pd-capas">
+    <span class="pd-pista">Capas</span>
+    <a class="pd-capa {{ 'on' if not tablero.tipo }}" href="/pedidos">Todas</a>
+    {% for f in tablero.filtros %}
+    <a class="pd-capa {{ 'on' if f.activo }}" href="/pedidos?tipo={{ f.nombre | urlencode }}">{{ f.nombre }} <span class="pd-n num">{{ f.cuenta }}</span></a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="pd-tablero">
+    {% for col in tablero.columnas %}
+    <section class="pd-col" aria-label="{{ col.titulo }}">
+      <div class="pd-ch"><span class="pd-ch-t">{{ col.titulo }}<span class="pd-cnt num">{{ col.cuenta }}</span></span></div>
+      <span class="pd-pista">{{ col.pista }}</span>
+      {% for t in col.tarjetas %}
+      <article class="pd-card">
+        <div class="pd-fila">
+          <a class="pd-abrir" href="{{ t.href }}">{{ t.cliente }}</a>
+          <b class="pd-monto num">{% if t.total is not none %}{{ t.total | dinero }}{% else %}—{% endif %}</b>
+        </div>
+        <div class="pd-fila">
+          <span class="pd-hint num">{{ t.orden }}{% if t.tipo_venta %} · {{ t.tipo_venta }}{% endif %}</span>
+          {% if col.clave == 'entregado' %}
+          <span class="pd-fecha num">Entregada {{ t.fecha_entrega }}</span>
+          {% elif t.fecha_programada %}
+          <span class="pd-fecha num">{{ t.fecha_programada }}</span>
+          {% endif %}
+        </div>
+        {% if t.direccion or t.asignado %}
+        <span class="pd-hint">{{ t.direccion or "Sin dirección" }}{% if t.asignado %} · {{ t.asignado }}{% endif %}</span>
+        {% endif %}
+        <div class="pd-fila">
+          <span class="pd-plata {{ 'pd-debe' if t.plata.clase == 'debe' else ('pd-pagado' if t.plata.clase == 'pagado' else 'pd-sin-dato') }} num">{{ t.plata.texto }}</span>
+          {% if col.clave == 'por_programar' and not col.solo_lectura %}
+          <a class="pd-chip" href="{{ t.href }}" style="text-decoration:none">Programar →</a>
+          {% endif %}
+        </div>
+      </article>
+      {% endfor %}
+      {% if not col.tarjetas %}<span class="pd-pista">Nada por aquí.</span>{% endif %}
+    </section>
+    {% endfor %}
+  </div>
+</main>
+
+{% set activa = 'pedidos' %}{% include '_nav.html' %}
+{% endblock %}

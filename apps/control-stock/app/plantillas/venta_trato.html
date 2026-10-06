@@ -105,12 +105,24 @@
     {% if hechos.estado == 3 %}
     <p style="margin:0">Dirección: <b>{{ obligacion.direccion or "—" }}</b></p>
     <p style="margin:4px 0 0">Asignado: <b>{{ obligacion.asignado or "—" }}</b></p>
+    <p style="margin:4px 0 0">Fecha programada: <b>{{ obligacion.fecha_programada or "—" }}</b></p>
     <p class="edit-nota">La venta cerró: la obligación queda como historia.</p>
     {% else %}
     <form method="post" action="/venta/estado/{{ origen }}/{{ n }}/entrega">
       <label for="vt-direccion">Dirección</label>
       <input type="text" id="vt-direccion" name="direccion" maxlength="200"
              value="{{ obligacion.direccion }}" placeholder="¿A dónde va?">
+      {# La fecha PROGRAMADA (el plan): decide «Programado» en la pestaña
+         Pedidos. Texto y no type=date a propósito — la regla forms-lote
+         exige conservar lo tecleado cuando se rechaza, y un type=date se
+         traga el texto malo en silencio. NO es la fecha real de entrega
+         (esa la fija «Marcar entregada», abajo). #}
+      <label for="vt-fecha-prog">Fecha programada de entrega (AAAA-MM-DD; vacía = por programar)</label>
+      <input type="text" id="vt-fecha-prog" name="fecha_programada"
+             maxlength="10" inputmode="numeric" placeholder="2026-10-15"
+             value="{{ obligacion.fecha_programada }}"
+             {{ 'autofocus' if campo_error == 'fecha_programada' }}>
+      {% with campo='fecha_programada' %}{% include '_error_campo.html' %}{% endwith %}
       <label for="vt-asignado-sel">Asignado (responsable de que llegue)</label>
       <select id="vt-asignado-sel" name="asignado_sel">
         <option value="">— Elegir empleada —</option>
@@ -130,7 +142,7 @@
     {% if historial_entrega %}
     <ul class="vt-hist">
       {% for c in historial_entrega %}
-      <li>{{ "Dirección" if c.campo == "direccion" else "Asignado" }}:
+      <li>{{ "Dirección" if c.campo == "direccion" else ("Fecha programada" if c.campo == "fecha_programada" else "Asignado") }}:
         «{{ c.antes or "—" }}» → «{{ c.despues or "—" }}» · {{ c.por }} · {{ c.en[:16] }}</li>
       {% endfor %}
     </ul>

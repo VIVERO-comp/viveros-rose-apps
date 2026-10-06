@@ -115,6 +115,111 @@ def test_si_odoo_rechaza_la_salida_nada_queda_marcado(manager, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# fecha_programada (pestaña Pedidos, 6/10/2026): el plan de entrega,
+# AAAA-MM-DD estricto, con historial y el candado de cerrada.
+# ---------------------------------------------------------------------------
+
+def test_fecha_programada_valida_guarda_con_su_fila_de_historial(manager):
+    n = _venta_local()
+    assert entregas.guardar("venta", n, "Calle 50", "Sam", "Génesis",
+                            fecha_programada="2026-10-15") is None
+    fila = entregas.obligacion_de("venta", n)
+    assert fila["fecha_programada"] == "2026-10-15"
+    cambios = [(c["campo"], c["antes"], c["despues"])
+               for c in entregas.historial_de("venta", n)]
+    assert ("fecha_programada", "", "2026-10-15") in cambios
+    # Editarla deja OTRA fila (cada cambio, su rastro).
+    assert entregas.guardar("venta", n, "Calle 50", "Sam", "Sam",
+                            fecha_programada="2026-10-16") is None
+    cambios = [(c["campo"], c["antes"], c["despues"])
+               for c in entregas.historial_de("venta", n)]
+    assert ("fecha_programada", "2026-10-15", "2026-10-16") in cambios
+
+
+@pytest.mark.parametrize("mala", [
+    "15/10/2026",      # formato criollo
+    "2026-10-5",       # sin el cero
+    "2026-02-31",      # no existe en el calendario
+    "mañana",          # texto
+    "2026-10-15x",     # cola pegada
+])
+def test_fecha_programada_mal_escrita_no_escribe_nada(manager, mala):
+    """Regla forms-lote: el guardado se rechaza ENTERO — ni la fecha ni
+    la dirección ni el asignado se escriben, y lo tecleado lo conserva
+    la ficha (que es quien re-pinta)."""
+    n = _venta_local()
+    entregas.guardar("venta", n, "Calle 50", "Sam", "Génesis")
+    error = entregas.guardar("venta", n, "Otra calle", "Otro", "Génesis",
+                             fecha_programada=mala)
+    assert error == "fecha_programada_invalida"
+    fila = entregas.obligacion_de("venta", n)
+    assert fila["direccion"] == "Calle 50"      # nada se movió
+    assert fila["asignado"] == "Sam"
+    assert fila["fecha_programada"] == ""
+    assert len(entregas.historial_de("venta", n)) == 2
+
+
+def test_fecha_programada_cerrada_no_se_edita(manager):
+    """El candado de estado 3 cubre también la fecha programada."""
+    n = _venta_local()
+    venta_estado.abrir("venta", n, "plant retail", "Génesis")
+    entregas.guardar("venta", n, "Calle 50", "Sam", "Génesis",
+                     fecha_programada="2026-10-15")
+    venta_estado.registrar_pago("venta", n, "Génesis")
+    error, _ = entregas.marcar_entregada("venta", n, manager, "Sam")
+    assert error is None
+    assert entregas.guardar("venta", n, "Calle 50", "Sam", "Sam",
+                            fecha_programada="2026-10-20") == "cerrada"
+    assert entregas.obligacion_de("venta", n)["fecha_programada"] == "2026-10-15"
+
+
+def test_quitar_la_fecha_programada_deja_su_rastro(manager):
+    n = _venta_local()
+    entregas.guardar("venta", n, "", "Sam", "Génesis",
+                     fecha_programada="2026-10-15")
+    assert entregas.guardar("venta", n, "", "Sam", "Sam",
+                            fecha_programada="") is None
+    assert entregas.obligacion_de("venta", n)["fecha_programada"] == ""
+    cambios = [(c["campo"], c["antes"], c["despues"])
+               for c in entregas.historial_de("venta", n)]
+    assert ("fecha_programada", "2026-10-15", "") in cambios
+
+
+def test_los_callers_viejos_no_tocan_la_fecha(manager):
+    """guardar() sin el kwarg (Vender, la ficha vieja) conserva la fecha
+    programada tal cual: None = no tocarla."""
+    n = _venta_local()
+    entregas.guardar("venta", n, "", "Sam", "Génesis",
+                     fecha_programada="2026-10-15")
+    entregas.guardar("venta", n, "Calle 50", "Sam", "Génesis")
+    assert entregas.obligacion_de("venta", n)["fecha_programada"] == "2026-10-15"
+
+
+def test_migracion_al_vuelo_agrega_la_columna(db_limpia):
+    """Una base de antes de la pestaña Pedidos (sin la columna) la gana
+    al pasar por iniciar_tablas, sin perder datos."""
+    with datos._db() as con:
+        con.execute("DROP TABLE entrega_obligacion")
+        con.execute("""
+            CREATE TABLE entrega_obligacion (
+                origen TEXT NOT NULL,
+                venta INTEGER NOT NULL,
+                direccion TEXT NOT NULL DEFAULT '',
+                asignado TEXT NOT NULL DEFAULT '',
+                actualizado_en TEXT,
+                PRIMARY KEY (origen, venta)
+            )""")
+        con.execute("INSERT INTO entrega_obligacion (origen, venta,"
+                    " direccion, asignado) VALUES ('venta', 7, 'Calle 50',"
+                    " 'Sam')")
+    entregas.iniciar_tablas()
+    entregas.iniciar_tablas()  # idempotente
+    fila = entregas.obligacion_de("venta", 7)
+    assert fila["direccion"] == "Calle 50"
+    assert fila["fecha_programada"] == ""
+
+
+# ---------------------------------------------------------------------------
 # La ficha por HTTP (humo): existe, pinta los candados y guarda.
 # ---------------------------------------------------------------------------
 
@@ -139,3 +244,39 @@ def test_ficha_estado_entrega_por_http(cliente):
 def test_ficha_de_origen_invalido_redirige(cliente):
     r = cliente.get("/venta/estado/otracosa/1", follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/venta"
+
+
+def test_ficha_edita_la_fecha_programada(cliente):
+    n = _venta_local()
+    pagina = cliente.get(f"/venta/estado/venta/{n}")
+    assert "Fecha programada de entrega" in pagina.text
+    r = cliente.post(f"/venta/estado/venta/{n}/entrega",
+                     data={"direccion": "Calle 50", "asignado_sel": "",
+                           "asignado_libre": "Sam",
+                           "fecha_programada": "2026-10-15"},
+                     follow_redirects=False)
+    assert r.status_code == 303
+    assert entregas.obligacion_de(
+        "venta", n)["fecha_programada"] == "2026-10-15"
+
+
+def test_ficha_rechaza_fecha_mala_conservando_lo_tecleado(cliente):
+    """Regla forms-lote por HTTP: el error sale DEBAJO del campo, lo
+    tecleado se queda en el formulario (fecha, dirección y asignado) y
+    el motor no escribió nada."""
+    n = _venta_local()
+    entregas.guardar("venta", n, "Calle 50", "Sam", "Génesis")
+    r = cliente.post(f"/venta/estado/venta/{n}/entrega",
+                     data={"direccion": "Otra calle", "asignado_sel": "",
+                           "asignado_libre": "Otro",
+                           "fecha_programada": "15/10/2026"},
+                     follow_redirects=False)
+    assert r.status_code == 200  # re-pinta, no redirige
+    assert "La fecha no se entiende" in r.text
+    assert 'value="15/10/2026"' in r.text      # lo tecleado se conserva
+    assert 'value="Otra calle"' in r.text
+    assert "error-campo" in r.text
+    fila = entregas.obligacion_de("venta", n)
+    assert fila["direccion"] == "Calle 50"     # nada se escribió
+    assert fila["asignado"] == "Sam"
+    assert fila["fecha_programada"] == ""
