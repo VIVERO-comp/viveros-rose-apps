@@ -207,14 +207,18 @@
   .vd-svc-pc{padding:0}
 }
 @media (min-width: 1200px){
-  /* En pantalla ancha las columnas van a su ancho del diseño (276px) y
-     el resumen lateral ocupa el resto. El tablero dimensiona por su
-     CONTENIDO (flex-basis auto): con flex:1 en los dos hermanos, el
-     resumen se llevaba la mitad del lienzo y la tercera columna quedaba
-     clipeada debajo (visto en vivo a 1500px). Si el lienzo no alcanza,
-     el tablero cede (shrink) y scrollea adentro; el resumen nunca baja
-     de sus 236px de tiles. */
+  /* En pantalla ancha las columnas van a su ancho del diseño (276px). */
   .vd-col{flex:0 0 276px}
+}
+@media (min-width: 1400px){
+  /* El resumen lateral solo aparece cuando TODO cabe de verdad: con el
+     sidebar de 240px y los paddings, el lienzo necesita ~1400px de
+     ventana para 3 columnas de 276 + los tiles (236 mínimo). El tablero
+     dimensiona por su CONTENIDO (flex-basis auto) y el resumen toma el
+     resto — con flex:1 en los dos hermanos, el resumen se llevaba la
+     mitad del lienzo y la tercera columna quedaba clipeada debajo
+     (visto en vivo a 1500px). Más angosto que esto, el resumen se
+     guarda (su display:none base) y las columnas respiran. */
   .vd-tablero{flex:0 1 auto}
   .vd-res{display:flex;flex:1;min-width:236px;flex-direction:column;gap:10px}
 }
