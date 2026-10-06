@@ -1485,3 +1485,17 @@ def test_sin_envio_sigue_ignorando_el_campo_aunque_sea_ilegible(db_limpia):
     se ignora entero)."""
     assert ventas.resolver_envio({"envio_opcion": "", "envio": "abc"}) == {
         "envio": 0.0, "envio_opcion": "", "envio_nota": ""}
+
+
+def test_agregar_dos_veces_el_mismo_producto_suma_sin_duplicar(db_limpia):
+    """Sugerencia del review del Arquitecto (5/10/2026): fija el contrato
+    de agregar_al_carrito — repetir el mismo producto SUMA la cantidad en
+    su única fila (ON CONFLICT ... DO UPDATE), jamás duplica el renglón."""
+    from app import datos as _datos
+    ventas.agregar_al_carrito("genesis", 501, 2)
+    ventas.agregar_al_carrito("genesis", 501, 3)
+    with _datos._db() as con:
+        filas = con.execute(
+            "SELECT producto_id, cantidad FROM venta_carrito "
+            "WHERE usuario='genesis'").fetchall()
+    assert [(f["producto_id"], f["cantidad"]) for f in filas] == [(501, 5)]
