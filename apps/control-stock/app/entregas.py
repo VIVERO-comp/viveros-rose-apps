@@ -9,6 +9,18 @@ Reglas:
 
 - La dirección y el asignado son EDITABLES hasta que la venta cierra
   (estado 3); después quedan como historia.
+- **`fecha_programada`** (pestaña Pedidos, 6/10/2026 — precisión (i) del
+  review del Arquitecto): la fecha de calendario de Panamá (AAAA-MM-DD)
+  en que se PLANEA entregar. Es la fuente local de «Programado» en la
+  pestaña Pedidos — una sola fuente de verdad del motor: la actividad
+  del calendario vive ligada a LEADS y muchas ventas locales no tienen
+  lead. Se pone y edita desde la ficha Estado/Entrega junto a dirección
+  y asignado, con el MISMO candado (estado 3 no se edita) y su fila en
+  `entrega_cambio`. **No es `fecha_entrega`** (el acto real, de
+  venta_estado): el plan y el acto no se mezclan. Formato estricto
+  AAAA-MM-DD (el patrón de corregir_fecha_entrega); una fecha mal
+  escrita se rechaza SIN escribir nada (regla forms-lote: el error va
+  bajo el campo y lo tecleado se conserva — eso lo pinta la ficha).
 - Todo cambio deja su fila en `entrega_cambio`: qué campo, qué decía,
   qué dice, quién y cuándo.
 - «Marcar entregada» EXIGE que haya asignado — y si falta, lo dice con
@@ -29,11 +41,33 @@ Reglas:
   Odoo. La reconciliación estado↔embudo es pregunta abierta para Jay.
 """
 
+import re
+from datetime import date
+
 from .datos import _db, ahora_iso
 from . import venta_estado, ventas
 
 CAMPOS = ("direccion", "asignado")
+# Los campos que dejan fila en entrega_cambio (fecha_programada entró el
+# 6/10/2026 con la pestaña Pedidos; mismo historial, mismo candado).
+CAMPOS_HISTORIAL = CAMPOS + ("fecha_programada",)
 LARGO_CAMPO = 200
+
+_RE_FECHA = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def fecha_programada_valida(texto):
+    """¿AAAA-MM-DD estricto y una fecha de verdad? El mismo patrón de 10
+    caracteres de corregir_fecha_entrega, más el calendario (un 2026-02-31
+    no pasa). Solo valida: el texto crudo lo conserva quien rechaza."""
+    texto = (texto or "").strip()
+    if not _RE_FECHA.fullmatch(texto):
+        return False
+    try:
+        date.fromisoformat(texto)
+    except ValueError:
+        return False
+    return True
 
 
 def iniciar_tablas():
@@ -59,6 +93,18 @@ def iniciar_tablas():
             en TEXT NOT NULL
         );
         """)
+        _asegurar_columna_fecha_programada(con)
+
+
+def _asegurar_columna_fecha_programada(con):
+    """Migración al vuelo para las bases que nacieron antes de la pestaña
+    Pedidos. Idempotente, igual que la columna slug de datos_roles.
+    '' = sin programar (la tarjeta cae en «Por programar»)."""
+    columnas = {f["name"] for f in
+                con.execute("PRAGMA table_info(entrega_obligacion)")}
+    if "fecha_programada" not in columnas:
+        con.execute("ALTER TABLE entrega_obligacion"
+                    " ADD COLUMN fecha_programada TEXT NOT NULL DEFAULT ''")
 
 
 def obligacion_de(origen, venta):
@@ -68,8 +114,18 @@ def obligacion_de(origen, venta):
             (origen, int(venta))).fetchone()
     if fila is None:
         return {"origen": origen, "venta": int(venta),
-                "direccion": "", "asignado": "", "actualizado_en": None}
+                "direccion": "", "asignado": "", "fecha_programada": "",
+                "actualizado_en": None}
     return dict(fila)
+
+
+def obligaciones_de():
+    """{(origen, venta): fila} de TODAS las obligaciones, para que la
+    pestaña Pedidos pinte el tablero en UNA consulta (el espejo de
+    venta_estado.estados_de). Leer jamás crea nada."""
+    with _db() as con:
+        filas = con.execute("SELECT * FROM entrega_obligacion").fetchall()
+    return {(f["origen"], f["venta"]): dict(f) for f in filas}
 
 
 def historial_de(origen, venta):
@@ -80,25 +136,42 @@ def historial_de(origen, venta):
     return [dict(f) for f in filas]
 
 
-def guardar(origen, venta, direccion, asignado, por):
-    """Guarda la dirección y el asignado, anotando en el historial SOLO
-    lo que de verdad cambió. Una venta cerrada (estado 3) ya no se
-    edita: devuelve 'cerrada'. None si quedó."""
+def guardar(origen, venta, direccion, asignado, por, fecha_programada=None):
+    """Guarda la dirección, el asignado y (si viene) la fecha programada,
+    anotando en el historial SOLO lo que de verdad cambió. Una venta
+    cerrada (estado 3) ya no se edita: devuelve 'cerrada' — ese candado
+    cubre también fecha_programada. None si quedó.
+
+    `fecha_programada`: None = no tocarla (los callers viejos siguen
+    igual); '' = quitarla (la tarjeta vuelve a «Por programar», con su
+    fila en el historial); 'AAAA-MM-DD' = programar. Una fecha mal
+    escrita devuelve 'fecha_programada_invalida' SIN escribir NADA —
+    tampoco dirección ni asignado: el guardado se rechaza entero para
+    que la ficha conserve lo tecleado (regla forms-lote)."""
     if venta_estado.estado_de(origen, venta)["estado"] == 3:
         return "cerrada"
+    actual = obligacion_de(origen, venta)
     nuevos = {"direccion": (direccion or "").strip()[:LARGO_CAMPO],
               "asignado": (asignado or "").strip()[:LARGO_CAMPO]}
-    actual = obligacion_de(origen, venta)
+    if fecha_programada is None:
+        nuevos["fecha_programada"] = actual.get("fecha_programada") or ""
+    else:
+        fecha = (fecha_programada or "").strip()
+        if fecha and not fecha_programada_valida(fecha):
+            return "fecha_programada_invalida"
+        nuevos["fecha_programada"] = fecha
     ahora = ahora_iso()
     with _db() as con:
         con.execute(
             "INSERT INTO entrega_obligacion (origen, venta, direccion,"
-            " asignado, actualizado_en) VALUES (?,?,?,?,?)"
+            " asignado, fecha_programada, actualizado_en) VALUES (?,?,?,?,?,?)"
             " ON CONFLICT (origen, venta) DO UPDATE SET direccion=?,"
-            " asignado=?, actualizado_en=?",
+            " asignado=?, fecha_programada=?, actualizado_en=?",
             (origen, int(venta), nuevos["direccion"], nuevos["asignado"],
-             ahora, nuevos["direccion"], nuevos["asignado"], ahora))
-        for campo in CAMPOS:
+             nuevos["fecha_programada"], ahora,
+             nuevos["direccion"], nuevos["asignado"],
+             nuevos["fecha_programada"], ahora))
+        for campo in CAMPOS_HISTORIAL:
             if (actual.get(campo) or "") != nuevos[campo]:
                 con.execute(
                     "INSERT INTO entrega_cambio (origen, venta, campo,"
