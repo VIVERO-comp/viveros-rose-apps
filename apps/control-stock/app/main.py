@@ -4366,10 +4366,13 @@ def control_pantalla(request: Request):
     leads = linear_leads.listar(
         refrescar=request.query_params.get("refrescar") == "1")
 
+    # El alcance viaja al tablero (BLOQUE 43): decide de qué tarjetas se
+    # lee el monto de la orden real — la plata de un lead la ven quien lo
+    # atiende, el Director y Finanzas, y de nadie más se pide a Odoo.
     if vista == "empleado":
-        columnas = control.tablero_por_empleado(leads)
+        columnas = control.tablero_por_empleado(leads, alc)
     else:
-        columnas = control.tablero_por_estado(leads)
+        columnas = control.tablero_por_estado(leads, alc)
 
     # El celular del encargado suena cuando un lead gana «Te toca»; una
     # sola vez por lead, y por detrás para que la pantalla no espere.
@@ -4383,8 +4386,20 @@ def control_pantalla(request: Request):
     # que ya estaba guardado.
     control.refrescar_espera_en_fondo(leads)
 
-    abierta = control.ficha(request.query_params.get("abrir", ""),
-                           request.query_params.get("buscar", ""))
+    # El panel del lead: el ref del ?abrir= se resuelve una vez y se le
+    # dice a la ficha si esta sesión ve la plata de ESE lead (el candado
+    # de lectura vive en control.puede_ver_plata, no en la plantilla).
+    ref_abierta = request.query_params.get("abrir", "")
+    lead_abierto = linear_leads.uno(ref_abierta) if ref_abierta else None
+    abierta = control.ficha(
+        ref_abierta, request.query_params.get("buscar", ""), vista=vista,
+        ve_plata=control.puede_ver_plata(lead_abierto, alc))
+    # El cuadro de asignar/reasignar (BLOQUE 43): una capa más sobre el
+    # mismo panel, abierta por enlace GET (?asignar=1) como el modal del
+    # motivo. Repartir sigue siendo cosa del dueño.
+    asignando = None
+    if abierta and request.query_params.get("asignar") == "1" and alc["admin"]:
+        asignando = control.cuadro_asignar(abierta, leads)
     # El modal de la corrección manual: a un estado nuevo no se llega sin
     # motivo, así que el drag (y el botón) pasan por aquí.
     moviendo = None
@@ -4403,6 +4418,7 @@ def control_pantalla(request: Request):
         "vista": vista,
         "columnas": columnas,
         "abierta": abierta,
+        "asignando": asignando,
         "moviendo": moviendo,
         "estados": linear_leads.ESTADOS,
         "responsables": linear_leads.responsables(),

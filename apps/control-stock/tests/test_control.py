@@ -50,8 +50,12 @@ def de_dueno(monkeypatch):
     monkeypatch.setenv("AJUSTES_ADMINS", "genesis")
 
 
-ADMIN = {"vistas": ["empleado", "estado"], "resp_propio": "", "admin": True}
-EMPLEADO = {"vistas": ["estado"], "resp_propio": "Ruben", "admin": False}
+# `plata_todo` (BLOQUE 43): ver el dinero de CUALQUIER lead, no solo el de
+# los suyos. El dueño sí; un empleado con su `Resp:`, no.
+ADMIN = {"vistas": ["empleado", "estado"], "resp_propio": "", "admin": True,
+         "plata_todo": True}
+EMPLEADO = {"vistas": ["estado"], "resp_propio": "Ruben", "admin": False,
+            "plata_todo": False}
 
 # La función real, capturada ANTES de que el autouse de arriba la tape con
 # un lambda: la necesitan las pruebas que congelan el reloj para probar la
@@ -139,6 +143,9 @@ def test_un_empleado_sin_etiqueta_resp_ve_todo_pero_no_toca_nada():
 def test_el_dueno_ve_las_dos_vistas_y_todo():
     alc = control.alcance({"id": "abraham"}, es_admin=True)
     assert alc == ADMIN
+    # Y «todo» incluye la plata de cualquier lead (BLOQUE 43), que es lo
+    # que el resto de la app pregunta con `puede_ver_plata`.
+    assert alc["plata_todo"] is True
 
 
 def test_el_empleado_solo_tiene_la_vista_por_estado():

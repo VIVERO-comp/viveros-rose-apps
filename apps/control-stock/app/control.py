@@ -35,9 +35,10 @@ import time
 
 import httpx
 from datetime import date, datetime, timedelta
+from urllib.parse import quote
 
 from . import (agenda, avisos, calendario, colores, cot_lead, cotizaciones, crm_twenty,
-               linear_leads, mantenimiento, resumen, ventas)
+               datos_roles, linear_leads, mantenimiento, resumen, ventas)
 from .datos import ZONA_PANAMA, _db
 
 VISTAS = ("empleado", "estado")
@@ -398,9 +399,15 @@ def _clase_pago(pago):
 
 
 def _tarjeta(lead):
-    """El lead listo para la tarjeta: lo que se ve y nada más."""
+    """El lead listo para la tarjeta: lo que se ve y nada más.
+
+    `monto` nace en None y solo lo llena `_poner_montos`, cuando hay un
+    alcance que diga quién está mirando: sin orden real conectada —o sin
+    permiso de ver la plata— la tarjeta no pinta ningún número.
+    """
     estado = lead.get("estado_ficha") or {}
     return dict(lead, **{
+        "monto": None,
         "estado_titulo": estado.get("nombre") or lead.get("estado_nombre") or "",
         "estado_chip": estado.get("chip") or "",
         "motivo_chip": (linear_leads.chip_de_motivo(lead["motivo_clave"])
@@ -422,7 +429,48 @@ def _vivos(leads):
     return [l for l in leads if l["estado"] not in linear_leads.CERRADOS]
 
 
-def tablero_por_empleado(leads=None):
+# ---------------------------------------------------------------------------
+# El monto de la tarjeta (BLOQUE 43, lienzo de Roles): el nombre y la plata
+# arriba, el interés y la persona abajo. El número sale de la ORDEN REAL
+# conectada al lead (cot_lead) — nunca de una suma de esta app, nunca de un
+# promedio, nunca de un cero por defecto. Sin orden real, la tarjeta no
+# lleva monto y eso es la verdad: todavía no hay plata que mostrar.
+# ---------------------------------------------------------------------------
+
+def _poner_montos(tarjetas, alcance_actual):
+    """Le pone su `monto` a cada tarjeta que lo tenga Y que esta sesión
+    pueda ver (`puede_ver_plata`), en UNA sola consulta a Odoo.
+
+    Sin `alcance_actual` no se le pregunta nada a Odoo: así las llamadas
+    sueltas a `tablero_por_estado()` —las de las pruebas y las de los
+    avisos— siguen costando cero.
+    """
+    if not alcance_actual:
+        return
+    visibles = [t for t in tarjetas if puede_ver_plata(t, alcance_actual)]
+    if not visibles:
+        return
+    por_lead = cot_lead.plata_de_varios(visibles).get("por_lead") or {}
+    for tarjeta in visibles:
+        tarjeta["monto"] = por_lead.get(tarjeta["ref"])
+
+
+def _total_de_columna(leads, alcance_actual):
+    """La suma del pie de la columna (lienzo de Roles), o None.
+
+    Solo para quien ve TODA la plata (Director y Finanzas): un total
+    armado con los montos que a alguien le tocan y sin los que no, sería
+    un número que no es el de nadie. Y sin un solo monto conocido tampoco
+    se pinta: un `$0.00` diría que no hay plata, cuando lo cierto es que
+    no se sabe.
+    """
+    if not (alcance_actual or {}).get("plata_todo"):
+        return None
+    montos = [l["monto"]["total"] for l in leads if l.get("monto")]
+    return round(sum(montos), 2) if montos else None
+
+
+def tablero_por_empleado(leads=None, alcance_actual=None):
     """[{clave, titulo, pie, leads}] — una columna por responsable.
 
     «Sin asignar» primero: es la que hay que vaciar. Después cada `Resp:`
@@ -431,6 +479,7 @@ def tablero_por_empleado(leads=None):
     """
     leads = _vivos([_tarjeta(l) for l in (leads if leads is not None
                                           else linear_leads.listar())])
+    _poner_montos(leads, alcance_actual)
     columnas = [{"clave": "", "titulo": SIN_ASIGNAR,
                  "pie": "Nadie los tiene: repártelos."}]
     for nombre in linear_leads.responsables():
@@ -439,10 +488,11 @@ def tablero_por_empleado(leads=None):
     for columna in columnas:
         columna["leads"] = _orden_columna(
             [l for l in leads if (l["resp"] or "") == columna["clave"]])
+        columna["total"] = _total_de_columna(columna["leads"], alcance_actual)
     return columnas
 
 
-def tablero_por_estado(leads=None):
+def tablero_por_estado(leads=None, alcance_actual=None):
     """[{clave, titulo, pie, leads}] — las 8 columnas del embudo.
 
     Sin filtro por responsable: desde el 28/09/2026 («en crm solo admin lo
@@ -452,14 +502,17 @@ def tablero_por_estado(leads=None):
     """
     todos = [_tarjeta(l) for l in (leads if leads is not None
                                    else linear_leads.listar())]
+    _poner_montos(todos, alcance_actual)
     columnas = []
     for estado in linear_leads.ESTADOS:
+        de_esta = _orden_columna(
+            [l for l in todos if l["estado"] == estado["clave"]])
         columnas.append({
             "clave": estado["clave"], "titulo": estado["nombre"],
             "color": estado["color"], "chip": estado["chip"],
             "pie": estado["auto"],
-            "leads": _orden_columna(
-                [l for l in todos if l["estado"] == estado["clave"]]),
+            "leads": de_esta,
+            "total": _total_de_columna(de_esta, alcance_actual),
         })
         # Solo la columna Recordatorio pinta el motivo (29/09/2026): las
         # demás tarjetas no cambian. Una consulta para toda la columna, y
@@ -492,10 +545,50 @@ def alcance(empleada, es_admin):
     vistas_admin = [v for v in VISTAS
                     if v != "empleado" or not vista_empleado_apagada()]
     if es_admin:
-        return {"vistas": vistas_admin, "resp_propio": "", "admin": True}
+        return {"vistas": vistas_admin, "resp_propio": "", "admin": True,
+                "plata_todo": True}
     return {"vistas": ["estado"],
             "resp_propio": agenda.responsable_de_empleada(empleada),
-            "admin": False}
+            "admin": False,
+            "plata_todo": _ve_toda_la_plata(empleada)}
+
+
+# Los dos roles que ven la plata de CUALQUIER lead (BLOQUE 43, lienzo de
+# Roles): el Director —que además es admin— y Finanzas. Se comparan por
+# SLUG, nunca por el nombre visible de la fila: renombrar el rol desde
+# Ajustes no suelta ni afloja este candado.
+SLUGS_DE_PLATA = (datos_roles.SLUG_DIRECTOR, datos_roles.SLUG_FINANZAS)
+
+
+def _ve_toda_la_plata(empleada):
+    """¿Esta sesión ve el dinero de todos los leads, no solo el de los
+    suyos? Solo Director y Finanzas. Si la tabla de roles todavía no
+    existe (una instalación recién nacida), la respuesta es NO: el
+    candado falla cerrado."""
+    try:
+        mios = datos_roles.roles_activos_de((empleada or {}).get("id") or "")
+    except Exception:
+        return False
+    return any(r.get("slug") in SLUGS_DE_PLATA for r in mios)
+
+
+def puede_ver_plata(lead, alcance_actual):
+    """¿Quien está en la sesión puede ver el DINERO de ESTE lead?
+
+    El mismo criterio que la ficha de contacto: lo ve quien lo atiende (su
+    `Resp:`), el Director y Finanzas — nadie más. Ver el tablero completo
+    (28/09/2026) nunca fue ver la plata de todos: el monto de la tarjeta y
+    el de la ficha son lo que cobra otra persona.
+
+    Es un candado de LECTURA y vive aparte de `puede_tocar()` a propósito:
+    quien puede tocar un lead también ve su plata, pero Finanzas ve la
+    plata sin poder mover nada.
+    """
+    alcance_actual = alcance_actual or {}
+    if alcance_actual.get("admin") or alcance_actual.get("plata_todo"):
+        return True
+    propio = alcance_actual.get("resp_propio") or ""
+    return bool(propio) and ((lead or {}).get("resp") or "") == propio
 
 
 def vista_pedida(pedida, alcance_actual):
@@ -929,7 +1022,168 @@ def hilo(mensajes, sucesos=(), nombre_cliente=""):
     return bloques
 
 
-def ficha(ref, buscar_cotizacion=""):
+# ---------------------------------------------------------------------------
+# Las CINCO filas del panel del lead (BLOQUE 43, lienzo de Roles
+# «crm-lead-abierto»): Lo atiende · Seguimiento · Último mensaje ·
+# Cotización · Historial. Se toca la fila ENTERA, así que cada una viaja
+# con su destino ya decidido aquí — la plantilla solo pinta.
+#
+# Ninguna fila inventa: cuando el dato no tiene fuente (Twenty o Linear
+# neutralizados en el 8095, Odoo caído, una etiqueta que Abraham todavía
+# no creó), la fila lo DICE en su lugar y, si lo que falta es la acción,
+# va apagada con su «Todavía no».
+# ---------------------------------------------------------------------------
+
+# El recorte del texto de un mensaje en su fila: una línea, no un párrafo.
+LARGO_ULTIMO_MENSAJE = 72
+
+LEYENDA_SIN_PLATA = ("El monto lo ven quien lo atiende, el Director y "
+                     "Finanzas.")
+
+
+def _dinero(monto):
+    """El mismo formato del filtro `dinero` de las plantillas, con la coma
+    de los miles: una fila que dice «Total $1,150.00» se lee de un golpe.
+    Vive acá porque estas filas se componen en Python (regla 10) y el
+    filtro de Jinja no se puede llamar desde el servidor sin arrastrar
+    main.py — que importa este módulo."""
+    return f"${monto:,.2f}"
+
+
+def _recortado(texto, largo=LARGO_ULTIMO_MENSAJE):
+    texto = " ".join((texto or "").split())
+    return texto if len(texto) <= largo else texto[:largo - 1].rstrip() + "…"
+
+
+def _fila(clave, etiqueta, valor, detalle="", href="", inicial="",
+          todavia_no="", alerta=False):
+    return {"clave": clave, "etiqueta": etiqueta, "valor": valor,
+            "detalle": detalle, "href": href, "inicial": inicial,
+            "todavia_no": todavia_no, "alerta": alerta}
+
+
+def _fila_atiende(abierta, vista):
+    """Quién lo atiende: la etiqueta `Resp:` del issue, el único lugar
+    donde vive el responsable (nunca el `assignee`). La fila entera abre
+    el cuadro de asignar/reasignar."""
+    resp = abierta.get("resp") or ""
+    destino = ("/control?vista=" + quote(vista or "estado")
+               + "&abrir=" + quote(abierta["ref"]) + "&asignar=1")
+    return _fila("atiende", "Lo atiende", resp or SIN_ASIGNAR,
+                 detalle="" if resp else "Nadie lo tiene todavía",
+                 href=destino, inicial=resp[:1].upper() if resp else "",
+                 alerta=not resp)
+
+
+def _fila_seguimiento(abierta):
+    """El seguimiento de hoy es la SEÑAL de Linear, que está prendida o
+    apagada y nada más: la fecha y la nota del lienzo no existen todavía
+    como dato en ningún lado, así que la fila lo dice y la acción va
+    apagada en vez de fingir un vencimiento."""
+    disponibles = {s["nombre"] for s in abierta.get("senales") or []}
+    if linear_leads.LABEL_SEGUIMIENTO not in disponibles:
+        return _fila("seguimiento", "Seguimiento",
+                     "La etiqueta «Seguimiento» no existe en Linear",
+                     detalle="La crea Abraham allá; el código nunca la crea.",
+                     todavia_no="Todavía no")
+    prendida = any(s["nombre"] == linear_leads.LABEL_SEGUIMIENTO and s["prendida"]
+                   for s in abierta["senales"])
+    return _fila("seguimiento", "Seguimiento",
+                 "Marcado para seguir" if prendida else "Sin seguimiento",
+                 detalle="La fecha y la nota todavía no existen como dato.",
+                 todavia_no="Todavía no")
+
+
+def _fila_ultimo_mensaje(abierta, mensajes, nombre_cliente):
+    """Lo último que se dijo en el chat, tal cual lo tiene Twenty. Twenty
+    caído no es «sin mensajes»: son cosas distintas y la fila las
+    distingue (Nº12 del lote, 2/10/2026)."""
+    if abierta.get("hilo_error"):
+        return _fila("mensaje", "Último mensaje", abierta["hilo_error"],
+                     href="#dc-conversacion")
+    ultimo = max(mensajes, key=lambda m: m.get("fecha") or "") if mensajes else None
+    if ultimo is None:
+        return _fila("mensaje", "Último mensaje", "Sin mensajes todavía",
+                     href="#dc-conversacion")
+    if ultimo.get("salida"):
+        quien = (ultimo.get("autor") or "").strip() or SIN_AUTOR
+    else:
+        quien = nombre_cliente or "Cliente"
+    cuando = (ultimo.get("cuando") or "").strip()
+    return _fila("mensaje", "Último mensaje",
+                 "«" + _recortado(ultimo.get("texto") or "") + "»",
+                 detalle=quien + (" · " + cuando if cuando else ""),
+                 href="#dc-conversacion")
+
+
+def _fila_cotizacion(cot, ve_plata):
+    """La cotización conectada: el número de la orden REAL y su plata.
+    Sin orden real no hay monto; con Odoo caído se dice, en vez de pasar
+    por «sin cotización»."""
+    if not cot.get("ok"):
+        return _fila("cotizacion", "Cotización", "No se pudo leer Odoo",
+                     detalle=cot.get("error") or "", href="#dc-cotizacion")
+    plata = cot.get("plata")
+    if plata:
+        if ve_plata:
+            detalle = (f"Total {_dinero(plata['total'])} · saldo "
+                       f"{_dinero(plata['saldo'])}")
+        else:
+            detalle = LEYENDA_SIN_PLATA
+        return _fila("cotizacion", "Cotización", plata["orden"],
+                     detalle=detalle, href="#dc-cotizacion")
+    conectadas = cot.get("ordenes") or []
+    if conectadas:
+        return _fila("cotizacion", "Cotización",
+                     f"{len(conectadas)} conectada"
+                     + ("s" if len(conectadas) != 1 else ""),
+                     detalle="Ninguna marcada como la real.",
+                     href="#dc-cotizacion", alerta=True)
+    return _fila("cotizacion", "Cotización", "Sin cotización conectada",
+                 href="#dc-cotizacion")
+
+
+def _fila_historial(abierta, cuantos, ultimo):
+    """El historial del lead son los comentarios de su issue: cada
+    corrección manual, cada cotización conectada y cada nota firmada deja
+    uno. La fila lleva a Linear, que es donde viven de verdad; sin URL
+    (modo muestra) cae en las notas internas de esta misma ficha."""
+    if not cuantos:
+        return _fila("historial", "Historial", "Sin movimientos anotados",
+                     href=abierta.get("url") or "#dc-notas")
+    return _fila("historial", "Historial",
+                 f"{cuantos} movimiento" + ("s" if cuantos != 1 else ""),
+                 detalle=("Último: " + ultimo) if ultimo else "",
+                 href=abierta.get("url") or "#dc-notas")
+
+
+def _monto_del_panel(cot, ve_plata):
+    """El número grande de arriba del panel y su renglón de abajo.
+
+    `{"total": …, "nota": …}` con el total de la orden REAL, o
+    `{"total": None, "nota": …}` cuando no hay plata que mostrar — y la
+    nota dice POR QUÉ: sin cotización conectada, Odoo caído, o plata que
+    esta sesión no ve. Nunca un cero.
+    """
+    if not ve_plata:
+        return {"total": None, "nota": LEYENDA_SIN_PLATA}
+    if not cot.get("ok"):
+        return {"total": None,
+                "nota": "No se pudo leer Odoo: " + (cot.get("error") or "")}
+    plata = cot.get("plata")
+    if not plata:
+        return {"total": None,
+                "nota": "Sin cotización conectada: todavía no hay monto."}
+    if plata["saldo"] <= 0:
+        cobro = "pagado completo"
+    elif plata["pagado"]:
+        cobro = "debe " + _dinero(plata["saldo"])
+    else:
+        cobro = "sin pago todavía"
+    return {"total": plata["total"], "nota": plata["orden"] + " · " + cobro}
+
+
+def ficha(ref, buscar_cotizacion="", vista="", ve_plata=True):
     """El lead con su conversación, sus notas y su cotización conectada,
     para el panel de la derecha.
 
@@ -937,6 +1191,10 @@ def ficha(ref, buscar_cotizacion=""):
     dice que no hay chat, en vez de quedarse en blanco. Lo mismo con Odoo
     (`_cotizacion_de`): "no se pudo leer Odoo" nunca se confunde con "sin
     cotización conectada".
+
+    `vista` solo arma los enlaces de vuelta; `ve_plata` lo decide
+    `puede_ver_plata()` en la ruta — con él en False el panel pinta todo
+    menos los números de dinero, y dice quién los ve.
     """
     lead = linear_leads.uno(ref)
     if lead is None:
@@ -970,7 +1228,74 @@ def ficha(ref, buscar_cotizacion=""):
     # El teléfono de Twenty completa al del issue cuando allá no quedó.
     if not abierta.get("celular") and ficha_twenty.get("telefono"):
         abierta["celular"] = ficha_twenty["telefono"]
+
+    # El monto grande de arriba y las cinco filas (lienzo de Roles). Todo
+    # sale de lo que ya se leyó acá: ni una consulta más.
+    abierta["ve_plata"] = bool(ve_plata)
+    # `monto_panel` y el `monto` de la tarjeta son cosas distintas a
+    # propósito: el de la tarjeta es la plata entera de la orden real (o
+    # None), y este es lo que se PINTA arriba del panel, con su renglón
+    # que explica por qué cuando no hay número.
+    abierta["monto_panel"] = _monto_del_panel(abierta["cot"], ve_plata)
+    historial = (sucesos or []) + (internas or [])
+    ultimo_apunte = max((n.get("cuando") or "" for n in historial), default="")
+    abierta["filas"] = [
+        _fila_atiende(abierta, vista),
+        _fila_seguimiento(abierta),
+        _fila_ultimo_mensaje(abierta, mensajes, lead.get("nombre") or ""),
+        _fila_cotizacion(abierta["cot"], ve_plata),
+        _fila_historial(abierta, len(historial), ultimo_apunte),
+    ]
     return abierta
+
+
+# ---------------------------------------------------------------------------
+# El cuadro de asignar / reasignar (BLOQUE 43, lienzo de Roles
+# «crm-asignar»). Es una PANTALLA, no una escritura: el botón «Mandar
+# petición» va apagado porque las peticiones —y con ellas el «no queda
+# asignado hasta que la persona acepte»— llegan en el punto 2 del plan de
+# roles. Lo que sí reparte HOY sigue donde estaba: «Se lo doy a» dentro de
+# «Más opciones», que cambia la etiqueta `Resp:` de una.
+#
+# Nadie viene premarcado, a propósito (pedido del lienzo): una opción
+# preseleccionada es una decisión que el cuadro tomó por quien reparte.
+# ---------------------------------------------------------------------------
+
+def cuadro_asignar(abierta, leads=None):
+    """Lo que el cuadro necesita, ya decidido: a quién se le puede mandar,
+    con cuánto trabajo abierto lleva encima cada quien.
+
+    El conteo de «abiertos» es REAL: los leads vivos que hoy tienen esa
+    etiqueta `Resp:` en Linear. Lo que el lienzo llama «2 sin aceptar» no
+    se pinta: las peticiones no existen todavía y un número inventado ahí
+    sería el peor de todos — el que decide a quién cargarle un trabajo.
+    """
+    leads = _vivos(leads if leads is not None else linear_leads.listar())
+    abiertos = {}
+    for lead in leads:
+        nombre = lead.get("resp") or ""
+        if nombre:
+            abiertos[nombre] = abiertos.get(nombre, 0) + 1
+    actual = (abierta or {}).get("resp") or ""
+    gente = []
+    for nombre in linear_leads.responsables():
+        cuantos = abiertos.get(nombre, 0)
+        gente.append({
+            "nombre": nombre,
+            "inicial": nombre[:1].upper(),
+            "actual": nombre == actual,
+            "abiertos": cuantos,
+            "detalle": (f"{cuantos} lead" + ("s" if cuantos != 1 else "")
+                        + " abierto" + ("s" if cuantos != 1 else "")),
+        })
+    return {
+        "lead": abierta,
+        "gente": gente,
+        "reasigna": bool(actual),
+        # El rótulo del botón apagado dice qué sería: mandar la petición
+        # por primera vez, o reasignar lo que ya tiene dueño.
+        "accion": "Reasignar" if actual else "Mandar petición",
+    }
 
 
 # ---------------------------------------------------------------------------

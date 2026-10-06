@@ -100,6 +100,13 @@ class OdooCotLead:
             elif op == "!=":
                 if actual == valor:
                     return False
+            elif op == "in":
+                # El dominio de `plata_de_varios` (BLOQUE 43): todos los
+                # PP del tablero en UNA consulta. Se compara sin distinguir
+                # mayúsculas, igual que el "=ilike" de una sola orden.
+                vistos = {str(v or "").strip().lower() for v in (valor or [])}
+                if str(actual or "").strip().lower() not in vistos:
+                    return False
             else:
                 raise NotImplementedError(f"operador no soportado en la prueba: {op}")
         return True
