@@ -35,6 +35,7 @@ Qué es — y qué no:
   ni siquiera local.
 """
 
+import os
 import re
 import time
 
@@ -161,11 +162,25 @@ def datos_odoo():
     return {"partners": partners, "plata": plata, "ok": True, "aviso": ""}
 
 
+def twenty_conectado():
+    """¿Twenty se puede leer DE VERDAD?
+
+    `crm_twenty.twenty_configurado()` solo mira que la variable EXISTA, y
+    en el 8095 existe con el valor NEUTRALIZADO: arranca con «CLAVE», que
+    es la convención de la casa para «esto no es una key». Medido contra
+    el proceso del 8095 (6/10/2026): sin esta distinción la pantalla
+    decía que Twenty estaba conectado justo donde no lo está."""
+    if not crm_twenty.twenty_configurado():
+        return False
+    valor = (os.environ.get("TWENTY_API_KEY") or "").strip()
+    return not valor.upper().startswith("CLAVE")
+
+
 def aviso_twenty():
     """El lado Twenty, dicho con la verdad: en el 8095 el token está
-    neutralizado (no conectado); conectado, la lectura llega con su
-    propia parte. Nunca una columna vacía que mienta."""
-    if not crm_twenty.twenty_configurado():
+    neutralizado (no conectado); conectado de verdad, la lectura llega
+    con su propia parte. Nunca una columna vacía que mienta."""
+    if not twenty_conectado():
         return AVISO_TWENTY_PRUEBAS
     return AVISO_TWENTY_LUEGO
 

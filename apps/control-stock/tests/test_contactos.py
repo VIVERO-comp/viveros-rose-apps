@@ -142,11 +142,25 @@ def test_abre_sin_datos_y_dice_los_huecos(cliente):
     assert contactos.VACIO_LISTA in r.text
 
 
-def test_con_twenty_configurado_dice_que_llega_despues(cliente, monkeypatch):
-    monkeypatch.setenv("TWENTY_API_KEY", "clave-de-prueba")
+def test_con_twenty_conectado_de_verdad_dice_que_llega_despues(
+        cliente, monkeypatch):
+    monkeypatch.setenv("TWENTY_API_KEY", "ey-una-key-de-verdad")
     texto = cliente.get("/contactos").text
     assert contactos.AVISO_TWENTY_LUEGO in texto
     assert contactos.AVISO_TWENTY_PRUEBAS not in texto
+
+
+def test_un_token_neutralizado_cuenta_COMO_AUSENTE(cliente, monkeypatch):
+    """El defecto cazado midiendo contra el proceso del 8095 (6/10/2026):
+    allá TWENTY_API_KEY EXISTE pero arranca con «CLAVE» (la convención de
+    la casa para «esto no es una key»), así que `twenty_configurado()`
+    —que solo mira que la variable exista— decía que sí. La pantalla
+    tiene que decir el hueco, no fingir conexión."""
+    monkeypatch.setenv("TWENTY_API_KEY", "CLAVE-neutralizada-de-pruebas")
+    assert contactos.twenty_conectado() is False
+    texto = cliente.get("/contactos").text
+    assert contactos.AVISO_TWENTY_PRUEBAS in texto
+    assert contactos.AVISO_TWENTY_LUEGO not in texto
 
 
 def test_con_odoo_pinta_los_partners(cliente, con_odoo_qa):
