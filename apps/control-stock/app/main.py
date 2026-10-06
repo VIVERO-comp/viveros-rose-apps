@@ -2988,7 +2988,8 @@ async def pagos_por_confirmar_confirmar(request: Request):
             + quote("Esa venta ya no está en la cola (recarga)."),
             status_code=303)
     codigo = pagos_confirmar.confirmar(
-        fila["orden_id"], fila["orden"], fila["cliente"], fila["pagado"],
+        fila["orden_id"], fila["orden"], fila["cliente"],
+        fila["monto_nuevo"],  # la plata de ESTE hecho, no el total
         form.get("evidencia") or "", form.get("nota") or "",
         usuario, nombre, completo=fila["completo"])
     if codigo:

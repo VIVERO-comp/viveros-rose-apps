@@ -110,24 +110,51 @@ def historial():
     return [dict(f) for f in filas]
 
 
+def sumas_confirmadas():
+    """{orden_id: suma de los montos ya confirmados de esa orden}. Un
+    monto NULL suma 0 a propósito — el lado conservador: ante la duda la
+    orden puede VOLVER a la cola, nunca desaparecer para siempre."""
+    with _db() as con:
+        filas = con.execute(
+            "SELECT orden_id, COALESCE(SUM(monto), 0) AS suma"
+            " FROM pago_confirmado GROUP BY orden_id").fetchall()
+    return {int(f["orden_id"]): round(float(f["suma"]), 2) for f in filas}
+
+
 def cola():
     """(pendientes, huecos): las ventas del informe con plata que nadie
     confirmó que llegó — pagado real en Odoo sin confirmación humana, o
     clase F (pago informado fuera de Odoo, a verificar). Nada se
     inventa: si el informe trae huecos, viajan tal cual y la pantalla
-    los dice."""
+    los dice.
+
+    **Una orden ya confirmada RE-ENTRA cuando llega plata nueva** (fix
+    del review, 5/10): el `orden_id in ya` viejo la excluía para
+    siempre, así que el saldo de un evento con depósito confirmado
+    nunca volvía a la cola y el pago_completo era imposible. La regla:
+    re-entra cuando lo pagado según Odoo SUPERA la suma de montos ya
+    confirmados; la fila lo dice (`aviso_reentrada`) y trae en
+    `monto_nuevo` solo la plata nueva — confirmar registra OTRO hecho,
+    nunca pisa el anterior."""
     informe = _informe()
-    ya = confirmados()
+    ya = sumas_confirmadas()
     pendientes = []
     for venta in informe.get("ventas") or []:
         clase = (venta.get("clase") or "").strip().upper()
         if clase == "CANCELADA":
             continue
-        if venta.get("orden_id") in ya:
-            continue
         pagado = float(venta.get("pagado") or 0)
-        if pagado <= _CENTAVO and clase != "F":
-            continue
+        previo = ya.get(venta.get("orden_id"))
+        if previo is None:
+            if pagado <= _CENTAVO and clase != "F":
+                continue
+            nuevo, aviso = pagado, ""
+        else:
+            if pagado <= previo + _CENTAVO:
+                continue  # nada nuevo que confirmar
+            nuevo = pagado - previo
+            aviso = (f"abono previo confirmado: ${previo:,.2f} — llegó "
+                     f"plata nueva (${nuevo:,.2f} por confirmar)")
         debe = float(venta.get("debe") or 0)
         pendientes.append({
             "orden_id": venta.get("orden_id"),
@@ -144,6 +171,11 @@ def cola():
             # ¿El saldo quedó en 0? Decide si la confirmación deja la
             # venta lista para cerrar (completo) o es un abono.
             "completo": debe <= _CENTAVO and pagado > _CENTAVO,
+            # La plata de ESTE hecho (lo nuevo): es lo que se confirma.
+            "monto_nuevo": round(nuevo, 2),
+            "confirmado_previo": round(previo or 0.0, 2),
+            "reentrada": previo is not None,
+            "aviso_reentrada": aviso,
         })
     return pendientes, list(informe.get("huecos") or [])
 

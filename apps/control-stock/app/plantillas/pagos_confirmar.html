@@ -57,6 +57,9 @@
     <p class="pc-motivo">{{ p.motivo }}
       {% if p.fuera_de_odoo %}<span class="pc-fuera">verificar: Odoo no tiene la plata</span>{% endif %}
     </p>
+    {% if p.reentrada %}
+    <p class="pc-motivo"><span class="pc-fuera">{{ p.aviso_reentrada }}</span></p>
+    {% endif %}
     {% if puedo_confirmar %}
     <form class="pc-form" method="post" action="/pagos-por-confirmar/confirmar">
       <input type="hidden" name="orden_id" value="{{ p.orden_id }}">
