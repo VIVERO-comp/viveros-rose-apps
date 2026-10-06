@@ -75,7 +75,13 @@
               aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
-      <h3>Control</h3>
+      {# El lienzo de ROLES (BLOQUE 43) titula esta pantalla «CRM», con la
+         marca «Todos» al lado para el Director: lo que ve es el tablero
+         de TODO el equipo, no el suyo. Manda sobre la regla vieja de
+         «la pestaña se llama Control» para lo que este lienzo muestra;
+         el menú lateral sigue congelado por otra tanda y dice Control. #}
+      <h3>CRM</h3>
+      {% if alc.admin %}<span class="dc-marca">Todos</span>{% endif %}
       {# El segmento de vistas: el dueño tiene las dos, el empleado solo
          "Por estado" — y no es que se le esconda el botón, es que el
          servidor no le arma la otra. #}
@@ -130,6 +136,11 @@
           {# El conteo va pegado al título (lienzo 05), no empujado al borde. #}
           <b>{{ col.titulo }}</b>
           <span class="ret-cuenta">{{ col.leads|length }}</span>
+          {# El total de la columna (lienzo de Roles), a la derecha. Solo
+             lo arma Python para quien ve TODA la plata, y solo si hay al
+             menos un monto conocido: un $0.00 diría «no hay plata»
+             cuando lo cierto sería «no se sabe». #}
+          {% if col.total_texto %}<span class="ret-total num">{{ col.total_texto }}</span>{% endif %}
         </div>
         <div class="ret-lista" data-columna="{{ col.clave }}"
              data-destino="{{ '/control/responsable' if vista == 'empleado' else '/control/estado' }}"
@@ -158,13 +169,16 @@
                 <b>{{ l.nombre }}</b>
                 <span class="ctl-acts">
                   {% if l.te_toca %}<span class="ctl-alerta" title="Te toca: hay un cliente esperando"></span>{% endif %}
-                  {# El responsable como inicial en círculo (lienzo 05), solo
-                     en las columnas vivas de «Por estado»: en «Por empleado»
-                     la columna YA es el responsable, y un cerrado no se
-                     reparte. Sin responsable no hay círculo — el chip «Sin
-                     asignar» de abajo lo sigue diciendo. #}
-                  {% if vista == 'estado' and not l.cerrado and l.resp %}
-                  <span class="ctl-av" role="img" aria-label="Responsable: {{ l.resp }}" title="Responsable: {{ l.resp }}">{{ l.resp[:1] }}</span>
+                  {# El rincón derecho de la primera fila es la PLATA (lienzo
+                     de Roles): el total de la orden real conectada. Sin
+                     monto —o sin permiso de verlo— ahí va el «hace», que es
+                     lo que el lienzo pone en las tarjetas sin plata. El
+                     número lo compone Python (control._poner_montos) y solo
+                     para quien puede ver la plata de ESE lead. #}
+                  {% if l.monto_texto %}
+                  <b class="ctl-monto num">{{ l.monto_texto }}</b>
+                  {% else %}
+                  <span class="ctl-hace {{ 'hace-alerta' if l.hace_alerta }}">{{ l.hace }}</span>
                   {% endif %}
                 </span>
               </span>
@@ -188,13 +202,20 @@
                «💬» solo. El chip de estado se queda únicamente en «Por
                empleado», donde una columna mezcla estados; el de pago y
                el de motivo siguen — son información, no decoración. #}
+            {# La fila de abajo del lienzo de Roles: el COLOR DEL INTERÉS a
+               la izquierda y LA PERSONA a la derecha. (Antes la persona
+               vivía arriba; el rincón de arriba ahora es la plata.) #}
             <span class="t-sub ctl-pie-tarjeta">
               {% if vista != 'estado' %}<span class="chip-est" style="{{ l.estado_chip }}">{{ l.estado_titulo }}</span>{% endif %}
               {# Diseño Orquesta: el interés vuelve como chip pastel con el
                  color de su familia en paleta.json (antes era texto tenue).
                  El estilo lo compone Python (l.interes_chip). #}
               {% if l.interes %}<span class="dc-chip-interes" style="{{ l.interes_chip }}">{{ l.interes }}</span>{% endif %}
-              <span class="{{ 'hace-alerta' if l.hace_alerta }}">{{ l.hace }}</span>
+              {# Con monto arriba, el «hace» baja acá: el lienzo lo cambia
+                 por la plata, pero perderlo le quitaría al dueño el
+                 resaltado de los 5 días (T2, 29/09/2026). No se repite
+                 nunca: o está arriba, o está acá. #}
+              {% if l.monto_texto %}<span class="{{ 'hace-alerta' if l.hace_alerta }}">{{ l.hace }}</span>{% endif %}
               {% if l.pago %}<span class="etq-pago{{ ' dc-' + l.pago_clase if l.pago_clase }}">{{ l.pago }}</span>{% endif %}
               {% if l.motivo %}<span class="chip-est" style="{{ l.motivo_chip }}">{{ l.motivo }}</span>{% endif %}
               {# Ganado y Perdido no se reparten (regla ya escrita): el chip
@@ -202,13 +223,27 @@
                  columnas vivas se queda — le dice al dueño a quién falta
                  repartir, y desde que todos ven todo (28/09/2026) también
                  le dice al empleado cuáles leads son suyos para mover. #}
-              {# Con responsable, el que habla es el círculo de arriba
-                 (lienzo 05); el chip solo queda para el hueco «Sin
-                 asignar», que al dueño le marca qué falta repartir. #}
+              {# El hueco «Sin asignar» se sigue diciendo con todas sus
+                 letras: es lo que al dueño le marca qué falta repartir. #}
               {% if vista == 'estado' and not l.cerrado and not l.resp %}
               <span class="chip-est chip-nadie">{{ l.resp_titulo }}</span>
               {% endif %}
               {% if l.wa %}<a class="ctl-wa" draggable="false" href="{{ l.wa }}" target="_blank" rel="noopener" aria-label="Abrir chat">💬</a>{% endif %}
+              {# LA PERSONA, en el rincón derecho de la fila de abajo
+                 (lienzo de Roles): la inicial en círculo. Solo en las
+                 columnas vivas de «Por estado» — en «Por empleado» la
+                 columna YA es el responsable, y un cerrado no se reparte. #}
+              {% if vista == 'estado' and not l.cerrado and l.resp %}
+              <span class="ctl-av" role="img" aria-label="Responsable: {{ l.resp }}" title="Responsable: {{ l.resp }}">{{ l.resp[:1] }}</span>
+              {% endif %}
+              {# «Asignar» (lienzo de Roles): la puerta al cuadro de
+                 asignar desde la tarjeta sin dueño. Repartir es cosa del
+                 dueño, así que solo él lo ve — y es un enlace GET a una
+                 capa, no una escritura. #}
+              {% if vista == 'estado' and not l.cerrado and not l.resp and alc.admin %}
+              <a class="ctl-asignar" draggable="false"
+                 href="/control?vista={{ vista }}&abrir={{ l.ref | urlencode }}&asignar=1">Asignar</a>
+              {% endif %}
             </span>
             {# «Ya llegó» (29/09/2026): el producto llegó — a Hablando con
                «Te toca» puesto, sin abrir la ficha. Solo quien puede

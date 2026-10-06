@@ -127,6 +127,16 @@
 
 @media (min-width:861px), (max-width:767.98px){
 
+  /* La marca «Todos» del lienzo de Roles, al lado del título: una
+     píldora gris que dice de quién es el tablero que se está viendo.
+     En las dos caras — en el teléfono el título ya ocupa su renglón
+     entero y la marca cae debajo, que es donde se lee bien. */
+  .dc-marca{
+    display:inline-flex;align-items:center;height:26px;padding:0 10px;
+    border-radius:13px;background:var(--d-gris-activo);color:#3F3F3F;
+    font-size:12.5px;font-weight:600;flex-shrink:0;
+  }
+
   /* ---- los chips de la tarjeta, a la medida EXACTA del lienzo:
      22px de alto, radio 11, letra 12 (.chip del canon). ---- */
   .dc-chip-interes{
@@ -147,17 +157,38 @@
     font-size:12px;font-weight:600;white-space:nowrap;margin-right:0;
   }
   /* El rincón derecho de la primera fila (lienzo .acts): el 🔴 de «Te
-     toca» y el círculo del responsable, juntos y pegados al borde. El
-     margin-left:auto del punto (calendario.css) se apaga adentro. */
+     toca» y, con el lienzo de Roles, la PLATA (o el «hace» cuando no
+     hay monto). El margin-left:auto del punto (calendario.css) se apaga
+     adentro. */
   .ctl-acts{margin-left:auto;display:inline-flex;align-items:center;gap:6px;flex-shrink:0}
   .ctl-acts .ctl-alerta{margin-left:0}
-  /* La inicial del responsable en círculo (lienzo .av.sm: 22px). */
+  /* El monto de la tarjeta: el `.amt` del lienzo de Roles — negrita, a
+     la misma altura del nombre y sin encogerse nunca. */
+  .ctl-monto{font-size:14px;font-weight:700;color:var(--d-tinta);white-space:nowrap}
+  .ctl-hace{font-size:12.5px;color:var(--d-suave);white-space:nowrap}
+  /* La inicial del responsable en círculo (lienzo .av.sm: 22px). Con el
+     lienzo de Roles baja a la fila de abajo, pegada al borde derecho. */
   .ctl-av{
     width:22px;height:22px;border-radius:50%;
     background:var(--d-gris-activo);color:#3F3F3F;
     display:inline-grid;place-items:center;
     font-size:10.5px;font-weight:700;flex-shrink:0;
+    margin-left:auto;
   }
+  /* «Asignar» en la tarjeta sin dueño: el botón de borde del lienzo
+     (.ob), que acá es un enlace — abre una capa, no escribe nada. */
+  .ctl-asignar{
+    margin-left:auto;height:24px;padding:0 10px;
+    display:inline-flex;align-items:center;flex-shrink:0;
+    border:1px solid var(--d-tinta);border-radius:12px;
+    background:#fff;color:var(--d-tinta);
+    font-size:12px;font-weight:600;text-decoration:none;
+  }
+  /* Con el círculo Y el enlace no puede haber dos `margin-left:auto`
+     peleando: el chip «Sin asignar» y el enlace van juntos. */
+  .ctl-av + .ctl-asignar,.ctl-asignar + .ctl-av{margin-left:6px}
+  /* El total de la columna, a la derecha del encabezado (lienzo .tot). */
+  .ret-total{margin-left:auto;font-size:12.5px;font-weight:600;color:var(--d-tinta)}
   /* Rojo solo para plata que se debe; verde para lo saldado (la clase la
      decide Python: control._clase_pago). */
   .etq-pago.dc-debe{background:var(--d-rojo-fondo);color:var(--d-rojo)}

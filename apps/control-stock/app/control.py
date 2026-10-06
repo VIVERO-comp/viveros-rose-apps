@@ -452,7 +452,18 @@ def _poner_montos(tarjetas, alcance_actual):
         return
     por_lead = cot_lead.plata_de_varios(visibles).get("por_lead") or {}
     for tarjeta in visibles:
-        tarjeta["monto"] = por_lead.get(tarjeta["ref"])
+        plata = por_lead.get(tarjeta["ref"])
+        tarjeta["monto"] = plata
+        # Formateado acá (con la coma de los miles, como el lienzo): el
+        # filtro `dinero` de las plantillas no la pone.
+        tarjeta["monto_texto"] = _dinero(plata["total"]) if plata else ""
+
+
+def _poner_total(columna, alcance_actual):
+    """El total del encabezado de la columna, ya formateado."""
+    total = _total_de_columna(columna["leads"], alcance_actual)
+    columna["total"] = total
+    columna["total_texto"] = _dinero(total) if total is not None else ""
 
 
 def _total_de_columna(leads, alcance_actual):
@@ -488,7 +499,7 @@ def tablero_por_empleado(leads=None, alcance_actual=None):
     for columna in columnas:
         columna["leads"] = _orden_columna(
             [l for l in leads if (l["resp"] or "") == columna["clave"]])
-        columna["total"] = _total_de_columna(columna["leads"], alcance_actual)
+        _poner_total(columna, alcance_actual)
     return columnas
 
 
@@ -512,8 +523,8 @@ def tablero_por_estado(leads=None, alcance_actual=None):
             "color": estado["color"], "chip": estado["chip"],
             "pie": estado["auto"],
             "leads": de_esta,
-            "total": _total_de_columna(de_esta, alcance_actual),
         })
+        _poner_total(columnas[-1], alcance_actual)
         # Solo la columna Recordatorio pinta el motivo (29/09/2026): las
         # demás tarjetas no cambian. Una consulta para toda la columna, y
         # "" cuando el lead llegó movido directo en Linear — la plantilla

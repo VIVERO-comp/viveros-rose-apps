@@ -6,7 +6,9 @@ ficha en el HTML nuevo, para que un retoque de piel futuro no se lleve una
 función por delante sin que nada avise. Reglas de la casa verificadas
 aparte: la pestaña se sigue llamando Control (no CRM), el color del
 interés sale de paleta.json vía Python (nunca un hex en la plantilla), y
-hay UN solo botón negro en la ficha.
+hay UN solo botón negro en la ficha. (Lo del nombre cambió con el lienzo
+de ROLES del BLOQUE 43: ESTA pantalla se titula «CRM»; el programa se
+sigue llamando Control Viverorose.)
 
 Mismo arreglo que tests/test_control.py: modo muestra, `genesis` como
 dueño con AJUSTES_ADMINS.
@@ -41,12 +43,26 @@ def _panel(cuerpo):
 # El tablero: todo lo de hoy sigue en el HTML nuevo
 # ---------------------------------------------------------------------------
 
-def test_la_pestana_sigue_llamandose_control(cliente, de_dueno):
-    # El lienzo la llama «CRM», pero la pestaña NO se renombra (decisión
-    # vigente hasta que Korto diga): el título y el menú dicen Control.
+def test_la_pantalla_se_titula_crm_y_el_programa_sigue_siendo_control(
+        cliente, de_dueno):
+    # El lienzo de PESTAÑAS decía «la pestaña se llama Control»; el de
+    # ROLES (BLOQUE 43) titula ESTA pantalla «CRM», con la marca «Todos»
+    # al lado para el Director. Manda el de Roles para lo que él muestra.
+    # Lo que NO cambió: el programa se sigue llamando Control Viverorose
+    # (la pestaña del navegador y el menú lateral, congelado por otra
+    # tanda, lo siguen diciendo).
     cuerpo = cliente.get("/control", params={"vista": "estado"}).text
-    assert "<h3>Control</h3>" in cuerpo
+    assert "<h3>CRM</h3>" in cuerpo
+    assert '<span class="dc-marca">Todos</span>' in cuerpo
     assert "<title>Control — Control Viverorose</title>" in cuerpo
+
+
+def test_la_marca_todos_es_solo_del_director(cliente):
+    # Sin AJUSTES_ADMINS la sesión no es dueña: ve el tablero completo (lo
+    # de siempre), pero la marca «Todos» es del Director.
+    cuerpo = cliente.get("/control", params={"vista": "estado"}).text
+    assert "<h3>CRM</h3>" in cuerpo
+    assert "dc-marca" not in cuerpo
 
 
 def test_la_piel_nueva_se_carga_despues_de_la_base(cliente, de_dueno):
