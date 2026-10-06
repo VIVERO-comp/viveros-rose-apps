@@ -1,0 +1,189 @@
+/* Diseño Orquesta — la piel de la pantalla PROVEEDORES (pantalla 14 de
+   docs/diseno-orquesta/). Solo el ASPECTO: ningún botón cambia de
+   función, ninguna ruta cambia; el DOM es el de proveedores.html con la
+   clase `pvd` en el <body> como interruptor.
+
+   Se carga DESPUÉS de calendario.css y de diseno-base.css: los selectores
+   van todos bajo `body.pvd` (el prefijo propio de esta pantalla), así que
+   no le cambian nada a Compras (que tiene su propia piel bajo body.cpd),
+   a Control ni al Calendario, que comparten los mismos CSS.
+
+   Los tokens neutros vienen de diseno-base.css (--d-*). El único gris del
+   lienzo sin token va literal, como en las otras pieles: #E4E4E4 (borde
+   de tarjeta/miniatura). Evaluando (ámbar) y los tintes que los tokens no
+   tienen conservan su color de calendario.css — acá solo cambia la forma.
+
+   Esta pantalla sigue SIN botón negro, a propósito (la decisión vieja de
+   la plantilla): los dos negros del lienzo —«+ Nuevo proveedor» y «ANOTAR
+   COMPRA»— son funciones que hoy no existen y una piel no las inventa. */
+
+/* ==================== la barra de arriba ============================== */
+
+body.pvd .tablero{padding:18px 28px 24px;gap:12px}
+body.pvd .barra{border-bottom:0;padding-bottom:2px;gap:12px}
+body.pvd .barra h3{font-size:22px;font-weight:600;letter-spacing:-.01em}
+body.pvd .barra .hamb{
+  width:44px;height:44px;justify-content:center;padding:0;
+  border:1px solid var(--d-borde-boton);border-radius:var(--d-radio-boton);
+  background:#fff;
+}
+/* El segmento Tablero · Proveedores: la píldora partida del lienzo
+   (misma receta que la piel de Compras — las dos caras de la pestaña
+   tienen que verse hermanas). */
+body.pvd .segmento{
+  background:#fff;border:1px solid var(--d-borde-campo);
+  border-radius:18px;padding:0;gap:0;overflow:hidden;
+}
+body.pvd .segmento a{
+  height:36px;display:inline-flex;align-items:center;padding:0 16px;
+  font-size:14px;font-weight:400;color:var(--d-tinta);border-radius:0;
+}
+body.pvd .segmento a.on{
+  background:var(--d-gris-activo);color:var(--d-tinta);
+  font-weight:700;box-shadow:none;
+}
+body.pvd .barra .tenue{font-size:12.5px;color:var(--d-suave)}
+body.pvd .pie-nota{font-size:12.5px;color:var(--d-suave)}
+body.pvd .solo-lectura,body.pvd .aviso-ok,body.pvd .franja{
+  border-radius:var(--d-radio-pil);
+}
+
+/* Los botones grises de la pantalla (Preferido, Guardar, Quitar, Buscar,
+   + Agregar): borde y radio del diseño. Ninguno pasa a negro. */
+body.pvd .btn{
+  background:#fff;border:1px solid var(--d-borde-campo);
+  border-radius:var(--d-radio-boton);color:var(--d-tinta);
+}
+body.pvd .btn:hover{background:var(--d-gris-activo)}
+
+/* ==================== las tarjetas de proveedor ======================= */
+
+/* El avatar con iniciales del lienzo (lo calcula proveedores.iniciales). */
+body.pvd .pvd-av{
+  width:42px;height:42px;border-radius:50%;flex-shrink:0;
+  border:1px solid var(--d-borde-campo);background:#fff;
+  display:grid;place-items:center;
+  font-size:14px;font-weight:700;color:var(--d-tinta);
+}
+body.pvd .prov-grid{
+  grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;
+}
+body.pvd .prov-tarjeta{
+  background:#fff;border:1px solid #E4E4E4;
+  border-radius:var(--d-radio-tarjeta);padding:14px 16px;gap:7px;
+}
+body.pvd .prov-cab{align-items:center;gap:10px}
+body.pvd .prov-cab b{flex:1;min-width:0;font-size:15px;font-weight:700;line-height:1.3}
+body.pvd .prov-contacto{font-size:12.5px;color:var(--d-suave)}
+
+/* Los chips de estado: pastillas de 22px. Preferido (la única marca a
+   mano) en tinta; Activo y En pausa con las familias verde/roja de los
+   tokens; Evaluando conserva su ámbar (familia sin token — reportada). */
+body.pvd .chip-est{
+  display:inline-flex;align-items:center;height:22px;padding:0 8px;
+  border:0;border-radius:11px;font-size:11.5px;font-weight:600;line-height:1;
+}
+body.pvd .prov-badge.prov-preferido{background:var(--d-tinta);color:#fff}
+body.pvd .prov-badge.prov-activo{background:var(--d-verde-fondo);color:var(--d-verde)}
+body.pvd .prov-badge.prov-pausa{background:var(--d-rojo-fondo);color:var(--d-rojo)}
+body.pvd .prov-badge.prov-prospecto{background:var(--d-gris-activo);color:var(--d-suave)}
+
+/* Los renglones Este año / Última compra / A tiempo / Dañado: la clave
+   gris a la izquierda y el valor a la derecha, sin rayas (el mismo
+   lenguaje que el panel de Compras). Vale para la tarjeta y el panel. */
+body.pvd .dato{
+  display:flex;justify-content:space-between;align-items:baseline;gap:16px;
+  border-bottom:0;padding:3px 0;font-size:13.5px;
+}
+body.pvd .dato b{
+  font-size:13px;font-weight:400;color:var(--d-suave);
+  text-transform:none;letter-spacing:0;flex-shrink:0;
+}
+body.pvd .dato span{text-align:right;min-width:0}
+
+/* «Ver productos y precio →»: enlace subrayado en tinta, como .lnk. */
+body.pvd .prov-abrir{
+  font-size:13px;font-weight:600;color:var(--d-tinta);
+  text-decoration:underline;text-underline-offset:2px;
+}
+
+/* ==================== el proveedor abierto ============================ */
+
+body.pvd .telon{background:rgba(17,17,17,.35)}
+body.pvd .panel-der{
+  width:min(560px,94vw);padding:20px 24px;gap:12px;
+  border-left:1px solid var(--d-borde);box-shadow:none;
+}
+body.pvd .panel-der .cab-panel{
+  align-items:center;gap:14px;
+  top:-20px;margin:-20px -24px 0;padding:20px 24px 12px;
+  box-shadow:0 8px 10px -10px rgba(17,17,17,.3);
+}
+body.pvd .panel-der h4{font-size:20px;font-weight:700;line-height:1.2}
+body.pvd .pvd-av-panel{width:52px;height:52px;font-size:17px}
+/* La X del panel: el mismo enlace «Cerrar» de siempre, como botón
+   cuadrado de 36px (patrón cpd-x de Compras). */
+body.pvd .pvd-x{
+  display:grid;place-items:center;width:36px;height:36px;flex:0 0 auto;
+  margin-left:auto;padding:0;font-size:0;
+  border:1px solid var(--d-borde-boton);border-radius:var(--d-radio-boton);
+  background:#fff;color:var(--d-tinta);text-decoration:none;
+}
+body.pvd .pvd-x:hover{background:var(--d-gris-activo)}
+
+/* Los títulos de sección (Lo que le compramos, Agregar un producto):
+   mayúscula chica con su raya arriba, como .sec del lienzo. */
+body.pvd .panel-der .campo-caja{gap:8px}
+body.pvd .panel-der .campo-caja > label{
+  font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--d-suave);border-top:1px solid var(--d-borde);padding-top:12px;
+}
+body.pvd .cmp-tabla{font-size:13px}
+body.pvd .cmp-tabla td{padding:6px 2px}
+body.pvd .prov-lo-llama{color:var(--d-suave)}
+body.pvd .cmp-tabla .cmp-orden{color:var(--d-suave)}
+body.pvd .panel-der .err{font-size:12.5px}
+
+/* Los campos donde se escribe (precio, mínimo, cómo le llama, su código,
+   el buscador, los días): borde y radio del diseño, foco en tinta. */
+body.pvd input.campo,body.pvd select.sel,body.pvd textarea.campo{
+  border-color:var(--d-borde-campo);border-radius:var(--d-radio-boton);
+  color:var(--d-tinta);
+}
+body.pvd input.campo:focus,body.pvd select.sel:focus,
+body.pvd textarea.campo:focus{border-color:var(--d-tinta)}
+
+/* ==================== el teléfono ===================================== */
+
+@media (max-width:767.98px){
+  /* Campos de escritura a 16px SIEMPRE (regla de la tanda: así iOS no
+     hace zoom al enfocar). */
+  body.pvd input.campo,body.pvd select.sel,body.pvd textarea.campo{
+    font-size:16px;padding:12px;
+  }
+  body.pvd input.campo.cmp-mini{width:76px;padding:12px 8px}
+
+  /* El segmento del teléfono: píldoras sueltas de 40px, la activa con el
+     borde negro de 2px (misma receta que la piel de Compras). */
+  body.pvd .segmento.seg-movil{
+    background:none;border:0;border-radius:0;padding:0;gap:8px;
+    overflow:visible;justify-content:flex-start;
+  }
+  body.pvd .segmento.seg-movil a{
+    flex:0 1 auto;height:40px;display:inline-flex;align-items:center;
+    justify-content:center;padding:0 13px;font-size:14px;
+    border:1px solid var(--d-borde-campo);border-radius:20px;
+    background:#fff;color:var(--d-tinta);box-shadow:none;
+  }
+  body.pvd .segmento.seg-movil a.on{
+    border:2px solid var(--d-tinta);font-weight:700;background:#fff;
+  }
+
+  /* Las tarjetas a una columna, y el panel a pantalla completa con la X
+     de 44px para el dedo (pantalla 56 del lienzo no existe para
+     Proveedores: se sigue la receta de las compras abiertas). */
+  body.pvd .prov-grid{grid-template-columns:1fr}
+  body.pvd .panel-der{width:100%;padding:16px;gap:12px}
+  body.pvd .panel-der .cab-panel{top:-16px;margin:-16px -16px 0;padding:16px 16px 10px}
+  body.pvd .pvd-x{width:44px;height:44px;border-radius:var(--d-radio-pil)}
+}

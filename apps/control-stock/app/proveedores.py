@@ -260,6 +260,16 @@ _SIN_COMPRAS = {"compras_totales": 0, "ultima_compra": "",
                 "compras_ano": 0, "total_ano": 0.0}
 
 
+def iniciales(nombre):
+    """Las dos letras del avatar de la tarjeta (diseño Orquesta, pantalla
+    14): la inicial de las dos primeras palabras que empiecen con letra.
+    Solo presentación — se calcula acá y no en la plantilla (regla 10).
+    Sin ninguna letra («6204-5511», vacío) sale «?», nunca un invento."""
+    letras = [palabra[0].upper() for palabra in (nombre or "").split()
+              if palabra[:1].isalpha()]
+    return "".join(letras[:2]) or "?"
+
+
 def _ficha(proveedor, agregado, preferido):
     """El proveedor listo para la tarjeta: lo que se ve y nada más."""
     agregado = agregado or _SIN_COMPRAS
@@ -268,6 +278,8 @@ def _ficha(proveedor, agregado, preferido):
     ficha_estado = POR_CLAVE[clave]
     return {
         **proveedor,
+        # El avatar de la tarjeta y del panel (diseño Orquesta).
+        "iniciales": iniciales(proveedor.get("nombre") or ""),
         "preferido": preferido,
         "estado": clave,
         "estado_titulo": ficha_estado["titulo"],

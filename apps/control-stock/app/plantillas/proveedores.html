@@ -23,8 +23,13 @@
    menú nuevo, DESPUÉS de calendario.css para ganar por orden. #}
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/diseno-base.css?v={{ v_estaticos }}">
+{# …y la piel propia de Proveedores (pantalla 14 del lienzo Orquesta),
+   que se prende con la clase `pvd` del body y no toca a Compras ni a las
+   otras pantallas que comparten calendario.css. Solo el aspecto: mismas
+   rutas, mismos POST, mismos botones. #}
+<link rel="stylesheet" href="/static/diseno-proveedores.css?v={{ v_estaticos }}">
 </head>
-<body class="{{ 'menu-oculto' if request.cookies.get('menu') == '0' }}">
+<body class="pvd {{ 'menu-oculto' if request.cookies.get('menu') == '0' }}">
 
 <div class="app">
   <aside class="lado">
@@ -119,6 +124,9 @@
       {% for p in proveedores %}
       <div class="prov-tarjeta" id="pv-{{ p.id }}">
         <div class="prov-cab">
+          {# El avatar con iniciales del lienzo (pantalla 14): lo calcula
+             proveedores.iniciales(), la plantilla solo lo pinta. #}
+          <span class="pvd-av" aria-hidden="true">{{ p.iniciales }}</span>
           <b>{{ p.nombre or 'Sin nombre' }}</b>
           <span class="chip-est prov-badge {{ p.estado_clase }}">{{ p.estado_titulo }}</span>
         </div>
@@ -176,9 +184,14 @@
 <a class="telon" href="{{ vuelta }}" aria-label="Cerrar"></a>
 <aside class="panel-der">
   <div class="cab-panel">
+    <span class="pvd-av pvd-av-panel" aria-hidden="true">{{ abierto.iniciales }}</span>
     <div><span class="chip-est prov-badge {{ abierto.estado_clase }}">{{ abierto.estado_titulo }}</span>
       <h4>{{ abierto.nombre }}</h4></div>
-    <a class="btn chico" href="{{ vuelta }}">Cerrar</a>
+    {# El mismo enlace «Cerrar» de siempre, ahora como la X cuadrada del
+       lienzo (mismo patrón que la cpd-x de Compras). #}
+    <a class="pvd-x" href="{{ vuelta }}" aria-label="Cerrar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </a>
   </div>
   {% if abierto.telefono %}<div class="dato"><b>Teléfono</b><span>{{ abierto.telefono }}</span></div>{% endif %}
   {% if abierto.correo %}<div class="dato"><b>Correo</b><span>{{ abierto.correo }}</span></div>{% endif %}
