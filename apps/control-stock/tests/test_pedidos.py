@@ -301,3 +301,104 @@ def test_filtro_por_tipo_de_venta(base):
     assert filtros == {"plant retail": 1, "rental event": 1}
     # Un tipo inventado no filtra nada (se ignora, no se truena).
     assert pedidos.tablero(tipo="no-existe", hoy=HOY)["tipo"] is None
+
+
+# ---------------------------------------------------------------------------
+# La pantalla por HTTP: existe, pinta las tres columnas, abre la ficha
+# existente y NO trae «Marcar entregada»
+# ---------------------------------------------------------------------------
+
+def test_pantalla_pedidos_por_http(cliente, monkeypatch):
+    pedidos.reiniciar_cache_plata()
+    monkeypatch.setattr(pedidos, "_informe", lambda: {
+        "ventas": [{"orden_id": 81, "pagado": 9.0, "debe": 9.0,
+                    "total": 18.0}],
+        "huecos": []})
+    n = _venta_local()
+    _en_estado_2(n)
+    entregas.guardar("venta", n, "Calle 50", "Sam", "Génesis")
+    pagina = cliente.get("/pedidos")
+    assert pagina.status_code == 200
+    for titulo in ("Por programar", "Programado", "Entregado reciente"):
+        assert titulo in pagina.text
+    assert "S00081" in pagina.text                 # identificador visible
+    assert f"/venta/estado/venta/{n}" in pagina.text  # abre la ficha EXISTENTE
+    assert "Debe $9.00" in pagina.text
+    assert "Calle 50" in pagina.text and "Sam" in pagina.text
+    # «Marcar entregada» NO vive acá: solo en la ficha.
+    assert "MARCAR ENTREGADA" not in pagina.text
+    assert "/entregada" not in pagina.text
+
+
+def test_pantalla_viva_con_odoo_caido(cliente, monkeypatch):
+    pedidos.reiniciar_cache_plata()
+
+    def revienta():
+        raise RuntimeError("Odoo apagado")
+
+    monkeypatch.setattr(pedidos, "_informe", revienta)
+    n = _venta_local()
+    _en_estado_2(n)
+    pagina = cliente.get("/pedidos")
+    assert pagina.status_code == 200               # la pestaña VIVE
+    assert "Ana" in pagina.text                    # desde el estado local
+    assert "Plata sin dato" in pagina.text         # jamás $0
+    assert "Odoo apagado" in pagina.text           # y el hueco se dice
+
+
+def test_el_menu_trae_la_pestana_pedidos(cliente, monkeypatch):
+    monkeypatch.setattr(pedidos, "_informe",
+                        lambda: {"ventas": [], "huecos": []})
+    pagina = cliente.get("/pedidos")
+    assert 'href="/pedidos"' in pagina.text
+    assert ">Pedidos</a>" in pagina.text
+
+
+# ---------------------------------------------------------------------------
+# El rol Inventario: request directa contra las rutas nuevas (el patrón
+# de los 27+ — la puerta global corta sin que la ruta se acuerde)
+# ---------------------------------------------------------------------------
+
+def _rol_inventario_n():
+    with datos._db() as con:
+        return con.execute("SELECT n FROM roles WHERE slug=?",
+                           (datos_roles.SLUG_INVENTARIO,)).fetchone()["n"]
+
+
+@pytest.fixture
+def cliente_omar(db_limpia):
+    """Un TestClient con la sesión de Omar (solo-inventario)."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    seguridad.crear_empleada("omar", "Omar", "clave-de-prueba")
+    assert datos_roles.poner_persona(_rol_inventario_n(), "omar",
+                                     "korto") is None
+    c = TestClient(app)
+    r = c.post("/login",
+               data={"usuario": "omar", "contrasena": "clave-de-prueba"},
+               follow_redirects=False)
+    assert r.status_code == 303
+    return c
+
+
+def test_rol_inventario_no_ve_pedidos(cliente_omar):
+    r = cliente_omar.get("/pedidos", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/stock"
+    r = cliente_omar.get("/pedidos?tipo=plant%20retail",
+                         follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_rol_inventario_no_escribe_fecha_programada(cliente_omar):
+    """La escritura nueva de la ficha (el POST de la obligación, ahora
+    con fecha_programada) también está cortada: 403 sin efecto."""
+    n = _venta_local()
+    r = cliente_omar.post(f"/venta/estado/venta/{n}/entrega",
+                          data={"direccion": "X", "asignado_libre": "Y",
+                                "fecha_programada": "2026-10-15"},
+                          follow_redirects=False)
+    assert r.status_code == 403
+    assert entregas.obligacion_de("venta", n)["fecha_programada"] == ""

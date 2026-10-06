@@ -30,6 +30,14 @@
   <a href="/?tab=stock" class="{{ 'on' if activa == 'stock' }}"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M12 10C12 6 9 3 4 3c0 5 3 8 8 7z"/><path d="M12 13c0-3.5 2.5-6 7-6 0 4.5-2.5 7-7 6z"/><path d="M7 21h10"/></svg></span>Stock</a>
   <a href="/venta" class="{{ 'on' if activa == 'vender' }}"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg></span>Vender</a>
     <a href="/control" class="{{ 'on' if activa == 'control' }}"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>Control</a>
+  {# Pedidos (6/10/2026, punto 4 del BLOQUE 12): el lado de la ENTREGA
+     del trabajo pagado — vista sobre el motor de los 3 estados. En el
+     orden del lienzo (CRM · Pedidos): después de Control, antes de
+     Compras, sin mover ninguna pestaña existente. El icono es el camión
+     del diseño (pantalla 07): Pedidos = entregas. El rol Inventario
+     nunca ve este menú (stock_plano no incluye _nav.html) y su puerta
+     global corta /pedidos de todas formas. #}
+  <a href="/pedidos" class="{{ 'on' if activa == 'pedidos' }}"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5h13v11H1z"/><path d="M14 9h4l3 3v4h-7z"/><circle cx="6" cy="18.5" r="1.8"/><circle cx="17.5" cy="18.5" r="1.8"/></svg></span>Pedidos</a>
   {# Compras (Fase 1, 30/09/2026): el tablero de lo que se le compra al
      proveedor. El icono es una caja, no un carrito: el carrito ya es
      Vender y son cosas opuestas (una entra plata, la otra sale). #}

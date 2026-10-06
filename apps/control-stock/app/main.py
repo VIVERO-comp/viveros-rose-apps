@@ -30,7 +30,7 @@ from . import (acceso_google, agenda, altas, avisos, calculos, calendario,
                calendario_ics, conteos, control, conversaciones, cot_lead,
                cotizaciones, coworkers, crm_twenty, datos, datos_roles,
                entregas, fichas, fotos, linear_leads, mantenimiento,
-               pagos_confirmar, proveedores, resumen, seguridad,
+               pagos_confirmar, pedidos, proveedores, resumen, seguridad,
                stock_escritura, vehiculos, venta_estado, ventas,
                wa_autor)
 
@@ -3171,6 +3171,27 @@ async def venta_estado_obligacion(request: Request, origen: str, n: int):
     aviso = "" if error else "Entrega guardada."
     return RedirectResponse(_url_estado(origen, n, error or "", aviso),
                             status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# La pestaña PEDIDOS (punto 4 del BLOQUE 12, diseño con ACK del
+# Arquitecto 6/10): una VISTA sobre el motor de los 3 estados — el lado
+# de la ENTREGA del trabajo pagado. NO es la pestaña Pedidos descartada
+# del 30/09 (aquella listaba tiquetes de otra época): esta nace del
+# modelo de Jay — el pedido nace cuando el cliente paga o abona. Todo lo
+# que se pinta lo decide app/pedidos.py (regla 10); la tarjeta abre la
+# ficha Estado/Entrega EXISTENTE. La ven todos MENOS el rol Inventario:
+# su puerta global (_puerta_rol_inventario, en el middleware) ya corta
+# cualquier ruta nueva — GET → 303 a /stock, POST → 403 — sin acordarse
+# de nada; hay prueba por request directa (el patrón de los 27+).
+# ---------------------------------------------------------------------------
+
+@app.get("/pedidos")
+def pedidos_tablero(request: Request, tipo: str = ""):
+    return plantillas.TemplateResponse(request, "pedidos.html", {
+        "empleada": request.state.empleada,
+        "tablero": pedidos.tablero(tipo=(tipo or "").strip() or None),
+    })
 
 
 # ---------------------------------------------------------------------------
