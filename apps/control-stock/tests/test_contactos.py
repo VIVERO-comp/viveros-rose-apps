@@ -708,10 +708,16 @@ def test_operaciones_NO_recibe_montos_ni_hilo_EN_EL_CUERPO_HTTP(
     assert "Empresa QA Hotel" in lista
 
 
-def test_hoy_operaciones_ni_siquiera_abre_contactos(con_odoo_qa):
-    """El hallazgo, fijado: hasta que `/contactos` entre en
-    `datos_roles.PESTANAS`, la puerta global manda a Operaciones a su
-    casa. Si algún día eso cambia, esta prueba lo dice."""
+def test_operaciones_abre_contactos_y_el_candado_manda_adentro(con_odoo_qa):
+    """Operaciones SÍ abre `/contactos`: la pestaña es una de las suyas.
+
+    La prueba nació fijando lo contrario, cuando `/contactos` todavía no
+    estaba en `datos_roles.PESTANAS`, y su propio docstring pedía que se
+    actualizara el día que eso cambiara: este es ese día. Se conserva su
+    SUSTANCIA —qué le pasa a Operaciones en esa puerta—, solo que la
+    respuesta correcta ya no es un rebote: entra, y el candado manda
+    ADENTRO (ve la lista y los datos de contacto, nunca el dinero de un
+    lead ajeno)."""
     from fastapi.testclient import TestClient
 
     from app.main import app
@@ -721,8 +727,10 @@ def test_hoy_operaciones_ni_siquiera_abre_contactos(con_odoo_qa):
                            "contrasena": "clave-de-prueba"},
            follow_redirects=False)
     r = c.get("/contactos", follow_redirects=False)
-    assert r.status_code == 303
-    assert r.headers["location"] == "/control"
+    assert r.status_code == 200
+    # Entra, pero el dinero ajeno no viaja en el cuerpo.
+    for monto in ("480", "1,150", "1150"):
+        assert monto not in r.text, monto
 
 
 def test_atencion_sin_lead_suyo_tampoco_ve_dinero_ni_chat(con_odoo_qa,
