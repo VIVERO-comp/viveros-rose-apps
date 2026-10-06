@@ -15,18 +15,22 @@ Reglas:
   un aviso visible, nunca un bloqueo mudo.
 - El candado de QUIÉN marca vive en venta_estado.marcar_entregada (el
   system manager, por deber); aquí se orquesta: primero el candado y el
-  asignado, después la salida en Odoo (validar_salida — es ESTE el
-  momento en que Odoo valida, no antes: el pago nunca la tocó), y al
-  final el hecho local con su fecha REAL de entrega.
+  asignado, después los dos pasos en Odoo —la salida (validar_salida: es
+  ESTE el momento en que Odoo valida, no antes, porque el pago nunca la
+  tocó) y la factura de la entrega (ventas.facturar_entrega: la que trae
+  los renglones, con el anticipo del cobro descontado)— y al final el
+  hecho local con su fecha REAL de entrega. Los dos pasos de Odoo son
+  idempotentes y el hecho local va último: ver marcar_entregada().
 - La recogida (plantas que vuelven, alquiler) NO es un paso de la venta
   de plantas y no vive aquí.
 - **«Marcar entregada» NO escribe en Linear ni en Twenty** (régimen del
   BLOQUE 12: hacia los sistemas reales, solo lectura). El embudo del
   lead (pago → Por agendar, «Hecha» → Entregado, Ganado = entregado +
   saldo 0) sigue moviéndose por sus caminos de siempre; esta máquina de
-  estados es PARALELA (ver venta_estado.py). La única escritura externa
-  es la salida de Odoo (validar_salida), que es stock — el trabajo de
-  Odoo. La reconciliación estado↔embudo es pregunta abierta para Jay.
+  estados es PARALELA (ver venta_estado.py). Las únicas escrituras
+  externas son en Odoo —la salida de stock y la factura de la entrega—,
+  que son stock y dinero: el trabajo de Odoo. La reconciliación
+  estado↔embudo es pregunta abierta para Jay.
 """
 
 from .datos import _db, ahora_iso
@@ -108,27 +112,60 @@ def guardar(origen, venta, direccion, asignado, por):
     return None
 
 
+def _registro_de(origen, venta):
+    """El registro local de esta venta (ventas_locales o
+    cotizaciones_servicio), o None."""
+    if origen == "venta":
+        return ventas.obtener_venta(venta)
+    from . import cotizaciones  # diferido: cotizaciones importa ventas
+    return cotizaciones.obtener(venta)
+
+
 def _orden_id_de(origen, venta):
     """El sale.order de Odoo detrás de esta venta local, o None."""
-    if origen == "venta":
-        registro = ventas.obtener_venta(venta)
-    else:
-        from . import cotizaciones  # diferido: cotizaciones importa ventas
-        registro = cotizaciones.obtener(venta)
-    return (registro or {}).get("orden_id")
+    return (_registro_de(origen, venta) or {}).get("orden_id")
 
 
 def marcar_entregada(origen, venta, por_usuario, por_nombre=None, fecha=None):
     """«Marcar entregada», completo: candado del system manager, el
-    asignado obligatorio (con aviso, no mudo), la salida validada en
-    Odoo AHÍ (y no antes — el pago nunca la tocó) y el hecho local con
-    su fecha REAL. Devuelve (error, fila de venta_estado); errores:
-    'solo_system_manager' · 'falta_asignado' · 'odoo'."""
+    asignado obligatorio (con aviso, no mudo), los DOS pasos en Odoo —la
+    salida validada AHÍ (y no antes: el pago nunca la tocó) y la factura
+    de la entrega, con los renglones y el anticipo descontado— y al final
+    el hecho local con su fecha REAL. Devuelve (error, fila de
+    venta_estado); errores: 'solo_system_manager' · 'falta_asignado' ·
+    'odoo' · 'odoo_factura'.
+
+    **La atomicidad, que es el bulto de F3.** El contrato de siempre era
+    «si Odoo no acepta la salida, NADA quedó marcado». Con un SEGUNDO
+    paso en Odoo aparece un hueco nuevo —salida validada y factura
+    fallida— y ahí no se puede prometer lo mismo: la salida ya se escribió
+    y deshacerla no es una opción. Se cierra como lo cierra `registrar_pago`
+    (ventas.py): **por pasos sellados, cada uno idempotente, con el sello
+    donde el paso escribió**, así que volver a tocar el botón retoma desde
+    el paso que faltó sin repetir el anterior.
+
+    - Paso 1, la salida: su sello es el estado del picking en Odoo
+      (`_salidas_pendientes` viene vacío cuando ya está validada, y
+      `validar_salida` no escribe nada).
+    - Paso 2, la factura: su sello es la factura misma en Odoo (y
+      `factura_final_id` en la base); un borrador que quedó sin publicar
+      se publica en la pasada siguiente.
+    - El hecho local va AL FINAL, y solo si los dos pasos salieron. Un
+      intento que validó la salida pero no logró facturar deja
+      `entrega_marcada` en 0 a propósito: la entrega no está cerrada
+      mientras falte la factura, y el aviso dice exactamente dónde se
+      quedó (en 'odoo_factura' la salida SÍ quedó validada — decirle al
+      empleado «nada quedó marcado» ahí sería mentirle).
+
+    El segundo toque del botón, cuando el primero sí terminó, no vuelve a
+    facturar: ese POST ya no entra aquí — `main.py` lo trata como
+    corrección de la fecha."""
     if not venta_estado.es_system_manager(por_usuario):
         return "solo_system_manager", venta_estado.estado_de(origen, venta)
     if not obligacion_de(origen, venta)["asignado"]:
         return "falta_asignado", venta_estado.estado_de(origen, venta)
-    orden_id = _orden_id_de(origen, venta)
+    registro = _registro_de(origen, venta)
+    orden_id = (registro or {}).get("orden_id")
     monto = None
     if orden_id and ventas.configurado():
         try:
@@ -138,6 +175,16 @@ def marcar_entregada(origen, venta, por_usuario, por_nombre=None, fecha=None):
             # reflejar la realidad, no el deseo. El error llega visible.
             return "odoo", {"detalle": ventas._mensaje_de_error(error),
                             **venta_estado.estado_de(origen, venta)}
+        # La factura de la entrega, solo para las ventas de plantas: una
+        # cotización de servicio no se factura desde la app (eso sigue en
+        # Odoo) y su tabla local no guarda factura.
+        if origen == "venta":
+            try:
+                ventas.facturar_entrega(registro)
+            except Exception as error:
+                return "odoo_factura", {
+                    "detalle": ventas._mensaje_de_error(error),
+                    **venta_estado.estado_de(origen, venta)}
         monto = ventas.monto_sin_impuesto(orden_id)
     return venta_estado.marcar_entregada(
         origen, venta, por_usuario, por_nombre, fecha=fecha, monto=monto)

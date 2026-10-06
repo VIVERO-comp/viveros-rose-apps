@@ -1539,8 +1539,12 @@ def _fila_venta(request, v):
         # AttributeError sobre None.
         "nombre_cotizacion_pdf": ventas.nombre_de_pdf(
             (v["orden"] or "").replace("/", "-"), v["cliente"]),
+        # El nombre del archivo tiene que ser el de la factura que el
+        # botón de verdad baja (ver venta_pdf_factura): la de la entrega
+        # cuando existe, la del cobro mientras no.
         "nombre_factura_pdf": ventas.nombre_de_pdf(
-            (v["factura"] or str(v["n"])).replace("/", "-"), v["cliente"]),
+            (ventas.factura_del_cliente(v)[1] or str(v["n"])).replace("/", "-"),
+            v["cliente"]),
     }
 
 
@@ -3062,6 +3066,16 @@ async def venta_estado_entregada(request: Request, origen: str, n: int):
                  f"{resultado.get('detalle') or ''} — nada quedó marcado.")
         return RedirectResponse(_url_estado(origen, n, error=texto),
                                 status_code=303)
+    if error == "odoo_factura":
+        # El hueco nuevo de F3: la salida SÍ se escribió y la factura no.
+        # El aviso lo dice tal cual —decir «nada quedó marcado» sería
+        # mentira— y el mismo botón retoma desde la factura.
+        texto = ("La salida quedó validada en Odoo, pero la factura de la "
+                 f"entrega no salió: {resultado.get('detalle') or ''} — la "
+                 "entrega NO quedó marcada. Volvé a tocar «Marcar "
+                 "entregada»: retoma desde la factura.")
+        return RedirectResponse(_url_estado(origen, n, error=texto),
+                                status_code=303)
     aviso = "" if error else "Entrega marcada."
     return RedirectResponse(_url_estado(origen, n, error or "", aviso),
                             status_code=303)
@@ -3128,11 +3142,16 @@ def venta_pdf_factura(request: Request, n: int):
     registro = ventas.obtener_venta(n)
     if registro is None or not registro["factura_id"]:
         return RedirectResponse("/venta", status_code=303)
+    # Qué factura se baja: la de la ENTREGA cuando existe (F3, 6/10/2026)
+    # — es la que lista los renglones, y este botón dice «Compartir
+    # factura»: no puede entregarle al cliente el anticipo de una sola
+    # línea. Sin entrega marcada todavía, la del cobro, como siempre.
+    factura_id, factura_nombre = ventas.factura_del_cliente(registro)
     # El nombre lleva el número de FACTURA (no el de la orden/cotización):
     # es el documento que el cliente reconoce.
     return _respuesta_pdf(
-        "account.report_invoice", registro["factura_id"],
-        ventas.nombre_de_pdf((registro["factura"] or str(n)).replace("/", "-"),
+        "account.report_invoice", factura_id,
+        ventas.nombre_de_pdf((factura_nombre or str(n)).replace("/", "-"),
                              registro["cliente"]))
 
 
