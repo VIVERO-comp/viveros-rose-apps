@@ -141,7 +141,9 @@ def test_la_ficha_conserva_todas_sus_acciones(cliente, de_dueno, monkeypatch):
     # Acciones.
     assert "💬 WhatsApp" in panel
     assert 'action="/control/responder' in panel and "🔴 Responder" in panel
-    assert ">Cotizar</a>" in panel
+    # Cotizar es formulario POST desde el punto 1 de roles (precisión 2:
+    # el GET /venta?lead= mutaba).
+    assert 'action="/venta/lead"' in panel and ">Cotizar</button>" in panel
     assert "&a=RECORDATORIO\">Recordar</a>" in panel
     # Señales (las dos de la muestra).
     assert 'action="/control/senal' in panel

@@ -1134,7 +1134,9 @@ def test_la_ficha_agrupa_acciones_y_senales(cliente, de_dueno):
     assert cuerpo.index(">Acciones</div>") < cuerpo.index(">Señales</div>")
     # Los mismos botones de siempre, cada uno en su grupo.
     assert "💬 WhatsApp" in cuerpo and "Responder" in cuerpo
-    assert ">Cotizar</a>" in cuerpo
+    # Cotizar es formulario POST desde el punto 1 de roles (precisión 2:
+    # el GET /venta?lead= mutaba).
+    assert 'action="/venta/lead"' in cuerpo and ">Cotizar</button>" in cuerpo
     # LEAD-86 no tiene señales prendidas: las dos que existen en la
     # muestra van fantasma (chicas, borde dashed, texto tenue).
     assert cuerpo.count("btn chico fantasma") == 2
