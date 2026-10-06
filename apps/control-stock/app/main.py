@@ -1674,6 +1674,7 @@ def venta_nueva(request: Request, q: str = "", error: str = "", campo: str = "",
     contexto = {
         "ventas_activo": ventas.configurado(), "q": q.strip(),
         "resultados": None, "carrito": [], "total_carrito": 0.0,
+        "itbms_carrito": 0.0,
         "renglones_planta": [], "total_renglones_planta": 0.0,
         # None = todavía no se sabe (Odoo no contestó): la plantilla no
         # debe leerlo como "no disponible" y apagar el formulario por las
@@ -1705,9 +1706,14 @@ def venta_nueva(request: Request, q: str = "", error: str = "", campo: str = "",
     if contexto["ventas_activo"]:
         try:
             if contexto["q"]:
+                # F2 (6/10/2026): Vender busca plantas, macetas e insumos
+                # — el producto real en la línea es lo que hace que Odoo
+                # cobre el ITBMS del 7% que el comodín exento no cobraba.
                 contexto["resultados"] = _resultados_con_stock(
-                    ventas.buscar_productos(contexto["q"]))
+                    ventas.buscar_productos(contexto["q"],
+                                            prefijos=ventas.PREFIJOS_VENDER))
             contexto["carrito"], contexto["total_carrito"] = ventas.carrito_de(usuario)
+            contexto["itbms_carrito"] = ventas.itbms_del_carrito(contexto["carrito"])
             contexto["renglones_planta"] = ventas.renglones_planta_de(usuario)
             contexto["total_renglones_planta"] = round(
                 sum(r["importe"] for r in contexto["renglones_planta"]), 2)
@@ -1729,7 +1735,8 @@ def venta_nueva(request: Request, q: str = "", error: str = "", campo: str = "",
     contexto["terminos"] = _contexto_terminos(venta_estado.TIPO_PLANTAS,
                                               contexto["borrador"])
     contexto["total_con_cargos"] = (
-        contexto["total_carrito"] + contexto["total_renglones_planta"]
+        contexto["total_carrito"] + contexto["itbms_carrito"]
+        + contexto["total_renglones_planta"]
         + sum(v for v in contexto["cargos_montos"].values()
               if isinstance(v, (int, float))))
     return plantillas.TemplateResponse(request, "venta_nueva.html", contexto)
@@ -1751,13 +1758,19 @@ async def venta_borrador(request: Request):
 
 
 @app.get("/venta/buscar")
-def venta_buscar(request: Request, q: str = ""):
+def venta_buscar(request: Request, q: str = "", solo_plantas: str = ""):
     # Alimenta el buscador en vivo (venta.js): mismo resultado que la
     # búsqueda server-rendered, en JSON, con el precio ya formateado y el
     # stock (28/09/2026) para que la búsqueda en vivo y la de recarga de
-    # página digan lo mismo.
+    # página digan lo mismo. F2 (6/10/2026): Vender busca PL-, MC- e IN-
+    # (el ITBMS lo pone Odoo desde el producto real); la pantalla de
+    # EDITAR manda solo_plantas=1 y sigue como estaba — su cuenta en vivo
+    # se arma en el navegador y no sabe de impuestos todavía.
+    prefijos = ((ventas.PREFIJO_PLANTA,) if solo_plantas
+                else ventas.PREFIJOS_VENDER)
     try:
-        resultados = _resultados_con_stock(ventas.buscar_productos(q))
+        resultados = _resultados_con_stock(
+            ventas.buscar_productos(q, prefijos=prefijos))
     except Exception:
         return {"error": "Sin conexión con Odoo en este momento."}
     # "precio_num" (30/09/2026): el buscador de la pantalla de editar arma
@@ -2257,6 +2270,7 @@ def _contexto_servicio(request, tipo, q="", error=None, servicios=None):
         "meta": cotizaciones.TIPOS[tipo], "q": (q or "").strip(),
         "cobro": cobro, "por_planta": por_planta,
         "resultados": None, "carrito": [], "total_carrito": 0.0,
+        "itbms_carrito": 0.0,
         "borrador": borrador, "servicios": servicios or [{"texto": "", "monto": "", "descripcion": ""}],
         "terminos": _contexto_terminos(
             venta_estado.TIPO_DE_SERVICIO.get(tipo, "other"), borrador),
@@ -2268,6 +2282,10 @@ def _contexto_servicio(request, tipo, q="", error=None, servicios=None):
                 contexto["resultados"] = ventas.buscar_productos(contexto["q"])
             contexto["carrito"], contexto["total_carrito"] = ventas.carrito_de(
                 usuario, base_cero=por_planta)
+            # Una maceta o un insumo agregados desde Vender pueden seguir
+            # en el carrito al llegar aquí: su ITBMS se muestra igual,
+            # porque Odoo lo va a cobrar igual (va por producto).
+            contexto["itbms_carrito"] = ventas.itbms_del_carrito(contexto["carrito"])
         except Exception:
             contexto["error_venta"] = ("Sin conexión con Odoo en este momento. "
                                        "Vuelve a intentar en un rato.")
@@ -2383,6 +2401,7 @@ def _contexto_personalizada(request, q="", error=None, renglones=None,
     contexto = {
         "ventas_activo": ventas.configurado(), "q": (q or "").strip(),
         "resultados": None, "carrito": [], "total_carrito": 0.0,
+        "itbms_carrito": 0.0,
         "borrador": borrador, "error_venta": error or None,
         # La casilla del PDF (garantía): en el personalizado nace MARCADA.
         "casillas": ventas.banderas_de(borrador, True),
@@ -2397,6 +2416,7 @@ def _contexto_personalizada(request, q="", error=None, renglones=None,
             if contexto["q"]:
                 contexto["resultados"] = ventas.buscar_productos(contexto["q"])
             contexto["carrito"], contexto["total_carrito"] = ventas.carrito_de(usuario)
+            contexto["itbms_carrito"] = ventas.itbms_del_carrito(contexto["carrito"])
         except Exception:
             contexto["error_venta"] = ("Sin conexión con Odoo en este momento. "
                                        "Vuelve a intentar en un rato.")

@@ -192,6 +192,12 @@
         <span>{{ "Alquiler de las plantas" if por_planta else "Subtotal plantas y materiales" }}</span>
         <b>{{ total_carrito | dinero }}</b>
       </div>
+      {% if itbms_carrito %}
+      <div class="total-venta">
+        <span>ITBMS</span>
+        <b>{{ itbms_carrito | dinero }}</b>
+      </div>
+      {% endif %}
       {% endif %}
     {% endif %}
     {% endif %}
