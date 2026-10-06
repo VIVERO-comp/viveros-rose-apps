@@ -40,15 +40,16 @@ def odoo(monkeypatch):
 
 def _insertar_venta(orden_id, orden, cliente="Ana", total=100.0,
                     estado="cotizacion", celular=None, factura_id=None,
-                    factura=None, metodo=None):
+                    factura=None, metodo=None, ultimo_error=None):
     with _db() as con:
         cursor = con.execute(
             "INSERT INTO ventas_locales (creado_en, empleada, cliente,"
             " celular, orden_id, orden, total, estado, factura_id,"
-            " factura, metodo) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            " factura, metodo, ultimo_error)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (datetime.now(ZONA_PANAMA).isoformat(), "Génesis", cliente,
              celular, orden_id, orden, total, estado, factura_id,
-             factura, metodo))
+             factura, metodo, ultimo_error))
         return cursor.lastrowid
 
 
@@ -190,7 +191,9 @@ def test_columnas_cotizado_confirmado_pagado(cliente, odoo):
     n_serv = _insertar_servicio(602, "S00063", cliente="ServicioFacturado")
     odoo.ordenes[602] = {"state": "sale", "invoice_ids": [77]}
     pagina = cliente.get("/venta").text
-    assert pagina.count('class="vd-col"') == 3
+    # Las columnas siguen siendo 3 (ahora llevan además sus clases de
+    # sección celular vd-mv-*, BLOQUE 37 — la sustancia es la misma).
+    assert pagina.count('<section class="vd-col') == 3
     assert "Cotizado" in pagina and "Confirmado" in pagina and "Pagado" in pagina
     # Un servicio facturado cae en Confirmado (su cobro vive en Odoo); el
     # orden DENTRO de una columna sigue siendo por número descendente.
@@ -245,6 +248,118 @@ def test_abrir_invalido_no_rompe_ni_abre_nada(cliente, odoo):
 def test_sin_abrir_no_hay_panel(cliente, odoo):
     _insertar_venta(511, "S00069")
     assert 'class="vd-panel"' not in cliente.get("/venta").text
+
+
+# ---------------------------------------------------------------------------
+# El CUERPO CELULAR (BLOQUE 37, pantalla 25): píldoras Pendientes/Pagadas
+# por GET (?vista=), secciones del lienzo y lo apagado en su lugar. El
+# HTML es el mismo para computadora y teléfono (las caras celulares se
+# prenden por CSS ≤899px): aquí se amarra la ESTRUCTURA que llega de
+# Python — conteos reales, agrupación, nada inventado.
+# ---------------------------------------------------------------------------
+
+def _tres_filas(odoo):
+    """1 cotizada + 1 confirmada (pendientes) y 1 pagada."""
+    a = _insertar_venta(520, "S00080", cliente="MvCotizada", total=50.0)
+    b = _insertar_venta(521, "S00081", cliente="MvConfirmada",
+                        estado="vendida", total=200.0)
+    c = _insertar_venta(522, "S00082", cliente="MvPagada",
+                        estado="pagado", total=80.0, metodo="efectivo")
+    return a, b, c
+
+
+def test_pildoras_con_conteos_reales_y_navegacion_por_get(cliente, odoo):
+    _tres_filas(odoo)
+    pagina = cliente.get("/venta").text
+    # Las dos píldoras navegan por GET, con los conteos de verdad
+    # (2 pendientes = cotizada + confirmada; 1 pagada) y Pendientes
+    # activa por defecto.
+    assert '<a class="vd-fc on" href="/venta?vista=pendientes">Pendientes 2</a>' in pagina
+    assert '<a class="vd-fc" href="/venta?vista=pagadas">Pagadas 1</a>' in pagina
+
+
+def test_vista_pendientes_trae_las_dos_secciones_del_lienzo(cliente, odoo):
+    _tres_filas(odoo)
+    pagina = cliente.get("/venta").text
+    # Los títulos de sección del lienzo, con su conteo inline.
+    assert "Falta cobrar · 1" in pagina
+    assert "Cotizado, sin pagar · 1" in pagina
+    # La sección de pagadas queda fuera de esta vista (vd-mv-fuera); las
+    # dos pendientes no. Y «Falta cobrar» va primero (order vd-mv-1).
+    assert pagina.count("vd-mv-fuera") == 1
+    assert 'vd-mv-1 vd-mv-fuera' in pagina  # la fuera es la de pagadas
+    # El total de cada sección es el real.
+    assert "$200.00" in pagina and "$50.00" in pagina
+
+
+def test_vista_pagadas_solo_deja_su_seccion(cliente, odoo):
+    _tres_filas(odoo)
+    pagina = cliente.get("/venta?vista=pagadas").text
+    # La píldora activa ahora es Pagadas.
+    assert '<a class="vd-fc on" href="/venta?vista=pagadas">Pagadas 1</a>' in pagina
+    assert '<a class="vd-fc" href="/venta?vista=pendientes">Pendientes 2</a>' in pagina
+    # Fuera quedan las DOS secciones pendientes; la de pagadas se queda.
+    assert pagina.count("vd-mv-fuera") == 2
+    assert "Pagadas · 1" in pagina
+
+
+def test_vista_manoseada_cae_en_pendientes(cliente, odoo):
+    _tres_filas(odoo)
+    for mala in ("rara", "PAGADAS", "pagadas%20", "1"):
+        pagina = cliente.get(f"/venta?vista={mala}").text
+        assert '<a class="vd-fc on" href="/venta?vista=pendientes"' in pagina
+
+
+def test_abrir_y_cerrar_no_pierden_la_vista_pagadas(cliente, odoo):
+    _, _, n = _tres_filas(odoo)
+    pagina = cliente.get("/venta?vista=pagadas").text
+    # La tarjeta abre arrastrando la vista (& escapado por Jinja)…
+    assert f'href="/venta?vista=pagadas&amp;abrir=v{n}#v-{n}"' in pagina
+    panel = cliente.get(f"/venta?vista=pagadas&abrir=v{n}").text
+    assert 'class="vd-panel"' in panel
+    # …y cerrar vuelve a la MISMA vista, al ancla de la tarjeta.
+    assert f'href="/venta?vista=pagadas#v-{n}"' in panel
+    # En la vista de siempre las URLs no cambian (lo amarra también
+    # test_abrir_venta_muestra_el_panel_con_facturar).
+    assert f'href="/venta?abrir=v{n}#v-{n}"' in cliente.get("/venta").text
+
+
+def test_cobrar_de_la_tarjeta_va_apagado_y_sin_ruta(cliente, odoo):
+    _tres_filas(odoo)
+    pagina = cliente.get("/venta").text
+    # El «Cobrar» del lienzo existe pero APAGADO (pide el flujo de
+    # abonos): solo en las 2 tarjetas pendientes, nunca en la pagada, y
+    # sin href ni action — no hay a dónde ir todavía.
+    assert pagina.count("Cobrar — Todavía no") == 2
+    assert pagina.count('<button class="vd-cobrar" type="button" disabled>') == 2
+
+
+def test_aviso_de_atoradas_solo_con_dato_real(cliente, odoo):
+    # Sin atoradas: ni rastro del aviso (nada se inventa — el «4 ventas
+    # por revisar» del lienzo no se pinta sin dato).
+    _tres_filas(odoo)
+    pagina = cliente.get("/venta").text
+    assert "por revisar" not in pagina
+    assert "vd-alerta-rev" not in pagina
+    # Con una atorada de verdad (ultimo_error a medio pipeline): el
+    # aviso con su conteo real y su enlace al panel (donde vive
+    # Reintentar).
+    n = _insertar_venta(523, "S00083", cliente="MvAtorada",
+                        estado="facturada", ultimo_error="Odoo no contestó")
+    pagina = cliente.get("/venta").text
+    assert "1 venta atorada por revisar" in pagina
+    assert f'href="/venta?abrir=v{n}#v-{n}">Revisar</a>' in pagina
+
+
+def test_lo_del_lienzo_sin_dato_no_se_pinta(cliente, odoo):
+    _tres_filas(odoo)
+    pagina = cliente.get("/venta").text
+    # «vence en N días» no existe como dato: la tarjeta conserva su
+    # línea contextual real (Cotizada · fecha).
+    assert "vence en" not in pagina
+    assert "Cotizada ·" in pagina
+    # El selector de Ajustes del lienzo no existe: su línea tampoco.
+    assert "En Ajustes puedes elegir" not in pagina
 
 
 # ---------------------------------------------------------------------------

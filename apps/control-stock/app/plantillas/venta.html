@@ -91,12 +91,36 @@
   {% if not vender_lista %}
   <p class="vd-nada">Aún no hay ventas ni cotizaciones locales.</p>
   {% else %}
+  {# El CUERPO CELULAR (BLOQUE 37, pantalla 25): el aviso rojo de
+     atoradas —solo si el dato REAL existe (main._vender_alerta), nunca
+     un número inventado— y las píldoras Pendientes/Pagadas, que navegan
+     por GET (?vista=, decidido en Python, sin JS). En computadora nada
+     de esto se pinta (display:none fuera de ≤899px). El «N ventas por
+     revisar» y el «vence en N días» del lienzo no tienen dato real hoy:
+     el aviso usa las atoradas (ultimo_error) y la tarjeta conserva su
+     línea contextual de siempre. #}
+  {% if vender_alerta %}
+  <div class="vd-alerta-rev">
+    <span>{{ vender_alerta.texto }}</span>
+    <a class="vd-rev-btn" href="{{ vender_alerta.href }}">Revisar</a>
+  </div>
+  {% endif %}
+  <nav class="vd-fl" aria-label="Qué ventas ver">
+    {% for p in vender_pildoras %}
+    <a class="vd-fc{% if p.activa %} on{% endif %}" href="{{ p.href }}">{{ p.texto }} {{ p.cuenta }}</a>
+    {% endfor %}
+  </nav>
   <div class="vd-lienzo">
   <div class="vd-tablero">
     {% for col in vender_columnas %}
-    <section class="vd-col">
+    {# En el teléfono la columna es una SECCIÓN del lienzo: su título
+       corto con el conteo inline (vd-ch-mv), su orden (vd-mv-N: «Falta
+       cobrar» antes que «Cotizado, sin pagar») y fuera de su vista no
+       se pinta (vd-mv-fuera). En computadora esas clases no hacen nada
+       y la columna queda igual que siempre. #}
+    <section class="vd-col vd-mv-{{ col.movil.orden }}{% if not col.movil.visible %} vd-mv-fuera{% endif %}">
       <div class="vd-ch">
-        <span class="vd-ch-t">{{ col.titulo }}<span class="vd-cnt num">{{ col.cuenta }}</span></span>
+        <span class="vd-ch-t"><span class="vd-ch-pc">{{ col.titulo }}</span><span class="vd-ch-mv">{{ col.movil.titulo }} · {{ col.cuenta }}</span><span class="vd-cnt num">{{ col.cuenta }}</span></span>
         <span class="vd-tot num {{ 'vd-rojo' if col.clave == 'confirmado' }}">{{ col.total | dinero }}</span>
       </div>
       <span class="vd-pista">{{ col.pista }}</span>
@@ -116,6 +140,10 @@
             {% if item.pagada %}<span class="vd-pg" role="img" aria-label="Pagado" title="Pagado"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span>{% endif %}
             <span class="vd-hint num{% if item.linea_alerta %} vd-error{% endif %}">{{ item.linea }}</span>
           </span>
+          {# El «Cobrar» por tarjeta del lienzo (pantalla 25), APAGADO:
+             pide el flujo de abonos, que todavía no existe. Solo en las
+             pendientes (lo decide Python) y solo en el teléfono. #}
+          {% if col.movil.cobrar_apagado %}<button class="vd-cobrar" type="button" disabled>Cobrar — Todavía no</button>{% endif %}
         </div>
       </article>
       {% endfor %}
@@ -167,10 +195,10 @@
    la derecha encima del tablero / pantalla completa con ← Atrás. Se
    cierra con la X, con ← Atrás o tocando afuera — todos enlaces que
    vuelven al ancla de la tarjeta (no perder el lugar en la lista). #}
-<a class="vd-telon" href="/venta#{{ abierta.ancla }}" aria-label="Cerrar el panel"></a>
+<a class="vd-telon" href="{{ volver_url }}#{{ abierta.ancla }}" aria-label="Cerrar el panel"></a>
 <aside class="vd-panel" style="border-top-color:{{ abierta.acento }}" aria-label="{{ 'Venta' if abierta.tipo == 'venta' and abierta.estado != 'cotizacion' else 'Cotización' }}">
   <div class="vd-p-cab">
-    <a class="vd-p-volver" href="/venta#{{ abierta.ancla }}" aria-label="Atrás">
+    <a class="vd-p-volver" href="{{ volver_url }}#{{ abierta.ancla }}" aria-label="Atrás">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
     </a>
     <div class="vd-p-tt">
@@ -181,7 +209,7 @@
         {% else %}{{ abierta.orden }} · {{ "Facturado" if abierta.facturada else "Cotización" }}{% endif %}
       </span>
     </div>
-    <a class="vd-p-x" href="/venta#{{ abierta.ancla }}" aria-label="Cerrar">
+    <a class="vd-p-x" href="{{ volver_url }}#{{ abierta.ancla }}" aria-label="Cerrar">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </a>
   </div>
