@@ -111,6 +111,30 @@ def columna_de(estado, fecha_programada, fecha_entrega, hoy, ventana):
     return None  # estado 1: todavía no es un pedido (no hay plata)
 
 
+# El ancla del editor de fecha en la ficha Estado/Entrega (el input
+# fecha_programada de venta_trato.html): el drop del arrastre navega
+# DERECHO a ese campo.
+ANCLA_EDITOR_FECHA = "#vt-fecha-prog"
+
+
+def gesto_arrastre(columna, href):
+    """El arrastre de una tarjeta de Pedidos como GESTO DE NAVEGACIÓN
+    (BLOQUE 40): {url, destinos}, o None si la tarjeta no se arrastra.
+
+    LA REGLA DE ORO: SOLTAR NUNCA ESCRIBE — este módulo sigue siendo
+    una vista que no escribe en nada. La ÚNICA movida con gesto es
+    «Por programar» → «Programado», y el drop solo NAVEGA al editor de
+    fecha EXISTENTE de la ficha (el campo fecha_programada de
+    Estado/Entrega): la fecha la escribe la persona allá, y cerrar la
+    ficha sin guardar deja la tarjeta donde estaba. «Entregado
+    reciente» no es destino ni se arrastra (solo lectura); «Programado»
+    tampoco se arrastra — volver a «Por programar» es borrar la fecha
+    en la ficha, no un gesto."""
+    if columna != "por_programar":
+        return None
+    return {"url": href + ANCLA_EDITOR_FECHA, "destinos": ["programado"]}
+
+
 # ---------------------------------------------------------------------------
 # La plata: el MISMO motor de la cola, con la última lectura buena
 # ---------------------------------------------------------------------------
@@ -224,6 +248,10 @@ def tarjetas(hoy=None):
                              fila.get("fecha_entrega"), hoy, ventana)
         if columna is None:
             continue
+        href = f"/venta/estado/{origen}/{n}"  # la ficha EXISTENTE
+        # El gesto de navegación del arrastre (BLOQUE 40) y su versión
+        # de celular («Mover a», enlaces): decididos acá, regla 10.
+        gesto = gesto_arrastre(columna, href)
         columnas[columna].append({
             "origen": origen, "n": n,
             "cliente": registro.get("cliente") or "—",
@@ -236,7 +264,10 @@ def tarjetas(hoy=None):
             "fecha_programada": fecha_programada,
             "fecha_entrega": fila.get("fecha_entrega") or "",
             "creado_en": registro.get("creado_en") or "",
-            "href": f"/venta/estado/{origen}/{n}",  # la ficha EXISTENTE
+            "href": href,
+            "arrastre": gesto,
+            "mover_a": ([{"texto": "Programado", "href": gesto["url"]}]
+                        if gesto else []),
         })
     for lista in columnas.values():
         lista.sort(key=lambda t: (t["fecha_programada"], t["creado_en"],
