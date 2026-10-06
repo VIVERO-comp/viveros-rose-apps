@@ -17,8 +17,20 @@ from app import ventas
 class OdooFalso:
     def __init__(self):
         self.productos = {
-            501: {"default_code": "PL-ROMERO", "name": "ROMERO", "list_price": 3.5},
-            502: {"default_code": "PL-JADE", "name": "JADE", "list_price": 5.25},
+            501: {"default_code": "PL-ROMERO", "name": "ROMERO",
+                  "list_price": 3.5, "sale_ok": True},
+            502: {"default_code": "PL-JADE", "name": "JADE",
+                  "list_price": 5.25, "sale_ok": True},
+            # F2 (6/10/2026): una maceta y un insumo CON ITBMS (el 7% real
+            # de producción, id 1, percent, NO incluido en el precio).
+            503: {"default_code": "MC-BARRO-M", "name": "MACETA DE BARRO M",
+                  "list_price": 29.25, "sale_ok": True, "taxes_id": [1]},
+            504: {"default_code": "IN-TIERRA-NEGRA", "name": "TIERRA NEGRA",
+                  "list_price": 10.0, "sale_ok": True, "taxes_id": [1]},
+        }
+        self.impuestos = {
+            1: {"amount": 7.0, "amount_type": "percent",
+                "price_include": False},
         }
         self.partners = {74: {"name": "Cliente Local"}}
         # Plantillas para la foto de la pantalla de Stock: una con imagen de
@@ -61,10 +73,15 @@ class OdooFalso:
 
     # ---- productos ----
     def product_product_search_read(self, args, kw):
-        texto = next(c[2].lower() for c in args[0]
-                     if isinstance(c, list) and c[0] == "name")
-        return [{"id": i, **p} for i, p in self.productos.items()
-                if texto in p["name"].lower() or texto in p["default_code"].lower()]
+        # Desde F2 (6/10/2026) el fake evalúa el dominio DE VERDAD
+        # (prefijos, sale_ok, texto): el buscador de Vender (PL-/MC-/IN-)
+        # se diferencia del de antes (solo PL-) por el dominio, y un fake
+        # que lo ignore daría por probado lo que no probó.
+        filas = [{"id": i, **p} for i, p in self.productos.items()
+                 if self._evaluar_dominio(args[0], p)]
+        filas.sort(key=lambda f: f["name"])
+        limite = kw.get("limit")
+        return filas[:limite] if limite else filas
 
     def product_product_search(self, args, kw):
         """Los productos de los cargos (SV-ENVIO, SV-CARGO-INSTALACION) se
@@ -73,6 +90,23 @@ class OdooFalso:
                        if isinstance(c, (list, tuple)) and c[0] == "default_code"), None)
         return [i for i, p in self.productos.items()
                 if p["default_code"] == codigo]
+
+    def account_tax_read(self, args, kw):
+        return [{"id": i, **{c: self.impuestos[i].get(c) for c in kw["fields"]}}
+                for i in args[0] if i in self.impuestos]
+
+    def _impuesto_de(self, linea):
+        """El impuesto de un renglón, como lo calcula Odoo: sale de los
+        impuestos del PRODUCTO (la app no manda taxes en la línea),
+        porcentual sobre el importe, redondeado por línea."""
+        producto = self.productos.get(linea.get("product_id"), {})
+        monto = 0.0
+        for impuesto_id in producto.get("taxes_id") or []:
+            datos = self.impuestos[impuesto_id]
+            if datos["amount_type"] == "percent" and not datos["price_include"]:
+                monto += (linea["product_uom_qty"] * self._precio(linea)
+                          * datos["amount"] / 100.0)
+        return round(monto, 2)
 
     def product_product_create(self, args, kw):
         nuevo = self._nuevo_id()
@@ -178,8 +212,11 @@ class OdooFalso:
         lineas = [l[2] for l in vals["order_line"]]
         # Las lineas display_type (secciones y los parrafos de los cargos)
         # no llevan cantidad ni precio, igual que en el Odoo real.
-        total = sum(l["product_uom_qty"] * self._precio(l)
-                    for l in lineas if not l.get("display_type"))
+        con_monto = [l for l in lineas if not l.get("display_type")]
+        total = sum(l["product_uom_qty"] * self._precio(l) for l in con_monto)
+        # El ITBMS por línea (F2, 6/10/2026), desde los impuestos del
+        # producto — las plantas y los servicios van exentos y suman $0.
+        impuesto = sum(self._impuesto_de(l) for l in con_monto)
         self.ordenes[nuevo] = {
             "name": f"S{nuevo}", "partner_id": vals["partner_id"],
             "tag_ids": vals.get("tag_ids"), "lineas": lineas,
@@ -187,8 +224,7 @@ class OdooFalso:
             # lead_ref (28/09/2026): el PP-XXXXX del lead pendiente, cuando
             # lo hay. Campo nuevo de sale.order (addon 19.0.1.55.0).
             "lead_ref": vals.get("lead_ref"),
-            "amount_total": round(total, 2),
-            # Sin ITBMS: el negocio va exento, así que coincide.
+            "amount_total": round(total + impuesto, 2),
             "amount_untaxed": round(total, 2),
             "state": "draft", "invoice_ids": [],
         }
@@ -208,10 +244,12 @@ class OdooFalso:
             if "order_line" in vals:
                 lineas = [l[2] for l in vals["order_line"] if l[0] == 0]
                 orden["lineas"] = lineas
+                con_monto = [l for l in lineas if not l.get("display_type")]
+                base = round(sum(l["product_uom_qty"] * self._precio(l)
+                                 for l in con_monto), 2)
+                orden["amount_untaxed"] = base
                 orden["amount_total"] = round(
-                    sum(l["product_uom_qty"] * self._precio(l)
-                        for l in lineas if not l.get("display_type")), 2)
-                orden["amount_untaxed"] = orden["amount_total"]
+                    base + sum(self._impuesto_de(l) for l in con_monto), 2)
             for campo in ("partner_id", "client_order_ref"):
                 if campo in vals:
                     orden[campo] = vals[campo]
@@ -1637,3 +1675,128 @@ def test_agregar_dos_veces_el_mismo_producto_suma_sin_duplicar(db_limpia):
             "SELECT producto_id, cantidad FROM venta_carrito "
             "WHERE usuario='genesis'").fetchall()
     assert [(f["producto_id"], f["cantidad"]) for f in filas] == [(501, 5)]
+
+
+# ---------------------------------------------------------------------------
+# F2 (6/10/2026): Vender cotiza macetas (MC-) e insumos (IN-) CON ITBMS.
+# El impuesto viaja POR EL PRODUCTO: la línea va con product_id y sin tocar
+# taxes, y Odoo aplica solo los impuestos que el producto ya tiene (el 7%
+# en macetas e insumos; las plantas van exentas). Lo que amarran estas
+# pruebas: el buscador de Vender trae los tres prefijos, la pantalla
+# muestra el ITBMS, y el total de la app CUADRA con el amount_total que
+# calcula Odoo — nadie ve $29.25 para que Odoo cobre $31.30.
+# ---------------------------------------------------------------------------
+
+def test_buscador_de_vender_trae_maceta_e_insumo(cliente_venta, con_inventario):
+    # La maceta sale en la recarga server-rendered de Nueva venta...
+    r = cliente_venta.get("/venta/nueva?q=maceta")
+    assert "MACETA DE BARRO M" in r.text and "MC-BARRO-M" in r.text
+    # ...y el insumo en el buscador en vivo (venta.js), por /venta/buscar.
+    r = cliente_venta.get("/venta/buscar?q=tierra")
+    nombres = [p["sku"] for p in r.json()["resultados"]]
+    assert "IN-TIERRA-NEGRA" in nombres
+
+
+def test_buscador_de_vender_manda_los_tres_prefijos_a_odoo(cliente_venta, monkeypatch):
+    """Como test_buscar_productos_exige_el_prefijo_pl: lo que protege es
+    el DOMINIO que viaja a Odoo, no lo que el fake devuelva."""
+    dominios = []
+    original = ventas._ejecutar
+
+    def espia(modelo, metodo, args, kw=None):
+        if modelo == "product.product" and metodo == "search_read":
+            dominios.append(args[0])
+        return original(modelo, metodo, args, kw)
+
+    monkeypatch.setattr(ventas, "_ejecutar", espia)
+    cliente_venta.get("/venta/buscar?q=romero")
+    assert dominios
+    likes = [d for d in dominios[0]
+             if isinstance(d, list) and d[0] == "default_code" and d[1] == "like"]
+    assert likes == [["default_code", "like", "PL-"],
+                     ["default_code", "like", "MC-"],
+                     ["default_code", "like", "IN-"]]
+    assert ["sale_ok", "=", True] in dominios[0]   # vendibles, como siempre
+
+
+def test_buscador_de_editar_sigue_solo_plantas(cliente_venta):
+    """La pantalla de editar arma su cuenta en el navegador y no sabe de
+    ITBMS: su fetch manda solo_plantas=1 y no se le ofrecen macetas."""
+    r = cliente_venta.get("/venta/buscar?q=maceta&solo_plantas=1")
+    assert r.json()["resultados"] == []
+    # Y el fetch de venta.js de verdad manda la bandera.
+    import pathlib
+    from app import main as modulo_main
+    js = (pathlib.Path(modulo_main.__file__).parent
+          / "static" / "venta.js").read_text()
+    assert "/venta/buscar?solo_plantas=1&q=" in js
+
+
+def test_maceta_con_itbms_cuadra_con_odoo(cliente_venta, odoo):
+    _agregar(cliente_venta, 503)                      # maceta $29.25 + 7%
+    pagina = cliente_venta.get("/venta/nueva").text
+    assert "<span>ITBMS</span><b>$2.05</b>" in pagina
+    assert '>$31.30</b>' in pagina                    # el total-final, con impuesto
+    cliente_venta.post("/venta/cotizar", data={"cliente": ""})
+    orden = next(iter(odoo.ordenes.values()))
+    assert "tax_id" not in orden["lineas"][0]         # la app NO pisa impuestos
+    assert orden["amount_untaxed"] == 29.25
+    assert orden["amount_total"] == 31.30             # lo puso Odoo, por el producto
+    assert ventas.ventas_todas()[0]["total"] == 31.30  # y la app guarda ESE
+
+
+def test_insumo_con_itbms_cuadra_con_odoo(cliente_venta, odoo):
+    _agregar(cliente_venta, 504, veces=2)             # insumo $10.00 × 2 + 7%
+    pagina = cliente_venta.get("/venta/nueva").text
+    assert "<span>ITBMS</span><b>$1.40</b>" in pagina
+    assert '>$21.40</b>' in pagina
+    cliente_venta.post("/venta/cotizar", data={"cliente": ""})
+    orden = next(iter(odoo.ordenes.values()))
+    assert orden["amount_total"] == 21.40
+    assert ventas.ventas_todas()[0]["total"] == 21.40
+
+
+def test_planta_sin_itbms_sigue_igual(cliente_venta, odoo):
+    """El caso viejo, intacto: una planta exenta no estrena renglón de
+    ITBMS ni cambia un centavo."""
+    _agregar(cliente_venta, 501)
+    pagina = cliente_venta.get("/venta/nueva").text
+    assert "<span>ITBMS</span>" not in pagina
+    assert '>$3.50</b>' in pagina
+    cliente_venta.post("/venta/cotizar", data={"cliente": ""})
+    orden = next(iter(odoo.ordenes.values()))
+    assert orden["amount_total"] == 3.50 == orden["amount_untaxed"]
+    assert ventas.ventas_todas()[0]["total"] == 3.50
+
+
+def test_venta_mezclada_planta_maceta_y_servicio(cliente_venta, odoo):
+    """Planta exenta + maceta con 7% + instalación (servicio exento, con
+    su producto SV- de impuestos explícitamente vacíos): el ITBMS es SOLO
+    el de la maceta y el total cuadra con Odoo."""
+    _agregar(cliente_venta, 501)                      # planta  $3.50
+    _agregar(cliente_venta, 503)                      # maceta $29.25 (+$2.05)
+    cliente_venta.post("/venta/cotizar",
+                       data={"cliente": "", "instalacion": "20"})
+    orden = next((o for o in odoo.ordenes.values() if o.get("tag_ids")), None)
+    assert orden is not None
+    assert orden["amount_untaxed"] == 52.75           # 3.50 + 29.25 + 20.00
+    assert orden["amount_total"] == 54.80             # + 2.05 de la maceta
+    assert ventas.ventas_todas()[0]["total"] == 54.80
+    # Y la pantalla lo decía ANTES de cotizar: carrito con ITBMS aparte.
+    lineas, total = ventas.carrito_de("genesis")
+    assert lineas == [] and total == 0.0              # ya se limpió al cotizar
+
+
+def test_itbms_tambien_sobre_el_precio_a_mano(cliente_venta, odoo):
+    """Si la empleada le escribe el precio a mano a una maceta, Odoo cobra
+    el 7% sobre ESE precio — la pantalla también."""
+    _agregar(cliente_venta, 503)
+    cliente_venta.post("/venta/carrito/precio",
+                       data={"producto_id": 503, "precio": "40.00"},
+                       follow_redirects=False)
+    lineas, total = ventas.carrito_de("genesis")
+    assert lineas[0]["itbms"] == 2.80                 # 7% de $40, no de $29.25
+    assert ventas.itbms_del_carrito(lineas) == 2.80
+    cliente_venta.post("/venta/cotizar", data={"cliente": ""})
+    orden = next(iter(odoo.ordenes.values()))
+    assert orden["amount_total"] == 42.80

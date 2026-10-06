@@ -216,7 +216,10 @@ function pintarDesglose() {
   // (28/09/2026): estos últimos solo cambian con un reload del servidor
   // (se agregan de a uno, por POST), así que su total ya viene fijo en el
   // dataset; lo que se recalcula en vivo aquí son los cargos.
+  // El ITBMS del carrito (F2, 6/10/2026) también viene fijo del servidor:
+  // solo cambia al agregar/quitar productos, que recargan la página.
   let total = (parseFloat(desglose.dataset.plantas) || 0)
+    + (parseFloat(desglose.dataset.itbms) || 0)
     + (parseFloat(desglose.dataset.personalizada) || 0);
   for (const clave of ["envio", "instalacion"]) {
     const fila = document.getElementById("linea-" + clave);
@@ -506,7 +509,11 @@ if (entradaBuscaPlanta && resultadosPlanta) {
     }
     temporizadorBuscaPlanta = setTimeout(async () => {
       try {
-        const respuesta = await fetch("/venta/buscar?q=" + encodeURIComponent(q));
+        // solo_plantas=1 (F2, 6/10/2026): la pantalla de editar arma su
+        // cuenta en el navegador y no sabe de ITBMS, así que no ofrece
+        // macetas ni insumos — si algún día los suma, que sume también
+        // el impuesto o el total le mentiría a la empleada.
+        const respuesta = await fetch("/venta/buscar?solo_plantas=1&q=" + encodeURIComponent(q));
         const datos = await respuesta.json();
         if (entradaBuscaPlanta.value.trim() !== q) return; // ya escribió otra cosa
         if (datos.error) {

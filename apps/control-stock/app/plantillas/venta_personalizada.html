@@ -118,6 +118,12 @@
       <span>Subtotal plantas y materiales</span>
       <b>{{ total_carrito | dinero }}</b>
     </div>
+    {% if itbms_carrito %}
+    <div class="total-venta">
+      <span>ITBMS</span>
+      <b>{{ itbms_carrito | dinero }}</b>
+    </div>
+    {% endif %}
   {% endif %}
 
   {# ---- Servicios: párrafo + monto, igual que las cotizaciones por tipo ---- #}

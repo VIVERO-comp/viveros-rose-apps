@@ -270,10 +270,17 @@
          escribe. El total real lo confirma Odoo. #}
       <div class="total-venta desglose" id="desglose"
            data-plantas="{{ '%.2f' | format(total_carrito) }}"
+           data-itbms="{{ '%.2f' | format(itbms_carrito) }}"
            data-personalizada="{{ '%.2f' | format(total_renglones_planta) }}">
         {% if carrito %}
         {% set a_mano = carrito | selectattr('precio_editado') | list %}
         <div class="linea-total"><span>Plantas{{ ' (con precios a mano)' if a_mano else ' (precios de Odoo)' }}</span><b>{{ total_carrito | dinero }}</b></div>
+        {% endif %}
+        {# F2 (6/10/2026): macetas e insumos llevan ITBMS; el renglón solo
+           aparece cuando hay, para que el total de la pantalla diga lo
+           mismo que el amount_total que Odoo va a cobrar. #}
+        {% if itbms_carrito %}
+        <div class="linea-total"><span>ITBMS</span><b>{{ itbms_carrito | dinero }}</b></div>
         {% endif %}
         {% if renglones_planta %}
         <div class="linea-total"><span>Planta personalizada</span><b>{{ total_renglones_planta | dinero }}</b></div>

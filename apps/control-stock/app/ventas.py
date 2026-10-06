@@ -89,6 +89,7 @@ def reiniciar_cache():
     descripción a mano se pierde detrás del texto de fábrica."""
     _cache_cargos.clear()
     _id_personalizada_planta["id"] = None
+    _cache_impuestos.clear()
 
 
 def _autenticar():
@@ -508,6 +509,16 @@ def lineas_de_renglones_planta(renglones):
 # ---------------------------------------------------------------------------
 
 PREFIJO_PLANTA = "PL-"
+PREFIJO_MACETA = "MC-"
+PREFIJO_INSUMO = "IN-"
+
+# El buscador de Vender (F2, 6/10/2026): plantas, macetas e insumos
+# vendibles. Antes solo traía PL-, así que una maceta o un insumo entraban
+# como renglón libre al comodín exento y el ITBMS del 7% no se cobraba.
+# Con el producto real en la línea, Odoo aplica solo los impuestos del
+# producto. OJO: es el prefijo del LLAMADO de Vender (main.py), no el
+# default de `buscar_productos` — Compras y Proveedores pasan los suyos.
+PREFIJOS_VENDER = (PREFIJO_PLANTA, PREFIJO_MACETA, PREFIJO_INSUMO)
 
 
 def dominio_de_busqueda(texto, prefijos=(PREFIJO_PLANTA,), solo_vendibles=True):
@@ -550,15 +561,65 @@ def buscar_productos(texto, prefijos=(PREFIJO_PLANTA,), solo_vendibles=True):
 
 
 def productos_por_id(ids):
-    """{id: {sku, nombre, precio}} leído fresco de Odoo (los totales del
-    carrito y de la orden salen SIEMPRE de aquí, nunca de lo que vio antes
-    el navegador)."""
+    """{id: {sku, nombre, precio, impuestos}} leído fresco de Odoo (los
+    totales del carrito y de la orden salen SIEMPRE de aquí, nunca de lo
+    que vio antes el navegador). `impuestos` son los ids de los impuestos
+    de VENTA del producto (F2, 6/10/2026): con ellos el carrito muestra el
+    ITBMS que Odoo va a cobrar — el total de la pantalla y el amount_total
+    de la orden tienen que decir lo mismo."""
     if not ids:
         return {}
     filas = _ejecutar("product.product", "read", [list(ids)],
-                      {"fields": ["default_code", "name", "list_price"]})
+                      {"fields": ["default_code", "name", "list_price",
+                                  "taxes_id"]})
     return {f["id"]: {"sku": f["default_code"], "nombre": f["name"],
-                      "precio": f["list_price"]} for f in filas}
+                      "precio": f["list_price"],
+                      "impuestos": f.get("taxes_id") or []} for f in filas}
+
+
+# El detalle de cada impuesto (monto, tipo, incluido o no), cacheado por
+# proceso: los impuestos de venta cambian casi nunca y el carrito se pinta
+# en cada toque. Se limpia en reiniciar_cache() como los demás cachés.
+_cache_impuestos = {}
+
+
+def _impuestos_por_id(ids):
+    """{id: {amount, amount_type, price_include}} de account.tax, cacheado.
+    `price_include` sigue siendo legible en Odoo 19 (verificado contra el
+    real el 6/10/2026: el 7% es percent, NO incluido en el precio)."""
+    faltan = [i for i in ids if i not in _cache_impuestos]
+    if faltan:
+        filas = _ejecutar("account.tax", "read", [faltan],
+                          {"fields": ["amount", "amount_type",
+                                      "price_include"]})
+        for f in filas:
+            _cache_impuestos[f["id"]] = {
+                "amount": f.get("amount") or 0.0,
+                "amount_type": f.get("amount_type") or "percent",
+                "price_include": bool(f.get("price_include")),
+            }
+    return {i: _cache_impuestos[i] for i in ids if i in _cache_impuestos}
+
+
+def _itbms_de(importe, impuesto_ids):
+    """Lo que Odoo va a SUMARLE a este importe por impuestos: los
+    porcentuales no incluidos en el precio (el 7% de venta es así),
+    redondeado por línea como lo hace Odoo. Un impuesto incluido ya vive
+    dentro del importe y no agranda el total; un tipo que no sea percent
+    no se estima (mejor $0 visible que un número inventado)."""
+    if not impuesto_ids:
+        return 0.0
+    total = 0.0
+    for datos in _impuestos_por_id(list(impuesto_ids)).values():
+        if datos["amount_type"] == "percent" and not datos["price_include"]:
+            total += importe * datos["amount"] / 100.0
+    return round(total, 2)
+
+
+def itbms_del_carrito(lineas):
+    """La suma del ITBMS de las líneas del carrito (0.0 si todo va
+    exento, que es el caso de las plantas)."""
+    return round(sum(l.get("itbms") or 0.0 for l in lineas), 2)
 
 
 def _dir_fotos():
@@ -1056,7 +1117,9 @@ def vincular_lead(n, issue):
 
 def carrito_de(usuario, base_cero=False):
     """[{producto_id, cantidad, sku, nombre, precio, precio_odoo,
-    precio_editado, importe}] con precios frescos de Odoo, más el total. Un
+    precio_editado, importe, itbms}] con precios frescos de Odoo, más el
+    total (SIN impuesto, como siempre: `itbms` por línea y la suma con
+    `itbms_del_carrito` son aparte, para que la pantalla los muestre). Un
     producto que ya no existe en Odoo se descarta del carrito en silencio.
 
     El precio de cada línea puede estar escrito a mano (pedido del dueño,
@@ -1082,11 +1145,16 @@ def carrito_de(usuario, base_cero=False):
         # línea sin precio escrito vale $0 y sale de referencia.
         base = 0.0 if base_cero else precio_odoo
         precio = round(float(a_mano), 2) if a_mano is not None else base
+        importe = round(fila["cantidad"] * precio, 2)
         lineas.append({
             "producto_id": fila["producto_id"], "cantidad": fila["cantidad"],
             **producto, "precio": precio, "precio_odoo": precio_odoo,
             "precio_editado": a_mano is not None,
-            "importe": round(fila["cantidad"] * precio, 2),
+            "importe": importe,
+            # El ITBMS que Odoo va a cobrarle a esta línea (F2): sale de
+            # los impuestos del PRODUCTO, sobre el precio que manda (el
+            # escrito a mano incluido), redondeado por línea como Odoo.
+            "itbms": _itbms_de(importe, producto.get("impuestos")),
         })
     return lineas, round(sum(l["importe"] for l in lineas), 2)
 
