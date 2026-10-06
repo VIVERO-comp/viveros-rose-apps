@@ -260,7 +260,11 @@ def test_tablero_de_pedidos_lleva_los_data_atributos(cliente, monkeypatch):
             '#vt-fecha-prog"') in pagina
     # La trampa del 29/09 en los <a> internos de la tarjeta.
     assert 'class="pd-abrir" draggable="false"' in pagina
-    assert 'class="pd-chip" draggable="false"' in pagina
+    # El enlace de acción de la tarjeta (el «Programar» del lienzo 07,
+    # que antes era un chip y ahora es la píldora pd-ob) también va sin
+    # arrastre propio: lo que importa es que NINGÚN <a> de adentro se
+    # arrastre, no cómo se llame su clase.
+    assert 'class="pd-ob" draggable="false"' in pagina
     assert "/static/arrastre.js" in pagina
 
 
