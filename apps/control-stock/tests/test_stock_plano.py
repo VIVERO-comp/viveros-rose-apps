@@ -201,3 +201,22 @@ def test_bitacora_para_admins_con_fecha_de_panama(cliente, con_inventario,
 
 def test_bitacora_rechaza_a_quien_no_es_admin(cliente):
     assert cliente.get("/stock/cambios").status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# El bug del lugar de la pestaña Stock de siempre (todos los roles)
+# ---------------------------------------------------------------------------
+
+def test_producto_abierto_ya_no_rebota_al_calendario(cliente, con_inventario):
+    """Guardar en Odoo desde el detalle recarga /?producto=SKU sin tab
+    (app.js, parametrosDeEstado): antes este GET caía en el redirect al
+    Calendario y el empleado perdía el producto. Ahora pinta el tablero
+    y el arranque reabre ese detalle."""
+    r = cliente.get("/?producto=PL-ROMERO&refrescar=1&vista=global",
+                    follow_redirects=False)
+    assert r.status_code == 200
+
+
+def test_la_raiz_pelada_sigue_abriendo_el_calendario(cliente):
+    r = cliente.get("/", follow_redirects=False)
+    assert (r.status_code, r.headers["location"]) == (303, "/calendario")

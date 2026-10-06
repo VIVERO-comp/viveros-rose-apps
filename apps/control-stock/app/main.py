@@ -516,7 +516,14 @@ def inicio(request: Request, refrescar: int = 0, crear: str = "",
     # "quita inicio y pon calendario de primero" y, al ver que la raíz
     # seguía mostrando el tablero, "todavía inicio está"). El tablero del
     # home queda solo como el lienzo de /?tab=stock y /?tab=ajustes.
-    if "tab" not in request.query_params:
+    #
+    # ?producto=SKU también es la pestaña Stock (el bug del lugar, spec de
+    # Omar 5/10/2026): la recarga tras "Guardar en Odoo" desde el detalle
+    # viaja como /?producto=SKU SIN tab (parametrosDeEstado en app.js), y
+    # este redirect la mandaba al Calendario — guardar una cantidad te
+    # sacaba del producto. Con el producto pedido se pinta el tablero y el
+    # JS de arranque reabre ese detalle: la pantalla se queda donde estaba.
+    if "tab" not in request.query_params and "producto" not in request.query_params:
         return RedirectResponse("/calendario", status_code=303)
     umbral = datos.umbral()
     try:
