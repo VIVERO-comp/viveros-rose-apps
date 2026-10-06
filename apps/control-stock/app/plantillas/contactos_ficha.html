@@ -130,12 +130,16 @@
 
     {# ---------------- DERECHA: las dos pestañas ---------------- #}
     <section class="ct-panel" aria-label="Historial de leads y chat">
-      <nav class="ct-tabs" aria-label="Pestañas del contacto">
+      {# Las dos pestañas, como ENLACES. Ojo: esto NO puede ir dentro de un
+         <nav> — `nav a` está estilado globalmente en diseno-base.css Y en
+         styles.css (es el menú lateral de la casa) y convierte cualquier
+         enlace de adentro en una píldora del menú, sin un solo error. #}
+      <div class="ct-tabs" aria-label="Pestañas del contacto">
         {% for p in v.paneles %}
         <a class="ct-tab {{ 'on' if p.activo }}" href="{{ p.href }}"
            {% if p.activo %}aria-current="page"{% endif %}>{{ p.nombre }}</a>
         {% endfor %}
-      </nav>
+      </div>
 
       {% if v.panel == 'leads' %}
       <div class="ct-cuerpo">
@@ -150,7 +154,7 @@
            que inventar) queda la misma tarjeta, sin salto. #}
         {% if l.url %}<a class="ct-ld {{ 'on' if l.activo else 'off' }}" href="{{ l.url }}" target="_blank" rel="noopener">
         {% else %}<div class="ct-ld {{ 'on' if l.activo else 'off' }}">{% endif %}
-          <div class="ct-fila"><b>{{ l.titulo }}</b><span class="ct-pista num">{{ l.ref }}</span></div>
+          <div class="ct-fila"><b class="num">{{ l.ref }}</b><span class="ct-pista num">{{ l.pp }}</span></div>
           <div class="ct-fila">
             <span class="ct-st {{ 'a' if l.activo else 'g' }}">{{ l.chip }}</span>
             <span class="ct-meta">{{ l.interes or 'Sin interés' }} · {{ l.estado_nombre }}</span>
@@ -168,9 +172,10 @@
         {% for b in v.chat.hilo %}
           {% if b.tipo == 'dia' %}
           <span class="ct-dia">{{ b.texto }}</span>
-          {% elif b.tipo == 'suceso' %}
-          <div class="ct-m ct-sis"><span>{{ b.texto }}</span><span class="ct-mt num">{{ b.hora }}</span></div>
           {% else %}
+          {# Solo `dia` y `grupo`: el hilo se arma sin sucesos (esos son
+             comentarios del issue de un lead, y un contacto puede no
+             tener ninguno), así que acá no hay un tercer caso. #}
           {# El MISMO armado del hilo de la ficha (control.hilo): cliente a
              la izquierda, equipo a la derecha con el nombre de quien
              respondió. Una tanda del mismo autor va bajo UNA firma. #}

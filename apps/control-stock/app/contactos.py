@@ -449,8 +449,13 @@ def _leads_del_contacto(contacto, leads):
         filas.append({
             "ref": lead.get("ref") or "",
             "url": lead.get("url") or "",
-            "titulo": (lead.get("nombre") or lead.get("titulo")
-                       or lead.get("ref") or "—"),
+            # El lienzo pone un título de trabajo («Jardín del lobby») que
+            # en Linear NO EXISTE: el title del issue es el nombre de la
+            # persona más su código PP, y en la página del contacto ese
+            # nombre ya está arriba — repetirlo tres veces es ruido. Así
+            # que el renglón lo encabeza lo que de verdad distingue un
+            # lead del otro: su ref, con el código PP al lado.
+            "pp": lead.get("pp") or "",
             "estado_nombre": lead.get("estado_nombre") or "",
             "interes": lead.get("interes") or "",
             "resp": lead.get("resp") or "",

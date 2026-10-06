@@ -101,7 +101,6 @@ a.ct-r:hover b{text-decoration:underline;text-underline-offset:2px}
 .ct-m{max-width:82%;padding:8px 10px;border-radius:12px;font-size:13.5px;line-height:1.35;display:flex;flex-direction:column;gap:3px;overflow-wrap:anywhere}
 .ct-m.c{align-self:flex-start;background:#fff;border:1px solid #E4E4E4}
 .ct-m.v{align-self:flex-end;background:var(--d-verde-fondo);border:1px solid #CFE6D6}
-.ct-m.ct-sis{align-self:center;background:#F3EDFB;border:1px solid #E0D4F3;color:#4B3A68;max-width:92%}
 .ct-mt{font-size:11.5px;color:var(--d-suave)}
 
 /* ---------- celular ---------- */
