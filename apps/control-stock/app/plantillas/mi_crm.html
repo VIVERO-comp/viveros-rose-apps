@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block titulo %}Mi CRM — Control Viverorose{% endblock %}
+
+{% block contenido %}
+{# MI CRM (BLOQUE 20, esqueleto navegable 6/10/2026; diseño: pantallas
+   ruben-gerente-de-operaciones-mi-crm / mary-atencion-al-cliente-mi-crm
+   y las dos del celular). TODO lo que se pinta llegó decidido de Python
+   (app/mi_crm.py, regla 10). SOLO LECTURA: acá no hay un solo <form> —
+   lo que no funciona es un <button disabled> con «Todavía no» (regla
+   dura de Abraham: nada que parezca funcionar y no guarde). En el
+   celular son dos pestañas por GET (?pestana=), cero JS nuevo. #}
+<link rel="stylesheet" href="/static/diseno-mi-crm.css?v={{ v_estaticos }}">
+
+{% macro tarjeta(t) %}
+<article class="mc-card" {% if t.interes_color %}style="border-left-color:{{ t.interes_color }}"{% endif %}>
+  <div class="mc-fila">
+    <a class="mc-abrir" href="{{ t.href }}">{{ t.nombre }}</a>
+    <span class="mc-hace num">{{ t.hace }}</span>
+  </div>
+  <div class="mc-fila">
+    {% if t.interes %}<span class="mc-chip" style="{{ t.interes_chip }}">{{ t.interes }}</span>{% else %}<span class="mc-chip">Sin interés</span>{% endif %}
+    {% if t.pago %}<span class="mc-pago {{ t.pago_clase }}">{{ t.pago }}</span>{% endif %}
+  </div>
+</article>
+{% endmacro %}
+
+{% with bm_titulo='Mi CRM', bm_sub='Solo lo tuyo' %}{% include '_barra_movil.html' %}{% endwith %}
+
+<header class="mc-top">
+  <div class="cab-izq">
+    <button class="hamb" type="button" aria-label="Mostrar u ocultar el menú"
+            aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+    <h1 class="mc-titulo">Mi CRM</h1>
+    <span class="mc-tag">Solo lo tuyo{% if v.resp %} · {{ v.resp }}{% endif %}</span>
+  </div>
+  <div class="mc-acciones">
+    {# Los dos botones del diseño, APAGADOS: pedir una compra y crear un
+       lead llegan con sus propias partes. #}
+    <button class="mc-apagado" type="button" disabled>Pedir compra — Todavía no</button>
+    <button class="mc-apagado" type="button" disabled>+ Nuevo lead — Todavía no</button>
+  </div>
+</header>
+<p class="mc-sub">Arriba ves a quién le debes respuesta y a quién le toca seguimiento. Abajo, tu tablero.</p>
+
+<main class="mc-main">
+  {% if v.aviso_fuente %}<div class="mc-alerta">{{ v.aviso_fuente }}</div>{% endif %}
+  {% if v.aviso_resp %}<div class="mc-alerta">{{ v.aviso_resp }}</div>{% endif %}
+
+  {# ================= COMPUTADORA ================= #}
+  <div class="mc-pc">
+    <div class="mc-work">
+      <section class="mc-pet" aria-label="Peticiones">
+        <div class="mc-ph"><span>Peticiones</span><span class="mc-cnt num">{{ v.peticiones.filas | length }}</span></div>
+        <p class="mc-hueco">{{ v.peticiones.aviso }}</p>
+        <div class="mc-lab">Aceptadas · falta cotizar</div>
+        <p class="mc-hueco">{{ v.falta_cotizar.aviso }}</p>
+      </section>
+      <div class="mc-der">
+        <div class="mc-hoy">
+          <section class="mc-bx" aria-label="Por responder">
+            <div class="mc-ph"><span>Por responder</span><span class="mc-cnt num">{{ v.por_responder.filas | length }}</span></div>
+            {# BLOQUE 29: «Ver chat» apunta a la ruta FUTURA /chat/<ref>
+               (data-href), hoy APAGADO — la ruta no existe todavía. #}
+            {% for fila in v.por_responder.filas %}
+            <div class="mc-fr">
+              <span class="mc-quien"><b>{{ fila.nombre }}</b><span class="mc-pista">{{ fila.detalle }}</span></span>
+              <button class="mc-apagado chico" type="button" disabled
+                      data-href="{{ fila.chat_href }}"
+                      title="Abrirá {{ fila.chat_href }} cuando exista la ruta de chat">Ver chat — Todavía no</button>
+            </div>
+            {% else %}
+            <p class="mc-hueco">{{ v.por_responder.aviso }}</p>
+            {% endfor %}
+            <span class="mc-pista">Clientes que llevan más del umbral esperando. Saldrán solos de la lista cuando les respondas.</span>
+          </section>
+          <section class="mc-bx" aria-label="Seguimientos">
+            <div class="mc-ph"><span>Seguimientos</span><span class="mc-cnt num">{{ v.seguimientos.filas | length }}</span></div>
+            {% for fila in v.seguimientos.filas %}
+            <div class="mc-fr">
+              <span class="mc-quien"><b>{{ fila.nombre }}</b><span class="mc-pista">{{ fila.detalle }}</span></span>
+              <button class="mc-apagado chico" type="button" disabled>Hecho — Todavía no</button>
+            </div>
+            {% else %}
+            <p class="mc-hueco">{{ v.seguimientos.aviso }}</p>
+            {% endfor %}
+            <span class="mc-pista">Los que el Director te marque con fecha. Primero los vencidos y los de hoy.</span>
+          </section>
+        </div>
+        <div class="mc-board">
+          {% for col in v.columnas %}
+          <section class="mc-col" aria-label="{{ col.titulo }}">
+            <div class="mc-ch"><span>{{ col.titulo }}<span class="mc-cnt q num">{{ col.cuenta }}</span></span></div>
+            {% for t in col.tarjetas %}
+            {{ tarjeta(t) }}
+            {% if col.boton_apagado %}
+            <button class="mc-apagado chico" type="button" disabled>{{ col.boton_apagado }} — Todavía no</button>
+            {% endif %}
+            {% else %}
+            <span class="mc-pista">{{ col.vacio }}</span>
+            {% endfor %}
+            <span class="mc-pista mc-pie">{{ col.pie }}</span>
+          </section>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ================= CELULAR: dos pestañas por GET ================= #}
+  <div class="mc-movil">
+    <div class="mc-seg" role="tablist">
+      <a class="{{ 'on' if v.pestana == 'hacer' }}" href="/mi-crm">Por hacer</a>
+      <a class="{{ 'on' if v.pestana == 'tablero' }}" href="/mi-crm?pestana=tablero">Tablero<span class="mc-cnt q num">{{ v.total_tablero }}</span></a>
+    </div>
+    {% if v.pestana == 'hacer' %}
+    <div class="mc-sh">Por responder</div>
+    {% for fila in v.por_responder.filas %}
+    <div class="mc-fr">
+      <span class="mc-quien"><b>{{ fila.nombre }}</b><span class="mc-pista">{{ fila.detalle }}</span></span>
+      <button class="mc-apagado chico" type="button" disabled
+              data-href="{{ fila.chat_href }}"
+              title="Abrirá {{ fila.chat_href }} cuando exista la ruta de chat">Ver chat — Todavía no</button>
+    </div>
+    {% else %}
+    <p class="mc-hueco">{{ v.por_responder.aviso }}</p>
+    {% endfor %}
+    <div class="mc-sh">Peticiones</div>
+    <p class="mc-hueco">{{ v.peticiones.aviso }}</p>
+    <div class="mc-sh">Seguimientos</div>
+    <p class="mc-hueco">{{ v.seguimientos.aviso }}</p>
+    <div class="mc-sh">Falta cotizar</div>
+    <p class="mc-hueco">{{ v.falta_cotizar.aviso }}</p>
+    {% else %}
+    <div class="mc-st">
+      {% for col in v.columnas %}
+      <a class="mc-sx {{ 'on' if col.clave == v.etapa }}" href="/mi-crm?pestana=tablero&etapa={{ col.clave }}">
+        <b class="num">{{ col.cuenta }}</b><span>{{ col.titulo }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    <div class="mc-sh">{{ v.columna_movil.titulo }}</div>
+    {% for t in v.columna_movil.tarjetas %}
+    {{ tarjeta(t) }}
+    {% else %}
+    <span class="mc-pista">{{ v.columna_movil.vacio }}</span>
+    {% endfor %}
+    <span class="mc-pista">{{ v.columna_movil.pie }}</span>
+    {% endif %}
+  </div>
+</main>
+
+{% set activa = '' %}{% include '_nav.html' %}
+{% endblock %}
