@@ -323,8 +323,15 @@ def test_pantalla_pedidos_por_http(cliente, monkeypatch):
         assert titulo in pagina.text
     assert "S00081" in pagina.text                 # identificador visible
     assert f"/venta/estado/venta/{n}" in pagina.text  # abre la ficha EXISTENTE
-    assert "Debe $9.00" in pagina.text
-    assert "Calle 50" in pagina.text and "Sam" in pagina.text
+    # La deuda se ve con su monto (la píldora «Cobrar $X» del lienzo, que
+    # abre la ficha — misma sustancia que el «Debe $X» de antes).
+    assert "Cobrar $9.00" in pagina.text
+    assert "$0" not in pagina.text                 # jamás un cero inventado
+    assert "Calle 50" in pagina.text
+    assert "Responsable: Sam" in pagina.text       # la inicial con su nombre
+    # La leyenda del lienzo y la vista Agenda apagada con su «Todavía no».
+    assert "Falta cobrar" in pagina.text
+    assert "Agenda" in pagina.text and "Todavía no" in pagina.text
     # «Marcar entregada» NO vive acá: solo en la ficha.
     assert "MARCAR ENTREGADA" not in pagina.text
     assert "/entregada" not in pagina.text

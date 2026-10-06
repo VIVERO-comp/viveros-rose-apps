@@ -6,13 +6,24 @@
    la tarjeta enlaza allá. */
 
 /* ---------- cabecera ---------- */
-.pd-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 28px;flex-wrap:wrap}
+.pd-top{display:flex;align-items:center;gap:12px;padding:18px 28px;flex-wrap:wrap}
 .pd-top .cab-izq{display:flex;align-items:center;gap:8px}
 .pd-titulo{font-size:22px;font-weight:600;letter-spacing:0}
+.pd-sp{flex-grow:1}
 .pd-nace{font-size:13px;color:var(--d-suave)}
-.pd-leyenda{display:inline-flex;align-items:center;gap:6px;margin-left:10px}
-.pd-dot-ok{width:16px;height:16px;border-radius:50%;background:var(--d-verde-fondo);color:var(--d-verde);display:inline-grid;place-items:center;flex-shrink:0}
-.pd-lej-debe{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:10px;background:var(--d-rojo-fondo);color:var(--d-rojo);font-size:12px;font-weight:700}
+.pd-leyenda{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--d-suave);white-space:nowrap}
+.pd-lej-debe{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:11px;background:var(--d-rojo-fondo);color:var(--d-rojo);font-size:12px;font-weight:600}
+
+/* El selector de vista del lienzo: Tablero vive, Agenda está apagada. */
+.pd-seg{display:inline-flex;border:1px solid var(--d-borde-campo);border-radius:10px;overflow:hidden}
+.pd-seg>span{height:40px;display:inline-flex;align-items:center;gap:6px;padding:0 16px;font-size:15px}
+.pd-seg-on{background:var(--d-gris-activo);font-weight:700}
+.pd-seg-off{color:var(--d-suave)}
+.pd-seg-nota{font-size:11px;color:var(--d-suave)}
+
+/* La palomita verde de «Pagado» (leyenda y tarjeta), como el .pg del
+   lienzo: círculo de 22 con el check adentro. */
+.pd-pg{width:22px;height:22px;border-radius:50%;background:var(--d-verde-fondo);color:var(--d-verde);display:inline-grid;place-items:center;flex-shrink:0}
 
 /* ---------- avisos ---------- */
 .pd-alerta{
@@ -49,7 +60,7 @@
   font-size:12px;font-weight:600;
 }
 
-/* ---------- la tarjeta ---------- */
+/* ---------- la tarjeta (anatomía del lienzo 07) ---------- */
 .pd-card{
   background:#fff;border:1px solid var(--d-borde-tarjeta);
   border-left:3px solid var(--d-borde-tarjeta);
@@ -62,27 +73,48 @@
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
 .pd-abrir:hover{text-decoration:underline;text-underline-offset:2px}
-.pd-monto{font-weight:700;flex-shrink:0}
+.pd-acts{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.pd-meta{display:flex;align-items:center;gap:6px;min-width:0}
 .pd-hint{font-size:12.5px;color:var(--d-suave);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pd-fecha{font-size:12.5px;font-weight:700;color:var(--d-tinta);flex-shrink:0}
-.pd-chip{
-  display:inline-flex;align-items:center;height:22px;padding:0 8px;
-  border-radius:11px;background:var(--d-gris-activo);color:#3F3F3F;
-  font-size:12px;font-weight:600;white-space:nowrap;flex-shrink:0;
+.pd-fecha{font-size:12.5px;color:var(--d-suave);flex-shrink:0}
+
+/* La inicial del responsable, como el .av sm del lienzo. */
+.pd-av{
+  width:22px;height:22px;border-radius:50%;background:var(--d-gris-activo);
+  color:#3F3F3F;display:inline-grid;place-items:center;
+  font-size:10.5px;font-weight:700;flex-shrink:0;
 }
-.pd-plata{font-size:12.5px;font-weight:700;white-space:nowrap}
-.pd-plata.pd-debe{color:var(--d-rojo)}
-.pd-plata.pd-pagado{color:var(--d-verde)}
-.pd-plata.pd-sin-dato{color:var(--d-suave);font-weight:600}
+
+/* El chip del tipo de venta: neutro mientras Python no mande color
+   (t.chip_estilo pinta fondo/texto/borde encima, por eso el borde
+   transparente de base). */
+.pd-tipo{
+  display:inline-flex;align-items:center;height:22px;padding:0 8px;
+  border:1px solid transparent;border-radius:11px;
+  background:var(--d-gris-activo);color:#3F3F3F;
+  font-size:12px;font-weight:600;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;
+}
+
+/* Las píldoras de acción del lienzo: «Programar» contorneada en tinta,
+   «Cobrar $X» en rojo. Son enlaces a la ficha, donde vive la acción. */
+.pd-ob{
+  display:inline-flex;align-items:center;height:28px;padding:0 12px;
+  border:1px solid var(--d-tinta);border-radius:14px;background:#fff;
+  color:var(--d-tinta);font-size:13px;font-weight:600;
+  text-decoration:none;white-space:nowrap;flex-shrink:0;
+}
+.pd-ob.pd-cob{border-color:var(--d-rojo-fondo);background:var(--d-rojo-fondo);color:var(--d-rojo)}
+.pd-plata{font-size:12.5px;font-weight:600;white-space:nowrap}
+.pd-plata.pd-sin-dato{color:var(--d-suave)}
 .num{font-variant-numeric:tabular-nums}
 
 /* ---------- computadora ---------- */
 @media (min-width: 900px){
   .pd-main{padding:0 28px 28px}
   .pd-tablero{overflow-x:auto;padding-bottom:4px}
-}
-@media (min-width: 1200px){
-  .pd-col{flex:1 1 0;max-width:420px}
+  /* Columnas de ancho fijo, como el tablero del lienzo. */
+  .pd-col{flex:0 0 276px}
 }
 
 /* ---------- teléfono (pantalla 23) ---------- */
@@ -99,6 +131,9 @@
   .pd-ch-t{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--d-suave)}
   .pd-ch .pd-cnt{background:var(--d-gris-activo)}
   .pd-card{border-left-width:3px;border-radius:var(--d-radio-pil);padding:10px 12px}
-  /* Dedos y lectura: la tarjeta entera respira y el nombre va a 16px. */
+  /* Dedos y lectura: la tarjeta entera respira, el nombre va a 16px y
+     las píldoras de acción crecen a alto de dedo. */
   .pd-abrir{font-size:16px;min-height:28px;display:inline-flex;align-items:center}
+  .pd-ob{height:40px;padding:0 16px;border-radius:20px;font-size:14px}
+  .pd-av{width:28px;height:28px;font-size:12px}
 }
