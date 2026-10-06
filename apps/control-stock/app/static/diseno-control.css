@@ -278,11 +278,15 @@
   .dc-monto-amt{font-size:34px;font-weight:600;line-height:1.1}
   .dc-monto-nota{font-size:13px;color:var(--d-suave)}
 
-  .dc-filas{display:flex;flex-direction:column;border-top:1px solid #EFEFEF}
+  /* Las rayas de las filas van de borde a borde del panel, como en el
+     lienzo: el margen negativo cancela el padding lateral y cada fila lo
+     repone adentro. El valor es el del padding de ESTA cara (20px); la
+     computadora lo recalza a 24px al final del archivo. */
+  .dc-filas{display:flex;flex-direction:column;border-top:1px solid #EFEFEF;margin:0 -20px}
   .dc-fila{
     display:grid;grid-template-columns:106px minmax(0,1fr) auto;
     align-items:center;column-gap:10px;min-height:58px;
-    padding:8px 0;box-sizing:border-box;
+    padding:8px 20px;box-sizing:border-box;
     border-bottom:1px solid #EFEFEF;
     color:inherit;text-decoration:none;
   }
@@ -379,6 +383,10 @@
      siga sangrando hasta el borde. El top:-20px no cambia (el padding
      de ARRIBA sigue siendo 20px). */
   .panel-der .cab-panel{margin:-20px -24px 0;padding:20px 24px 0}
+  /* Y lo mismo para las rayas de las cinco filas: acá el padding lateral
+     del panel es 24px, no 20. */
+  .dc-filas{margin:0 -24px}
+  .dc-fila{padding:8px 24px}
 }
 
 /* Los campos de escritura del teléfono ya crecen a 16px en calendario.css
