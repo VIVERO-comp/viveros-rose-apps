@@ -1,0 +1,263 @@
+/* Diseño Orquesta — la piel de la pestaña STOCK (pantallas 03 y 04 en Mac,
+   19 y 20 en celular, de docs/diseno-orquesta/). Solo el ASPECTO: ningún
+   botón cambia de función, ninguna ruta ni POST cambia, y app.js (que
+   pinta la lista en #lista) no se toca — esta hoja restila las clases que
+   ese JS ya emite (.planta, .foto, .info, .qty, .badge, .card-pie).
+
+   La carga SOLO app.html (dentro de su block contenido, después de
+   styles.css y diseno-base.css, para ganar por orden). Todos los
+   selectores van anclados a los ids PROPIOS de esa pantalla — #tab-stock,
+   #tab-detalle, #modal-editar, #modal-foto, #modal-agregar, #panel y
+   #fab-agregar — así no le cambia nada a Inicio, Ajustes, Vender ni a la
+   vista plana del rol Inventario (stock_plano.html, que no la carga).
+
+   Los tokens vienen de diseno-base.css (--d-*). Los grises del lienzo que
+   NO tienen token todavía van literales, como en diseno-compras.css:
+   #EFEFEF (raya de fila), #E4E4E4 (borde de miniatura), #D7D7D7 y #3F3F3F
+   (chips del celular, pantalla 19). Las familias ámbar (Bajo) y las de
+   estado no existen en los tokens: esos colores se conservan de
+   styles.css — acá solo se les cambia la forma. */
+
+/* ==================== la cara general (pantalla 03) =================== */
+
+/* La franja pegajosa de arriba: blanca con la sombra suave del lienzo. */
+#tab-stock .stock-top{box-shadow:0 8px 10px -10px rgba(17,17,17,.25)}
+#tab-stock .fila-sub{gap:12px}
+
+/* Stock online / Stock global: el segmento del diseño (la píldora partida
+   de borde #CFCFCF, la vista activa en gris), como el de Compras. */
+#tab-stock .sub-tabs{
+  flex:0 0 auto;display:inline-flex;background:#fff;
+  border:1px solid var(--d-borde-campo);border-radius:18px;
+  padding:0;gap:0;overflow:hidden;
+}
+#tab-stock .sub-tabs .sub{
+  flex:0 0 auto;height:36px;padding:0 16px;border-radius:0;
+  font-size:14px;font-weight:400;color:var(--d-tinta);
+}
+#tab-stock .sub-tabs .sub.on{
+  background:var(--d-gris-activo);color:var(--d-tinta);font-weight:700;
+}
+#tab-stock .sub-nota{font-size:12.5px;color:var(--d-suave)}
+
+/* La campana: botón cuadrado de 44px, como la hamburguesa del lienzo.
+   margin-left:auto porque el segmento ya no estira (flex:0 0 auto) y la
+   campana debe quedarse pegada a la derecha, donde siempre estuvo. */
+#tab-stock .bell{
+  position:relative;width:44px;height:44px;margin-left:auto;
+  border:1px solid var(--d-borde-boton);border-radius:var(--d-radio-boton);
+  background:#fff;color:var(--d-tinta);display:grid;place-items:center;
+}
+#tab-stock .bell .dot{background:var(--d-rojo)}
+
+/* El buscador: campo con borde del diseño (radio 10, letra 16px — la
+   regla de la tanda: así iOS nunca hace zoom al enfocar). */
+#tab-stock .buscador{
+  background:#fff;border:1px solid var(--d-borde-campo);
+  border-radius:var(--d-radio-boton);height:44px;padding:0 12px;
+}
+#tab-stock .buscador input{font-size:16px;color:var(--d-tinta)}
+
+/* Los chips de filtro: píldoras blancas con borde; la activa, borde negro
+   de 2px (pantalla 03). */
+#tab-stock .filtros .chip{
+  display:inline-flex;align-items:center;height:36px;padding:0 12px;
+  border:1px solid var(--d-borde-campo);border-radius:18px;background:#fff;
+  color:var(--d-tinta);font-size:14px;font-weight:400;
+}
+#tab-stock .filtros .chip.on{
+  background:#fff;border:2px solid var(--d-tinta);color:var(--d-tinta);
+  font-weight:700;
+}
+#tab-stock .sync{font-size:12.5px;color:var(--d-suave)}
+#tab-stock .sync a{
+  color:var(--d-tinta);font-size:12.5px;text-decoration:underline;
+  text-underline-offset:2px;
+}
+
+/* La fila de un producto: blanca, con la raya fina del lienzo en vez de
+   la tarjeta crema. (El contenido lo pinta app.js igual que siempre.) */
+#tab-stock #lista .planta{
+  background:#fff;border:0;border-bottom:1px solid #EFEFEF;border-radius:0;
+  padding:8px 10px;margin-bottom:0;gap:10px;
+}
+#tab-stock #lista .planta .foto{
+  width:40px;height:40px;border-radius:8px;flex-shrink:0;
+  background:var(--d-gris-activo);border:1px solid #E4E4E4;font-size:20px;
+}
+#tab-stock #lista .planta .info b{font-size:15px;font-weight:600;color:var(--d-tinta)}
+#tab-stock #lista .planta .info span{font-size:12.5px;color:var(--d-suave)}
+#tab-stock #lista .planta .info .precio{font-size:12.5px;color:var(--d-suave)}
+#tab-stock #lista .planta .info .precio b{
+  display:inline;font-size:12.5px;font-weight:600;color:var(--d-tinta);
+}
+#tab-stock #lista .planta .qty b{
+  font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;
+}
+#tab-stock #lista .planta.agotada{background:#fff;color:var(--d-tinta)}
+#tab-stock #lista .planta.agotada .foto{background:var(--d-gris-activo)}
+#tab-stock #lista .planta.agotada .info .precio b{color:var(--d-suave)}
+#tab-stock #lista .planta.resaltada{
+  outline:2px solid var(--d-tinta);
+  box-shadow:0 0 0 5px rgba(17,17,17,.08);
+}
+#tab-stock .fuera-linea{
+  background:var(--d-gris-activo);color:var(--d-suave);
+  font-size:10.5px;border-radius:11px;letter-spacing:0;
+}
+
+/* Las etiquetas de estado: pastillas de 22px. Crítico, Negativo y Agotada
+   van con la única familia roja del lienzo (dinero que se debe o algo por
+   revisar); OK con la verde; Bajo CONSERVA su ámbar de styles.css (esa
+   familia no existe en los tokens — reportado, no inventado). */
+#tab-stock .badge,#tab-detalle .badge{
+  display:inline-flex;align-items:center;height:22px;padding:0 8px;
+  border-radius:11px;font-size:11.5px;font-weight:600;
+}
+#tab-stock .badge.b-critico,#tab-detalle .badge.b-critico,
+#tab-stock .badge.b-agotado,#tab-detalle .badge.b-agotado{
+  background:var(--d-rojo-fondo);color:var(--d-rojo);
+}
+#tab-stock .badge.b-ok,#tab-detalle .badge.b-ok{
+  background:var(--d-verde-fondo);color:var(--d-verde);
+}
+
+/* Los botones de la pestaña: el de acción en negro (lienzo: un solo botón
+   negro por pantalla), los secundarios grises con borde. */
+#tab-stock .btn-dorado,#tab-detalle .btn-dorado,#modal-editar .btn-dorado,
+#modal-foto .btn-dorado,#modal-agregar .btn-dorado{
+  background:var(--d-tinta);border:1px solid var(--d-tinta);color:#fff;
+  border-radius:var(--d-radio-boton);font-weight:600;
+}
+#tab-stock .btn-linea,#tab-detalle .btn-linea,#modal-editar .btn-linea,
+#modal-foto .btn-linea,#modal-agregar .btn-linea{
+  background:#fff;border:1px solid var(--d-borde-campo);
+  color:var(--d-tinta);border-radius:var(--d-radio-boton);
+}
+
+/* Crear producto (el único botón negro de la pantalla 03/19). */
+#fab-agregar{
+  background:var(--d-tinta);color:#fff;border-radius:var(--d-radio-pil);
+  font-weight:600;box-shadow:var(--d-sombra);
+}
+
+/* ==================== el producto abierto (pantalla 04) ================ */
+
+#tab-detalle .det-izq,#tab-detalle .det-der{
+  background:#fff;border:1px solid #E4E4E4;border-radius:var(--d-radio-tarjeta);
+}
+#tab-detalle .det-foto{
+  border-radius:12px;background:var(--d-gris-activo);border:1px solid #E4E4E4;
+}
+#tab-detalle #det-nombre{font-weight:700;letter-spacing:-.01em}
+#tab-detalle .det-sub,#tab-detalle .det-miga{color:var(--d-suave)}
+#tab-detalle .det-miga b{color:var(--d-tinta)}
+#tab-detalle .det-dato{background:var(--d-col);border-radius:12px}
+#tab-detalle .det-dato span{color:var(--d-suave)}
+
+/* Los títulos de sección de la ficha: mayúscula chica con su raya arriba,
+   como .sec del lienzo. */
+#tab-detalle .seccion-titulo{
+  font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--d-suave);border-top:1px solid var(--d-borde);padding-top:12px;
+}
+
+/* Los campos de la ficha, con el borde y el radio del diseño. */
+#tab-detalle .ficha-form .campo input,
+#tab-detalle .ficha-form .campo select,
+#tab-detalle .ficha-form .campo textarea{
+  background:#fff;border:1px solid var(--d-borde-campo);
+  border-radius:var(--d-radio-boton);color:var(--d-tinta);
+}
+
+/* El interruptor de la tienda: prendido va en tinta, no en dorado. */
+#tab-detalle .interruptor input:checked + .palanca{background:var(--d-tinta)}
+#tab-detalle .interruptor input:checked + .palanca::after{background:#fff}
+#tab-detalle .publicacion{border-top-color:var(--d-borde)}
+
+/* ==================== los modales y el panel de alertas ================ */
+
+#modal-editar .panel-hoja,#modal-foto .panel-hoja,#modal-agregar .panel-hoja,
+#panel .panel-hoja{
+  border-radius:var(--d-radio-col);border:1px solid var(--d-borde);
+}
+#modal-editar .edit-x,#modal-foto .edit-x{
+  width:36px;height:36px;border:1px solid var(--d-borde-boton);
+  border-radius:var(--d-radio-boton);background:#fff;color:var(--d-tinta);
+  display:grid;place-items:center;
+}
+/* El − cantidad + de Modificar stock: los cuadrados del lienzo
+   (pantalla 20: bordes #CFCFCF, radio 14, número grande tabular). */
+#modal-editar .qty-btn{
+  width:48px;height:48px;border:1px solid var(--d-borde-campo);
+  border-radius:var(--d-radio-pil);background:#fff;color:var(--d-tinta);
+  font-size:22px;
+}
+#modal-editar #edit-input{
+  border:1px solid var(--d-borde-campo);border-radius:var(--d-radio-pil);
+  background:#fff;color:var(--d-tinta);font-weight:700;
+  font-variant-numeric:tabular-nums;
+}
+#modal-agregar .campo input,#modal-agregar .campo select{
+  background:#fff;border:1px solid var(--d-borde-campo);
+  border-radius:var(--d-radio-boton);color:var(--d-tinta);
+}
+#panel .alerta-item{border:1px solid var(--d-borde);border-radius:var(--d-radio-pil)}
+#panel .umbral-form input{
+  border:1px solid var(--d-borde-campo);border-radius:var(--d-radio-boton);
+}
+
+/* ==================== computadora (pantallas 03 y 04) ================== */
+
+@media (min-width:900px){
+  /* La lista deja la cuadrícula de tarjetas: filas a todo lo ancho, como
+     la tabla del lienzo. El − / + del físico (que el lienzo no muestra:
+     allá se edita en el panel) se queda EN la fila, compacto a la
+     derecha — nada se pierde. */
+  #tab-stock #lista{display:flex;flex-direction:column;gap:0}
+  #tab-stock #lista .planta{
+    flex-wrap:nowrap;align-content:center;align-items:center;
+    border:0;border-bottom:1px solid #EFEFEF;
+  }
+  #tab-stock #lista .planta .foto{width:36px;height:36px;font-size:18px}
+  /* El extracto de la descripción: una sola línea en la fila. */
+  #tab-stock #lista .planta .info .extracto{-webkit-line-clamp:1}
+  #tab-stock #lista .card-pie{
+    width:auto;flex:0 0 auto;border-top:0;padding-top:0;margin:0 0 0 14px;
+  }
+  #tab-stock .pie-btn{
+    width:32px;height:32px;border:1px solid var(--d-borde-campo);
+    border-radius:var(--d-radio-boton);background:#fff;color:var(--d-tinta);
+    font-size:16px;
+  }
+  #tab-stock .pie-valor{font-variant-numeric:tabular-nums}
+  #tab-stock .pie-acciones{margin-left:10px}
+}
+
+/* ==================== el teléfono (pantallas 19 y 20) ================== */
+
+@media (max-width:899px){
+  /* Campos de escritura a 16px SIEMPRE (regla de la tanda). */
+  #tab-stock .buscador{height:48px}
+  #tab-stock .buscador input{font-size:16px}
+  #modal-editar #edit-input{font-size:24px}
+  #modal-agregar .campo input,#modal-agregar .campo select{font-size:16px}
+  #tab-detalle .ficha-form .campo input,
+  #tab-detalle .ficha-form .campo select,
+  #tab-detalle .ficha-form .campo textarea{font-size:16px}
+  #panel .umbral-form input{font-size:16px}
+
+  /* Los chips del celular (pantalla 19): chicos, grises, la activa
+     rellena en negro. */
+  #tab-stock .filtros .chip{
+    height:30px;padding:0 11px;font-size:13px;color:#3F3F3F;
+    border:1px solid #D7D7D7;
+  }
+  #tab-stock .filtros .chip.on{
+    background:var(--d-tinta);border:1px solid var(--d-tinta);color:#fff;
+    font-weight:600;
+  }
+
+  /* Las filas pegadas al borde, como la lista de la pantalla 19. */
+  #tab-stock #lista .planta{padding:8px 2px}
+}

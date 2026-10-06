@@ -5,6 +5,13 @@
    Stock o Vender y hacía sentir lento el cambio. #}
 
 {% block contenido %}
+{# Stock con el diseño Orquesta (pantallas 03/04 Mac y 19/20 celular de
+   docs/diseno-orquesta/). SOLO el aspecto: mismas rutas, mismos POST,
+   mismo app.js pintando #lista — la piel vive en diseno-stock.css,
+   anclada a los ids de ESTA pantalla (#tab-stock, #tab-detalle y sus
+   modales), así Inicio/Ajustes y la vista plana del rol Inventario
+   (stock_plano.html, que no carga esta hoja) quedan como estaban. #}
+<link rel="stylesheet" href="/static/diseno-stock.css?v={{ v_estaticos }}">
 {# Sin cabecera (pedido del dueño, 22/09/2026): ni el título "Control de
    Stock" ni una fila propia para la campana. La campana vive dentro de la
    fila de pestañas Stock online / Stock global y el contenido arranca
