@@ -39,6 +39,24 @@ def test_pending_es_lo_confirmado_sin_entregar(manager):
     assert cifra["rotulo"].startswith("provisional")
 
 
+def test_las_cifras_cuentan_el_acumulado_de_dos_pagos(manager):
+    """Depósito $100 + saldo $400: pending cuenta $500 (el monto pisado
+    subcontaba $400), y delivered usa el mismo acumulado cuando no hubo
+    entrega_monto."""
+    venta_estado.abrir("servicio", 11, "rental event", "g")
+    venta_estado.registrar_pago("servicio", 11, "g", monto=100.0,
+                                completo=False)
+    venta_estado.registrar_pago("servicio", 11, "g", monto=400.0,
+                                completo=True)
+    cifra = cifras.pending_revenue()
+    assert cifra["monto"] == 500.0 and cifra["n"] == 1
+    venta_estado.marcar_entregada("servicio", 11, manager, "Sam",
+                                  fecha="2026-10-07")
+    assert cifras.pending_revenue()["n"] == 0
+    entregado = cifras.delivered_revenue("2026-10-01", "2026-10-31")
+    assert entregado["monto"] == 500.0 and entregado["n"] == 1
+
+
 def test_delivered_usa_la_fecha_de_entrega_no_la_del_pago(manager):
     """Pagada en septiembre, entregada el 9/10: cuenta en la semana de
     OCTUBRE de la entrega, y no aparece en la del pago."""

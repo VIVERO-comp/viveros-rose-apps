@@ -155,6 +155,42 @@ def test_bajar_un_estado_es_del_system_manager(manager):
     assert venta_estado.estado_de("venta", 8)["estado"] == 1
 
 
+def test_dos_pagos_acumulan_el_monto(manager):
+    """Depósito $100 + saldo $400 = $500, nunca $400 (fix del review,
+    5/10: el COALESCE pisaba el monto y las cifras subcontaban). El
+    monto del ESTADO acumula los hechos; el historial guarda CADA pago
+    con SU monto —el del hecho, no el acumulado."""
+    venta_estado.abrir("servicio", 31, "rental event", "g")
+    venta_estado.registrar_pago("servicio", 31, "g", monto=100.0,
+                                completo=False, detalle="depósito")
+    venta_estado.registrar_pago("servicio", 31, "g", monto=400.0,
+                                completo=True, detalle="saldo")
+    fila = venta_estado.estado_de("servicio", 31)
+    assert fila["pago_monto"] == 500.0
+    assert fila["pago_completo"] == 1
+    pagos = [c for c in venta_estado.historial_de("servicio", 31)
+             if c["hecho"] == "pago"]
+    assert len(pagos) == 2
+    assert "depósito" in pagos[0]["detalle"] and "100.00" in pagos[0]["detalle"]
+    assert "saldo" in pagos[1]["detalle"] and "400.00" in pagos[1]["detalle"]
+    assert "500" not in pagos[1]["detalle"]  # jamás el acumulado
+    # Un hecho sin monto conocido no toca el acumulado.
+    venta_estado.registrar_pago("servicio", 31, "g", completo=True)
+    assert venta_estado.estado_de("servicio", 31)["pago_monto"] == 500.0
+
+
+def test_pago_completo_nunca_baja(manager):
+    """Cobrado el saldo, queda cobrado: un hecho posterior sin saldo
+    (completo=False) no des-completa el pago."""
+    venta_estado.abrir("servicio", 32, "rental event", "g")
+    venta_estado.registrar_pago("servicio", 32, "g", monto=500.0,
+                                completo=True)
+    venta_estado.registrar_pago("servicio", 32, "g", monto=20.0,
+                                completo=False)
+    fila = venta_estado.estado_de("servicio", 32)
+    assert fila["pago_completo"] == 1 and fila["pago_monto"] == 520.0
+
+
 def test_historial_guarda_cada_movimiento(manager):
     venta_estado.abrir("venta", 11, "plant retail", "genesis")
     venta_estado.registrar_pago("venta", 11, "genesis")
