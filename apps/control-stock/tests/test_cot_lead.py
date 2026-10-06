@@ -566,3 +566,84 @@ def test_sin_linear_las_candidatas_salen_sin_marca(odoo, monkeypatch):
     assert resultado["ok"] is True
     assert resultado["candidatas"]
     assert all(not c["ambigua"] for c in resultado["candidatas"])
+
+
+# ---------------------------------------------------------------------------
+# La plata de MUCHOS leads en UNA consulta (BLOQUE 43): el monto de cada
+# tarjeta del CRM. Lo mismo que `plata_de_la_real`, pero para el tablero
+# entero — pedirlo lead por lead serían ~25 viajes XML-RPC por pintada.
+# ---------------------------------------------------------------------------
+
+def _lead(ref, pp, nombre="Cliente"):
+    return {"ref": ref, "pp": pp, "nombre": nombre, "celular": "", "url": ""}
+
+
+def test_la_plata_de_varios_sale_en_una_sola_consulta(odoo, monkeypatch):
+    uno = _lead("LEAD-201", "PP-XX201", "Cliente A")
+    dos = _lead("LEAD-202", "PP-XX202", "Cliente B")
+    pa = odoo.agregar_partner("Cliente A")
+    pb = odoo.agregar_partner("Cliente B")
+    odoo.agregar_orden(pa, "S00111", amount_total=140.0, total_pagado=70.0,
+                       lead_ref="PP-XX201", lead_real=True)
+    # Una conectada que NO es la real: no cuenta para el monto.
+    odoo.agregar_orden(pa, "S00112", amount_total=999.0, lead_ref="PP-XX201")
+    odoo.agregar_orden(pb, "S00113", amount_total=50.0, lead_ref="PP-XX202",
+                       lead_real=True)
+
+    consultas = []
+    real = odoo.ejecutar
+
+    def contando(modelo, metodo, args, kw=None):
+        consultas.append((modelo, metodo))
+        return real(modelo, metodo, args, kw)
+
+    monkeypatch.setattr(ventas, "_ejecutar", contando)
+    resultado = cot_lead.plata_de_varios([uno, dos])
+    assert resultado["ok"] is True
+    assert len(consultas) == 1
+    assert resultado["por_lead"]["LEAD-201"]["total"] == 140.0
+    assert resultado["por_lead"]["LEAD-201"]["saldo"] == 70.0
+    assert resultado["por_lead"]["LEAD-201"]["orden"] == "S00111"
+    assert resultado["por_lead"]["LEAD-202"]["total"] == 50.0
+
+
+def test_un_lead_sin_orden_real_no_aparece_y_eso_es_no_tiene(odoo):
+    uno = _lead("LEAD-201", "PP-XX201")
+    partner = odoo.agregar_partner("Cliente A")
+    odoo.agregar_orden(partner, "S00111", amount_total=140.0,
+                       lead_ref="PP-XX201")   # conectada, no real
+    resultado = cot_lead.plata_de_varios([uno])
+    assert resultado["ok"] is True
+    assert resultado["por_lead"] == {}
+
+
+def test_un_lead_sin_pp_no_se_le_pregunta_a_odoo(odoo, monkeypatch):
+    def nunca(*a, **kw):
+        raise AssertionError("sin PP no hay nada que buscar")
+
+    monkeypatch.setattr(ventas, "_ejecutar", nunca)
+    assert cot_lead.plata_de_varios([_lead("LEAD-201", "")])["por_lead"] == {}
+    assert cot_lead.plata_de_varios([])["por_lead"] == {}
+
+
+def test_odoo_caido_deja_el_monto_vacio_nunca_en_cero(odoo):
+    uno = _lead("LEAD-201", "PP-XX201")
+    partner = odoo.agregar_partner("Cliente A")
+    odoo.agregar_orden(partner, "S00111", amount_total=140.0,
+                       lead_ref="PP-XX201", lead_real=True)
+    odoo.fallar = True
+    resultado = cot_lead.plata_de_varios([uno])
+    assert resultado["ok"] is False
+    assert resultado["error"]
+    assert resultado["por_lead"] == {}   # ni un 0.0 inventado
+
+
+def test_la_plata_de_varios_dice_lo_mismo_que_la_de_uno(odoo):
+    # La regla del abono del 50% vive en UN solo lugar
+    # (`_plata_de_orden`): las dos puertas tienen que coincidir.
+    uno = _lead("LEAD-201", "PP-XX201")
+    partner = odoo.agregar_partner("Cliente A")
+    odoo.agregar_orden(partner, "S00111", amount_total=140.0,
+                       total_pagado=70.0, lead_ref="PP-XX201", lead_real=True)
+    assert (cot_lead.plata_de_varios([uno])["por_lead"]["LEAD-201"]
+            == cot_lead.plata_de_la_real(uno))

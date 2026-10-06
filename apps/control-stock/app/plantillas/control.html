@@ -716,6 +716,81 @@
 </aside>
 {% endif %}
 
+{% if asignando %}
+{# --- El cuadro de ASIGNAR / REASIGNAR (BLOQUE 43, lienzo de Roles
+       «crm-asignar»). Se abre con un enlace GET (?asignar=1), como el
+       modal del motivo: cero JS.
+
+       Es una PANTALLA, no una escritura. El botón va APAGADO con su
+       «Todavía no» porque la petición —y con ella el «no queda asignado
+       hasta que la persona acepte»— llega en el punto 2 del plan de
+       roles. Por eso esto NO es un <form>: no hay a dónde mandar nada
+       todavía, y un formulario que no manda sería peor que el botón
+       apagado. Lo que SÍ reparte hoy sigue donde estaba, en «Se lo doy
+       a» dentro de «Más opciones» de la ficha.
+
+       Nadie viene premarcado, a propósito del lienzo: una opción
+       preseleccionada es una decisión que el cuadro tomó por el dueño. --- #}
+{% set volver = '/control?vista=' + vista + '&abrir=' + (asignando.lead.ref | urlencode) %}
+<a class="telon" href="{{ volver }}" aria-label="Cerrar"></a>
+<div class="modal dc-asignar" role="dialog" aria-label="{{ asignando.accion }}">
+  <div class="cab-panel">
+    <div class="dc-cab-tit">
+      <h4>{{ 'Reasignar lead' if asignando.reasigna else 'Asignar lead' }}</h4>
+      <div class="dc-cab-sub">
+        <b>{{ asignando.lead.nombre }}</b>
+        {% if asignando.lead.interes %}
+        <span class="dc-chip-interes" style="{{ asignando.lead.interes_chip }}">{{ asignando.lead.interes }}</span>
+        {% endif %}
+        <span>llegó {{ asignando.lead.hace }}</span>
+      </div>
+    </div>
+    <a class="btn chico dc-cerrar" href="{{ volver }}" aria-label="Cerrar el cuadro"><span class="dc-cerrar-x" aria-hidden="true">✕</span><span class="dc-cerrar-atras">← Atrás</span></a>
+  </div>
+
+  <div class="campo-caja" role="radiogroup" aria-label="A quién se lo mandas">
+    <label>¿A quién se lo mandas?</label>
+    {# La gente sale de las etiquetas `Resp:` de Linear (sumar a alguien
+       al equipo es crear su etiqueta allá). El conteo de abiertos es
+       REAL, contado del mismo tablero; lo que el lienzo llama «2 sin
+       aceptar» NO se pinta: las peticiones todavía no existen y un
+       número inventado ahí sería el peor de todos. #}
+    {% for p in asignando.gente %}
+    <label class="dc-opt">
+      <input type="radio" name="quien" value="{{ p.nombre }}">
+      <span class="dc-opt-av" aria-hidden="true">{{ p.inicial }}</span>
+      <span class="dc-opt-quien"><b>{{ p.nombre }}</b>
+        <span class="tenue">{{ p.detalle }}{% if p.actual %} · lo tiene hoy{% endif %}</span></span>
+    </label>
+    {% else %}
+    <p class="pie-nota" style="margin:0">Todavía no hay ninguna etiqueta
+      <b>Resp:</b> en Linear: las crea Abraham allá, y el código nunca las crea.</p>
+    {% endfor %}
+  </div>
+
+  <div class="dc-asignar-dos">
+    <div class="campo-caja">
+      <label for="as-nota">Nota para la persona (opcional)</label>
+      <input class="campo" id="as-nota" type="text" maxlength="300"
+             autocomplete="off" placeholder="Ej.: llamar antes del viernes">
+    </div>
+    <div class="campo-caja">
+      <label for="as-fecha">Seguimiento (opcional)</label>
+      <input class="campo" id="as-fecha" type="date">
+    </div>
+  </div>
+
+  <div class="acciones">
+    <button class="btn dc-apagado" type="button" disabled
+            title="Las peticiones llegan en el punto 2 del plan de roles">{{ asignando.accion }} — Todavía no</button>
+  </div>
+  <p class="pie-nota">Este cuadro todavía no manda nada: cuando exista la
+    petición, el lead no quedará asignado hasta que la persona acepte, y si
+    dice «No puedo» volverá con su nota. Mientras tanto, lo que sí reparte
+    es <b>Se lo doy a</b>, dentro de «Más opciones» de la ficha.</p>
+</div>
+{% endif %}
+
 {% if moviendo %}
 {# El motivo de la corrección manual. Perdido pide además su motivo de
    pérdida, que es una etiqueta del grupo "Motivo de pérdida". #}

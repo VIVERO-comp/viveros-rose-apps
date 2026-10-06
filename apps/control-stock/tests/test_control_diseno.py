@@ -104,9 +104,12 @@ def test_la_tarjeta_conserva_sus_piezas(cliente, de_dueno):
 
 def test_el_responsable_va_de_inicial_en_la_tarjeta(cliente, de_dueno):
     # Fidelidad P37 (pantalla 05): el responsable es el círculo con su
-    # inicial en el rincón derecho de la primera fila, no un chip abajo.
-    # El chip se queda SOLO para el hueco «Sin asignar», que es lo que el
-    # dueño necesita ver para repartir.
+    # inicial, no un chip con su nombre. El chip se queda SOLO para el
+    # hueco «Sin asignar», que es lo que el dueño necesita ver para
+    # repartir. (Con el lienzo de ROLES —BLOQUE 43— ese círculo se mudó
+    # a la fila de ABAJO, porque el rincón de arriba es ahora la plata;
+    # sigue siendo el mismo círculo y lo verifica la prueba de la
+    # tarjeta reordenada.)
     cuerpo = cliente.get("/control", params={"vista": "estado"}).text
     desde = cuerpo.index('data-ref="LEAD-91"')
     tarjeta = cuerpo[desde:desde + 10 + cuerpo[desde + 10:].index("data-ref=")]
@@ -352,3 +355,299 @@ def test_el_lead_ajeno_sigue_sin_botones_con_la_piel_nueva(cliente):
     assert 'action="/control/responder' not in panel
     assert "<summary>Más opciones</summary>" not in panel
     assert "No es tuyo." in panel
+
+
+# ---------------------------------------------------------------------------
+# BLOQUE 43 — las tres pantallas del lienzo de ROLES:
+#   A. el panel del lead (monto grande + cinco filas),
+#   B. el CRM reordenado (nombre y monto arriba, interés y persona abajo),
+#   C. el cuadro de asignar / reasignar.
+# Lo que ninguna de las tres hace: inventar un dato o aflojar un candado.
+# ---------------------------------------------------------------------------
+
+def _con_plata(falso, ref, total=1150.0, pagado=70.0, etapa="abono"):
+    """Le conecta a un lead su orden REAL en el Odoo fingido."""
+    lead = linear_leads.uno(ref)
+    partner = falso.agregar_partner(lead["nombre"], lead.get("celular") or "")
+    orden = falso.agregar_orden(partner, "S00100", amount_total=total,
+                                total_pagado=pagado, etapa_cobro=etapa)
+    control.conectar_cotizacion(ref, orden, autor="Abraham")
+    return orden
+
+
+def test_el_panel_lleva_las_cinco_filas_en_su_orden(cliente, de_dueno):
+    panel = _panel(cliente.get("/control", params={"abrir": "LEAD-91",
+                                                   "vista": "estado"}).text)
+    etiquetas = ["Lo atiende", "Seguimiento", "Último mensaje",
+                 "Cotización", "Historial"]
+    donde = [panel.index(">%s</span>" % e) for e in etiquetas]
+    assert donde == sorted(donde)   # en el orden del lienzo
+    assert panel.count('class="dc-fila-l">') == 5
+
+
+def test_se_toca_la_fila_entera_no_un_enlacito_al_final(cliente, de_dueno):
+    # El <a> ES la fila: abre en la etiqueta y cierra después de la
+    # flecha, así que todo el renglón es área activa.
+    panel = _panel(cliente.get("/control", params={"abrir": "LEAD-91",
+                                                   "vista": "estado"}).text)
+    fila = panel[panel.index('<a class="dc-fila"'):]
+    fila = fila[:fila.index("</a>")]
+    assert ">Lo atiende</span>" in fila          # la etiqueta, adentro
+    assert 'class="dc-fila-go"' in fila          # y la flecha, también
+
+
+def test_lo_atiende_sale_de_la_etiqueta_resp_y_abre_el_cuadro(cliente, de_dueno):
+    panel = _panel(cliente.get("/control", params={"abrir": "LEAD-91",
+                                                   "vista": "estado"}).text)
+    assert linear_leads.uno("LEAD-91")["resp"] == "Ruben"
+    assert "Ruben" in panel
+    assert "abrir=LEAD-91&amp;asignar=1" in panel
+
+
+def test_sin_responsable_la_fila_lo_dice_y_pide_ojo(cliente, de_dueno):
+    panel = _panel(cliente.get("/control", params={"abrir": "LEAD-86",
+                                                   "vista": "estado"}).text)
+    assert "Nadie lo tiene todavía" in panel
+    assert "dc-fila-ojo" in panel
+
+
+def test_el_monto_grande_es_el_total_de_la_orden_real(cliente, de_dueno,
+                                                       monkeypatch):
+    falso = OdooCotLead()
+    monkeypatch.setattr(ventas, "_ejecutar", falso.ejecutar)
+    _con_plata(falso, "LEAD-91")
+    panel = _panel(cliente.get("/control", params={"abrir": "LEAD-91",
+                                                   "vista": "estado"}).text)
+    assert '<span class="dc-monto-amt num">$1,150.00</span>' in panel
+    assert "S00100 · debe $1,080.00" in panel
+
+
+def test_sin_orden_real_no_hay_numero_y_el_panel_dice_por_que(cliente,
+                                                               de_dueno,
+                                                               monkeypatch):
+    monkeypatch.setattr(ventas, "_ejecutar", OdooCotLead().ejecutar)
+    panel = _panel(cliente.get("/control", params={"abrir": "LEAD-86",
+                                                   "vista": "estado"}).text)
+    assert "dc-monto-amt" not in panel       # ni un $0.00 de relleno
+    assert "Sin cotización conectada: todavía no hay monto." in panel
+
+
+def test_odoo_caido_no_se_confunde_con_sin_cotizacion(cliente, de_dueno,
+                                                       monkeypatch):
+    falso = OdooCotLead()
+    falso.fallar = True
+    monkeypatch.setattr(ventas, "_ejecutar", falso.ejecutar)
+    panel = _panel(cliente.get("/control", params={"abrir": "LEAD-91",
+                                                   "vista": "estado"}).text)
+    assert "dc-monto-amt" not in panel
+    assert "No se pudo leer Odoo" in panel
+
+
+def test_la_fila_del_seguimiento_va_apagada_con_su_todavia_no(cliente,
+                                                               de_dueno):
+    # La señal existe en Linear (está en la muestra), pero poner o cambiar
+    # un seguimiento CON fecha y nota todavía no existe como dato: la fila
+    # lo dice y no es un enlace.
+    panel = _panel(cliente.get("/control", params={"abrir": "LEAD-91",
+                                                   "vista": "estado"}).text)
+    fila = panel[panel.index(">Seguimiento</span>"):]
+    fila = fila[:fila.index("</div>", fila.index("dc-fila-no"))]
+    assert "Sin seguimiento" in fila
+    assert "Todavía no" in fila
+    assert "La fecha y la nota todavía no existen como dato." in fila
+
+
+def test_sin_twenty_la_fila_del_ultimo_mensaje_lo_dice(cliente, de_dueno):
+    # En modo muestra no hay Twenty: la fila dice «sin mensajes», nunca
+    # inventa uno ni deja el renglón mudo.
+    panel = _panel(cliente.get("/control", params={"abrir": "LEAD-91",
+                                                   "vista": "estado"}).text)
+    assert "Sin mensajes todavía" in panel
+
+
+# ---- el candado de la plata (E del encargo: ninguno se afloja) ----
+
+def test_quien_ve_la_plata_de_un_lead():
+    director = {"admin": True, "resp_propio": "", "plata_todo": True}
+    finanzas = {"admin": False, "resp_propio": "", "plata_todo": True}
+    ruben = {"admin": False, "resp_propio": "Ruben", "plata_todo": False}
+    nadie = {"admin": False, "resp_propio": "", "plata_todo": False}
+    mio = linear_leads.uno("LEAD-91")      # Resp: Ruben
+    ajeno = linear_leads.uno("LEAD-89")    # Resp: Mary
+    for alc in (director, finanzas):
+        assert control.puede_ver_plata(mio, alc) is True
+        assert control.puede_ver_plata(ajeno, alc) is True
+    assert control.puede_ver_plata(mio, ruben) is True
+    assert control.puede_ver_plata(ajeno, ruben) is False
+    assert control.puede_ver_plata(mio, nadie) is False
+
+
+def test_un_lead_ajeno_no_ensena_ni_un_numero_de_plata(cliente, monkeypatch):
+    # Sin AJUSTES_ADMINS la sesión no es dueña y no le toca ningún lead:
+    # ve el tablero completo (28/09/2026) pero NO la plata de nadie.
+    falso = OdooCotLead()
+    monkeypatch.setattr(ventas, "_ejecutar", falso.ejecutar)
+    _con_plata(falso, "LEAD-91")
+    cuerpo = cliente.get("/control", params={"abrir": "LEAD-91",
+                                             "vista": "estado"}).text
+    panel = _panel(cuerpo)
+    assert "1,150" not in cuerpo and "1150" not in cuerpo
+    assert "Cobrar saldo" not in panel
+    assert "ficha-cot-monto" not in panel
+    # Y se dice quién la ve, en vez de dejar el hueco mudo.
+    assert control.LEYENDA_SIN_PLATA in panel
+
+
+def test_el_tablero_no_le_pide_a_odoo_la_plata_que_no_va_a_ensenar(monkeypatch):
+    # El candado no es solo de pintado: de un lead que esta sesión no
+    # puede ver no se le pregunta nada a Odoo.
+    pedidos = []
+    monkeypatch.setattr(control.cot_lead, "plata_de_varios",
+                        lambda leads: pedidos.append([l["ref"] for l in leads])
+                        or {"ok": True, "por_lead": {}})
+    control.tablero_por_estado(
+        alcance_actual={"admin": False, "resp_propio": "Ruben",
+                        "plata_todo": False})
+    assert pedidos and set(pedidos[0]) == {"LEAD-91", "LEAD-88"}  # los de Ruben
+
+
+def test_sin_alcance_el_tablero_no_toca_odoo(monkeypatch):
+    # `tablero_por_estado()` a secas (pruebas, avisos de fondo) no paga un
+    # viaje a Odoo: el monto solo se lee cuando la pantalla lo pide.
+    def nunca(leads):
+        raise AssertionError("no se le debe preguntar a Odoo")
+
+    monkeypatch.setattr(control.cot_lead, "plata_de_varios", nunca)
+    columnas = control.tablero_por_estado()
+    assert all(l["monto"] is None for c in columnas for l in c["leads"])
+
+
+# ---- B. el tablero reordenado ----
+
+def test_la_tarjeta_lleva_el_monto_arriba_y_la_persona_abajo(cliente,
+                                                              de_dueno,
+                                                              monkeypatch):
+    falso = OdooCotLead()
+    monkeypatch.setattr(ventas, "_ejecutar", falso.ejecutar)
+    _con_plata(falso, "LEAD-91")
+    cuerpo = cliente.get("/control", params={"vista": "estado"}).text
+    desde = cuerpo.index('data-ref="LEAD-91"')
+    resto = cuerpo[desde + 10:]
+    corta = resto.index("data-ref=") if "data-ref=" in resto else len(resto)
+    tarjeta = cuerpo[desde:desde + 10 + corta]
+    arriba = tarjeta[:tarjeta.index("ctl-pie-tarjeta")]
+    abajo = tarjeta[tarjeta.index("ctl-pie-tarjeta"):]
+    # Arriba: el nombre y la plata.
+    assert "Tamara" in arriba
+    assert '<b class="ctl-monto num">$1,150.00</b>' in arriba
+    # Abajo: el color del interés y la persona.
+    assert "dc-chip-interes" in abajo and ">Plantas</span>" in abajo
+    assert 'aria-label="Responsable: Ruben"' in abajo
+    assert "ctl-av" not in arriba
+    # El «hace» no se pierde ni se repite: bajó a la fila de abajo.
+    assert "hace 1 día" in abajo and "hace 1 día" not in arriba
+
+
+def test_sin_monto_el_hace_se_queda_arriba_como_en_el_lienzo(cliente,
+                                                              de_dueno):
+    # Las tarjetas sin plata del lienzo llevan el tiempo en ese rincón.
+    cuerpo = cliente.get("/control", params={"vista": "estado"}).text
+    desde = cuerpo.index('data-ref="LEAD-88"')
+    resto = cuerpo[desde + 10:]
+    corta = resto.index("data-ref=") if "data-ref=" in resto else len(resto)
+    tarjeta = cuerpo[desde:desde + 10 + corta]
+    arriba = tarjeta[:tarjeta.index("ctl-pie-tarjeta")]
+    assert "ctl-monto" not in arriba
+    # Y con él su resaltado de los 5 días (T2, 29/09/2026), que no se
+    # perdió al mudarse de fila.
+    assert 'class="ctl-hace hace-alerta"' in arriba
+
+
+def test_el_total_de_la_columna_es_solo_de_quien_ve_toda_la_plata(
+        cliente, de_dueno, monkeypatch):
+    falso = OdooCotLead()
+    monkeypatch.setattr(ventas, "_ejecutar", falso.ejecutar)
+    _con_plata(falso, "LEAD-91")
+    del_dueno = cliente.get("/control", params={"vista": "estado"}).text
+    assert '<span class="ret-total num">$1,150.00</span>' in del_dueno
+    # Sin un solo monto conocido no hay total: un $0.00 diría «no hay
+    # plata» cuando lo cierto es «no se sabe».
+    assert del_dueno.count('class="ret-total') == 1
+
+
+def test_asignar_desde_la_tarjeta_sin_dueno_es_del_dueno(cliente, de_dueno):
+    cuerpo = cliente.get("/control", params={"vista": "estado"}).text
+    desde = cuerpo.index('data-ref="LEAD-86"')   # sin Resp:
+    resto = cuerpo[desde + 10:]
+    corta = resto.index("data-ref=") if "data-ref=" in resto else len(resto)
+    tarjeta = cuerpo[desde:desde + 10 + corta]
+    assert 'class="ctl-asignar"' in tarjeta
+    assert "abrir=LEAD-86&asignar=1" in tarjeta
+    # El hueco se sigue diciendo con todas sus letras.
+    assert "chip-nadie" in tarjeta
+
+
+def test_un_empleado_no_ve_el_enlace_de_asignar(cliente):
+    cuerpo = cliente.get("/control", params={"vista": "estado"}).text
+    assert "ctl-asignar" not in cuerpo
+
+
+# ---- C. el cuadro de asignar / reasignar ----
+
+def test_el_cuadro_de_asignar_se_abre_con_un_enlace_get(cliente, de_dueno):
+    cuerpo = cliente.get("/control", params={
+        "vista": "estado", "abrir": "LEAD-86", "asignar": "1"}).text
+    assert 'class="modal dc-asignar"' in cuerpo
+    assert "¿A quién se lo mandas?" in cuerpo
+    # Las tres etiquetas `Resp:` de Linear, con su carga REAL de hoy.
+    for nombre in linear_leads.responsables():
+        assert f'value="{nombre}"' in cuerpo
+    assert "2 leads abiertos" in cuerpo        # los de Ruben
+
+
+def test_en_el_cuadro_no_viene_nadie_premarcado(cliente, de_dueno):
+    cuerpo = cliente.get("/control", params={
+        "vista": "estado", "abrir": "LEAD-91", "asignar": "1"}).text
+    assert "checked" not in cuerpo
+    # Ni siquiera quien lo tiene hoy: se dice, no se marca.
+    assert "lo tiene hoy" in cuerpo
+
+
+def test_la_nota_y_la_fecha_del_cuadro_son_opcionales(cliente, de_dueno):
+    cuerpo = cliente.get("/control", params={
+        "vista": "estado", "abrir": "LEAD-86", "asignar": "1"}).text
+    assert "Nota para la persona (opcional)" in cuerpo
+    assert "Seguimiento (opcional)" in cuerpo
+    caja = cuerpo[cuerpo.index("dc-asignar-dos"):]
+    caja = caja[:caja.index("</div>\n\n  <div class=\"acciones\">")]
+    assert "required" not in caja
+
+
+def test_mandar_peticion_va_apagado_y_el_cuadro_no_escribe_nada(cliente,
+                                                                 de_dueno):
+    cuerpo = cliente.get("/control", params={
+        "vista": "estado", "abrir": "LEAD-86", "asignar": "1"}).text
+    cuadro = cuerpo[cuerpo.index('class="modal dc-asignar"'):]
+    cuadro = cuadro[:cuadro.index("</div>\n{% endif %}") if "{% endif %}" in cuadro
+                    else len(cuadro)]
+    assert "Mandar petición — Todavía no" in cuadro
+    assert "disabled" in cuadro
+    # Es una capa, no un formulario: no hay a dónde mandar nada todavía.
+    assert "<form" not in cuadro[:cuadro.index("Mandar petición")]
+    # Y lo que SÍ reparte hoy sigue nombrado.
+    assert "Se lo doy a" in cuadro
+
+
+def test_con_dueno_el_mismo_cuadro_dice_reasignar(cliente, de_dueno):
+    cuerpo = cliente.get("/control", params={
+        "vista": "estado", "abrir": "LEAD-91", "asignar": "1"}).text
+    assert "<h4>Reasignar lead</h4>" in cuerpo
+    assert "Reasignar — Todavía no" in cuerpo
+
+
+def test_repartir_sigue_siendo_del_dueno_tambien_en_el_cuadro(cliente):
+    # Un empleado puede pedir ?asignar=1 a mano: el servidor no le arma el
+    # cuadro. El candado no es que el enlace no se pinte.
+    cuerpo = cliente.get("/control", params={
+        "vista": "estado", "abrir": "LEAD-86", "asignar": "1"}).text
+    assert "dc-asignar" not in cuerpo

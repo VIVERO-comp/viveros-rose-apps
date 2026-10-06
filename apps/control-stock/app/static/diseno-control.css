@@ -345,6 +345,28 @@
   /* El modal del motivo, con los radios del lienzo. */
   .modal{border-radius:16px;border-color:var(--d-borde)}
   .modal .btn.oro{min-height:44px;border-radius:12px;font-size:14px}
+
+  /* ---- El cuadro de asignar / reasignar (lienzo de Roles
+     «crm-asignar»): 440px, cada persona en su caja de 60px con el radio
+     a la izquierda, y la nota y la fecha en dos columnas. ---- */
+  .dc-asignar{width:min(440px,94vw)}
+  .dc-asignar .dc-cab-sub{margin-top:6px}
+  .dc-opt{
+    display:flex;align-items:center;gap:12px;min-height:60px;
+    padding:0 14px;box-sizing:border-box;
+    border:1px solid var(--d-borde-campo);border-radius:12px;
+    cursor:pointer;
+  }
+  .dc-opt input{width:20px;height:20px;accent-color:var(--d-tinta);margin:0;flex-shrink:0}
+  .dc-opt-av{
+    display:inline-grid;place-items:center;width:28px;height:28px;
+    border-radius:50%;background:var(--d-tinta);color:#fff;
+    font-size:12px;font-weight:700;flex-shrink:0;
+  }
+  .dc-opt-quien{display:flex;flex-direction:column;gap:1px;flex-grow:1;min-width:0}
+  .dc-opt-quien .tenue{font-size:12.5px}
+  .dc-asignar-dos{display:grid;grid-template-columns:minmax(0,1fr) 150px;gap:10px}
+  .dc-asignar .acciones{margin-top:2px}
 }
 
 /* El ancho de la ficha en computadora (pantalla 06): 480px. Va al final y
@@ -364,4 +386,10 @@
    cotizaciones si algún corte lo dejara fuera. */
 @media (max-width:767.98px){
   .panel-der .campo-caja .campo{font-size:16px}
+  /* En el teléfono el cuadro de asignar es pantalla completa (lo hace
+     `.modal` de calendario.css) y la nota y la fecha se apilan: 150px
+     para la fecha al lado de la nota no caben. */
+  .dc-asignar{width:100%}
+  .dc-asignar-dos{grid-template-columns:minmax(0,1fr)}
+  .dc-asignar .campo{font-size:16px}
 }
