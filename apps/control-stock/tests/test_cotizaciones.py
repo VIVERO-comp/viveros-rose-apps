@@ -1134,13 +1134,16 @@ def test_precio_editado_a_mano_sobrevive_guardar_y_reabrir_editar(cliente, odoo)
 
 
 def test_la_lista_muestra_editar_solo_en_cotizacion(cliente, odoo):
+    # BLOQUE 32: Editar y el chip Facturado viven en el panel de cada
+    # tarjeta — la regla es la misma (solo la editable ofrece Editar).
     editable = _cotizacion_de_renta(odoo)
     facturada = _cotizacion_de_renta(odoo)
     odoo.ordenes[facturada["orden_id"]]["invoice_ids"] = [903]
-    pagina = cliente.get("/venta").text
-    assert f"/venta/servicio/{editable['n']}/editar" in pagina
-    assert f"/venta/servicio/{facturada['n']}/editar" not in pagina
-    assert "Facturado" in pagina
+    panel_editable = cliente.get(f"/venta?abrir=s{editable['n']}").text
+    assert f"/venta/servicio/{editable['n']}/editar" in panel_editable
+    panel_facturada = cliente.get(f"/venta?abrir=s{facturada['n']}").text
+    assert f"/venta/servicio/{facturada['n']}/editar" not in panel_facturada
+    assert "Facturado" in panel_facturada
     # Y editar la facturada por URL directa tampoco pasa.
     r = cliente.get(f"/venta/servicio/{facturada['n']}/editar",
                     follow_redirects=False)
@@ -1409,7 +1412,9 @@ def test_el_enlace_de_la_propuesta_baja_con_target_blank_y_download(cliente, odo
                  data={"cliente": "María", "celular": "",
                        "servicio_texto": "Alquiler de 20 plantas",
                        "servicio_monto": "850"})
-    pagina = cliente.get("/venta").text
+    # BLOQUE 32: el enlace vive en el panel de la tarjeta.
+    registro = cotizaciones.cotizaciones_todas()[0]
+    pagina = cliente.get(f"/venta?abrir=s{registro['n']}").text
     encontrado = False
     for trozo in pagina.split("<a ")[1:]:
         enlace = trozo.split(">")[0]
@@ -1430,10 +1435,12 @@ def test_la_propuesta_ya_no_tiene_boton_compartir_aparte(cliente, odoo):
                        "servicio_texto": "Alquiler de 20 plantas",
                        "servicio_monto": "850"})
     registro = cotizaciones.cotizaciones_todas()[0]
-    pagina = cliente.get("/venta").text
+    # BLOQUE 32: el control único vive en el panel — el PDF es el botón
+    # principal (sin el «(PDF)» entre paréntesis de la tarjeta vieja).
+    pagina = cliente.get(f"/venta?abrir=s{registro['n']}").text
     assert f'data-compartir="/venta/servicio/{registro["n"]}/propuesta.pdf"' \
         not in pagina
-    assert ">Descargar / Compartir (PDF)</a>" in pagina
+    assert ">Descargar / Compartir PDF</a>" in pagina
 
 
 def test_el_enlace_de_la_propuesta_lleva_data_pdf_con_su_nombre(cliente, odoo):
@@ -1447,7 +1454,8 @@ def test_el_enlace_de_la_propuesta_lleva_data_pdf_con_su_nombre(cliente, odoo):
     registro = cotizaciones.cotizaciones_todas()[0]
     esperado = ventas.nombre_de_pdf(registro["orden"].replace("/", "-"),
                                     registro["cliente"])
-    pagina = cliente.get("/venta").text
+    # BLOQUE 32: el enlace vive en el panel de la tarjeta.
+    pagina = cliente.get(f"/venta?abrir=s{registro['n']}").text
     encontrado = False
     for trozo in pagina.split("<a ")[1:]:
         enlace = trozo.split(">")[0]
