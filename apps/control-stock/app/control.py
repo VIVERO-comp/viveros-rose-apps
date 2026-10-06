@@ -1166,13 +1166,13 @@ def _monto_del_panel(cot, ve_plata):
     esta sesión no ve. Nunca un cero.
     """
     if not ve_plata:
-        return {"total": None, "nota": LEYENDA_SIN_PLATA}
+        return {"total": None, "texto": "", "nota": LEYENDA_SIN_PLATA}
     if not cot.get("ok"):
-        return {"total": None,
+        return {"total": None, "texto": "",
                 "nota": "No se pudo leer Odoo: " + (cot.get("error") or "")}
     plata = cot.get("plata")
     if not plata:
-        return {"total": None,
+        return {"total": None, "texto": "",
                 "nota": "Sin cotización conectada: todavía no hay monto."}
     if plata["saldo"] <= 0:
         cobro = "pagado completo"
@@ -1180,7 +1180,11 @@ def _monto_del_panel(cot, ve_plata):
         cobro = "debe " + _dinero(plata["saldo"])
     else:
         cobro = "sin pago todavía"
-    return {"total": plata["total"], "nota": plata["orden"] + " · " + cobro}
+    # `texto` ya viene formateado (con la coma de los miles, como el
+    # lienzo): el filtro `dinero` de las plantillas no la pone, y el
+    # número grande del panel es de cuatro cifras a menudo.
+    return {"total": plata["total"], "texto": _dinero(plata["total"]),
+            "nota": plata["orden"] + " · " + cobro}
 
 
 def ficha(ref, buscar_cotizacion="", vista="", ve_plata=True):
@@ -1238,7 +1242,12 @@ def ficha(ref, buscar_cotizacion="", vista="", ve_plata=True):
     # que explica por qué cuando no hay número.
     abierta["monto_panel"] = _monto_del_panel(abierta["cot"], ve_plata)
     historial = (sucesos or []) + (internas or [])
-    ultimo_apunte = max((n.get("cuando") or "" for n in historial), default="")
+    crudo = max((n.get("fecha") or n.get("cuando") or "" for n in historial),
+                default="")
+    # «Martes 6 oct» en vez de «2026-10-06»: el mismo día legible que ya
+    # usa el hilo. Si no se pudo leer la fecha queda lo crudo, nunca una
+    # fecha inventada.
+    ultimo_apunte = crm_twenty.dia_legible(crudo) or crudo
     abierta["filas"] = [
         _fila_atiende(abierta, vista),
         _fila_seguimiento(abierta),

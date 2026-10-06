@@ -284,14 +284,60 @@
   </div>
   {% endif %}
 
-  {# Los datos arriba, como las filas Teléfono/Responsable del lienzo
-     (06/22); el origen ya va en la cabecera. #}
+  {# --- El MONTO grande (BLOQUE 43, lienzo de Roles «crm-lead-abierto»).
+         El número es el total de la ORDEN REAL conectada (cot_lead), y
+         debajo su renglón: qué orden es y cómo va el cobro. Sin orden
+         real, sin Odoo, o sin permiso de ver la plata, no hay número y
+         el renglón DICE por qué — nunca un $0.00 de relleno. Todo lo
+         decide control._monto_del_panel. --- #}
+  <div class="dc-monto">
+    {% if abierta.monto_panel.texto %}
+    <span class="dc-monto-amt num">{{ abierta.monto_panel.texto }}</span>
+    {% endif %}
+    <span class="dc-monto-nota">{{ abierta.monto_panel.nota }}</span>
+  </div>
+
+  {# --- Las CINCO filas del lienzo: Lo atiende · Seguimiento · Último
+         mensaje · Cotización · Historial. SE TOCA LA FILA ENTERA (el
+         <a> es la fila, no un enlacito al final), y cada una viaja con
+         su destino ya decidido en Python (control._fila_*). La que
+         todavía no tiene acción no es un enlace: es una fila apagada
+         con su «Todavía no» a la derecha, en el mismo lugar donde
+         estaría la flecha. --- #}
+  <div class="dc-filas">
+    {% for f in abierta.filas %}
+    {% if f.href %}
+    <a class="dc-fila" href="{{ f.href }}">
+      <span class="dc-fila-l">{{ f.etiqueta }}</span>
+      <span class="dc-fila-v">
+        <span class="dc-fila-dato{{ ' dc-fila-ojo' if f.alerta }}">
+          {% if f.inicial %}<span class="dc-fila-av" aria-hidden="true">{{ f.inicial }}</span>{% endif %}{{ f.valor }}</span>
+        {% if f.detalle %}<span class="dc-fila-det">{{ f.detalle }}</span>{% endif %}
+      </span>
+      <svg class="dc-fila-go" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+    </a>
+    {% else %}
+    <div class="dc-fila dc-fila-off">
+      <span class="dc-fila-l">{{ f.etiqueta }}</span>
+      <span class="dc-fila-v">
+        <span class="dc-fila-dato{{ ' dc-fila-ojo' if f.alerta }}">
+          {% if f.inicial %}<span class="dc-fila-av" aria-hidden="true">{{ f.inicial }}</span>{% endif %}{{ f.valor }}</span>
+        {% if f.detalle %}<span class="dc-fila-det">{{ f.detalle }}</span>{% endif %}
+      </span>
+      <span class="dc-fila-no">{{ f.todavia_no }}</span>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+
+  {# Los datos que las cinco filas no cuentan. El responsable salió de
+     aquí: lo dice la fila «Lo atiende», que además abre el cuadro de
+     asignar — repetirlo dos veces en la misma pantalla era ruido. #}
   <div>
     {% if abierta.estado == 'RECORDATORIO' %}
     <div class="dato"><b>Espera</b><span>{{ abierta.recordatorio_motivo or 'sin motivo anotado' }}</span></div>
     {% endif %}
     {% if abierta.celular %}<div class="dato"><b>Teléfono</b><span class="mono">{{ abierta.celular }}</span></div>{% endif %}
-    <div class="dato"><b>Responsable</b><span>{{ abierta.resp_titulo }}</span></div>
     <div class="dato"><b>Llegó</b><span>{{ abierta.hace }}</span></div>
     <div class="dato"><b>Issue</b><span class="mono">{{ abierta.ref }}{% if abierta.pp %} · {{ abierta.pp }}{% endif %}</span></div>
   </div>
@@ -382,12 +428,21 @@
          de cot_lead.py; acá solo se pinta lo que control.ficha() compuso
          (abierta.cot). "No se pudo leer Odoo" nunca se confunde con "sin
          cotización conectada": son cosas distintas. --- #}
+  {# `display:contents`, así que el ancla de la fila «Cotización» no
+     cambia ni un píxel del layout de la columna. #}
+  <div id="dc-cotizacion" class="dc-seccion">
   {% set cot = abierta.cot %}
   {% if not cot.ok %}
   <div class="ficha-cot-vacia">No se pudo leer Odoo: {{ cot.error }}</div>
   {% else %}
 
-    {% if cot.plata %}
+    {# La plata de la real solo para quien la puede ver (BLOQUE 43): el
+       que lo atiende, el Director y Finanzas. A los demás se les dice
+       quién la ve, en vez de dejar el hueco sin explicación. #}
+    {% if cot.plata and not abierta.ve_plata %}
+    <div class="ficha-cot-vacia">{{ leyenda_sin_plata }}</div>
+    {% endif %}
+    {% if cot.plata and abierta.ve_plata %}
     <div class="ret-cotizs">
       <div class="tenue ret-cotiz-titulo">La real · {{ cot.plata.orden }}</div>
       <div class="dato"><b>Total</b><span>{{ cot.plata.total | dinero }}</span></div>
@@ -420,7 +475,9 @@
           </div>
           <span class="badge {{ o.badge.clase }}">{{ o.badge.texto }}</span>
         </div>
+        {% if abierta.ve_plata %}
         <div class="ficha-cot-monto">{{ o.total | dinero }}{% if o.pagado %} · pagó {{ o.pagado | dinero }}{% endif %}</div>
+        {% endif %}
         <div class="ficha-cot-acciones">
           {# UN solo control (Abraham, 30/09/2026): «Descargar / Compartir»
              reemplaza el par PDF + Compartir. El nombre lo calcula Python
@@ -491,11 +548,12 @@
     </div>
     {% endif %}
   {% endif %}
+  </div>
 
   {# --- Qué se dijo: el hilo. Cliente a la izquierda, equipo a la derecha
          con el nombre de quien respondió; los sucesos del sistema en lila,
          en medio; las notas internas, abajo y aparte. --- #}
-  <div class="ficha-hilo-cab">
+  <div class="ficha-hilo-cab" id="dc-conversacion">
     <span>Conversación</span>
     {% if abierta.twenty_url %}
     <a class="tenue" href="{{ abierta.twenty_url }}" target="_blank" rel="noopener">ver en Twenty ↗</a>
@@ -516,7 +574,7 @@
 
   {# --- Las notas internas, aparte: nunca dentro del hilo, porque el
          cliente no las vio. --- #}
-  <div class="ret-cotizs">
+  <div class="ret-cotizs" id="dc-notas">
     <div class="tenue ret-cotiz-titulo">Notas internas · solo el equipo</div>
     {% for n in abierta.notas %}
     <div class="crm-nota"><small>{{ n.quien }} · {{ n.cuando }}</small>{{ n.texto }}</div>
@@ -540,7 +598,7 @@
      monto es el SALDO REAL de la orden real (cot_lead), jamás un número
      de ejemplo: sin orden real conectada, o con el saldo en cero, no se
      pinta nada. #}
-  {% if cot.ok and cot.plata and cot.plata.saldo %}
+  {% if cot.ok and cot.plata and cot.plata.saldo and abierta.ve_plata %}
   <div class="acciones">
     <button class="btn dc-apagado" type="button" disabled
             title="El cobro se registra en Odoo">Cobrar saldo {{ cot.plata.saldo | dinero }} — Todavía no</button>

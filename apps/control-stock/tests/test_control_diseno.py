@@ -213,10 +213,15 @@ def test_la_ficha_conserva_todas_sus_acciones(cliente, de_dueno, monkeypatch):
     # Datos. El origen dejó de ser renglón: la fidelidad P37 lo subió a la
     # cabecera, junto al LEAD-NN («LEAD-86 · llegó por …», pantallas
     # 06/22). El dato sigue ahí, solo cambió de lugar.
-    for dato in ("Responsable", "Llegó", "Teléfono", "Issue"):
+    for dato in ("Llegó", "Teléfono", "Issue"):
         assert f"<b>{dato}</b>" in panel
+    # El responsable tampoco se perdió: con el lienzo de Roles (BLOQUE 43)
+    # dejó de ser renglón de datos y es la PRIMERA de las cinco filas, «Lo
+    # atiende» — que además abre el cuadro de asignar.
+    assert ">Lo atiende</span>" in panel
+    assert "Sin asignar" in panel          # LEAD-86 no tiene Resp:
     assert "llegó por" in panel
-    assert panel.index("llegó por") < panel.index("<b>Responsable</b>")
+    assert panel.index("llegó por") < panel.index(">Lo atiende</span>")
     # Más opciones pliega lo delicado sin borrarlo.
     assert "<summary>Más opciones</summary>" in panel
     assert "Se lo doy a" in panel

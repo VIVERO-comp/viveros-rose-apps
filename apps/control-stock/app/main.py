@@ -4420,6 +4420,10 @@ def control_pantalla(request: Request):
         "abierta": abierta,
         "asignando": asignando,
         "moviendo": moviendo,
+        # Quién ve la plata, escrito UNA vez (control.LEYENDA_SIN_PLATA):
+        # la misma frase en la fila «Cotización» y donde iría el detalle
+        # de la orden real.
+        "leyenda_sin_plata": control.LEYENDA_SIN_PLATA,
         "estados": linear_leads.ESTADOS,
         "responsables": linear_leads.responsables(),
         "motivos": linear_leads.MOTIVOS_PERDIDA,
