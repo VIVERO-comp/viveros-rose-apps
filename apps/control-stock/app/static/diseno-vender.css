@@ -64,13 +64,16 @@
 .vd-tot{font-size:15px;flex-shrink:0}
 .vd-rojo{color:var(--d-rojo)}
 
-/* ---------- la tarjeta (todas del mismo tamaño) ---------- */
+/* ---------- la tarjeta SIMPLE (BLOQUE 32, pág. 09) ----------
+   Nombre + monto arriba, UN dato contextual abajo (lo decide Python).
+   Las acciones y los chips viven en el panel — mismo lenguaje que la
+   tarjeta de Pedidos (pd-card). */
 .vd-card{
   background:#fff;border:1px solid var(--d-borde-tarjeta);
   border-left:3px solid var(--d-borde-tarjeta);
   border-radius:var(--d-radio-tarjeta);padding:9px 10px;
   min-height:78px;display:flex;flex-direction:column;
-  justify-content:space-between;gap:6px;
+  justify-content:space-between;gap:6px;box-sizing:border-box;
 }
 .vd-fila{display:flex;justify-content:space-between;align-items:center;gap:6px;min-width:0}
 .vd-abrir{
@@ -78,12 +81,10 @@
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
 .vd-abrir:hover{text-decoration:underline;text-underline-offset:2px}
-.vd-cel{font-weight:600;color:var(--d-suave);font-size:12.5px}
 .vd-monto{font-weight:700;flex-shrink:0}
-.vd-resumen{font-size:12.5px;color:var(--d-tinta)}
 .vd-error{font-size:12.5px;color:var(--d-rojo);font-weight:600}
-.vd-pie{align-items:center;flex-wrap:wrap;gap:4px 6px;min-height:28px}
-.vd-meta{display:flex;align-items:center;gap:6px;min-width:0;flex-wrap:wrap}
+.vd-pie{align-items:center;gap:4px 6px;min-height:28px}
+.vd-meta{display:flex;align-items:center;gap:6px;min-width:0}
 .vd-hint{font-size:12.5px;color:var(--d-suave)}
 .vd-meta .vd-hint{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vd-chip{
@@ -97,25 +98,8 @@
   width:22px;height:22px;border-radius:50%;background:var(--d-verde-fondo);
   color:var(--d-verde);display:inline-grid;place-items:center;flex-shrink:0;
 }
-.vd-acts{display:flex;align-items:center;gap:4px 10px;flex-shrink:1;min-width:0;flex-wrap:wrap;justify-content:flex-end}
-.vd-ob{
-  display:inline-flex;align-items:center;height:28px;padding:0 12px;
-  border:1px solid var(--d-tinta);border-radius:14px;background:#fff;
-  font-size:13px;font-weight:600;color:var(--d-tinta);text-decoration:none;
-  white-space:nowrap;
-}
-.vd-ob-debe{border-color:var(--d-rojo-fondo);background:var(--d-rojo-fondo);color:var(--d-rojo)}
-.vd-lnk{
-  background:none;border:0;padding:0;font-size:13px;color:#3F3F3F;
-  text-decoration:underline;text-underline-offset:2px;cursor:pointer;
-}
-/* El botón Cancelar/Quitar (_vender_cancelar.html) se viste de enlace. */
-.vd-acts .forma-cancelar,.vd-p-acts .forma-cancelar{display:inline;margin:0}
-.vd-acts .enlace-sub{
-  background:none;border:0;padding:0;font:inherit;font-size:13px;
-  color:#3F3F3F;text-decoration:underline;text-underline-offset:2px;
-  cursor:pointer;
-}
+/* El botón Cancelar/Quitar (_vender_cancelar.html) vive en el panel. */
+.vd-p-acts .forma-cancelar{display:inline;margin:0}
 
 /* ---------- el panel de la tarjeta abierta (Mac) ---------- */
 .vd-telon{position:fixed;inset:0;background:rgba(17,17,17,.35);z-index:48}
@@ -150,6 +134,7 @@
 .vd-c-tel{background:#EDF2FE;border-color:#EDF2FE;color:#3A5BC7}
 .vd-c-wa{background:var(--d-verde-fondo);border-color:var(--d-verde-fondo);color:var(--d-verde)}
 .vd-p-cuerpo{display:flex;flex-direction:column;gap:12px;font-size:15px}
+.vd-p-chips{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .vd-sec{
   font-size:12px;letter-spacing:.08em;text-transform:uppercase;
   color:var(--d-suave);font-weight:600;border-top:1px solid var(--d-borde);
@@ -163,6 +148,9 @@
   border:0;border-radius:var(--d-radio-pil);background:var(--d-tinta);
   color:#fff;font-size:16px;font-weight:600;text-decoration:none;width:100%;
   box-sizing:border-box;
+  /* El texto del botón lo pone Python en caja normal («Facturar /
+     Pagado»); las pantallas 10/11/26/27 lo muestran en MAYÚSCULAS. */
+  text-transform:uppercase;
 }
 .vd-p-acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .vd-x{
@@ -236,9 +224,6 @@
   .vd-ch .vd-cnt{background:var(--d-gris-activo)}
   .vd-tot{font-size:14px}
   .vd-card{border-left-width:3px;border-radius:var(--d-radio-pil);padding:10px 12px;min-height:0}
-  /* Dedos: acciones de 44px de alto mínimo. */
-  .vd-ob{min-height:44px;border-radius:var(--d-radio-boton);padding:0 14px}
-  .vd-lnk,.vd-acts .enlace-sub{min-height:32px;display:inline-flex;align-items:center}
   /* La barra de abajo: chips que se deslizan + el único botón negro. */
   .vd-bar{
     position:fixed;left:0;right:0;bottom:0;z-index:30;

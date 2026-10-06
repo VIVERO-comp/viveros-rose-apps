@@ -12,6 +12,10 @@
    - Una tarjeta se abre con ?abrir= (panel a la derecha en Mac, pantalla
      completa con ← Atrás en celular) y se cierra con un enlace — el mismo
      patrón servidor-y-enlaces de «Ventas a revisar», sin JS.
+   - La tarjeta es SIMPLE (BLOQUE 32, pág. 09): nombre, monto, color del
+     interés y UN dato contextual. Todo lo demás —chips, acciones, PDF,
+     Cancelar, Facturar— vive en el panel; el único botón negro del panel
+     (el paso que toca) lo decide Python (main._panel_vender).
    - Un solo botón negro por pantalla: + Nueva venta (en el teléfono vive
      en la barra de abajo, pantalla 25). #}
 <link rel="stylesheet" href="/static/diseno-vender.css?v={{ v_estaticos }}">
@@ -96,59 +100,21 @@
         <span class="vd-tot num {{ 'vd-rojo' if col.clave == 'confirmado' }}">{{ col.total | dinero }}</span>
       </div>
       <span class="vd-pista">{{ col.pista }}</span>
+      {# La tarjeta SIMPLE (BLOQUE 32, pág. 09): nombre, monto, el color
+         del interés y UN dato contextual que decide Python
+         (main._linea_tarjeta). Todo lo demás —chips, acciones, número,
+         factura— vive en el panel que abre la tarjeta. Mismo lenguaje
+         que las tarjetas de Pedidos (pd-card). #}
       {% for item in col["items"] %}
       <article class="vd-card" id="{{ item.ancla }}" style="border-left-color:{{ item.acento }}">
         <div class="vd-fila">
-          <a class="vd-abrir" href="{{ item.abrir_url }}">{{ item.cliente }}{% if item.celular %} <span class="vd-cel num">· {{ item.celular }}</span>{% endif %}</a>
+          <a class="vd-abrir" href="{{ item.abrir_url }}">{{ item.cliente }}</a>
           <b class="vd-monto num">{{ item.total | dinero }}</b>
         </div>
-        {% if item.tipo == "venta" and item.resumen %}<span class="vd-resumen">{{ item.resumen }}</span>{% endif %}
-        {% if item.tipo == "venta" and item.ultimo_error %}
-        <span class="vd-error">Último intento: {{ item.ultimo_error }}</span>
-        {% endif %}
         <div class="vd-fila vd-pie">
           <span class="vd-meta">
-            <span class="vd-hint num">{{ item.orden or "—" }} · {{ item.fecha_texto }}</span>
-            {% if item.tipo == "venta" %}
-              {% if item.factura %}<span class="vd-hint">Factura {{ item.factura }}</span>{% endif %}
-              {% if item.metodo %}<span class="vd-hint">{{ "Yappy" if item.metodo == "yappy" else "Efectivo" }}</span>{% endif %}
-              {% if item.estado == "pagado" %}<span class="vd-pg" role="img" aria-label="Pagado" title="Pagado"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span>
-              {% elif item.estado == "cotizacion" %}<span class="vd-chip">Cotización</span>
-              {% elif item.estado == "vendida" %}<span class="vd-chip vd-ok">Venta</span>
-              {% else %}<span class="vd-chip vd-debe">{{ item.etiqueta_estado }}</span>{% endif %}
-            {% else %}
-              {% if item.facturada %}<span class="vd-chip vd-ok">Facturado</span>
-              {% else %}<span class="vd-chip">Cotización</span>{% endif %}
-            {% endif %}
-            {# El chip de los 3 estados (items 5-7): 1 Acordada · 2 Plata
-               confirmada · 3 Cerrada. Python lo arma en _lista_vender. #}
-            {% if item.estado3 %}<a class="vd-chip" href="{{ item.estado3.href }}" style="text-decoration:none">{{ item.estado3.texto }}</a>{% endif %}
-          </span>
-          <span class="vd-acts">
-            {% if item.tipo == "venta" %}
-              {% if item.estado == "cotizacion" %}
-                <a class="vd-lnk" href="/venta/{{ item.n }}/cotizacion.pdf" target="_blank" rel="noopener" download="{{ item.nombre_cotizacion_pdf }}" data-pdf>Descargar / Compartir (PDF)</a>
-                {% with form_action="/venta/cancelar/" + item.n|string,
-                        form_confirm="Cancela la cotización " + (item.orden or "sin número") + " también en Odoo y no tiene marcha atrás desde la app: para revivirla habría que crear la venta de nuevo. ¿Cancelar?",
-                        form_boton="Cancelar" %}{% include "_vender_cancelar.html" %}{% endwith %}
-                <a class="vd-ob" href="/venta/pago/{{ item.n }}">Facturar / Pagado</a>
-              {% elif item.estado == "vendida" %}
-                <a class="vd-lnk" href="/venta/{{ item.n }}/cotizacion.pdf" target="_blank" rel="noopener" download="{{ item.nombre_cotizacion_pdf }}" data-pdf>Descargar / Compartir (PDF)</a>
-              {% elif item.estado == "pagado" %}
-                <a class="vd-lnk" href="/venta/{{ item.n }}/factura.pdf" target="_blank" rel="noopener" download="{{ item.nombre_factura_pdf }}" data-pdf>Descargar / Compartir factura</a>
-                {% if item.whatsapp %}<a class="vd-lnk" href="{{ item.whatsapp }}" target="_blank" rel="noopener">Mandar factura</a>{% endif %}
-              {% else %}
-                <a class="vd-ob vd-ob-debe" href="/venta/pago/{{ item.n }}">Reintentar</a>
-              {% endif %}
-            {% else %}
-              <a class="vd-lnk" href="/venta/servicio/{{ item.n }}/propuesta.pdf" target="_blank" rel="noopener" download="{{ item.nombre_pdf }}" data-pdf>Descargar / Compartir (PDF)</a>
-              {% if item.editable %}
-                <a class="vd-lnk" href="/venta/servicio/{{ item.n }}/editar">Editar</a>
-                {% with form_action="/venta/servicio/" + item.n|string + "/cancelar",
-                        form_confirm="Quita la cotización " + item.orden + " también en Odoo y no tiene marcha atrás desde la app: para recuperarla habría que crearla de nuevo. ¿Quitar?",
-                        form_boton="Quitar" %}{% include "_vender_cancelar.html" %}{% endwith %}
-              {% endif %}
-            {% endif %}
+            {% if item.pagada %}<span class="vd-pg" role="img" aria-label="Pagado" title="Pagado"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span>{% endif %}
+            <span class="vd-hint num{% if item.linea_alerta %} vd-error{% endif %}">{{ item.linea }}</span>
           </span>
         </div>
       </article>
@@ -231,9 +197,18 @@
     {% if abierta.tipo == "venta" and abierta.resumen %}<span>{{ abierta.resumen }}</span>{% endif %}
     <div class="vd-ln"><b>Total</b><b class="num">{{ abierta.total | dinero }}</b></div>
     <div class="vd-sec">Estado</div>
+    {# Los chips que la tarjeta vieja mostraba, ahora aquí: el de estado
+       (lo arma Python en _panel_vender) y el de los 3 estados
+       (1 Acordada · 2 Plata confirmada · 3 Cerrada), con su enlace a la
+       ficha /venta/estado. #}
+    <span class="vd-p-chips">
+      {% if abierta.panel.chip %}<span class="vd-chip{% if abierta.panel.chip.css %} {{ abierta.panel.chip.css }}{% endif %}">{{ abierta.panel.chip.texto }}</span>{% endif %}
+      {% if abierta.estado3 %}<a class="vd-chip" href="{{ abierta.estado3.href }}" style="text-decoration:none">{{ abierta.estado3.texto }}</a>{% endif %}
+    </span>
     {% if abierta.tipo == "venta" %}
     <span>{{ abierta.etiqueta_estado }}</span>
-    {% if abierta.factura %}<span class="vd-hint">Factura {{ abierta.factura }}{% if abierta.metodo %} · {{ "Yappy" if abierta.metodo == "yappy" else "Efectivo" }}{% endif %}</span>{% endif %}
+    {% if abierta.factura %}<span class="vd-hint">Factura {{ abierta.factura }}</span>{% endif %}
+    {% if abierta.metodo %}<span class="vd-hint">{{ "Yappy" if abierta.metodo == "yappy" else "Efectivo" }}</span>{% endif %}
     {% if abierta.estado == "cotizacion" %}<span class="vd-hint">No aparta plantas. El pedido nace cuando el cliente paga o abona.</span>{% endif %}
     {% if abierta.ultimo_error %}<span class="vd-error">Último intento: {{ abierta.ultimo_error }}</span>{% endif %}
     {% else %}
@@ -242,34 +217,23 @@
     <div class="vd-sec">Fecha</div>
     <span>{{ abierta.fecha_texto }}</span>
   </div>
+  {# El pie: UN solo botón negro —el paso que toca— y las acciones
+     secundarias. CUÁL botón lo decide Python (main._panel_vender,
+     regla 10): la plantilla solo pinta la estructura que llega. El
+     CSS pone el botón en mayúsculas (pantallas 10/11/26/27). #}
   <div class="vd-p-pie">
-    {% if abierta.tipo == "venta" and abierta.estado == "cotizacion" %}
-    <a class="vd-btn" href="/venta/pago/{{ abierta.n }}">FACTURAR / PAGADO</a>
+    <a class="vd-btn" href="{{ abierta.panel.boton.href }}"{% if abierta.panel.boton.pdf %} target="_blank" rel="noopener" download="{{ abierta.panel.boton.descarga }}" data-pdf{% endif %}>{{ abierta.panel.boton.texto }}</a>
+    {% if abierta.panel.acciones %}
     <div class="vd-p-acts">
-      <a class="vd-x vd-x2" href="/venta/{{ abierta.n }}/cotizacion.pdf" target="_blank" rel="noopener" download="{{ abierta.nombre_cotizacion_pdf }}" data-pdf>Descargar / Compartir PDF</a>
-      {% with form_action="/venta/cancelar/" + abierta.n|string,
-              form_confirm="Cancela la cotización " + (abierta.orden or "sin número") + " también en Odoo y no tiene marcha atrás desde la app: para revivirla habría que crear la venta de nuevo. ¿Cancelar?",
-              form_boton="Cancelar" %}{% include "_vender_cancelar.html" %}{% endwith %}
+      {% for a in abierta.panel.acciones %}
+        {% if a.cancelar %}
+          {% with form_action=a.action, form_confirm=a.confirm,
+                  form_boton=a.boton %}{% include "_vender_cancelar.html" %}{% endwith %}
+        {% else %}
+          <a class="vd-x{% if a.ancha %} vd-x2{% endif %}" href="{{ a.href }}"{% if a.pdf %} target="_blank" rel="noopener" download="{{ a.descarga }}" data-pdf{% elif a.externo %} target="_blank" rel="noopener"{% endif %}>{{ a.texto }}</a>
+        {% endif %}
+      {% endfor %}
     </div>
-    {% elif abierta.tipo == "venta" and abierta.estado == "vendida" %}
-    <a class="vd-btn" href="/venta/{{ abierta.n }}/cotizacion.pdf" target="_blank" rel="noopener" download="{{ abierta.nombre_cotizacion_pdf }}" data-pdf>DESCARGAR / COMPARTIR PDF</a>
-    {% elif abierta.tipo == "venta" and abierta.estado == "pagado" %}
-    <a class="vd-btn" href="/venta/{{ abierta.n }}/factura.pdf" target="_blank" rel="noopener" download="{{ abierta.nombre_factura_pdf }}" data-pdf>DESCARGAR / COMPARTIR FACTURA</a>
-    {% if abierta.whatsapp %}
-    <div class="vd-p-acts"><a class="vd-x vd-x2" href="{{ abierta.whatsapp }}" target="_blank" rel="noopener">Mandar factura por WhatsApp</a></div>
-    {% endif %}
-    {% elif abierta.tipo == "venta" %}
-    <a class="vd-btn" href="/venta/pago/{{ abierta.n }}">REINTENTAR</a>
-    {% else %}
-    <a class="vd-btn" href="/venta/servicio/{{ abierta.n }}/propuesta.pdf" target="_blank" rel="noopener" download="{{ abierta.nombre_pdf }}" data-pdf>DESCARGAR / COMPARTIR PDF</a>
-    {% if abierta.editable %}
-    <div class="vd-p-acts">
-      <a class="vd-x" href="/venta/servicio/{{ abierta.n }}/editar">Editar</a>
-      {% with form_action="/venta/servicio/" + abierta.n|string + "/cancelar",
-              form_confirm="Quita la cotización " + abierta.orden + " también en Odoo y no tiene marcha atrás desde la app: para recuperarla habría que crearla de nuevo. ¿Quitar?",
-              form_boton="Quitar" %}{% include "_vender_cancelar.html" %}{% endwith %}
-    </div>
-    {% endif %}
     {% endif %}
     <span class="vd-hint vd-p-nota">Se cierra con la X, con ← Atrás o tocando afuera.</span>
   </div>
