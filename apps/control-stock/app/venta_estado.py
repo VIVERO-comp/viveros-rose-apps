@@ -322,23 +322,48 @@ def registrar_pago(origen, venta, por, monto=None, completo=None,
     TIPO de la venta (conversión por tipo): en plantas el pago del flujo
     es el total; en evento/jardín/proyecto/PH/mantenimiento un pago sin
     más datos es un depósito y NO deja la venta lista para cerrar.
-    Sube el estado a lo que los hechos sostengan (nunca lo baja)."""
+    Sube el estado a lo que los hechos sostengan (nunca lo baja).
+
+    **`pago_monto` ACUMULA los hechos** (fix del review, 5/10): cada
+    llamada es un hecho con SU plata —la de ese pago, no el total— y la
+    columna guarda la SUMA (depósito $100 + saldo $400 = $500; el
+    COALESCE viejo dejaba $400 y las cifras subcontaban). Se eligió
+    acumular acá —y no derivar de pago_confirmado— porque es la misma
+    regla para TODOS los callers (la cola pasa la plata nueva de cada
+    confirmación; Vender pasa el total una sola vez) y cifras.py sigue
+    leyendo una columna. Un monto None no toca el acumulado.
+    `pago_completo` nunca BAJA: cobrado el saldo, queda cobrado.
+    Cada hecho deja SU fila en venta_estado_cambio —con el monto del
+    hecho, no el acumulado— aunque el estado no se mueva."""
     ahora = _ahora_epoch()
     with _db() as con:
         fila = _asegurar(con, origen, venta, por=por, ahora=ahora)
         if completo is None:
             completo = _cierra_con_pago(fila["tipo_venta"])
         con.execute(
-            "UPDATE venta_estado SET pago_confirmado=1, pago_completo=?,"
-            " pago_monto=COALESCE(?, pago_monto), pago_por=?, pago_en=?"
-            " WHERE origen=? AND venta=?",
-            (1 if completo else 0, monto, por, ahora, origen, int(venta)))
+            "UPDATE venta_estado SET pago_confirmado=1,"
+            " pago_completo=MAX(pago_completo, ?),"
+            " pago_monto=CASE WHEN ? IS NULL THEN pago_monto"
+            "   ELSE ROUND(COALESCE(pago_monto, 0) + ?, 2) END,"
+            " pago_por=?, pago_en=? WHERE origen=? AND venta=?",
+            (1 if completo else 0, monto, monto, por, ahora,
+             origen, int(venta)))
         fila = dict(con.execute(
             "SELECT * FROM venta_estado WHERE origen=? AND venta=?",
             (origen, int(venta))).fetchone())
-        _subir_estado(con, fila, "pago",
-                      detalle or ("pago completo" if completo else "depósito"),
-                      por, ahora)
+        actual = int(fila["estado"])
+        nuevo = max(actual, _derivado(fila))
+        if nuevo != actual:
+            con.execute(
+                "UPDATE venta_estado SET estado=? WHERE origen=? AND venta=?",
+                (nuevo, origen, int(venta)))
+        texto = detalle or ("pago completo" if completo else "depósito")
+        if monto is not None:
+            texto = f"{texto} · ${round(float(monto), 2):,.2f} este hecho"
+        con.execute(
+            "INSERT INTO venta_estado_cambio (origen, venta, de, a, hecho,"
+            " detalle, puesto_por, puesto_en) VALUES (?,?,?,?,'pago',?,?,?)",
+            (origen, int(venta), actual, nuevo, texto, por, ahora))
     return estado_de(origen, venta)
 
 

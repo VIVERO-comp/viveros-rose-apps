@@ -48,8 +48,9 @@ def _como_fecha(valor):
 
 def pending_revenue():
     """Plata confirmada en ventas AÚN SIN ENTREGAR: la suma de los
-    montos del hecho del pago (pago_monto) donde pago_confirmado=1 y
-    entrega_marcada=0. {'monto', 'n', 'sin_monto', 'rotulo'} —
+    montos del pago (pago_monto — que ya es el ACUMULADO de los hechos,
+    depósito + saldo: venta_estado.registrar_pago lo suma) donde
+    pago_confirmado=1 y entrega_marcada=0. {'monto', 'n', 'sin_monto', 'rotulo'} —
     `sin_monto` cuenta los hechos sin monto conocido: esos NO suman cero
     en silencio, se dicen."""
     with _db() as con:

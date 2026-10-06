@@ -24,6 +24,8 @@ Qué es esta pantalla — y qué no:
   cierra). JAMÁS escribe en Odoo, Linear ni Twenty.
 """
 
+import logging
+
 from .datos import _db, ahora_iso
 from . import venta_estado
 
@@ -110,24 +112,51 @@ def historial():
     return [dict(f) for f in filas]
 
 
+def sumas_confirmadas():
+    """{orden_id: suma de los montos ya confirmados de esa orden}. Un
+    monto NULL suma 0 a propósito — el lado conservador: ante la duda la
+    orden puede VOLVER a la cola, nunca desaparecer para siempre."""
+    with _db() as con:
+        filas = con.execute(
+            "SELECT orden_id, COALESCE(SUM(monto), 0) AS suma"
+            " FROM pago_confirmado GROUP BY orden_id").fetchall()
+    return {int(f["orden_id"]): round(float(f["suma"]), 2) for f in filas}
+
+
 def cola():
     """(pendientes, huecos): las ventas del informe con plata que nadie
     confirmó que llegó — pagado real en Odoo sin confirmación humana, o
     clase F (pago informado fuera de Odoo, a verificar). Nada se
     inventa: si el informe trae huecos, viajan tal cual y la pantalla
-    los dice."""
+    los dice.
+
+    **Una orden ya confirmada RE-ENTRA cuando llega plata nueva** (fix
+    del review, 5/10): el `orden_id in ya` viejo la excluía para
+    siempre, así que el saldo de un evento con depósito confirmado
+    nunca volvía a la cola y el pago_completo era imposible. La regla:
+    re-entra cuando lo pagado según Odoo SUPERA la suma de montos ya
+    confirmados; la fila lo dice (`aviso_reentrada`) y trae en
+    `monto_nuevo` solo la plata nueva — confirmar registra OTRO hecho,
+    nunca pisa el anterior."""
     informe = _informe()
-    ya = confirmados()
+    ya = sumas_confirmadas()
     pendientes = []
     for venta in informe.get("ventas") or []:
         clase = (venta.get("clase") or "").strip().upper()
         if clase == "CANCELADA":
             continue
-        if venta.get("orden_id") in ya:
-            continue
         pagado = float(venta.get("pagado") or 0)
-        if pagado <= _CENTAVO and clase != "F":
-            continue
+        previo = ya.get(venta.get("orden_id"))
+        if previo is None:
+            if pagado <= _CENTAVO and clase != "F":
+                continue
+            nuevo, aviso = pagado, ""
+        else:
+            if pagado <= previo + _CENTAVO:
+                continue  # nada nuevo que confirmar
+            nuevo = pagado - previo
+            aviso = (f"abono previo confirmado: ${previo:,.2f} — llegó "
+                     f"plata nueva (${nuevo:,.2f} por confirmar)")
         debe = float(venta.get("debe") or 0)
         pendientes.append({
             "orden_id": venta.get("orden_id"),
@@ -144,6 +173,11 @@ def cola():
             # ¿El saldo quedó en 0? Decide si la confirmación deja la
             # venta lista para cerrar (completo) o es un abono.
             "completo": debe <= _CENTAVO and pagado > _CENTAVO,
+            # La plata de ESTE hecho (lo nuevo): es lo que se confirma.
+            "monto_nuevo": round(nuevo, 2),
+            "confirmado_previo": round(previo or 0.0, 2),
+            "reentrada": previo is not None,
+            "aviso_reentrada": aviso,
         })
     return pendientes, list(informe.get("huecos") or [])
 
@@ -171,12 +205,23 @@ def _venta_local_de(orden_id):
 
 
 def confirmar(orden_id, orden, cliente, monto, evidencia, nota,
-              por_usuario, por_nombre=None, completo=False):
+              por_usuario, por_nombre=None, completo=False,
+              pagado_total=None):
     """Registra la confirmación humana: quién marcó, cuándo y qué vio
     (la evidencia del selector) + la nota. Solo el system manager.
     Devuelve el código de error o None. Deja además el hecho del pago en
     venta_estado si la orden es una venta local (completo solo con el
-    saldo en 0 — jamás convierte un depósito en cierre)."""
+    saldo en 0 — jamás convierte un depósito en cierre).
+
+    **Idempotencia (review, 5/10): el MISMO pago repetido es no-op**
+    (devuelve 'ya_confirmado', sin fila nueva ni hecho en venta_estado).
+    Es repetido cuando la ÚLTIMA confirmación de la orden tiene el mismo
+    monto y evidencia Y no hay plata nueva que lo justifique: con
+    `pagado_total` (lo pagado según Odoo, lo pasa la ruta desde la fila
+    de la cola), plata nueva = pagado_total supera la suma confirmada —
+    la frontera del Requerido 1: dos abonos iguales con plata nueva SÍ
+    son dos hechos. Sin `pagado_total`, el calce de monto+evidencia
+    basta (lado conservador: no duplicar)."""
     if not puede_confirmar(por_usuario):
         return "solo_system_manager"
     if evidencia not in EVIDENCIAS:
@@ -191,6 +236,20 @@ def confirmar(orden_id, orden, cliente, monto, evidencia, nota,
     except (TypeError, ValueError):
         monto = None
     with _db() as con:
+        ultima = con.execute(
+            "SELECT monto, evidencia FROM pago_confirmado WHERE orden_id=?"
+            " ORDER BY n DESC LIMIT 1", (orden_id,)).fetchone()
+    if ultima is not None and ultima["evidencia"] == evidencia \
+            and ultima["monto"] == monto:
+        suma = sumas_confirmadas().get(orden_id, 0.0)
+        try:
+            hay_plata_nueva = (pagado_total is not None
+                               and float(pagado_total) > suma + _CENTAVO)
+        except (TypeError, ValueError):
+            hay_plata_nueva = False
+        if not hay_plata_nueva:
+            return "ya_confirmado"
+    with _db() as con:
         con.execute(
             "INSERT INTO pago_confirmado (orden_id, orden, cliente, monto,"
             " evidencia, nota, por, en) VALUES (?,?,?,?,?,?,?,?)",
@@ -204,6 +263,7 @@ def confirmar(orden_id, orden, cliente, monto, evidencia, nota,
                 origen, n, por, monto=monto, completo=bool(completo),
                 detalle=f"confirmado en la cola ({evidencia})")
         except Exception as error:
-            print(f"pagos_confirmar: el hecho del pago de {origen} {n} no "
-                  f"quedó anotado: {error!r}", flush=True)
+            logging.getLogger("control_stock").warning(
+                f"pagos_confirmar: el hecho del pago de {origen} {n} no "
+                f"quedó anotado: {error!r}")
     return None

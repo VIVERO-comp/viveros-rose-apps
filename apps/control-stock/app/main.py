@@ -2425,8 +2425,9 @@ def _sellar_estado_y_termino(origen, n, tipo_venta, form, empleada):
         venta_estado.guardar_termino(origen, n, tipo_venta,
                                      form.get("termino") or "", por)
     except Exception as error:
-        print(f"venta_estado: el estado/término de {origen} {n} no quedó "
-              f"anotado: {error!r}", flush=True)
+        logging.getLogger("control_stock").warning(
+            f"venta_estado: el estado/término de {origen} {n} no quedó "
+            f"anotado: {error!r}")
 
 
 def _contexto_servicio(request, tipo, q="", error=None, servicios=None):
@@ -3178,9 +3179,17 @@ async def pagos_por_confirmar_confirmar(request: Request):
             + quote("Esa venta ya no está en la cola (recarga)."),
             status_code=303)
     codigo = pagos_confirmar.confirmar(
-        fila["orden_id"], fila["orden"], fila["cliente"], fila["pagado"],
+        fila["orden_id"], fila["orden"], fila["cliente"],
+        fila["monto_nuevo"],  # la plata de ESTE hecho, no el total
         form.get("evidencia") or "", form.get("nota") or "",
-        usuario, nombre, completo=fila["completo"])
+        usuario, nombre, completo=fila["completo"],
+        pagado_total=fila["pagado"])
+    if codigo == "ya_confirmado":
+        # El doble clic / doble POST del MISMO pago: no-op con aviso.
+        return RedirectResponse(
+            "/pagos-por-confirmar?aviso="
+            + quote(f"El pago de {fila['orden']} ya estaba confirmado."),
+            status_code=303)
     if codigo:
         textos = {
             "solo_system_manager": "Confirmar es del system manager: "

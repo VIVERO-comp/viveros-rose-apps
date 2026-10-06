@@ -141,6 +141,118 @@ def test_el_deposito_confirmado_de_un_evento_no_cierra(equipo):
     assert venta_estado.estado_de("servicio", n)["estado"] == 2
 
 
+def test_el_saldo_llegado_despues_reaparece_en_la_cola(equipo, monkeypatch):
+    """La secuencia completa de un evento (fix del review, 5/10): el
+    `orden_id in ya` viejo excluía para siempre una orden confirmada,
+    así que el saldo nunca volvía a la cola y pago_completo era
+    imposible (estado 3 bloqueado por falta_saldo). La regla nueva: la
+    orden RE-ENTRA cuando lo pagado según Odoo supera la suma de montos
+    ya confirmados — depósito → confirmar → saldo llega → REAPARECE →
+    confirmar → pago_completo=1. Cada confirmación es OTRO hecho."""
+    with datos._db() as con:
+        con.execute(
+            "INSERT INTO cotizaciones_servicio (creado_en, empleada, tipo,"
+            " cliente, celular, orden_id, orden, total) VALUES"
+            " ('2026-10-05T10:00:00','Mary','renta','Ilayda','',51,"
+            "'S00051',1500.0)")
+        n = con.execute("SELECT n FROM cotizaciones_servicio"
+                        " WHERE orden_id=51").fetchone()["n"]
+    venta_estado.abrir("servicio", n, "rental event", "Mary")
+
+    # 1) El depósito del 50% está en Odoo: la cola la lista como abono.
+    monkeypatch.setattr(pagos_confirmar, "_informe", lambda: _informe_falso([
+        _fila(51, "S00051", 750.0, 750.0, clase="E", cliente="Ilayda",
+              motivo="Depósito del evento")]))
+    pendientes, _ = pagos_confirmar.cola()
+    fila = pendientes[0]
+    assert fila["monto_nuevo"] == 750.0 and fila["completo"] is False
+    assert fila["reentrada"] is False
+    assert pagos_confirmar.confirmar(
+        51, "S00051", "Ilayda", fila["monto_nuevo"], "yappy", "depósito",
+        equipo["manager"], "Sam", completo=fila["completo"]) is None
+    # Confirmado el depósito: con la misma plata, la cola queda limpia.
+    assert pagos_confirmar.cola()[0] == []
+    assert venta_estado.estado_de("servicio", n)["pago_completo"] == 0
+
+    # 2) El saldo llega a Odoo: la orden REAPARECE y la fila lo dice.
+    monkeypatch.setattr(pagos_confirmar, "_informe", lambda: _informe_falso([
+        _fila(51, "S00051", 1500.0, 0.0, clase="D", cliente="Ilayda")]))
+    pendientes, _ = pagos_confirmar.cola()
+    assert len(pendientes) == 1
+    fila = pendientes[0]
+    assert fila["reentrada"] is True
+    assert fila["confirmado_previo"] == 750.0
+    assert fila["monto_nuevo"] == 750.0        # solo la plata nueva
+    assert "abono previo confirmado: $750.00" in fila["aviso_reentrada"]
+    assert "plata nueva" in fila["aviso_reentrada"]
+    assert fila["completo"] is True            # el saldo quedó en 0
+
+    # 3) Confirmar el saldo registra OTRO hecho (nunca pisa el primero)
+    #    y por fin pago_completo=1 — el estado 3 deja de estar vedado.
+    assert pagos_confirmar.confirmar(
+        51, "S00051", "Ilayda", fila["monto_nuevo"], "transferencia",
+        "saldo", equipo["manager"], "Sam", completo=fila["completo"]) is None
+    hechos = [h for h in pagos_confirmar.historial() if h["orden_id"] == 51]
+    assert len(hechos) == 2
+    assert sorted(h["monto"] for h in hechos) == [750.0, 750.0]
+    assert venta_estado.estado_de("servicio", n)["pago_completo"] == 1
+    # Y sin plata nueva, no vuelve a aparecer.
+    assert pagos_confirmar.cola()[0] == []
+
+
+# ---------------------------------------------------------------------------
+# Idempotencia (Requerido 4): el MISMO pago repetido no duplica; la
+# plata NUEVA sí entra — los dos lados de la frontera.
+# ---------------------------------------------------------------------------
+
+def test_confirmar_dos_veces_el_mismo_pago_es_no_op(equipo):
+    """Doble POST / doble clic de la MISMA fila de la cola: el segundo
+    es no-op con aviso 'ya_confirmado' — ni otra fila en
+    pago_confirmado, ni otro hecho acumulado en venta_estado, ni otra
+    fila en venta_estado_cambio."""
+    with datos._db() as con:
+        n = con.execute(
+            "INSERT INTO ventas_locales (creado_en, empleada, cliente,"
+            " orden_id, orden, total, estado) VALUES"
+            " ('2026-10-05T10:00:00','Génesis','Ana',61,'S00061',90.0,"
+            "'vendida')").lastrowid
+    venta_estado.abrir("venta", n, "plant retail", "Génesis")
+    assert pagos_confirmar.confirmar(
+        61, "S00061", "Ana", 90.0, "yappy", "voucher", equipo["manager"],
+        "Sam", completo=True, pagado_total=90.0) is None
+    assert pagos_confirmar.confirmar(
+        61, "S00061", "Ana", 90.0, "yappy", "voucher", equipo["manager"],
+        "Sam", completo=True, pagado_total=90.0) == "ya_confirmado"
+    assert len(pagos_confirmar.historial()) == 1
+    hechos = venta_estado.estado_de("venta", n)
+    assert hechos["pago_monto"] == 90.0  # no 180
+    pagos = [c for c in venta_estado.historial_de("venta", n)
+             if c["hecho"] == "pago"]
+    assert len(pagos) == 1
+
+
+def test_plata_nueva_con_el_mismo_monto_si_es_otro_hecho(equipo):
+    """El otro lado de la frontera (no romper el Requerido 1): dos
+    abonos IGUALES ($750 + $750 del saldo, misma evidencia) NO son el
+    mismo pago — lo dice la plata según Odoo (pagado_total supera la
+    suma confirmada), y el segundo se registra como hecho nuevo."""
+    assert pagos_confirmar.confirmar(
+        81, "S00081", "Ilayda", 750.0, "yappy", "depósito",
+        equipo["manager"], "Sam", completo=False,
+        pagado_total=750.0) is None
+    assert pagos_confirmar.confirmar(
+        81, "S00081", "Ilayda", 750.0, "yappy", "saldo",
+        equipo["manager"], "Sam", completo=True,
+        pagado_total=1500.0) is None
+    assert len(pagos_confirmar.historial()) == 2
+    # Y repetir ESE segundo (sin más plata nueva) sí es no-op.
+    assert pagos_confirmar.confirmar(
+        81, "S00081", "Ilayda", 750.0, "yappy", "saldo",
+        equipo["manager"], "Sam", completo=True,
+        pagado_total=1500.0) == "ya_confirmado"
+    assert len(pagos_confirmar.historial()) == 2
+
+
 # ---------------------------------------------------------------------------
 # La pantalla por HTTP: acceso por deber y el POST que relee la cola.
 # ---------------------------------------------------------------------------

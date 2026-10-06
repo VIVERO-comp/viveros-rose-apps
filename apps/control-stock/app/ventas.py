@@ -1946,6 +1946,11 @@ def registrar_pago(n, metodo, por=""):
     venta = obtener_venta(n)
     if venta is None:
         return None
+    # Idempotencia (review, 5/10): un doble POST del MISMO pago no debe
+    # acumular el hecho otra vez en venta_estado — el sello va solo
+    # cuando ESTA llamada movió la venta a "pagado" (los pasos de Odoo
+    # ya son idempotentes solos: con estado "pagado" ninguno corre).
+    ya_estaba_pagado = venta["estado"] == "pagado"
     _actualizar_venta(n, metodo=metodo, ultimo_error=None)
     try:
         venta = obtener_venta(n)
@@ -1964,7 +1969,8 @@ def registrar_pago(n, metodo, por=""):
     venta = obtener_venta(n)
     if venta["estado"] == "pagado":
         _avanzar_crm_pagada(venta)
-        _sellar_hecho_pago(venta, por or venta["empleada"])
+        if not ya_estaba_pagado:
+            _sellar_hecho_pago(venta, por or venta["empleada"])
     return venta
 
 
