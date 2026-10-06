@@ -86,6 +86,59 @@ def test_la_tarjeta_conserva_sus_piezas(cliente, de_dueno):
     assert 'class="ctl-alerta"' in t87
 
 
+def test_el_responsable_va_de_inicial_en_la_tarjeta(cliente, de_dueno):
+    # Fidelidad P37 (pantalla 05): el responsable es el círculo con su
+    # inicial en el rincón derecho de la primera fila, no un chip abajo.
+    # El chip se queda SOLO para el hueco «Sin asignar», que es lo que el
+    # dueño necesita ver para repartir.
+    cuerpo = cliente.get("/control", params={"vista": "estado"}).text
+    desde = cuerpo.index('data-ref="LEAD-91"')
+    tarjeta = cuerpo[desde:desde + 10 + cuerpo[desde + 10:].index("data-ref=")]
+    resp = linear_leads.uno("LEAD-91")["resp"]
+    assert resp  # la muestra lo trae con su Resp:
+    assert f'aria-label="Responsable: {resp}"' in tarjeta
+    assert 'class="ctl-av"' in tarjeta
+    assert "chip-nadie" not in tarjeta
+
+
+def test_sin_responsable_el_hueco_sigue_diciendose(cliente, de_dueno,
+                                                   monkeypatch):
+    # Sin `Resp:` no hay círculo (no se inventa una inicial): queda el chip
+    # «Sin asignar», que es el que le dice al dueño qué falta repartir.
+    real = linear_leads.listar
+
+    def sin_resp(*a, **kw):
+        return [dict(l, resp="") for l in real(*a, **kw)]
+
+    monkeypatch.setattr(linear_leads, "listar", sin_resp)
+    cuerpo = cliente.get("/control", params={"vista": "estado"}).text
+    assert 'class="ctl-av"' not in cuerpo
+    assert "chip-nadie" in cuerpo
+
+
+def test_la_cabecera_de_la_ficha_lleva_interes_ref_y_origen(cliente, de_dueno):
+    # Pantallas 06/22: nombre arriba y, debajo, el chip del interés con
+    # «LEAD-NN · llegó por Origen». El origen dejó de ser renglón de datos.
+    panel = _panel(cliente.get("/control", params={"abrir": "LEAD-86",
+                                                   "vista": "estado"}).text)
+    cabecera = panel[:panel.index("</div>", panel.index("dc-cab-sub"))]
+    assert "dc-chip-interes" in cabecera
+    assert "LEAD-86" in cabecera and "llegó por" in cabecera
+
+
+def test_los_atajos_de_llamar_y_chatear_son_los_enlaces_de_siempre(
+        cliente, de_dueno):
+    # Los dos íconos pastel del lienzo (06/22) no inventan nada: el verde
+    # es el wa.me de siempre y el azul, el teléfono que ya estaba en los
+    # datos. Sin teléfono no se pinta ninguno de los dos.
+    panel = _panel(cliente.get("/control", params={"abrir": "LEAD-86",
+                                                   "vista": "estado"}).text)
+    celular = linear_leads.uno("LEAD-86")["celular"]
+    assert celular
+    assert f'href="tel:{celular.replace("-", "")}"' in panel
+    assert 'href="https://wa.me/507' in panel
+
+
 def test_el_color_del_interes_sale_de_la_paleta(cliente, de_dueno):
     cuerpo = cliente.get("/control", params={"vista": "estado"}).text
     tarjeta = cuerpo[cuerpo.index('data-ref="LEAD-91"') - 300:][:600]
@@ -138,8 +191,11 @@ def test_la_ficha_conserva_todas_sus_acciones(cliente, de_dueno, monkeypatch):
     cuerpo = cliente.get("/control", params={"abrir": "LEAD-86",
                                              "vista": "estado"}).text
     panel = _panel(cuerpo)
-    # Acciones.
-    assert "💬 WhatsApp" in panel
+    # Acciones. Abrir el chat sigue en la ficha: con la fidelidad P37 es el
+    # ícono verde de arriba (pantallas 06/22) en vez del botón «💬
+    # WhatsApp» — mismo enlace de wa.me, otro lugar.
+    assert 'class="dc-ic dc-wa"' in panel
+    assert 'href="https://wa.me/507' in panel
     assert 'action="/control/responder' in panel and "🔴 Responder" in panel
     # Cotizar es formulario POST desde el punto 1 de roles (precisión 2:
     # el GET /venta?lead= mutaba).
@@ -154,9 +210,13 @@ def test_la_ficha_conserva_todas_sus_acciones(cliente, de_dueno, monkeypatch):
     assert "Conversación" in panel
     assert "Notas internas · solo el equipo" in panel
     assert 'action="/control/nota' in panel and "Guardar nota" in panel
-    # Datos.
-    for dato in ("Responsable", "Origen", "Llegó", "Teléfono", "Issue"):
+    # Datos. El origen dejó de ser renglón: la fidelidad P37 lo subió a la
+    # cabecera, junto al LEAD-NN («LEAD-86 · llegó por …», pantallas
+    # 06/22). El dato sigue ahí, solo cambió de lugar.
+    for dato in ("Responsable", "Llegó", "Teléfono", "Issue"):
         assert f"<b>{dato}</b>" in panel
+    assert "llegó por" in panel
+    assert panel.index("llegó por") < panel.index("<b>Responsable</b>")
     # Más opciones pliega lo delicado sin borrarlo.
     assert "<summary>Más opciones</summary>" in panel
     assert "Se lo doy a" in panel
@@ -165,14 +225,44 @@ def test_la_ficha_conserva_todas_sus_acciones(cliente, de_dueno, monkeypatch):
     assert panel.index("<summary>Más opciones</summary>") < panel.index("Se lo doy a")
 
 
-def test_un_solo_boton_negro_en_la_ficha(cliente, de_dueno):
-    # El lienzo: un botón negro por pantalla — en la ficha, abrir el chat.
+def test_ningun_boton_negro_en_la_ficha(cliente, de_dueno):
+    # El lienzo pone UN botón negro por pantalla, y en la ficha (06/22) ese
+    # negro es «COBRAR SALDO $X» — una acción que Control no hace: el cobro
+    # se registra en Odoo. Así que acá no queda ninguno: el chat se fue al
+    # ícono verde y el cobro va apagado en su lugar (ver la prueba de
+    # abajo). Cero negros es la lectura correcta del lienzo, no un olvido.
     cuerpo = cliente.get("/control", params={"abrir": "LEAD-86",
                                              "vista": "estado"}).text
     panel = _panel(cuerpo)
-    assert panel.count('class="btn oro"') == 1
-    trozo = panel[panel.index('class="btn oro"'):][:200]
-    assert "WhatsApp" in trozo
+    assert 'class="btn oro"' not in panel
+    assert 'class="dc-ic dc-wa"' in panel
+
+
+def test_cobrar_saldo_va_apagado_con_el_saldo_real(cliente, de_dueno,
+                                                   monkeypatch):
+    # El botón negro del lienzo, en su lugar y APAGADO: el monto es el
+    # saldo REAL de la orden real (cot_lead), nunca uno de ejemplo.
+    falso = OdooCotLead()
+    monkeypatch.setattr(ventas, "_ejecutar", falso.ejecutar)
+    lead = linear_leads.uno("LEAD-91")
+    partner = falso.agregar_partner(lead["nombre"], lead.get("celular") or "")
+    orden = falso.agregar_orden(partner, "S00100", amount_total=140.0,
+                                total_pagado=70.0, etapa_cobro="abono")
+    control.conectar_cotizacion("LEAD-91", orden, autor="Abraham")
+    panel = _panel(cliente.get("/control", params={"abrir": "LEAD-91",
+                                                   "vista": "estado"}).text)
+    assert "Cobrar saldo $70.00 — Todavía no" in panel
+    boton = panel[panel.index("Cobrar saldo $70.00") - 220:]
+    assert "disabled" in boton[:260]
+
+
+def test_sin_orden_real_no_se_pinta_ningun_cobro(cliente, de_dueno,
+                                                 monkeypatch):
+    # Sin plata conocida no hay botón: ni apagado ni con un $0.00 inventado.
+    monkeypatch.setattr(ventas, "_ejecutar", OdooCotLead().ejecutar)
+    panel = _panel(cliente.get("/control", params={"abrir": "LEAD-86",
+                                                   "vista": "estado"}).text)
+    assert "Cobrar saldo" not in panel
 
 
 def test_la_ficha_cierra_con_x_en_mac_y_atras_en_celular(cliente, de_dueno):

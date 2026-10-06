@@ -127,7 +127,8 @@
       <div class="ret-col {{ 'urgente' if col.clave == '' and vista == 'empleado' }}">
         <div class="ret-cab">
           {% if col.color %}<span class="pt-leyenda" style="background:{{ col.color }}"></span>{% endif %}
-          <b>{{ col.titulo }}</b><span class="crece"></span>
+          {# El conteo va pegado al título (lienzo 05), no empujado al borde. #}
+          <b>{{ col.titulo }}</b>
           <span class="ret-cuenta">{{ col.leads|length }}</span>
         </div>
         <div class="ret-lista" data-columna="{{ col.clave }}"
@@ -155,7 +156,17 @@
             <a class="ctl-zona" draggable="false" href="/control?vista={{ vista }}&abrir={{ l.ref | urlencode }}">
               <span class="t-cab">
                 <b>{{ l.nombre }}</b>
-                {% if l.te_toca %}<span class="ctl-alerta" title="Te toca: hay un cliente esperando"></span>{% endif %}
+                <span class="ctl-acts">
+                  {% if l.te_toca %}<span class="ctl-alerta" title="Te toca: hay un cliente esperando"></span>{% endif %}
+                  {# El responsable como inicial en círculo (lienzo 05), solo
+                     en las columnas vivas de «Por estado»: en «Por empleado»
+                     la columna YA es el responsable, y un cerrado no se
+                     reparte. Sin responsable no hay círculo — el chip «Sin
+                     asignar» de abajo lo sigue diciendo. #}
+                  {% if vista == 'estado' and not l.cerrado and l.resp %}
+                  <span class="ctl-av" role="img" aria-label="Responsable: {{ l.resp }}" title="Responsable: {{ l.resp }}">{{ l.resp[:1] }}</span>
+                  {% endif %}
+                </span>
               </span>
               {# Solo en la columna Recordatorio (29/09/2026): el teléfono
                  como TEXTO (para llamarlo o buscarlo, no solo el enlace
@@ -191,8 +202,11 @@
                  columnas vivas se queda — le dice al dueño a quién falta
                  repartir, y desde que todos ven todo (28/09/2026) también
                  le dice al empleado cuáles leads son suyos para mover. #}
-              {% if vista == 'estado' and not l.cerrado %}
-              <span class="chip-est {{ 'chip-nadie' if not l.resp }}">{{ l.resp_titulo }}</span>
+              {# Con responsable, el que habla es el círculo de arriba
+                 (lienzo 05); el chip solo queda para el hueco «Sin
+                 asignar», que al dueño le marca qué falta repartir. #}
+              {% if vista == 'estado' and not l.cerrado and not l.resp %}
+              <span class="chip-est chip-nadie">{{ l.resp_titulo }}</span>
               {% endif %}
               {% if l.wa %}<a class="ctl-wa" draggable="false" href="{{ l.wa }}" target="_blank" rel="noopener" aria-label="Abrir chat">💬</a>{% endif %}
             </span>
@@ -233,19 +247,53 @@
 {# El borde de arriba de la ficha lleva el color del interés (pantalla 06),
    con la misma variable CSS de la tarjeta — desde paleta.json, vía Python. #}
 <aside class="panel-der" role="dialog" aria-label="Ficha del lead"{% if abierta.interes_color %} style="--dc-interes:{{ abierta.interes_color }}"{% endif %}>
+  {# La cabecera del lienzo (06/22): el nombre primero, y debajo la línea
+     con el chip del interés y «LEAD-NN · llegó por Origen» — el origen
+     dejó de ser fila de Datos, ahora vive aquí. #}
   <div class="cab-panel">
-    <span class="chip on" style="{{ abierta.estado_chip }}">{{ abierta.estado_titulo }}</span>
+    <div class="dc-cab-tit">
+      <h4>{{ abierta.nombre }}</h4>
+      <div class="dc-cab-sub">
+        {% if abierta.interes %}<span class="dc-chip-interes" style="{{ abierta.interes_chip }}">{{ abierta.interes }}</span>{% endif %}
+        <span>{{ abierta.ref }}{% if abierta.origen %} · llegó por {{ abierta.origen }}{% endif %}</span>
+      </div>
+    </div>
     {# Cerrar según la pantalla (diseño Orquesta): en computadora la X
        cuadrada (pantalla 06), en el teléfono «← Atrás» arriba (pantalla
        22). Es UN solo enlace; el CSS muestra una cara u otra. #}
     <a class="btn chico dc-cerrar" href="/control?vista={{ vista }}" aria-label="Cerrar la ficha"><span class="dc-cerrar-x" aria-hidden="true">✕</span><span class="dc-cerrar-atras">← Atrás</span></a>
   </div>
-  <h4>{{ abierta.nombre }}</h4>
   <div class="etiquetas">
+    <span class="chip on" style="{{ abierta.estado_chip }}">{{ abierta.estado_titulo }}</span>
     {% if abierta.te_toca %}<span class="etq at">Te toca</span>{% endif %}
-    {% if abierta.interes %}<span class="etq dc-chip-interes" style="{{ abierta.interes_chip }}">{{ abierta.interes }}</span>{% endif %}
     {% if abierta.pago %}<span class="etq">{{ abierta.pago }}</span>{% endif %}
     {% if abierta.motivo %}<span class="etq at">{{ abierta.motivo }}</span>{% endif %}
+  </div>
+
+  {# Los atajos del lienzo (06/22): llamar y abrir el chat como íconos
+     pastel de 44px. El chat dejó de ser el botón negro: el negro del
+     lienzo es «Cobrar saldo», una acción que todavía no existe aquí. #}
+  {% if abierta.celular or abierta.wa %}
+  <div class="dc-ics">
+    {% if abierta.celular %}
+    <a class="dc-ic dc-tel" href="tel:{{ abierta.celular | replace('-', '') | replace(' ', '') }}" aria-label="Llamar"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a12 12 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2"/></svg></a>
+    {% endif %}
+    {% if abierta.wa %}
+    <a class="dc-ic dc-wa" href="{{ abierta.wa }}" target="_blank" rel="noopener" aria-label="Abrir el chat de WhatsApp"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-4-7.5L21 3l-1 4.5A9 9 0 0121 12z"/><path d="M8.5 10.5c.5 2 2.5 4 4.5 4.5l1.5-1.5 2 1-.5 2c-3.5.5-7.5-3-8.5-6.5l1-1.5 1.5 1z" fill="currentColor" stroke="none"/></svg></a>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# Los datos arriba, como las filas Teléfono/Responsable del lienzo
+     (06/22); el origen ya va en la cabecera. #}
+  <div>
+    {% if abierta.estado == 'RECORDATORIO' %}
+    <div class="dato"><b>Espera</b><span>{{ abierta.recordatorio_motivo or 'sin motivo anotado' }}</span></div>
+    {% endif %}
+    {% if abierta.celular %}<div class="dato"><b>Teléfono</b><span class="mono">{{ abierta.celular }}</span></div>{% endif %}
+    <div class="dato"><b>Responsable</b><span>{{ abierta.resp_titulo }}</span></div>
+    <div class="dato"><b>Llegó</b><span>{{ abierta.hace }}</span></div>
+    <div class="dato"><b>Issue</b><span class="mono">{{ abierta.ref }}{% if abierta.pp %} · {{ abierta.pp }}{% endif %}</span></div>
   </div>
 
   {# --- Qué hago, en DOS grupos con titulito (F3, 29/09/2026, maqueta
@@ -257,9 +305,8 @@
          enlace, no toca el lead). --- #}
   <div class="grupo-tit">Acciones</div>
   <div class="acciones">
-    {% if abierta.wa %}
-    <a class="btn oro" href="{{ abierta.wa }}" target="_blank" rel="noopener">💬 WhatsApp</a>
-    {% endif %}
+    {# El chat vive en el ícono verde de arriba (lienzo 06/22); aquí
+       quedan los interruptores. #}
     {% if puede_tocar_abierta %}
     {# `prender` viaja con lo que ESTE botón pinta ahora mismo (28/09/2026):
        nunca se recalcula en el servidor a partir de una lectura, que puede
@@ -486,17 +533,19 @@
     {% endif %}
   </div>
 
-  {# --- Los datos, al final: se consultan, no se leen cada vez. --- #}
-  <div>
-    {% if abierta.estado == 'RECORDATORIO' %}
-    <div class="dato"><b>Espera</b><span>{{ abierta.recordatorio_motivo or 'sin motivo anotado' }}</span></div>
-    {% endif %}
-    <div class="dato"><b>Responsable</b><span>{{ abierta.resp_titulo }}</span></div>
-    <div class="dato"><b>Origen</b><span>{{ abierta.origen or '—' }}</span></div>
-    <div class="dato"><b>Llegó</b><span>{{ abierta.hace }}</span></div>
-    {% if abierta.celular %}<div class="dato"><b>Teléfono</b><span class="mono">{{ abierta.celular }}</span></div>{% endif %}
-    <div class="dato"><b>Issue</b><span class="mono">{{ abierta.ref }}{% if abierta.pp %} · {{ abierta.pp }}{% endif %}</span></div>
+  {# El pie de la ficha del lienzo (06/22): el botón grande «COBRAR SALDO
+     $X» y, debajo, los enlaces chicos. Cobrar NO es una acción de Control
+     —el pago se registra en Odoo y de ahí baja el estado— así que el
+     botón va APAGADO con su «Todavía no», en el lugar del diseño. El
+     monto es el SALDO REAL de la orden real (cot_lead), jamás un número
+     de ejemplo: sin orden real conectada, o con el saldo en cero, no se
+     pinta nada. #}
+  {% if cot.ok and cot.plata and cot.plata.saldo %}
+  <div class="acciones">
+    <button class="btn dc-apagado" type="button" disabled
+            title="El cobro se registra en Odoo">Cobrar saldo {{ cot.plata.saldo | dinero }} — Todavía no</button>
   </div>
+  {% endif %}
   {% if abierta.url %}
   <div class="acciones">
     <a class="btn" href="{{ abierta.url }}" target="_blank" rel="noopener">Linear ↗</a>
