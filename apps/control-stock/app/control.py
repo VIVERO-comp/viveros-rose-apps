@@ -1171,10 +1171,11 @@ def _fila_historial(abierta, cuantos, ultimo):
 def _monto_del_panel(cot, ve_plata):
     """El número grande de arriba del panel y su renglón de abajo.
 
-    `{"total": …, "nota": …}` con el total de la orden REAL, o
-    `{"total": None, "nota": …}` cuando no hay plata que mostrar — y la
-    nota dice POR QUÉ: sin cotización conectada, Odoo caído, o plata que
-    esta sesión no ve. Nunca un cero.
+    `{"total", "texto", "nota"}`: el total de la orden REAL, ya
+    formateado en `texto`, y el renglón de abajo. Cuando no hay plata que
+    mostrar, `total` es None, `texto` queda vacío (no se pinta ningún
+    número) y la nota dice POR QUÉ: sin cotización conectada, Odoo caído,
+    o plata que esta sesión no ve. Nunca un cero.
     """
     if not ve_plata:
         return {"total": None, "texto": "", "nota": LEYENDA_SIN_PLATA}
