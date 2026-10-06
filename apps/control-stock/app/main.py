@@ -1706,7 +1706,40 @@ def _lista_vender(request):
             "css": "b-ok" if numero >= 2 else "b-bajo",
             "href": f"/venta/estado/{origen}/{fila['n']}",
         }
+        # La tarjeta simple (BLOQUE 32, pág. 09): UN dato contextual,
+        # decidido aquí — la plantilla solo lo pinta.
+        fila["linea"], fila["linea_alerta"] = _linea_tarjeta(fila)
+        fila["pagada"] = (fila["tipo"] == "venta"
+                          and fila["estado"] == "pagado")
     return filas, aviso
+
+
+_NOMBRES_METODO = {"yappy": "Yappy", "efectivo": "Efectivo"}
+
+
+def _linea_tarjeta(f):
+    """(texto, alerta): el ÚNICO dato contextual de la tarjeta simple del
+    tablero (pág. 09 del diseño) — todo lo demás vive en el panel que la
+    tarjeta abre. La decisión es de Python (regla 10): qué merece el
+    renglón lo dice el estado de HOY, nunca la plantilla.
+
+    - pagada: cómo pagó + cuándo (como el «Yappy · entrega mié 14» del
+      diseño); - cotización: cuándo se cotizó; - vendida/facturado de
+      servicio: dónde vive el cobro; - atorada a medio pipeline: el paso
+      pendiente, en alerta si el último intento falló."""
+    if f["tipo"] == "servicio":
+        if f["facturada"]:
+            return "Facturado · cobro en Odoo", False
+        return f"Cotizada · {f['fecha_texto']}", False
+    if f["estado"] == "pagado":
+        metodo = _NOMBRES_METODO.get(f.get("metodo"))
+        texto = f"{metodo} · {f['fecha_texto']}" if metodo else f["fecha_texto"]
+        return texto, False
+    if f["estado"] == "cotizacion":
+        return f"Cotizada · {f['fecha_texto']}", False
+    # vendida o atorada a medio pipeline: la etiqueta ya dice el paso
+    # («Venta confirmada · cobro en Odoo», «Facturada · pago pendiente»).
+    return f["etiqueta_estado"], bool(f.get("ultimo_error"))
 
 
 def _fila_servicio(c):
@@ -1785,12 +1818,11 @@ def _vender_pagos(filas):
     (Yappy · Efectivo · Sin método), para el resumen lateral del tablero.
     Nada se inventa: si no hay pagadas, la lista sale vacía y la
     plantilla no pinta el bloque."""
-    nombres = {"yappy": "Yappy", "efectivo": "Efectivo"}
     grupos = {}
     for f in filas:
         if f["tipo"] != "venta" or f["estado"] != "pagado":
             continue
-        nombre = nombres.get(f.get("metodo"), "Sin método")
+        nombre = _NOMBRES_METODO.get(f.get("metodo"), "Sin método")
         grupo = grupos.setdefault(nombre, {"nombre": nombre, "cuenta": 0,
                                            "monto": 0.0})
         grupo["cuenta"] += 1
@@ -1800,16 +1832,100 @@ def _vender_pagos(filas):
 
 def _vender_abierta(filas, abrir):
     """La fila que pide ?abrir= (v3 = venta n.º 3, s3 = cotización de
-    servicio n.º 3); None si el parámetro no apunta a nada — una URL
-    vieja o manoseada no rompe la pantalla, solo no abre panel."""
+    servicio n.º 3), vestida con su panel (_panel_vender); None si el
+    parámetro no apunta a nada — una URL vieja o manoseada no rompe la
+    pantalla, solo no abre panel."""
     if len(abrir or "") < 2 or abrir[0] not in "vs" or not abrir[1:].isdigit():
         return None
     tipo = "venta" if abrir[0] == "v" else "servicio"
     n = int(abrir[1:])
     for f in filas:
         if f["tipo"] == tipo and f["n"] == n:
+            f = dict(f)
+            f["panel"] = _panel_vender(f)
             return f
     return None
+
+
+def _panel_vender(f):
+    """Todo lo que el panel de la tarjeta abierta muestra de acciones:
+    el ÚNICO botón negro (el paso que toca HOY) y las acciones
+    secundarias. La decisión de CUÁL botón es de Python (regla 10) — la
+    plantilla solo recorre esta estructura.
+
+    - boton: {texto, href, pdf?, descarga?} — pdf=True baja y abre en
+      pestaña nueva con data-pdf (regla del 28/09).
+    - acciones: enlaces {texto, href, ...} o el POST de cancelar
+      ({cancelar: True, action, confirm, boton}, _vender_cancelar.html).
+    - chip: el chip de estado que la tarjeta vieja mostraba (Cotización ·
+      Venta · Facturado · el paso pendiente), ahora en el panel."""
+    if f["tipo"] == "venta":
+        pdf_cotizacion = {
+            "texto": "Descargar / Compartir PDF",
+            "href": f"/venta/{f['n']}/cotizacion.pdf",
+            "pdf": True, "descarga": f["nombre_cotizacion_pdf"],
+        }
+        if f["estado"] == "cotizacion":
+            return {
+                "chip": {"texto": "Cotización", "css": ""},
+                "boton": {"texto": "Facturar / Pagado",
+                          "href": f"/venta/pago/{f['n']}"},
+                "acciones": [
+                    dict(pdf_cotizacion, ancha=True),
+                    {"cancelar": True,
+                     "action": f"/venta/cancelar/{f['n']}",
+                     "confirm": ("Cancela la cotización "
+                                 + (f["orden"] or "sin número")
+                                 + " también en Odoo y no tiene marcha"
+                                   " atrás desde la app: para revivirla"
+                                   " habría que crear la venta de nuevo."
+                                   " ¿Cancelar?"),
+                     "boton": "Cancelar"},
+                ],
+            }
+        if f["estado"] == "vendida":
+            return {"chip": {"texto": "Venta", "css": "vd-ok"},
+                    "boton": pdf_cotizacion, "acciones": []}
+        if f["estado"] == "pagado":
+            acciones = []
+            if f.get("whatsapp"):
+                acciones.append({"texto": "Mandar factura por WhatsApp",
+                                 "href": f["whatsapp"], "externo": True,
+                                 "ancha": True})
+            return {
+                "chip": None,  # «Pagado» ya lo dicen el ✓ y el estado
+                "boton": {"texto": "Descargar / Compartir factura",
+                          "href": f"/venta/{f['n']}/factura.pdf",
+                          "pdf": True, "descarga": f["nombre_factura_pdf"]},
+                "acciones": acciones,
+            }
+        # Atorada a medio pipeline: el paso que toca es reintentar.
+        return {"chip": {"texto": f["etiqueta_estado"], "css": "vd-debe"},
+                "boton": {"texto": "Reintentar",
+                          "href": f"/venta/pago/{f['n']}"},
+                "acciones": []}
+    # Cotización de servicio: el PDF es el botón (su cobro vive en Odoo);
+    # Editar y Quitar solo mientras Odoo diga que se puede.
+    acciones = []
+    if f["editable"]:
+        acciones = [
+            {"texto": "Editar", "href": f"/venta/servicio/{f['n']}/editar"},
+            {"cancelar": True,
+             "action": f"/venta/servicio/{f['n']}/cancelar",
+             "confirm": ("Quita la cotización " + f["orden"]
+                         + " también en Odoo y no tiene marcha atrás"
+                           " desde la app: para recuperarla habría que"
+                           " crearla de nuevo. ¿Quitar?"),
+             "boton": "Quitar"},
+        ]
+    return {
+        "chip": ({"texto": "Facturado", "css": "vd-ok"} if f["facturada"]
+                 else {"texto": "Cotización", "css": ""}),
+        "boton": {"texto": "Descargar / Compartir PDF",
+                  "href": f"/venta/servicio/{f['n']}/propuesta.pdf",
+                  "pdf": True, "descarga": f["nombre_pdf"]},
+        "acciones": acciones,
+    }
 
 
 def _cotizaciones_con_estado():
