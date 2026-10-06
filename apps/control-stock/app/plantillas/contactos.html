@@ -2,13 +2,18 @@
 {% block titulo %}Contactos — Control Viverorose{% endblock %}
 
 {% block contenido %}
-{# CONTACTOS (BLOQUE 37, item 2 de Jay; lienzo v3 abraham-contactos).
+{# CONTACTOS — la LISTA (BLOQUE 37 + BLOQUE 43; lienzo abraham-contactos,
+   refrescado el 6/10: el panel del costado quedó `hidden` y la grilla en
+   una sola columna). Acá eso es literal: la lista ocupa TODO EL ANCHO y
+   tocar un contacto ABRE SU PÁGINA (/contactos/<id>), no un panel.
+
    TODO lo que se pinta llegó decidido de Python (app/contactos.py,
-   regla 10): la unión por teléfono normalizado, los filtros, la plata.
-   SOLO LECTURA: acá no hay un solo <form> de escritura — el buscador es
-   un form GET (server-rendered) y lo que no funciona es un <button
-   disabled> con «Todavía no». El casamiento es EN LECTURA: nada se
-   escribe en Twenty/Odoo para unir. #}
+   regla 10): la unión por teléfono normalizado, los filtros, la plata y
+   el candado del dinero (un monto tapado no viaja en el HTML: Python lo
+   dejó en None). SOLO LECTURA: acá no hay un solo <form> de escritura —
+   el buscador es un form GET (server-rendered) y lo que no funciona es un
+   <button disabled> con «Todavía no». El casamiento es EN LECTURA: nada
+   se escribe en Twenty/Odoo para unir. #}
 <link rel="stylesheet" href="/static/diseno-contactos.css?v={{ v_estaticos }}">
 
 {% with bm_titulo='Contactos', bm_sub='Todo el mundo, en un solo lugar' %}{% include '_barra_movil.html' %}{% endwith %}
@@ -42,6 +47,9 @@
   {% if error_aviso %}<div class="ct-alerta">{{ error_aviso }}</div>{% endif %}
   {% if v.aviso_odoo %}<div class="ct-alerta">{{ v.aviso_odoo }}</div>{% endif %}
   <div class="ct-hueco">{{ v.aviso_twenty }}</div>
+  {# El candado dicho, no escondido: si alguna fila va tapada, la pantalla
+     explica por qué en vez de mostrar un «—» mudo. #}
+  {% if v.aviso_tapados %}<div class="ct-hueco">{{ v.aviso_tapados }}</div>{% endif %}
 
   {# Los filtros del lienzo, como enlaces GET. «Sin responsable» va
      APAGADO: el responsable del contacto no existe como dato todavía. #}
@@ -67,13 +75,20 @@
       {# El último contacto sale de Twenty, que hoy no se puede leer:
          vacío honesto en su lugar, nunca una fecha inventada. #}
       <span class="ct-pista">—</span>
+      {# Ventas y Total: solo de quien uno atiende. Lo tapado llegó en
+         None desde Python — acá no hay nada que esconder. #}
+      {% if not c.dinero %}
+      <span class="ct-pista" title="De otro responsable">—</span>
+      <span class="ct-pista" title="De otro responsable">—</span>
+      {% else %}
       <span class="num">{{ c.ventas_n }}</span>
       {% if c.ventas_total %}<b class="num">{{ c.ventas_total | dinero }}</b>{% else %}<span class="ct-pista">—</span>{% endif %}
+      {% endif %}
     </a>
     {% else %}
     <div class="ct-r ct-vacia"><span class="ct-pista">{{ v.vacio }}</span><span></span><span></span><span></span><span></span><span></span></div>
     {% endfor %}
-    <div class="ct-r ct-pie"><span class="ct-pista">Un contacto puede existir sin venta. Aquí está todo el mundo, ordenado en un solo lugar.</span><span></span><span></span><span></span><span></span><span></span></div>
+    <div class="ct-r ct-pie"><span class="ct-pista">Un contacto puede existir sin venta. Toca uno para abrir su página con el chat y su dinero.</span><span></span><span></span><span></span><span></span><span></span></div>
   </div>
 </main>
 {% endblock %}

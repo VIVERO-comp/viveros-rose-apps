@@ -45,18 +45,64 @@ a.ct-r:hover b{text-decoration:underline;text-underline-offset:2px}
 .ct-tel{font-weight:400;color:var(--d-suave);font-size:12.5px}
 .ct-vacia,.ct-pie{background:#fff}
 
-/* ---------- la ficha (el panel del lienzo, como pantalla) ---------- */
-.ct-pan{border:1px solid var(--d-tinta);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0;box-sizing:border-box;max-width:560px}
-.ct-pt{font-size:20px;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* ---------- la página del contacto abierto (BLOQUE 43) ----------
+   Lienzo abraham-contacto-abierto.html: estilo ficha de Odoo, los datos a
+   la izquierda y el panel de pestañas a la derecha. Una sola columna en
+   celular (el panel baja debajo de los datos). */
+.ct-cols{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:20px;align-items:start}
+.ct-det{display:flex;flex-direction:column;gap:12px;min-width:0}
+.ct-id{display:flex;flex-direction:column;gap:3px}
+.ct-idn{font-size:28px;font-weight:600;line-height:1.15;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ct-fila{display:flex;justify-content:space-between;align-items:center;gap:10px;min-width:0}
+.ct-fila b,.ct-fila>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ct-lb{font-weight:600;flex-shrink:0;font-size:13.5px}
 .ct-chip{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:11px;font-size:12px;font-weight:600;white-space:nowrap;flex-shrink:0;background:var(--d-gris-activo);color:#3F3F3F}
 .ct-sec{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--d-suave);font-weight:600;padding-top:8px;border-top:1px solid #EFEFEF}
-.ct-k3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-.ct-k{background:var(--d-col);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:2px}
-.ct-k b{font-size:18px}
+.ct-caja{border:1px solid var(--d-borde-pil);border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0;box-sizing:border-box}
+.ct-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+
+/* Las cuatro cifras del lienzo. Las apagadas llevan su píldora, nunca un
+   número inventado. */
+.ct-g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.ct-k{border:1px solid var(--d-borde-pil);border-radius:6px;min-height:66px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:8px;text-align:center}
+.ct-k b{font-size:17px;font-weight:600}
+.ct-kl{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--d-suave)}
+.ct-tn{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:10px;background:var(--d-gris-activo);color:#3F3F3F;font-size:11.5px;font-weight:600;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+
 .ct-it{border:1px solid var(--d-borde-tarjeta);border-radius:var(--d-radio-tarjeta);padding:10px;box-sizing:border-box;display:flex;flex-direction:column;gap:6px}
 .ct-abrir{font-weight:700;color:var(--d-tinta);text-decoration:none;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ct-abrir:hover{text-decoration:underline;text-underline-offset:2px}
+
+/* ---------- el panel derecho y sus dos pestañas (enlaces GET) ---------- */
+.ct-panel{border:1px solid var(--d-borde-pil);border-radius:var(--d-radio-tarjeta);display:flex;flex-direction:column;min-width:0;overflow:hidden;background:#fff}
+.ct-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border-bottom:1px solid #EFEFEF}
+.ct-tab{height:44px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:var(--d-suave);text-decoration:none;background:#fff}
+.ct-tab.on{color:var(--d-tinta);box-shadow:inset 0 -2px 0 var(--d-tinta)}
+.ct-cuerpo{display:flex;flex-direction:column;gap:9px;padding:12px;background:var(--d-col);min-height:220px}
+.ct-pie-panel{padding:10px 12px;border-top:1px solid #EFEFEF;font-size:12.5px;color:var(--d-suave);line-height:1.4}
+.ct-sum{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;color:var(--d-suave)}
+.ct-sum span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Las tarjetas de lead: verde las activas, gris las terminadas y las que
+   nunca se activaron. */
+.ct-ld{border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;color:inherit;text-decoration:none;box-sizing:border-box}
+.ct-ld.on{background:var(--d-verde-fondo);border:1px solid #9CCFAE}
+.ct-ld.off{background:var(--d-gris-activo);border:1px solid var(--d-borde-pil);color:var(--d-suave)}
+.ct-st{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:11px;font-size:12px;font-weight:600;white-space:nowrap;flex-shrink:0}
+.ct-st.a{background:var(--d-verde);color:#fff}
+.ct-st.g{background:var(--d-borde-boton);color:#3F3F3F}
+.ct-meta{font-size:12.5px;color:var(--d-suave);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ct-ld.on .ct-meta{color:#274A36}
+
+/* El chat, en SOLO LECTURA: cliente a la izquierda, equipo a la derecha
+   (el mismo reparto de control.hilo()). Sin caja de escribir: no la hay. */
+.ct-chb{gap:9px}
+.ct-dia{align-self:center;font-size:12px;color:var(--d-suave)}
+.ct-m{max-width:82%;padding:8px 10px;border-radius:12px;font-size:13.5px;line-height:1.35;display:flex;flex-direction:column;gap:3px;overflow-wrap:anywhere}
+.ct-m.c{align-self:flex-start;background:#fff;border:1px solid #E4E4E4}
+.ct-m.v{align-self:flex-end;background:var(--d-verde-fondo);border:1px solid #CFE6D6}
+.ct-m.ct-sis{align-self:center;background:#F3EDFB;border:1px solid #E0D4F3;color:#4B3A68;max-width:92%}
+.ct-mt{font-size:11.5px;color:var(--d-suave)}
 
 /* ---------- celular ---------- */
 @media (max-width:767.98px){
@@ -64,4 +110,7 @@ a.ct-r:hover b{text-decoration:underline;text-underline-offset:2px}
   .ct-main{padding:8px 14px 20px}
   .ct-q{max-width:100%;width:200px}
   .ct-hr,.ct-r{grid-template-columns:minmax(150px,1fr) 70px 90px 90px 56px 72px}
+  .ct-cols{grid-template-columns:minmax(0,1fr)}
+  .ct-g4{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ct-idn{font-size:22px}
 }

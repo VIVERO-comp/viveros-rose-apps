@@ -2,13 +2,18 @@
 {% block titulo %}{{ v.contacto.nombre }} — Contactos — Control Viverorose{% endblock %}
 
 {% block contenido %}
-{# La FICHA de un contacto (BLOQUE 37; panel del lienzo v3
-   abraham-contactos, como pantalla propia). Versión mínima HONESTA:
-   datos del contacto + sus tratos reales (locales con href a /venta,
-   órdenes de Odoo con su S00xxx y monto), y las secciones del lienzo
-   sin fuente hoy (leads de Linear, último mensaje de Twenty, citas)
-   como cajas-hueco que dicen su verdad. SOLO LECTURA: ni un <form>;
-   lo que no funciona es un <button disabled> con «Todavía no». #}
+{# LA PÁGINA DEL CONTACTO ABIERTO (BLOQUE 43; lienzos
+   abraham-contacto-abierto.html y contacto-whatsapp.html). Estilo ficha
+   de Odoo: los datos a la izquierda y un panel derecho con DOS pestañas
+   —«Historial de leads», que es la que abre, y «WhatsApp»—.
+
+   Las pestañas son ENLACES GET (?panel=leads|whatsapp) ya resueltos en
+   Python (v.paneles trae cuál está activa): cero JS nuevo, regla 10.
+
+   SOLO LECTURA de punta a punta: ni un <form>, ni un POST. Lo que no
+   existe todavía está en su lugar y apagado con «Todavía no», sin un solo
+   número inventado. Y el DINERO y el CHAT solo se pintan si Python dijo
+   que sí (v.permiso): lo tapado no llegó hasta acá. #}
 <link rel="stylesheet" href="/static/diseno-contactos.css?v={{ v_estaticos }}">
 
 {% with bm_titulo='Contactos', bm_sub=v.contacto.nombre %}{% include '_barra_movil.html' %}{% endwith %}
@@ -20,69 +25,168 @@
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
     </button>
     <a class="ct-volver" href="/contactos">← Contactos</a>
+    <span class="ct-pista">Contactos</span><b>{{ v.contacto.nombre }}</b>
+  </div>
+  <div class="ct-acciones">
+    {# Los tres botones del lienzo que todavía no escriben nada. #}
+    {% for nombre in v.apagados_accion %}
+    <button class="ct-apagado" type="button" disabled>{{ nombre }} — {{ v.todavia_no }}</button>
+    {% endfor %}
   </div>
 </header>
 
 <main class="ct-main">
   {% if v.aviso_odoo %}<div class="ct-alerta">{{ v.aviso_odoo }}</div>{% endif %}
 
-  <article class="ct-pan" aria-label="Contacto abierto">
-    <div class="ct-fila">
-      <span class="ct-pt">{{ v.contacto.nombre }}</span>
-      <span class="ct-chip">{{ v.contacto.tipo }}</span>
-    </div>
-    <div class="ct-fila">
-      <span class="num">{{ v.contacto.telefono or 'Sin teléfono' }}</span>
-      <span class="ct-pista">Fuente: {{ v.contacto.fuente_texto or '—' }}</span>
-    </div>
-
-    <div class="ct-k3">
-      <div class="ct-k"><span class="ct-pista">Comprado</span><b class="num">{% if v.contacto.ventas_total %}{{ v.contacto.ventas_total | dinero }}{% else %}—{% endif %}</b></div>
-      <div class="ct-k"><span class="ct-pista">Cotizado abierto</span><b class="num">{% if v.contacto.cotiz_total %}{{ v.contacto.cotiz_total | dinero }}{% else %}—{% endif %}</b></div>
-      <div class="ct-k"><span class="ct-pista">Ventas</span><b class="num">{{ v.contacto.ventas_n }}</b></div>
-    </div>
-
-    <div class="ct-sec">Lo que tiene con nosotros</div>
-    {% for t in v.tratos %}
-    <div class="ct-it">
-      <div class="ct-fila">
-        {% if t.href %}<a class="ct-abrir" href="{{ t.href }}">{{ t.titulo }}</a>
-        {% else %}<b>{{ t.titulo }}</b>{% endif %}
-        <b class="num">{% if t.total is not none and t.total != '' %}{{ t.total | dinero }}{% else %}—{% endif %}</b>
+  <div class="ct-cols">
+    {# ---------------- IZQUIERDA: el contacto ---------------- #}
+    <section class="ct-det" aria-label="Datos del contacto">
+      <div class="ct-id">
+        <span class="ct-pista">Contacto</span>
+        <div class="ct-fila">
+          <span class="ct-idn">{{ v.contacto.nombre }}</span>
+          <span class="ct-chip">{{ v.contacto.tipo }}</span>
+        </div>
+        <span class="ct-pista num">{{ v.contacto.id }}</span>
       </div>
-      <div class="ct-fila">
-        <span class="ct-pista num">{{ t.orden }}</span>
-        <span class="ct-pista">{{ t.estado or '' }}</span>
+
+      {# Las cuatro cifras del lienzo. Las dos de la izquierda son reales
+         (salen de Odoo y de Vender); las dos de la derecha no tienen
+         fuente todavía y van apagadas EN SU LUGAR, nunca en $0.00. #}
+      <div class="ct-g4">
+        <div class="ct-k">
+          {% if v.permiso.dinero %}<b class="num">{% if v.contacto.cotiz_total %}{{ v.contacto.cotiz_total | dinero }}{% else %}—{% endif %}</b>
+          {% else %}<span class="ct-tn">De otro responsable</span>{% endif %}
+          <span class="ct-kl">Cotizado</span>
+        </div>
+        <div class="ct-k">
+          {% if v.permiso.dinero %}<b class="num">{% if v.contacto.ventas_total %}{{ v.contacto.ventas_total | dinero }}{% else %}—{% endif %}</b>
+          {% else %}<span class="ct-tn">De otro responsable</span>{% endif %}
+          <span class="ct-kl">Vendido</span>
+        </div>
+        {% for nombre in v.apagados_plata %}
+        <div class="ct-k"><span class="ct-tn">{{ v.todavia_no }}</span><span class="ct-kl">{{ nombre }}</span></div>
+        {% endfor %}
       </div>
-    </div>
-    {% else %}
-    <p class="ct-hueco">{{ v.sin_tratos }}</p>
-    {% endfor %}
 
-    {% if v.posibles %}
-    <div class="ct-sec">Posible mismo contacto</div>
-    {# El nombre plano SOLO sugiere — jamás amarra (diseño corto). #}
-    {% for p in v.posibles %}
-    <div class="ct-fila">
-      <a class="ct-abrir" href="/contactos/{{ p.id }}">{{ p.nombre }}</a>
-      <span class="ct-pista">{{ p.fuente_texto or '—' }}</span>
-    </div>
-    {% endfor %}
-    {% endif %}
+      <div class="ct-caja">
+        <span class="ct-sec">Cómo contactarlos</span>
+        <div class="ct-fila"><span class="ct-lb">Teléfono</span><span class="num">{{ v.contacto.telefono or 'Sin teléfono' }}</span></div>
+        <div class="ct-fila"><span class="ct-lb">De dónde llegó</span><span class="ct-pista">{{ v.contacto.fuente_texto or '—' }}</span></div>
+        <div class="ct-fila">
+          <span class="ct-lb">Lo atiende</span>
+          {% if v.atiende %}<span>{{ v.atiende | join(' · ') }}</span>
+          {% else %}<span class="ct-pista">Sin responsable todavía</span>{% endif %}
+        </div>
+      </div>
 
-    <div class="ct-sec">Leads</div>
-    <p class="ct-hueco">{{ v.aviso_leads }}</p>
+      <div class="ct-sec">Lo que tiene con nosotros</div>
+      {% if not v.permiso.dinero %}
+      {# El candado, dicho en su lugar y decidido en el servidor: acá no
+         hay montos escondidos con CSS, no llegaron. #}
+      <p class="ct-hueco">{{ v.permiso.motivo }}</p>
+      {% else %}
+      {% for t in v.tratos %}
+      <div class="ct-it">
+        <div class="ct-fila">
+          {% if t.href %}<a class="ct-abrir" href="{{ t.href }}">{{ t.titulo }}</a>
+          {% else %}<b>{{ t.titulo }}</b>{% endif %}
+          <b class="num">{% if t.total is not none and t.total != '' %}{{ t.total | dinero }}{% else %}—{% endif %}</b>
+        </div>
+        <div class="ct-fila">
+          <span class="ct-pista num">{{ t.orden }}</span>
+          <span class="ct-pista">{{ t.estado or '' }}</span>
+        </div>
+      </div>
+      {% else %}
+      <p class="ct-hueco">{{ v.sin_tratos }}</p>
+      {% endfor %}
+      {% endif %}
 
-    <div class="ct-sec">Último mensaje</div>
-    <p class="ct-hueco">{{ v.aviso_twenty }}</p>
+      <div class="ct-foot">
+        <span class="ct-sec">Gastos y compras</span>
+        <span class="ct-pista">{{ v.apagado_total_gastado }}: <span class="ct-tn">{{ v.todavia_no }}</span></span>
+      </div>
 
-    <div class="ct-sec">Citas</div>
-    <p class="ct-hueco">{{ v.aviso_citas }}</p>
+      {% if v.posibles %}
+      <div class="ct-sec">Posible mismo contacto</div>
+      {# El nombre plano SOLO sugiere — jamás amarra (diseño corto). #}
+      {% for p in v.posibles %}
+      <div class="ct-fila">
+        <a class="ct-abrir" href="/contactos/{{ p.id }}">{{ p.nombre }}</a>
+        <span class="ct-pista">{{ p.fuente_texto or '—' }}</span>
+      </div>
+      {% endfor %}
+      {% endif %}
 
-    <div class="ct-acciones" style="padding-top:6px">
-      {# Crear un lead escribe en Linear: APAGADO hasta su punto. #}
-      <button class="ct-apagado" type="button" disabled>Nuevo lead para este contacto — Todavía no</button>
-    </div>
-  </article>
+      <div class="ct-sec">Citas</div>
+      <p class="ct-hueco">{{ v.aviso_citas }}</p>
+
+      <div class="ct-acciones">
+        {# Crear un lead escribe en Linear: APAGADO hasta su punto. #}
+        <button class="ct-apagado" type="button" disabled>Nuevo lead para este contacto — {{ v.todavia_no }}</button>
+      </div>
+    </section>
+
+    {# ---------------- DERECHA: las dos pestañas ---------------- #}
+    <section class="ct-panel" aria-label="Historial de leads y chat">
+      <nav class="ct-tabs" aria-label="Pestañas del contacto">
+        {% for p in v.paneles %}
+        <a class="ct-tab {{ 'on' if p.activo }}" href="{{ p.href }}"
+           {% if p.activo %}aria-current="page"{% endif %}>{{ p.nombre }}</a>
+        {% endfor %}
+      </nav>
+
+      {% if v.panel == 'leads' %}
+      <div class="ct-cuerpo">
+        {% if v.leads.leads %}
+        <div class="ct-sum">
+          <span>Todos los leads de {{ v.contacto.nombre }}</span>
+          <span class="num">{{ v.leads.resumen }}</span>
+        </div>
+        {% for l in v.leads.leads %}
+        {# Verde los activos, gris los terminados y los que nunca se
+           activaron. Con URL de Linear es un enlace; sin ella (no la hay
+           que inventar) queda la misma tarjeta, sin salto. #}
+        {% if l.url %}<a class="ct-ld {{ 'on' if l.activo else 'off' }}" href="{{ l.url }}" target="_blank" rel="noopener">
+        {% else %}<div class="ct-ld {{ 'on' if l.activo else 'off' }}">{% endif %}
+          <div class="ct-fila"><b>{{ l.titulo }}</b><span class="ct-pista num">{{ l.ref }}</span></div>
+          <div class="ct-fila">
+            <span class="ct-st {{ 'a' if l.activo else 'g' }}">{{ l.chip }}</span>
+            <span class="ct-meta">{{ l.interes or 'Sin interés' }} · {{ l.estado_nombre }}</span>
+          </div>
+          <span class="ct-meta">{{ l.hace }}{% if l.resp %} · lo atiende {{ l.resp }}{% else %} · nadie lo tomó{% endif %}</span>
+        {% if l.url %}</a>{% else %}</div>{% endif %}
+        {% endfor %}
+        {% endif %}
+        {% if v.leads.aviso %}<p class="ct-hueco">{{ v.leads.aviso }}</p>{% endif %}
+      </div>
+      <div class="ct-pie-panel">{{ v.leads.pie }}</div>
+
+      {% else %}
+      <div class="ct-cuerpo ct-chb">
+        {% for b in v.chat.hilo %}
+          {% if b.tipo == 'dia' %}
+          <span class="ct-dia">{{ b.texto }}</span>
+          {% elif b.tipo == 'suceso' %}
+          <div class="ct-m ct-sis"><span>{{ b.texto }}</span><span class="ct-mt num">{{ b.hora }}</span></div>
+          {% else %}
+          {# El MISMO armado del hilo de la ficha (control.hilo): cliente a
+             la izquierda, equipo a la derecha con el nombre de quien
+             respondió. Una tanda del mismo autor va bajo UNA firma. #}
+          {% for m in b.mensajes %}
+          <div class="ct-m {{ 'v' if b.mio else 'c' }}">
+            <span>{{ m.texto }}</span>
+            <span class="ct-mt num">{{ m.hora }} · {{ b.nombre }}</span>
+          </div>
+          {% endfor %}
+          {% endif %}
+        {% endfor %}
+        {% if v.chat.aviso %}<p class="ct-hueco">{{ v.chat.aviso }}</p>{% endif %}
+      </div>
+      <div class="ct-pie-panel">{{ v.chat.pie }}</div>
+      {% endif %}
+    </section>
+  </div>
 </main>
 {% endblock %}
