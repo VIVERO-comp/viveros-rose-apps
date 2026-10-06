@@ -101,44 +101,82 @@ PESTANAS = {
               "prefijos": ("/", "/stock", "/ajustar", "/productos", "/fotos",
                            "/fichas", "/conteos", "/revisiones",
                            "/plantilla.xlsx", "/alertas", "/umbral")},
-    "vender": {"titulo": "Vender", "href": "/venta", "prefijos": ("/venta",)},
-    "control": {"titulo": "Control", "href": "/control",
-                "prefijos": ("/control",)},
-    # Las 3 pantallas nuevas del plan de roles: aquí viven SOLO el enlace
-    # del menú y la puerta que las deja pasar — las rutas las construye
-    # otra rama (esqueleto-pantallas).
-    "mi_crm": {"titulo": "Mi CRM", "href": "/mi-crm", "prefijos": ("/mi-crm",)},
+    # UNA sola entrada «CRM» para todos (BLOQUE 35: «Control» desaparece
+    # como nombre del menú). La ruta /control se queda; /mi-crm es el CRM
+    # chico. El href por defecto es /control; acceso_de() se lo cambia a
+    # /mi-crm al rol Atención (BLOQUE 39.2: su entrada primaria es su
+    # Mi CRM, y el CRM completo queda como «Ver todos» en solo lectura).
+    "crm": {"titulo": "CRM", "href": "/control",
+            "prefijos": ("/control", "/mi-crm")},
+    # Contactos (BLOQUE 33): la construye otro worker — aquí viven solo el
+    # enlace del menú y la puerta que la deja pasar.
+    "contactos": {"titulo": "Contactos", "href": "/contactos",
+                  "prefijos": ("/contactos",)},
     "pedidos": {"titulo": "Pedidos", "href": "/pedidos",
                 "prefijos": ("/pedidos",)},
+    "vender": {"titulo": "Vender", "href": "/venta", "prefijos": ("/venta",)},
     "compras": {"titulo": "Compras", "href": "/compras",
                 "prefijos": ("/compras",)},
+    # «Conversaciones» es LA entrada del menú (BLOQUE 36.1): «Respuestas»
+    # ya no es pestaña — es la sub-pestaña de adentro (el conmutador
+    # Respuestas / Todos los chats de la cabecera). El prefijo cubre
+    # también /conversaciones/respuestas.
+    "conversaciones": {"titulo": "Conversaciones", "href": "/conversaciones",
+                       "prefijos": ("/conversaciones",)},
     "finanzas": {"titulo": "Finanzas", "href": "/finanzas",
                  "prefijos": ("/finanzas",)},
-    "respuestas": {"titulo": "Respuestas", "href": "/conversaciones/respuestas",
-                   "prefijos": ("/conversaciones/respuestas",)},
     "ajustes": {"titulo": "Ajustes", "href": "/?tab=ajustes",
                 "prefijos": ("/", "/ajustes", "/avisos", "/equipo",
                              "/resumen")},
 }
 
-# El menú completo de hoy (lo que ve un director, un admin sin rol o una
-# empleada sin rol): el orden es el del _nav de siempre.
-MENU_COMPLETO = ("calendario", "stock", "vender", "control", "pedidos",
-                 "compras", "ajustes")
+# El menú completo (director, admin sin rol o empleada sin rol), en el
+# ORDEN del diseño (BLOQUE 35.3 + BLOQUE 37): Calendario · Stock · CRM ·
+# Contactos · Pedidos · Vender · Compras · Conversaciones · Finanzas ·
+# Ajustes.
+MENU_COMPLETO = ("calendario", "stock", "crm", "contactos", "pedidos",
+                 "vender", "compras", "conversaciones", "finanzas", "ajustes")
+
+# El interruptor del recorte por rol (BLOQUE 39.1): True = cada rol ve SU
+# menú (MENU_DE_ROL); False = TODOS ven MENU_COMPLETO pintado y la puerta
+# del servidor rebota lo ajeno con su aviso. Apagarlo o prenderlo es ESTA
+# línea y nada más — el alcance (la puerta) NO depende de esta constante:
+# esconder o mostrar una pestaña jamás cambia un permiso.
+MENU_RECORTADO = True
 
 MENU_DE_ROL = {
     SLUG_DIRECTOR: MENU_COMPLETO,
-    SLUG_OPERACIONES: ("calendario", "stock", "vender", "control", "mi_crm",
-                       "pedidos", "compras"),
-    SLUG_ATENCION: ("calendario", "vender", "control", "mi_crm", "pedidos"),
-    # El rol Inventario no lleva menú: su vista plana (stock_plano) no
-    # incluye _nav.html y su puerta redirige todo lo demás a /stock.
-    SLUG_INVENTARIO: (),
-    # Finanzas según el diseño (precisión 10): Finanzas · Respuestas · y
-    # las pestañas de ver. SIN Ajustes (_solo_admin es otra puerta y sigue
-    # aparte e intacta).
-    SLUG_FINANZAS: ("finanzas", "respuestas", "calendario", "stock", "vender",
-                    "control", "pedidos", "compras"),
+    SLUG_OPERACIONES: ("calendario", "stock", "crm", "contactos", "pedidos",
+                       "vender", "compras"),
+    SLUG_ATENCION: ("calendario", "crm", "contactos", "pedidos", "vender"),
+    # Inventario: SOLO Stock (BLOQUE 39.1) — acceso_de() le apunta la
+    # entrada a su vista plana /stock, no a /?tab=stock.
+    SLUG_INVENTARIO: ("stock",),
+    # Finanzas según el diseño: sus dos pantallas propias. El resto lo
+    # abre por ver_todo (candado, no menú); SIN Ajustes.
+    SLUG_FINANZAS: ("finanzas", "conversaciones"),
+}
+
+# ---------------------------------------------------------------------------
+# V2 de permisos (BLOQUE 29 aprobado + ANALISIS-rol-manda-sobre-admin):
+# el rol manda aunque seas admin. La excepción del admin ya NO es global
+# (en la puerta no existe un «admin pasa siempre»): es POR RUTA — estas
+# son las rutas de «Ajustes y sistema», siempre accesibles para un admin
+# con cualquier rol, para que nadie quede sin el timón. "/" es exacto
+# (la pestaña Ajustes vive en /?tab=ajustes). Lista en CÓDIGO, no dato.
+# ---------------------------------------------------------------------------
+RUTAS_SISTEMA = ("/", "/ajustes", "/avisos", "/equipo", "/resumen")
+
+# El rótulo humano de cada rol con slug, para los avisos del rebote (los
+# nombres de las filas se pueden renombrar por pantalla; el aviso usa
+# estos, estables). Y el rótulo del pie del costado sí usa el nombre
+# visible de la fila (rotulo_de).
+ROTULO_ROL = {
+    SLUG_DIRECTOR: "Dirección",
+    SLUG_OPERACIONES: "Operaciones",
+    SLUG_ATENCION: "Atención al Cliente",
+    SLUG_INVENTARIO: "Inventario",
+    SLUG_FINANZAS: "Finanzas",
 }
 
 
@@ -158,20 +196,32 @@ def _prefijos_de_menu(claves):
 # TODOS los GET/HEAD — modo ver de verdad: abre fichas — mientras
 # `prefijos` vacío vuelve 403 TODA escritura (sin lista blanca de POST
 # hasta que Jay dé el sí del botón de confirmar; prenderlo será agregar
-# UNA ruta aquí, con test).
+# UNA ruta aquí, con test). El alcance se deriva de MENU_DE_ROL (la misma
+# fuente), NUNCA de MENU_RECORTADO: el recorte es presentación.
 ALCANCE_DE_ROL = {
     SLUG_DIRECTOR: None,
-    SLUG_OPERACIONES: {"casa": "/control",
+    # Operaciones y Atención: la casa es SU Mi CRM, la misma puerta a la
+    # que apunta su entrada «CRM» del menú (crm_chico) — una casa que no
+    # fuera la del menú mandaría el rebote a otra pantalla.
+    SLUG_OPERACIONES: {"casa": "/mi-crm",
                        "prefijos": _prefijos_de_menu(MENU_DE_ROL[SLUG_OPERACIONES]),
                        "ver_todo": False},
-    SLUG_ATENCION: {"casa": "/control",
+    # Atención (BLOQUE 39.2): /control le queda en el alcance como la
+    # vista «Ver todos» — GET completo, y sus POST del tablero pasan la
+    # puerta pero el candado por lead (_control_permiso) le devuelve 403
+    # duro sobre lo ajeno.
+    SLUG_ATENCION: {"casa": "/mi-crm",
                     "prefijos": _prefijos_de_menu(MENU_DE_ROL[SLUG_ATENCION]),
                     "ver_todo": False},
     # Idéntico al comportamiento del BLOQUE 13: solo /stock (y /stock/*),
     # casa /stock. Sus tests siguen verdes sin tocarse.
     SLUG_INVENTARIO: {"casa": "/stock", "prefijos": ("/stock",),
                       "ver_todo": False},
-    SLUG_FINANZAS: {"casa": "/control", "prefijos": (), "ver_todo": True},
+    # Finanzas: su casa es SU pantalla (la primera de su menú). Con
+    # ver_todo la puerta no rebota ningún GET, así que la casa solo se
+    # usa cuando una pantalla la manda de vuelta (el ?tab=ajustes que no
+    # le toca): mandarla a /control sería mandarla a una ajena.
+    SLUG_FINANZAS: {"casa": "/finanzas", "prefijos": (), "ver_todo": True},
 }
 
 # Con varios roles, la casa es la del primero de ESTA lista que la persona
@@ -462,21 +512,34 @@ def roles_activos_de(usuario):
 def solo_inventario(empleada):
     """EL predicado del rol Inventario — el único lugar donde se decide.
 
-    True solo para una empleada NO admin cuyo ÚNICO rol activo es el del
-    slug 'inventario'. De aquí cuelgan las tres cosas, siempre juntas: el
+    True para una empleada cuyo ÚNICO rol activo es el del slug
+    'inventario'. De aquí cuelgan las tres cosas, siempre juntas: el
     menú (=[Stock]), el redirect global a /stock y los candados de los
-    POST (la puerta vive en main._puerta_rol_inventario). La matriz:
-    admin → False · solo-inventario → True · inventario+otro rol → False
-    · sin roles → False. Se compara por SLUG, jamás por el nombre: la
-    fila se puede renombrar sin soltar un solo candado.
+    POST. La matriz: solo-inventario → True · inventario+otro rol →
+    False · sin roles → False · **admin+inventario → True** (V2 del
+    BLOQUE 29: el rol manda aunque seas admin — la excepción del admin
+    ya no vive en el predicado sino POR RUTA, en RUTAS_SISTEMA: un admin
+    con este rol conserva Ajustes y nada más). Se compara por SLUG,
+    jamás por el nombre: la fila se puede renombrar sin soltar un solo
+    candado.
 
     `empleada` es el dict de la sesión (request.state.empleada)."""
     mios = roles_activos_de(empleada["id"])
-    if len(mios) != 1 or mios[0]["slug"] != SLUG_INVENTARIO:
-        return False
-    # El admin nunca queda preso en la vista plana, tenga el rol que
-    # tenga. Se pregunta al final: es la consulta más cara de las dos.
-    return not seguridad.es_admin(empleada)
+    return len(mios) == 1 and mios[0]["slug"] == SLUG_INVENTARIO
+
+
+def crm_chico(slugs):
+    """¿La entrada «CRM» de esta persona es su Mi CRM (/mi-crm) y no el
+    tablero completo? Sí para Operaciones y Atención —los dos lienzos del
+    diseño son «Mi CRM» (ruben-gerente-de-operaciones-mi-crm y
+    mary-atencion-al-cliente-mi-crm)— y no para la Dirección, cuyo lienzo
+    es el CRM de todos. UNA sola fuente: la usan el menú (acceso_de), la
+    casa del rol y el enlace «Ver todos» de Mi CRM.
+
+    `slugs` es cualquier iterable de slugs de rol."""
+    slugs = set(slugs)
+    return bool(slugs & {SLUG_OPERACIONES, SLUG_ATENCION}) and (
+        SLUG_DIRECTOR not in slugs)
 
 
 def acceso_de(empleada):
@@ -486,15 +549,19 @@ def acceso_de(empleada):
     Devuelve {"menu": [...], "alcance": None | {...}}:
 
     - menu: [{clave, titulo, href}] ya decidido en Python para _nav.html
-      (regla 10: cero lógica en la plantilla). Con varios roles es la
-      UNIÓN: las pestañas del primer rol (en orden de PRIORIDAD_CASA) y
-      detrás las que agreguen los demás, sin repetir. Sin ningún rol con
-      menú propio, el menú completo de hoy.
+      y _lado.html (regla 10: cero lógica en la plantilla). Con el
+      recorte prendido (MENU_RECORTADO) y varios roles es la UNIÓN en el
+      ORDEN de MENU_COMPLETO; sin ningún rol con menú propio, o con el
+      recorte apagado, el menú completo. El rol Atención lleva su CRM a
+      /mi-crm (BLOQUE 39.2) y el solo-inventario su Stock a /stock (la
+      vista plana). Un admin SIEMPRE lleva Ajustes en el menú — es el
+      espejo visible de RUTAS_SISTEMA.
     - alcance: None = sin puerta (como hoy). Es None cuando la persona no
       tiene roles, o cuando ALGUNO de sus roles no acota (director, o un
       rol sin slug como los pods: Eventos, PH…) — ese FAIL-OPEN de
       transición es decisión explícita (precisión 8), fijada con test; la
-      excepción del ADMIN no vive aquí sino en main._puerta_por_rol.
+      excepción del ADMIN ya no es global (V2): vive POR RUTA en
+      RUTAS_SISTEMA, aplicada en main._puerta_por_rol.
       Si todos sus roles acotan: {"prefijos": unión, "casa": la del
       primer slug en PRIORIDAD_CASA, "ver_todo": True si algún rol lo es
       (finanzas), "slugs": set} — la puerta del middleware lo aplica.
@@ -503,16 +570,39 @@ def acceso_de(empleada):
     slugs = [r["slug"] for r in roles if r["slug"] in ALCANCE_DE_ROL]
     orden = [s for s in PRIORIDAD_CASA if s in slugs]
 
-    con_menu = [s for s in orden if MENU_DE_ROL.get(s)]
     claves = []
-    for slug in con_menu:
-        for clave in MENU_DE_ROL[slug]:
-            if clave not in claves:
-                claves.append(clave)
+    if MENU_RECORTADO:
+        con_menu = [s for s in orden if MENU_DE_ROL.get(s)]
+        if len(con_menu) == 1:
+            # Un solo rol: SU orden, el del lienzo. Finanzas abre con
+            # Finanzas (jordan-finanzas), no con Conversaciones.
+            claves = list(MENU_DE_ROL[con_menu[0]])
+        else:
+            # Varios roles: la unión sale en el ORDEN del diseño
+            # (MENU_COMPLETO), no en el de los roles — si no, el menú
+            # dependería de en qué orden le pusieron los roles.
+            en_union = set()
+            for slug in con_menu:
+                en_union.update(MENU_DE_ROL[slug])
+            claves = [c for c in MENU_COMPLETO if c in en_union]
     if not claves:
         claves = list(MENU_COMPLETO)
     menu = [{"clave": c, "titulo": PESTANAS[c]["titulo"],
              "href": PESTANAS[c]["href"]} for c in claves]
+    if MENU_RECORTADO:
+        if set(orden) == {SLUG_INVENTARIO}:
+            # La única entrada del solo-inventario es SU pantalla.
+            menu = [{"clave": "stock", "titulo": "Stock", "href": "/stock"}]
+        elif crm_chico(orden):
+            for p in menu:
+                if p["clave"] == "crm":
+                    p["href"] = "/mi-crm"
+    if seguridad.es_admin(empleada) and all(p["clave"] != "ajustes"
+                                            for p in menu):
+        # El timón nunca se esconde: un admin con rol restrictivo ve
+        # Ajustes en el menú porque RUTAS_SISTEMA se lo deja pasar.
+        menu.append({"clave": "ajustes", "titulo": "Ajustes",
+                     "href": "/?tab=ajustes"})
 
     abierto = (not roles) or any(
         r["slug"] not in ALCANCE_DE_ROL or ALCANCE_DE_ROL[r["slug"]] is None
@@ -532,6 +622,50 @@ def acceso_de(empleada):
         "ver_todo": ver_todo,
         "slugs": frozenset(orden),
     }}
+
+
+def rotulo_de(empleada):
+    """El pie del costado (diseño Roles v3: nombre y rol del usuario):
+    los nombres VISIBLES de sus roles activos, tal como están en la
+    base. Sin roles: «Admin» para un admin, «Equipo» para el resto —
+    nunca se inventa un rol."""
+    nombres = [r["nombre"] for r in roles_activos_de(empleada["id"])]
+    if nombres:
+        return " · ".join(nombres[:3])
+    return "Admin" if seguridad.es_admin(empleada) else "Equipo"
+
+
+def texto_pestana_ajena(ruta, tab=""):
+    """El aviso del rebote honesto (BLOQUE 39.3): a quién pertenece la
+    pestaña que se intentó abrir. Se calcula de la MISMA fuente del menú
+    (MENU_DE_ROL); los nombres son los rótulos estables de ROTULO_ROL,
+    no los renombrables de la base.
+
+    `tab` es el `?tab=` de la raíz: en "/" conviven Stock y Ajustes y el
+    camino no alcanza para nombrar cuál se pidió — sin él, «/?tab=stock»
+    saldría con el aviso genérico."""
+    clave, largo = None, 0
+    if ruta == "/" and tab in PESTANAS:
+        clave = tab
+    if clave is None:
+        for c, p in PESTANAS.items():
+            for pre in p["prefijos"]:
+                if pre == "/":
+                    continue
+                if (ruta == pre
+                        or ruta.startswith(pre + "/")) and len(pre) > largo:
+                    clave, largo = c, len(pre)
+    if clave is None:
+        return "Esa pantalla no es de tu rol; pedísela al encargado."
+    if clave == "ajustes":
+        quienes = "los administradores y la Dirección"
+    else:
+        duenos = [ROTULO_ROL[s] for s in PRIORIDAD_CASA
+                  if clave in MENU_DE_ROL.get(s, ())]
+        quienes = " y ".join([", ".join(duenos[:-1]), duenos[-1]]
+                             if len(duenos) > 1 else duenos)
+    titulo = PESTANAS[clave]["titulo"]
+    return (f"La pestaña {titulo} es de {quienes}; tu rol no la usa.")
 
 
 def _catalogo(tabla, solo_activos):
