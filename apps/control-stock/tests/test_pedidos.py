@@ -386,7 +386,11 @@ def cliente_omar(db_limpia):
 def test_rol_inventario_no_ve_pedidos(cliente_omar):
     r = cliente_omar.get("/pedidos", follow_redirects=False)
     assert r.status_code == 303
-    assert r.headers["location"] == "/stock"
+    # El rebote es honesto (BLOQUE 39.3): a su casa Y con el aviso que la
+    # pantalla pinta — la ruta es la misma de siempre.
+    destino = r.headers["location"]
+    assert destino.split("?")[0] == "/stock"
+    assert "rebote=" in destino
     r = cliente_omar.get("/pedidos?tipo=plant%20retail",
                          follow_redirects=False)
     assert r.status_code == 303

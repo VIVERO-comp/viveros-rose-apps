@@ -14,12 +14,12 @@
     <span class="logo-vr" aria-hidden="true">VR</span>
     <span>Control Viverorose</span>
   </div>
+  {# La píldora encendida sigue siendo un ENLACE: hay pantallas que son
+     parte de una pestaña sin ser su portada (Proveedores y «Lo que
+     llegó» viven bajo Compras), y ahí el enlace es la vuelta a casa. En
+     la portada misma el enlace no estorba: recarga y ya. #}
   {% for p in request.state.menu_nav %}
-  {% if activa == p.clave %}
-  <span class="pil on">{{ ic.icono(p.clave) }}{{ p.titulo }}</span>
-  {% else %}
-  <a class="pil" href="{{ p.href }}">{{ ic.icono(p.clave) }}{{ p.titulo }}</a>
-  {% endif %}
+  <a class="pil{{ ' on' if activa == p.clave }}" href="{{ p.href }}">{{ ic.icono(p.clave) }}{{ p.titulo }}</a>
   {% endfor %}
   <div class="pie">
     <b>{{ request.state.empleada.nombre or request.state.empleada.id }}</b>

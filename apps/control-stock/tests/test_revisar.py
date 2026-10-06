@@ -112,11 +112,14 @@ def test_sin_sesion_redirige_al_login(db_limpia):
     assert r.status_code == 303 and r.headers["location"] == "/login"
 
 
-def test_no_admin_recibe_403(cliente, informe_falso, monkeypatch):
+def test_sin_rol_de_supervision_recibe_403(cliente, informe_falso,
+                                           monkeypatch):
+    """V2 (BLOQUE 29): /revisar dejó de ser «solo admin» y pasó a los
+    ROLES Director y Finanzas — el 403 lo dice con ese nombre."""
     monkeypatch.delenv("AJUSTES_ADMINS", raising=False)
     r = cliente.get("/revisar")
     assert r.status_code == 403
-    assert "Solo para administradores" in r.text
+    assert "Director y Finanzas" in r.text
     # Y el POST de la nota tampoco pasa — ni escribe nada.
     r2 = cliente.post("/revisar/nota",
                       data={"orden_id": "S00077", "nota": "hola"},
