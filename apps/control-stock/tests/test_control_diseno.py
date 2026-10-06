@@ -651,3 +651,14 @@ def test_repartir_sigue_siendo_del_dueno_tambien_en_el_cuadro(cliente):
     cuerpo = cliente.get("/control", params={
         "vista": "estado", "abrir": "LEAD-86", "asignar": "1"}).text
     assert "dc-asignar" not in cuerpo
+
+
+def test_el_cuadro_pliega_el_panel_una_capa_a_la_vez(cliente, de_dueno):
+    # Los dos viven en el mismo z-index: dejarlos juntos pondría el panel
+    # SOBRE el telón del cuadro, sin atenuar. Se abre uno u otro, y la X
+    # del cuadro vuelve al panel.
+    cuerpo = cliente.get("/control", params={
+        "vista": "estado", "abrir": "LEAD-91", "asignar": "1"}).text
+    assert 'class="panel-der"' not in cuerpo
+    assert cuerpo.count('class="telon"') == 1
+    assert 'href="/control?vista=estado&amp;abrir=LEAD-91"' in cuerpo

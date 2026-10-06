@@ -277,7 +277,12 @@
 
 {% set activa = 'control' %}{% include '_nav.html' %}
 
-{% if abierta %}
+{# El panel se pliega mientras está abierto el cuadro de asignar: una
+   capa a la vez, el mismo trato que ya recibe el modal del motivo (su
+   enlace tampoco lleva ?abrir=). Dejar los dos encima pondría el panel
+   SOBRE el telón del cuadro, sin atenuar, porque los dos viven en el
+   mismo z-index. La X del cuadro vuelve al panel. #}
+{% if abierta and not asignando %}
 <a class="telon" href="/control?vista={{ vista }}" aria-label="Cerrar"></a>
 {# El borde de arriba de la ficha lleva el color del interés (pantalla 06),
    con la misma variable CSS de la tarjeta — desde paleta.json, vía Python. #}
