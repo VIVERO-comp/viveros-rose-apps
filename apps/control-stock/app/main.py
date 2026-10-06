@@ -1578,7 +1578,7 @@ def _enlace_whatsapp(request, venta):
 
 
 @app.get("/venta")
-def venta(request: Request, error: str = "", abrir: str = ""):
+def venta(request: Request, error: str = "", abrir: str = "", vista: str = ""):
     # La pestaña: el botón grande "+ Venta" (arriba de los servicios,
     # dueño 28/09/2026) y el historial local.
     #
@@ -1597,7 +1597,13 @@ def venta(request: Request, error: str = "", abrir: str = ""):
                        + len(ventas.renglones_planta_de(usuario)))
         except Exception:
             pass
-    filas, aviso_lista = _lista_vender(request)
+    # La vista del CUERPO CELULAR (BLOQUE 37, pantalla 25): píldoras
+    # Pendientes/Pagadas que navegan por GET — la decisión de qué vale
+    # es de Python (regla 10); una vista manoseada cae en la de siempre.
+    if vista not in VISTAS_VENDER_MOVIL:
+        vista = "pendientes"
+    filas, aviso_lista = _lista_vender(request, vista)
+    columnas = _vender_columnas(filas)
     return plantillas.TemplateResponse(request, "venta.html", {
         # La cola de pagos (item 6) es de los tres deberes: el enlace
         # solo existe para quien la puede abrir.
@@ -1615,7 +1621,16 @@ def venta(request: Request, error: str = "", abrir: str = ""):
         # Diseño Orquesta (2/10/2026): la misma lista única, agrupada en
         # columnas por su estado de HOY — la agrupación es presentación,
         # cada tarjeta conserva sus mismas acciones y rutas.
-        "vender_columnas": _vender_columnas(filas),
+        "vender_columnas": columnas,
+        # La cara celular del cuerpo (pantalla 25): las píldoras con sus
+        # conteos reales y las columnas vestidas de secciones (_vender_movil
+        # les cuelga su título y su orden del lienzo); el aviso rojo de
+        # atoradas solo si el dato REAL existe (_vender_alerta, nunca un
+        # número inventado); y la URL de volver que no pierde la vista.
+        "vender_pildoras": _vender_movil(columnas, vista),
+        "vender_alerta": _vender_alerta(filas),
+        "volver_url": ("/venta" if vista == "pendientes"
+                       else f"/venta?vista={vista}"),
         # La tarjeta abierta (?abrir=v3 | ?abrir=s3): panel a la derecha en
         # computadora, pantalla completa en el teléfono. Mismo patrón
         # servidor-y-enlaces que «Ventas a revisar» (revisar_ventas.html).
@@ -1647,7 +1662,16 @@ def _numero_de_orden(orden):
     return int(coincidencia.group(1)) if coincidencia else None
 
 
-def _fila_venta(request, v):
+def _base_abrir(vista):
+    """El comienzo de la URL que abre el panel de una tarjeta. En la
+    vista de siempre es el /venta? de toda la vida (las URLs no cambian);
+    en otra vista del celular (?vista=pagadas) la arrastra, para que
+    abrir y cerrar un panel no te devuelva a la vista equivocada (en
+    esta casa nunca se pierde el lugar en una lista)."""
+    return "/venta?" if vista == "pendientes" else f"/venta?vista={vista}&"
+
+
+def _fila_venta(request, v, vista="pendientes"):
     """Una venta de plantas, con "tipo" para que la plantilla sepa qué
     tarjeta pintar en la lista única."""
     return {
@@ -1670,11 +1694,11 @@ def _fila_venta(request, v):
         # El ancla de la tarjeta (no perder el lugar en la lista) y la URL
         # que abre su panel (?abrir=, mismo patrón que Ventas a revisar).
         "ancla": f"v-{v['n']}",
-        "abrir_url": f"/venta?abrir=v{v['n']}#v-{v['n']}",
+        "abrir_url": f"{_base_abrir(vista)}abrir=v{v['n']}#v-{v['n']}",
     }
 
 
-def _lista_vender(request):
+def _lista_vender(request, vista="pendientes"):
     """(filas, aviso): ventas locales + cotizaciones de servicio, en UNA
     sola lista, ordenada por número de orden de mayor a menor (la más
     nueva arriba) — y el aviso honesto si Odoo no contestó al armarla.
@@ -1686,9 +1710,9 @@ def _lista_vender(request):
     orden lo trata como el más chico de todos, nunca intercalado."""
     servicios, aviso = _cotizaciones_con_estado()
     filas = (
-        [_fila_venta(request, v) for v in ventas.ventas_todas()
+        [_fila_venta(request, v, vista) for v in ventas.ventas_todas()
          if v["estado"] != "cancelada"]
-        + [_fila_servicio(c) for c in servicios
+        + [_fila_servicio(c, vista) for c in servicios
            if not c["cancelada"]]
     )
     filas.sort(key=lambda f: (_numero_de_orden(f["orden"]) is not None,
@@ -1742,7 +1766,7 @@ def _linea_tarjeta(f):
     return f["etiqueta_estado"], bool(f.get("ultimo_error"))
 
 
-def _fila_servicio(c):
+def _fila_servicio(c, vista="pendientes"):
     """Una cotización de servicio, vestida para la lista única. "tipo"
     pasa a ser el discriminador de la plantilla ("servicio") y el tipo de
     NEGOCIO (renta, boda, …) sobrevive en "tipo_servicio" — antes se
@@ -1754,7 +1778,7 @@ def _fila_servicio(c):
         "chip_texto": c["etiqueta_tipo"],
         "contacto": _contacto_de(c.get("celular")),
         "ancla": f"cot-{c['n']}",
-        "abrir_url": f"/venta?abrir=s{c['n']}#cot-{c['n']}",
+        "abrir_url": f"{_base_abrir(vista)}abrir=s{c['n']}#cot-{c['n']}",
     }
 
 
@@ -1828,6 +1852,73 @@ def _vender_pagos(filas):
         grupo["cuenta"] += 1
         grupo["monto"] += f["total"] or 0
     return sorted(grupos.values(), key=lambda g: -g["monto"])
+
+
+# ---------------------------------------------------------------------------
+# El CUERPO CELULAR de Vender (BLOQUE 37, pantalla 25 del lienzo): dos
+# píldoras arriba (Pendientes / Pagadas) que navegan por GET (?vista=) y
+# las mismas columnas del tablero vestidas de SECCIONES apiladas. Todo
+# se decide aquí (regla 10): la plantilla solo pinta lo que llega, y la
+# computadora no cambia (estas caras solo existen ≤899px, en el CSS).
+# ---------------------------------------------------------------------------
+
+VISTAS_VENDER_MOVIL = ("pendientes", "pagadas")
+
+# columna -> (vista que la muestra, título de sección del lienzo, orden
+# en pantalla). En el lienzo «Falta cobrar» va ANTES que «Cotizado, sin
+# pagar», aunque el tablero de computadora las pinte al revés — el orden
+# es presentación (CSS order), el HTML no se duplica (las anclas de las
+# tarjetas tienen que seguir siendo únicas).
+_SECCION_MOVIL = {
+    "confirmado": ("pendientes", "Falta cobrar", 1),
+    "cotizado": ("pendientes", "Cotizado, sin pagar", 2),
+    "pagado": ("pagadas", "Pagadas", 1),
+}
+
+
+def _vender_movil(columnas, vista):
+    """Las píldoras Pendientes/Pagadas del teléfono, con sus conteos
+    REALES (la suma de las columnas de cada vista), y de paso le cuelga
+    a cada columna su cara de sección (título del lienzo, orden, si la
+    vista activa la muestra y si sus tarjetas llevan el Cobrar apagado).
+    MUTA las columnas a propósito: son la misma estructura que pinta el
+    tablero de computadora, solo que vestida dos veces."""
+    cuentas = {v: 0 for v in VISTAS_VENDER_MOVIL}
+    for col in columnas:
+        v, titulo, orden = _SECCION_MOVIL[col["clave"]]
+        col["movil"] = {
+            "titulo": titulo, "orden": orden, "visible": v == vista,
+            # El «Cobrar» por tarjeta del lienzo va APAGADO (pide el
+            # flujo de abonos, que no existe): solo en las pendientes —
+            # a una pagada no hay nada que cobrarle.
+            "cobrar_apagado": v == "pendientes",
+        }
+        cuentas[v] += col["cuenta"]
+    return [
+        {"clave": v, "texto": texto, "cuenta": cuentas[v],
+         "href": f"/venta?vista={v}", "activa": v == vista}
+        for v, texto in (("pendientes", "Pendientes"),
+                         ("pagadas", "Pagadas"))
+    ]
+
+
+def _vender_alerta(filas):
+    """El aviso rojo de arriba del cuerpo celular. El lienzo dice «4
+    ventas por revisar»; el dato REAL que existe hoy son las ventas
+    ATORADAS a medio pipeline con su último intento fallido
+    (linea_alerta, o sea ultimo_error) — ese es el conteo que se pinta,
+    y el botón abre el panel de la primera (donde vive Reintentar).
+    Sin atoradas no hay aviso: nada se inventa."""
+    atoradas = [f for f in filas if f.get("linea_alerta")]
+    if not atoradas:
+        return None
+    n = len(atoradas)
+    return {
+        "cuenta": n,
+        "texto": ("1 venta atorada por revisar" if n == 1
+                  else f"{n} ventas atoradas por revisar"),
+        "href": atoradas[0]["abrir_url"],
+    }
 
 
 def _vender_abierta(filas, abrir):
