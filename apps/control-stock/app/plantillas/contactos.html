@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block titulo %}Contactos — Control Viverorose{% endblock %}
+
+{% block contenido %}
+{# CONTACTOS (BLOQUE 37, item 2 de Jay; lienzo v3 abraham-contactos).
+   TODO lo que se pinta llegó decidido de Python (app/contactos.py,
+   regla 10): la unión por teléfono normalizado, los filtros, la plata.
+   SOLO LECTURA: acá no hay un solo <form> de escritura — el buscador es
+   un form GET (server-rendered) y lo que no funciona es un <button
+   disabled> con «Todavía no». El casamiento es EN LECTURA: nada se
+   escribe en Twenty/Odoo para unir. #}
+<link rel="stylesheet" href="/static/diseno-contactos.css?v={{ v_estaticos }}">
+
+{% with bm_titulo='Contactos', bm_sub='Todo el mundo, en un solo lugar' %}{% include '_barra_movil.html' %}{% endwith %}
+
+<header class="ct-top">
+  <div class="cab-izq">
+    <button class="hamb" type="button" aria-label="Mostrar u ocultar el menú"
+            aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+    <h1 class="ct-titulo">Contactos</h1>
+    {# El buscador del lienzo: server-rendered, un form GET que filtra
+       nombre y teléfono en Python. No escribe nada. #}
+    <form class="ct-busca" method="get" action="/contactos">
+      <input class="ct-q" type="search" name="q" value="{{ v.q }}"
+             placeholder="Buscar por nombre o teléfono"
+             aria-label="Buscar contacto">
+      {% if v.filtro != 'todos' %}<input type="hidden" name="f" value="{{ v.filtro }}">{% endif %}
+      <button class="ct-ir" type="submit">Buscar</button>
+    </form>
+    <span class="ct-pista num">{{ v.cuenta }} de {{ v.total }} contactos</span>
+  </div>
+  <div class="ct-acciones">
+    {# Crear una Person la aprieta un humano — y escribe en Twenty, que
+       en el 8095 está neutralizado: nace APAGADO (diseño corto). #}
+    <button class="ct-apagado" type="button" disabled>+ Nuevo contacto — Todavía no</button>
+  </div>
+</header>
+
+<main class="ct-main">
+  {% if error_aviso %}<div class="ct-alerta">{{ error_aviso }}</div>{% endif %}
+  {% if v.aviso_odoo %}<div class="ct-alerta">{{ v.aviso_odoo }}</div>{% endif %}
+  <div class="ct-hueco">{{ v.aviso_twenty }}</div>
+
+  {# Los filtros del lienzo, como enlaces GET. «Sin responsable» va
+     APAGADO: el responsable del contacto no existe como dato todavía. #}
+  <div class="ct-filtros">
+    {% for f in v.filtros %}
+    <a class="ct-fc {{ 'on' if f.activo }}"
+       href="/contactos?f={{ f.clave }}{% if v.q %}&amp;q={{ v.q | urlencode }}{% endif %}">{{ f.nombre }}</a>
+    {% endfor %}
+    <button class="ct-fc ct-fc-apagado" type="button" disabled
+            title="El responsable por contacto no existe como dato todavía">{{ v.filtro_apagado }} — Todavía no</button>
+  </div>
+
+  <div class="ct-lista">
+    <div class="ct-hr">
+      <span>Nombre</span><span>Tipo</span><span>Fuente</span>
+      <span>Último contacto</span><span>Ventas</span><span>Total</span>
+    </div>
+    {% for c in v.contactos %}
+    <a class="ct-r" href="/contactos/{{ c.id }}">
+      <b>{{ c.nombre }}{% if c.telefono %} <span class="ct-tel num">{{ c.telefono }}</span>{% endif %}</b>
+      <span class="ct-pista">{{ c.tipo }}</span>
+      <span class="ct-pista">{{ c.fuente_texto or '—' }}</span>
+      {# El último contacto sale de Twenty, que hoy no se puede leer:
+         vacío honesto en su lugar, nunca una fecha inventada. #}
+      <span class="ct-pista">—</span>
+      <span class="num">{{ c.ventas_n }}</span>
+      {% if c.ventas_total %}<b class="num">{{ c.ventas_total | dinero }}</b>{% else %}<span class="ct-pista">—</span>{% endif %}
+    </a>
+    {% else %}
+    <div class="ct-r ct-vacia"><span class="ct-pista">{{ v.vacio }}</span><span></span><span></span><span></span><span></span><span></span></div>
+    {% endfor %}
+    <div class="ct-r ct-pie"><span class="ct-pista">Un contacto puede existir sin venta. Aquí está todo el mundo, ordenado en un solo lugar.</span><span></span><span></span><span></span><span></span><span></span></div>
+  </div>
+</main>
+{% endblock %}
