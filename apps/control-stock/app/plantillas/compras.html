@@ -125,6 +125,14 @@
        hace que mover una compra no tire al empleado para arriba. Como el
        tablero scrollea de lado, traer la tarjeta a la vista también corre
        la columna sola — sin una línea de JavaScript. #}
+    {# El `.wrap` de la pantalla 12: el tablero a la izquierda (scrollea de
+       lado, como siempre) y el resumen a la derecha. Los números del
+       resumen del lienzo (cuánto falta comprar, cuánto está por llegar,
+       cuánto se recibió este mes) hoy no se calculan en ningún lado: los
+       tiles van APAGADOS con «Todavía no» — nunca un monto inventado — y
+       el de Proveedores enlaza a la vista real. En el teléfono el resumen
+       no existe (pantalla 28) y el CSS lo esconde. #}
+    <div class="cpd-envuelve">
     <div class="ret-tablero" id="cp-tablero">
       {% for col in columnas %}
       {# El color de la columna viaja como variable CSS (--cpd-col) y el
@@ -200,11 +208,38 @@
                href="/compras?abrir={{ c.ref | urlencode }}#c-{{ c.ref }}"
                aria-label="Ver los productos de {{ c.ref }}">{{ c.lineas_resumen }}</a>
             {% endif %}
+            {# El botón del rincón de la tarjeta (lienzo 12/28: «Recibir»).
+               Es el MISMO enlace que el panel ya ofrece — ni una ruta
+               nueva — y solo donde tiene sentido: una compra con su orden
+               de compra ya creada en Odoo es exactamente la que puede
+               recibirse. Sin orden no se pinta nada (ahí el paso que toca
+               es crearla, y eso vive en el panel). #}
+            {% if c.orden_compra %}
+            <a class="cpd-ob" draggable="false"
+               href="/compras/recibir?ref={{ c.ref | urlencode }}#cp-recibir"
+               aria-label="Registrar lo que llegó de {{ c.ref }}">Recibir</a>
+            {% endif %}
           </div>
           {% endfor %}
         </div>
       </div>
       {% endfor %}
+    </div>
+    <aside class="cpd-res" aria-label="Resumen de compras">
+      <div class="cpd-tile"><span class="k">Hay que comprar</span>
+        <span class="v">Todavía no</span></div>
+      <div class="cpd-tile"><span class="k">Por llegar</span>
+        <span class="v">Todavía no</span></div>
+      <div class="cpd-tile"><span class="k">Recibido este mes</span>
+        <span class="v">Todavía no</span></div>
+      <div class="cpd-tile cpd-pvs">
+        <span class="k">Proveedores
+          <a href="/compras/proveedores">Ver todos</a></span>
+        <span class="h">Los montos salen de Odoo y todavía no llegan a
+          este resumen; mientras, se calculan en la vista de
+          Proveedores.</span>
+      </div>
+    </aside>
     </div>
     <p class="pie-nota" style="padding:0 4px">
       El estado de la compra vive en el proyecto <b>COMPRAS</b> del equipo VIV
@@ -226,7 +261,9 @@
 <a class="telon" href="{{ vuelta }}" aria-label="Cerrar"></a>
 <aside class="panel-der">
   <div class="cab-panel">
-    <div><span class="tenue">{{ abierta.ref }}</span>
+    {# La pantalla 13 pone el estado en la cabecera («P00030 · Pedida, por
+       llegar»), no como renglón aparte: mismo dato, el lugar del lienzo. #}
+    <div><span class="tenue">{{ abierta.ref }} · {{ abierta.estado_ficha.titulo }}</span>
       <h4>{{ abierta.que_compro }}</h4></div>
     {# La X del lienzo (pantalla 13): mismo enlace de cerrar de siempre,
        ahora como botón cuadrado con icono. Cerrar vuelve a SU tarjeta. #}
@@ -234,7 +271,18 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </a>
   </div>
-  <div class="dato"><b>Columna</b><span>{{ abierta.estado_ficha.titulo }}</span></div>
+  {# Los dos atajos del lienzo (13/29): llamar al proveedor y escribirle.
+     Control NO guarda el teléfono del proveedor (vive como contacto de
+     Odoo, y la compra solo se queda con su id y su nombre) y la regla de
+     la casa es que los proveedores no tocan WhatsApp. Así que los dos van
+     APAGADOS con su «Todavía no», en el lugar del diseño: nunca un
+     número inventado ni un enlace que no marca a nadie. #}
+  <div class="cpd-ics">
+    <button class="cpd-ic c-tel" type="button" disabled title="Todavía no"
+            aria-label="Llamar al proveedor — Todavía no"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a12 12 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg></button>
+    <button class="cpd-ic c-wa" type="button" disabled title="Todavía no"
+            aria-label="WhatsApp del proveedor — Todavía no"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-4-7.5L21 3l-1 4.5A9 9 0 0 1 21 12z"/><path d="M8.5 10.5c.5 2 2.5 4 4.5 4.5l1.5-1.5 2 1-.5 2c-3.5.5-7.5-3-8.5-6.5l1-1.5 1.5 1z" fill="currentColor" stroke="none"/></svg></button>
+  </div>
   {% if abierta.proveedor %}
   <div class="dato"><b>Proveedor</b><span>{{ abierta.proveedor }}</span></div>
   {% endif %}
@@ -320,6 +368,16 @@
   <p class="pie-nota">Los productos se eligen al anotar la compra. Al pasar
     a «Pedido» se vuelven la orden de compra de Odoo, y ahí vive la
     plata.</p>
+  {% endif %}
+
+  {# El pie del lienzo (13/29): bajo la acción grande, los enlaces chicos.
+     «Ver proveedor» es el único que tiene a dónde ir hoy — la ficha del
+     proveedor ya existe y la compra se guardó con su id, así que abre SU
+     tarjeta. Sin proveedor anotado no se pinta. #}
+  {% if abierta.proveedor_id %}
+  <div class="acciones">
+    <a class="btn" href="/compras/proveedores?abrir={{ abierta.proveedor_id }}#pv-{{ abierta.proveedor_id }}">Ver proveedor</a>
+  </div>
   {% endif %}
 </aside>
 {% endif %}

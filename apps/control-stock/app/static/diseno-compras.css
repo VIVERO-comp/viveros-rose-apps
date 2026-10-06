@@ -112,9 +112,46 @@ body.cpd .ret-tarjeta a.cmp-falta:hover{text-decoration:underline;text-underline
 body.cpd .cmp-plata{font-size:11.5px;color:var(--d-tinta);font-weight:600}
 body.cpd .ret-tarjeta .eq-texto{font-size:12px;color:var(--d-suave)}
 body.cpd .hace-alerta{color:var(--d-rojo)}
+/* El botón del rincón de la tarjeta (el `.ob` del lienzo): píldora de 28px
+   con el borde en tinta. Es un enlace, no un botón: lleva a «Registrar lo
+   que llegó», la misma puerta del panel. */
+body.cpd .cpd-ob{
+  align-self:flex-end;display:inline-flex;align-items:center;height:28px;
+  padding:0 12px;border:1px solid var(--d-tinta);border-radius:14px;
+  background:#fff;color:var(--d-tinta);text-decoration:none;
+  font-size:13px;font-weight:600;
+}
+body.cpd .cpd-ob:hover{background:var(--d-gris-activo)}
 
 /* Los avisos, con los radios del diseño. */
 body.cpd .solo-lectura,body.cpd .aviso-ok,body.cpd .franja{border-radius:var(--d-radio-pil)}
+
+/* El `.wrap` de la pantalla 12: tablero + resumen lado a lado. El tablero
+   sigue scrolleando de lado ÉL SOLO (flex:1 + min-width:0, el overflow ya
+   lo trae calendario.css); el resumen es la columna fija de la derecha. */
+body.cpd .cpd-envuelve{display:flex;gap:12px;align-items:flex-start;flex:1;min-height:0}
+body.cpd .cpd-envuelve .ret-tablero{flex:1;min-width:0}
+body.cpd .cpd-res{
+  flex:0 0 280px;display:flex;flex-direction:column;gap:10px;min-width:0;
+}
+/* Los tiles del resumen van APAGADOS a propósito (sus números todavía no
+   se calculan): borde gris de tarjeta, no el acento del lienzo — un
+   resumen sin dato no puede vestirse de resumen vivo. */
+body.cpd .cpd-tile{
+  background:#fff;border:1.5px solid var(--d-borde-tarjeta);
+  border-radius:var(--d-radio-col);padding:12px 16px;
+  display:flex;flex-direction:column;gap:2px;
+}
+body.cpd .cpd-tile .k{
+  font-size:13px;font-weight:600;color:var(--d-tinta);
+  display:flex;justify-content:space-between;align-items:center;gap:8px;
+}
+body.cpd .cpd-tile .k a{
+  font-size:13px;font-weight:400;color:#3F3F3F;
+  text-decoration:underline;text-underline-offset:2px;
+}
+body.cpd .cpd-tile .v{font-size:18px;font-weight:600;color:var(--d-suave)}
+body.cpd .cpd-tile .h{font-size:12.5px;color:var(--d-suave)}
 
 /* ==================== la compra abierta (pantalla 13) ================== */
 
@@ -174,6 +211,17 @@ body.cpd .panel-der .btn:not(.oro):not(.cpd-x){
 }
 body.cpd .panel-der .pie-nota{font-size:12.5px;color:var(--d-suave)}
 body.cpd .panel-der .err{font-size:12.5px}
+/* Los dos atajos del lienzo (13/29), APAGADOS: Control no tiene el
+   teléfono del proveedor y los proveedores no tocan WhatsApp. Se pintan
+   en su lugar y se ven apagados — el pastel del canon queda para el día
+   que marquen a alguien. */
+body.cpd .cpd-ics{display:flex;gap:8px}
+body.cpd .cpd-ic{
+  width:44px;height:44px;box-sizing:border-box;flex-shrink:0;padding:0;
+  border:1px solid var(--d-borde);border-radius:10px;
+  background:var(--d-col);color:var(--d-suave);
+  display:grid;place-items:center;
+}
 
 /* ==================== Recibir (la hoja de «Lo que llegó») ============== */
 
@@ -238,6 +286,11 @@ body.cpd .modal .btn.oro{
   body.cpd .segmento.seg-movil a.on{
     border:2px solid var(--d-tinta);font-weight:700;background:#fff;
   }
+
+  /* El resumen de la pantalla 12 no existe en el teléfono (pantalla 28):
+     las secciones apiladas ocupan todo el ancho. */
+  body.cpd .cpd-res{display:none}
+  body.cpd .cpd-envuelve{display:block}
 
   /* Las secciones apiladas: el título de columna en mayúscula chica con
      su conteo, como «PEDIDAS, POR LLEGAR · 2». */
