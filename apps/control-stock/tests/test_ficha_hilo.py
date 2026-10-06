@@ -282,20 +282,29 @@ def test_cotizar_esta_disponible_siempre(cliente, de_dueno):
     assert ">Cotizar<" in agendado[agendado.index('class="panel-der"'):]
 
 
-def test_cotizar_es_un_enlace_a_vender_con_el_lead(cliente, de_dueno):
+def test_cotizar_es_un_post_a_vender_con_el_lead(cliente, de_dueno):
+    # Era un enlace GET (/venta?lead=...), pero dejaba escrito el lead
+    # pendiente y el borrador: desde el punto 1 de roles es un formulario
+    # POST a /venta/lead (precisión 2 del review — un GET no muta).
     cuerpo = cliente.get("/control", params={"abrir": "LEAD-91"}).text
     panel = cuerpo[cuerpo.index('class="panel-der"'):]
-    trozo = panel[panel.index(">Cotizar<") - 200:panel.index(">Cotizar<")]
-    assert '<a class="btn"' in trozo
-    assert "/venta?lead=LEAD-91" in trozo
-    assert "cliente=Tamara" in trozo
-    assert "cel=6552-0966" in trozo
+    trozo = panel[panel.index(">Cotizar<") - 400:panel.index(">Cotizar<")]
+    assert 'action="/venta/lead"' in trozo
+    assert 'name="lead" value="LEAD-91"' in trozo
+    assert 'name="cliente" value="Tamara' in trozo
+    assert 'name="cel" value="6552-0966"' in trozo
+    # Y el camino viejo ya no muta: el GET con ?lead= pinta la pestaña.
+    r = cliente.get("/venta", params={"lead": "LEAD-91"},
+                    follow_redirects=False)
+    assert r.status_code == 200
+    from app import ventas
+    assert ventas.lead_pendiente("genesis") is None
 
 
 def test_cotizar_no_duplica_el_lead_en_el_selector_de_vender(
         cliente, de_dueno, monkeypatch):
-    # El camino real, de punta a punta: clic en Cotizar -> /venta -> deja
-    # el lead pendiente -> /venta/nueva. La referencia que manda Control
+    # El camino real, de punta a punta: clic en Cotizar -> POST
+    # /venta/lead -> deja el lead pendiente -> /venta/nueva. La referencia que manda Control
     # (LEAD-91, la de linear_leads) tiene que ser la MISMA que arma el
     # selector de Vender (_leads_para_elegir, la misma fuente) — si no
     # coincidieran, el lead saldría duplicado en el <select>. El selector
@@ -305,7 +314,7 @@ def test_cotizar_no_duplica_el_lead_en_el_selector_de_vender(
                             "ODOO_DB": "pruebas", "ODOO_USER": "prueba",
                             "ODOO_PASSWORD": "prueba"}.items():
         monkeypatch.setenv(variable, valor)
-    r = cliente.get("/venta", params={
+    r = cliente.post("/venta/lead", data={
         "lead": "LEAD-91", "cliente": "Tamara", "cel": "6552-0966"},
         follow_redirects=False)
     assert r.status_code == 303
