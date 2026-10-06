@@ -6310,15 +6310,19 @@ from . import finanzas  # noqa: E402
 @app.get("/finanzas")
 def finanzas_pantalla(request: Request):
     """La pantalla de Finanzas, SOLO LECTURA. Nace cerrada (BLOQUE
-    22.7): hoy la abren los admins y los tres deberes de la cola de
-    pagos — la misma puerta del dinero que /pagos-por-confirmar. El rol
-    Finanzas entrará cuando roles-menu la abra para él, server-side."""
+    22.7): la abren los roles Finanzas y Director (BLOQUE 29), los
+    admins y los tres deberes de la cola de pagos — la misma puerta
+    del dinero que /pagos-por-confirmar."""
     empleada = request.state.empleada
-    if not (_es_admin(empleada)
+    slugs = {r["slug"]
+             for r in datos_roles.roles_activos_de(empleada["id"])}
+    if not (slugs & {datos_roles.SLUG_FINANZAS, datos_roles.SLUG_DIRECTOR}
+            or _es_admin(empleada)
             or pagos_confirmar.puede_ver(empleada["id"])):
         return Response(
-            "La pantalla Finanzas es de los administradores y de los "
-            "deberes de la cola de pagos (Ajustes → Roles).",
+            "La pantalla Finanzas es de los roles Finanzas y Director, "
+            "los administradores y los deberes de la cola de pagos "
+            "(Ajustes → Roles).",
             status_code=403)
     return plantillas.TemplateResponse(request, "finanzas.html", {
         "empleada": empleada,
@@ -6333,11 +6337,15 @@ from . import respuestas  # noqa: E402
 @app.get("/conversaciones/respuestas")
 def conversaciones_respuestas(request: Request):
     """La vista «Respuestas» de Conversaciones (BLOQUE 21), SOLO
-    LECTURA. Nace cerrada con el MISMO candado de /conversaciones
-    (_solo_admin); cuando roles-menu exista la verán Finanzas y el
-    Director, server-side."""
-    if (rechazo := _solo_admin(request)) is not None:
-        return rechazo
+    LECTURA. La ven los roles Finanzas y Director (BLOQUE 29) y los
+    admins (el candado histórico de /conversaciones, que en la v2 de
+    rol-sobre-admin pasará a ser solo de esos dos roles)."""
+    empleada = request.state.empleada
+    slugs = {r["slug"]
+             for r in datos_roles.roles_activos_de(empleada["id"])}
+    if not (slugs & {datos_roles.SLUG_FINANZAS, datos_roles.SLUG_DIRECTOR}):
+        if (rechazo := _solo_admin(request)) is not None:
+            return rechazo
     return plantillas.TemplateResponse(request, "respuestas.html", {
         "empleada": request.state.empleada,
         "r": respuestas.vista(),

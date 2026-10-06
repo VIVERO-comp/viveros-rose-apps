@@ -186,11 +186,11 @@ def test_menus_por_rol_segun_el_diseno():
 def test_matriz_operaciones(db_limpia, con_inventario):
     c = _con_roles("opera", "operaciones")
     casa = "/control"
-    # GET/HEAD dentro del alcance: pasan la puerta (200, o 404 si la ruta
-    # aún no existe — /mi-crm la construye otra rama).
+    # GET/HEAD dentro del alcance: pasan la puerta y la ruta responde
+    # (el esqueleto de /mi-crm ya existe: 200).
     assert c.get("/venta", follow_redirects=False).status_code == 200
     assert c.get("/?tab=stock", follow_redirects=False).status_code == 200
-    assert c.get("/mi-crm", follow_redirects=False).status_code == 404
+    assert c.get("/mi-crm", follow_redirects=False).status_code == 200
     # /stock no es su vista plana: el handler lo manda a la pestaña.
     r = c.get("/stock", follow_redirects=False)
     assert (r.status_code, r.headers["location"]) == (303, "/?tab=stock")
@@ -217,7 +217,7 @@ def test_matriz_atencion(db_limpia, con_inventario):
     c = _con_roles("atenta", "atencion")
     casa = "/control"
     assert c.get("/venta", follow_redirects=False).status_code == 200
-    assert c.get("/mi-crm", follow_redirects=False).status_code == 404
+    assert c.get("/mi-crm", follow_redirects=False).status_code == 200
     # SIN stock, compras ni ajustes: ni el tablero de "/" ni /compras.
     for ruta in ("/?tab=stock", "/?tab=ajustes", "/compras", "/stock",
                  "/resumen", "/finanzas"):
@@ -236,9 +236,11 @@ def test_matriz_finanzas_ve_todo_y_no_escribe_nada(db_limpia, con_inventario,
     # TODOS los GET pasan: modo ver de verdad (abre fichas y pestañas).
     assert c.get("/venta", follow_redirects=False).status_code == 200
     assert c.get("/?tab=stock", follow_redirects=False).status_code == 200
-    assert c.get("/finanzas", follow_redirects=False).status_code == 404
+    # El esqueleto ya existe y su candado de handler conoce el rol
+    # (BLOQUE 29: Finanzas y Director).
+    assert c.get("/finanzas", follow_redirects=False).status_code == 200
     assert c.get("/conversaciones/respuestas",
-                 follow_redirects=False).status_code == 404
+                 follow_redirects=False).status_code == 200
     r = c.get("/stock", follow_redirects=False)
     assert (r.status_code, r.headers["location"]) == (303, "/?tab=stock")
     # TODA escritura es 403 — también bajo /finanzas (sin lista blanca de
@@ -271,10 +273,10 @@ def test_matriz_inventario_identica_al_bloque_13(db_limpia):
 def test_matriz_director_sin_puerta(db_limpia):
     c = _con_roles("dire", "director")
     assert c.get("/venta", follow_redirects=False).status_code == 200
-    # La puerta no corta nada: una ruta inexistente llega al router (404),
-    # y los candados propios de cada pantalla siguen mandando (el 403 de
-    # /ajustes/invitar es de _solo_admin, no de la puerta por rol).
-    assert c.get("/finanzas", follow_redirects=False).status_code == 404
+    # La puerta no corta nada, y los candados propios de cada pantalla
+    # siguen mandando: /finanzas abre para el Director (BLOQUE 29) y el
+    # 403 de /ajustes/invitar es de _solo_admin, no de la puerta por rol.
+    assert c.get("/finanzas", follow_redirects=False).status_code == 200
     assert c.post("/venta/no-existe").status_code == 404
     r = c.post("/ajustes/invitar", data={"email": "a@b.co"})
     assert r.status_code == 403 and "Solo para administradores" in r.text
@@ -293,9 +295,11 @@ def test_sin_rol_sigue_como_hoy_fail_open_explicito(cliente):
     prueba a Abraham). Mientras una empleada no tenga rol asignado, la
     puerta no la corta: empleada completa, como antes del punto 1."""
     assert cliente.get("/venta", follow_redirects=False).status_code == 200
-    # Ni redirect a una casa ni 403 de rol: la ruta inexistente llega al
-    # router tal cual.
-    assert cliente.get("/finanzas", follow_redirects=False).status_code == 404
+    # Ni redirect a una casa ni 403 DE LA PUERTA: la ruta llega a su
+    # handler, y el 403 que devuelve /finanzas es su candado propio
+    # (nace cerrada, BLOQUE 22.7) — no un corte por rol.
+    r = cliente.get("/finanzas", follow_redirects=False)
+    assert r.status_code == 403 and "cola de pagos" in r.text
     assert cliente.post("/venta/no-existe").status_code == 404
 
 
@@ -314,8 +318,10 @@ def test_un_rol_sin_slug_mantiene_abierta_la_puerta(db_limpia):
     assert c.post("/login", data={"usuario": "mixta2", "contrasena": CLAVE},
                   follow_redirects=False).status_code == 303
     # Con atención sola, GET /finanzas rebotaría 303 a /control; con el
-    # pod al lado la puerta queda abierta y la ruta llega al router.
-    assert c.get("/finanzas", follow_redirects=False).status_code == 404
+    # pod al lado la puerta queda abierta y la ruta llega a su handler
+    # (cuyo candado propio responde 403: ni rol de finanzas ni admin).
+    r = c.get("/finanzas", follow_redirects=False)
+    assert r.status_code == 403 and "cola de pagos" in r.text
     assert c.post("/venta/no-existe").status_code == 404
 
 
