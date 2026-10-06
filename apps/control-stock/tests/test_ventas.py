@@ -250,12 +250,39 @@ class OdooFalso:
                     orden[campo] = vals[campo]
         return True
 
+    def _invoice_status(self, orden_id):
+        """`invoice_status` como lo computa Odoo con política «delivery»:
+        nada por facturar mientras la salida no esté validada; una vez
+        validada, 'to invoice' hasta que los RENGLONES se facturen. El
+        anticipo ('fixed') NO factura renglones, así que los deja
+        pendientes — por eso una orden cobrada por anticipo sigue en 'to
+        invoice', que es lo que hace posible la factura de la entrega.
+        Un BORRADOR de la final ya cuenta como facturado (en Odoo
+        `qty_invoiced` incluye los borradores)."""
+        orden = self.ordenes[orden_id]
+        if orden["state"] != "sale":
+            return "no"
+        entregado = any(p["sale_id"] == orden_id and p["state"] == "done"
+                        for p in self.pickings.values())
+        if not entregado:
+            return "no"
+        return "invoiced" if orden.get("renglones_facturados") else "to invoice"
+
     def sale_order_read(self, args, kw):
-        return [{"id": i, **{c: self.ordenes[i][c] for c in kw["fields"]}} for i in args[0]]
+        def campo(orden_id, c):
+            if c == "invoice_status":
+                return self._invoice_status(orden_id)
+            return self.ordenes[orden_id][c]
+        return [{"id": i, **{c: campo(i, c) for c in kw["fields"]}}
+                for i in args[0]]
 
     def sale_order_action_confirm(self, args, kw):
         for orden_id in args[0]:
             orden = self.ordenes[orden_id]
+            # Confirmar una orden ya confirmada es un no-op en Odoo: no
+            # nace una segunda salida. Importa para los reintentos.
+            if orden["state"] == "sale":
+                continue
             orden["state"] = "sale"
             picking = self._nuevo_id()
             self.pickings[picking] = {"sale_id": orden_id, "state": "assigned"}
@@ -267,14 +294,28 @@ class OdooFalso:
         return True
 
     def sale_order_line_search_read(self, args, kw):
-        orden_id = args[0][0][2]
-        return [{
-            "id": indice,
-            "name": self.productos.get(l.get("product_id"), {}).get("name", ""),
-            "product_uom_qty": l["product_uom_qty"],
-            "price_unit": self._precio(l),
-            "price_subtotal": round(l["product_uom_qty"] * self._precio(l), 2),
-        } for indice, l in enumerate(self.ordenes[orden_id]["lineas"], start=1)]
+        # El dominio se aplica DE VERDAD más allá de order_id (F3,
+        # 6/10/2026): la línea de anticipo que Odoo cuelga de la orden no
+        # es display_type, así que el único filtro que la deja fuera del
+        # documento del cliente es is_downpayment — un fake que ignorara
+        # esa condición daría por probado lo que no probó.
+        orden_id = next(c[2] for c in args[0] if c[0] == "order_id")
+        condiciones = [c for c in args[0] if c[0] != "order_id"]
+        filas = []
+        for indice, l in enumerate(self.ordenes[orden_id]["lineas"], start=1):
+            fila = {
+                "id": indice,
+                "name": (l.get("name")
+                         or self.productos.get(l.get("product_id"), {}).get("name", "")),
+                "product_uom_qty": l["product_uom_qty"],
+                "price_unit": self._precio(l),
+                "price_subtotal": round(l["product_uom_qty"] * self._precio(l), 2),
+                "display_type": l.get("display_type") or False,
+                "is_downpayment": bool(l.get("is_downpayment")),
+            }
+            if all(fila.get(campo) == valor for campo, _op, valor in condiciones):
+                filas.append(fila)
+        return filas
 
     def sale_order_action_cancel(self, args, kw):
         for orden_id in args[0]:
@@ -335,23 +376,49 @@ class OdooFalso:
                             "price_unit": monto, "price_subtotal": monto}],
             }
             orden["invoice_ids"].append(factura)
+            # Como el Odoo real: el anticipo cuelga de la ORDEN una línea
+            # propia (is_downpayment, cantidad 0, subtotal 0) que NO es
+            # display_type. De ahí salía el renglón fantasma «Anticipo · 0
+            # × $X · $0.00» en el documento público /f/ (F3).
+            orden["lineas"].append({
+                "name": "Anticipo", "product_uom_qty": 0.0,
+                "price_unit": monto, "is_downpayment": True,
+            })
+            orden["anticipado"] = round(
+                orden.get("anticipado", 0.0) + monto, 2)
             return True
         entregado = any(p["sale_id"] == orden_id and p["state"] == "done"
                         for p in self.pickings.values())
         if orden["state"] != "sale" or not entregado:
             raise xmlrpc.client.Fault(1, "...\nThere is nothing to invoice!")
+        # La factura de lo ENTREGADO: todos los renglones y, si hay
+        # anticipo y el asistente deduce (deduct_down_payments, que en
+        # Odoo es default=True), su línea en NEGATIVO bajo la sección
+        # «Anticipos» — así que el total queda neteado, en $0 cuando el
+        # anticipo cubrió todo.
+        anticipado = orden.get("anticipado", 0.0)
+        deduce = valores.get("deduct_down_payments", True) and anticipado
+        lineas = [{
+            "name": self.productos.get(l.get("product_id"), {}).get("name", ""),
+            "quantity": l["product_uom_qty"],
+            "price_unit": self._precio(l),
+            "price_subtotal": round(l["product_uom_qty"] * self._precio(l), 2),
+        } for l in orden["lineas"] if not l.get("is_downpayment")]
+        if deduce:
+            lineas.append({"name": "Anticipo", "quantity": -1.0,
+                           "price_unit": anticipado,
+                           "price_subtotal": -anticipado})
         factura = self._nuevo_id()
         self.facturas[factura] = {
             "name": f"INV/2026/{factura}", "state": "draft",
-            "amount_total": orden["amount_total"], "payment_state": "not_paid",
-            "lineas": [{
-                "name": self.productos.get(l.get("product_id"), {}).get("name", ""),
-                "quantity": l["product_uom_qty"],
-                "price_unit": self._precio(l),
-                "price_subtotal": round(l["product_uom_qty"] * self._precio(l), 2),
-            } for l in orden["lineas"]],
+            "amount_total": round(orden["amount_total"]
+                                  - (anticipado if deduce else 0.0), 2),
+            "payment_state": "not_paid", "lineas": lineas,
         }
         orden["invoice_ids"].append(factura)
+        # Los renglones quedan facturados (qty_invoiced) desde el BORRADOR,
+        # igual que en Odoo: ver _invoice_status.
+        orden["renglones_facturados"] = True
         return True
 
     def account_move_line_search_read(self, args, kw):
