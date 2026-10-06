@@ -71,7 +71,7 @@ def _insertar_servicio(orden_id, orden, cliente="Beto", total=200.0,
 def test_cotizacion_de_planta_conserva_sus_tres_acciones(cliente, odoo):
     n = _insertar_venta(501, "S00050")
     pagina = cliente.get("/venta").text
-    assert f'href="/venta/cobrar/{n}"' in pagina          # Facturar / Pagado
+    assert f'href="/venta/pago/{n}"' in pagina          # Facturar / Pagado
     assert "Facturar / Pagado" in pagina
     assert f"/venta/{n}/cotizacion.pdf" in pagina          # Descargar / Compartir
     assert "Descargar / Compartir" in pagina
@@ -104,7 +104,7 @@ def test_venta_pagada_conserva_factura_y_mandar_factura(cliente, odoo):
 def test_venta_atorada_conserva_reintentar(cliente, odoo):
     n = _insertar_venta(503, "S00052", cliente="Atorada", estado="facturada")
     pagina = cliente.get("/venta").text
-    assert f'href="/venta/cobrar/{n}"' in pagina
+    assert f'href="/venta/pago/{n}"' in pagina
     assert "Reintentar" in pagina
 
 
@@ -177,7 +177,7 @@ def test_abrir_venta_muestra_el_panel_con_facturar(cliente, odoo):
     n = _insertar_venta(509, "S00067", cliente="PanelVenta")
     pagina = cliente.get(f"/venta?abrir=v{n}").text
     assert 'class="vd-panel"' in pagina
-    assert pagina.count(f'href="/venta/cobrar/{n}"') == 2  # tarjeta + panel
+    assert pagina.count(f'href="/venta/pago/{n}"') == 2  # tarjeta + panel
     # Cerrar es un enlace que vuelve al ancla (no perder el lugar).
     assert f'href="/venta#v-{n}"' in pagina
 

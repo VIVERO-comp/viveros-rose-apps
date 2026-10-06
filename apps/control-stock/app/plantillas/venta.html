@@ -244,7 +244,7 @@
   </div>
   <div class="vd-p-pie">
     {% if abierta.tipo == "venta" and abierta.estado == "cotizacion" %}
-    <a class="vd-btn" href="/venta/cobrar/{{ abierta.n }}">FACTURAR / PAGADO</a>
+    <a class="vd-btn" href="/venta/pago/{{ abierta.n }}">FACTURAR / PAGADO</a>
     <div class="vd-p-acts">
       <a class="vd-x vd-x2" href="/venta/{{ abierta.n }}/cotizacion.pdf" target="_blank" rel="noopener" download="{{ abierta.nombre_cotizacion_pdf }}" data-pdf>Descargar / Compartir PDF</a>
       {% with form_action="/venta/cancelar/" + abierta.n|string,
@@ -259,7 +259,7 @@
     <div class="vd-p-acts"><a class="vd-x vd-x2" href="{{ abierta.whatsapp }}" target="_blank" rel="noopener">Mandar factura por WhatsApp</a></div>
     {% endif %}
     {% elif abierta.tipo == "venta" %}
-    <a class="vd-btn" href="/venta/cobrar/{{ abierta.n }}">REINTENTAR</a>
+    <a class="vd-btn" href="/venta/pago/{{ abierta.n }}">REINTENTAR</a>
     {% else %}
     <a class="vd-btn" href="/venta/servicio/{{ abierta.n }}/propuesta.pdf" target="_blank" rel="noopener" download="{{ abierta.nombre_pdf }}" data-pdf>DESCARGAR / COMPARTIR PDF</a>
     {% if abierta.editable %}
