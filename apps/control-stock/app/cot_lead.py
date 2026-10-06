@@ -414,6 +414,54 @@ def plata_de_la_real(lead):
     return _plata_de_orden(real)
 
 
+def plata_de_varios(leads):
+    """La plata de LA REAL de MUCHOS leads, en UNA sola consulta a Odoo.
+
+    Es `plata_de_la_real` para un tablero entero: el monto de la tarjeta
+    (BLOQUE 43, lienzo de Roles) lo necesita para cada lead de las nueve
+    columnas, y pedirlo lead por lead serían ~25 viajes XML-RPC en cada
+    pintada de la pantalla.
+
+    Devuelve `{"ok", "error", "por_lead": {ref: plata}}`, con la MISMA
+    forma que arma `_plata_de_orden` — la regla del abono del 50% sigue
+    viviendo en un solo lugar. Un lead sin orden real sencillamente no
+    aparece en el diccionario: eso es «no tiene», y la tarjeta no pinta
+    monto. Con Odoo caído, `ok` es False y `por_lead` queda VACÍO: un
+    monto que no se pudo leer no se pinta nunca, y jamás se inventa en
+    cero (sería plata falsa en la cara de quien reparte el trabajo).
+
+    Un lead sin PP-XXXXX no se pregunta: no hay por dónde buscarlo.
+    """
+    por_pp = {}
+    for lead in leads or []:
+        pp = _pp_de(lead)
+        ref = (lead or {}).get("ref") or ""
+        if pp and ref:
+            por_pp.setdefault(pp, []).append(ref)
+    if not por_pp:
+        return {"ok": True, "error": None, "por_lead": {}}
+    try:
+        filas = ventas._ejecutar(
+            "sale.order", "search_read",
+            [[["lead_real", "=", True], ["lead_ref", "in", sorted(por_pp)]]],
+            {"fields": CAMPOS_ORDEN, "order": "date_order desc"})
+    except Exception as error:
+        return {"ok": False, "error": _error(error), "por_lead": {}}
+    por_lead = {}
+    for fila in filas:
+        # `lead_ref` se escribe siempre en mayúsculas (`conectar`), pero el
+        # casamiento se hace igual sin distinguirlas: una corrección a mano
+        # en Odoo no tiene por qué respetar esa costumbre nuestra.
+        pp = (fila.get("lead_ref") or "").strip().upper()
+        plata = _plata_de_orden(_orden_legible(fila))
+        for ref in por_pp.get(pp, []):
+            # La invariante «una sola real por lead» la garantiza
+            # `marcar_real`; si por lo que sea hubiera dos, manda la más
+            # nueva (el `order` de la consulta) y no se suman.
+            por_lead.setdefault(ref, plata)
+    return {"ok": True, "error": None, "por_lead": por_lead}
+
+
 # ---------------------------------------------------------------------------
 # 5. Qué implica la conexión para el embudo (dato, no acción)
 # ---------------------------------------------------------------------------

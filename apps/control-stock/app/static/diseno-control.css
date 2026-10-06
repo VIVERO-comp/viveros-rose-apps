@@ -127,6 +127,56 @@
 
 @media (min-width:861px), (max-width:767.98px){
 
+  /* ---- «Ver a:» (lienzo de Roles): la tira de filtros de vista, en
+     píldoras de 34px; la puesta va con borde doble y negrita, como el
+     `.fc.on` del canon. ---- */
+  .dc-fl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding-bottom:2px}
+  .dc-fc{
+    height:34px;padding:0 12px;box-sizing:border-box;
+    display:inline-flex;align-items:center;
+    border:1px solid var(--d-borde-campo);border-radius:17px;
+    background:#fff;color:var(--d-tinta);
+    font-size:13.5px;text-decoration:none;white-space:nowrap;
+  }
+  .dc-fc.on{border:2px solid var(--d-tinta);font-weight:700}
+
+  /* ---- Las dos cajas de peticiones del lienzo, arriba del tablero.
+     La segunda («Dijeron que no pueden») lleva el borde negro del
+     canon: es la que pide una decisión. ---- */
+  .dc-strip{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .dc-box{
+    border:1px solid var(--d-borde);border-radius:14px;padding:12px 14px;
+    display:flex;flex-direction:column;gap:6px;min-width:0;
+  }
+  .dc-box.k{border-color:var(--d-tinta)}
+  .dc-box-cab{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    font-size:14.5px;font-weight:700;
+  }
+  .dc-box .tenue{font-size:12.5px;line-height:1.4}
+  .dc-box-ln{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  /* El apagado chico: el mismo gris del grande, a la medida de un botón
+     de barra o de caja (el `.ob`/`.btn` del lienzo). Va sin anidar bajo
+     `.panel-der` porque estos dos viven en la barra y en las cajas, no
+     en la ficha. Apagado se ve apagado, igual que el grande. */
+  .btn.dc-apagado.chico{
+    width:auto;min-height:0;height:32px;padding:0 12px;
+    display:inline-flex;align-items:center;justify-content:center;
+    border-radius:16px;font-size:12.5px;font-weight:600;
+    background:var(--d-col);border:1px solid var(--d-borde);
+    color:var(--d-suave);opacity:1;white-space:nowrap;
+  }
+
+  /* La marca «Todos» del lienzo de Roles, al lado del título: una
+     píldora gris que dice de quién es el tablero que se está viendo.
+     En las dos caras — en el teléfono el título ya ocupa su renglón
+     entero y la marca cae debajo, que es donde se lee bien. */
+  .dc-marca{
+    display:inline-flex;align-items:center;height:26px;padding:0 10px;
+    border-radius:13px;background:var(--d-gris-activo);color:#3F3F3F;
+    font-size:12.5px;font-weight:600;flex-shrink:0;
+  }
+
   /* ---- los chips de la tarjeta, a la medida EXACTA del lienzo:
      22px de alto, radio 11, letra 12 (.chip del canon). ---- */
   .dc-chip-interes{
@@ -147,17 +197,38 @@
     font-size:12px;font-weight:600;white-space:nowrap;margin-right:0;
   }
   /* El rincón derecho de la primera fila (lienzo .acts): el 🔴 de «Te
-     toca» y el círculo del responsable, juntos y pegados al borde. El
-     margin-left:auto del punto (calendario.css) se apaga adentro. */
+     toca» y, con el lienzo de Roles, la PLATA (o el «hace» cuando no
+     hay monto). El margin-left:auto del punto (calendario.css) se apaga
+     adentro. */
   .ctl-acts{margin-left:auto;display:inline-flex;align-items:center;gap:6px;flex-shrink:0}
   .ctl-acts .ctl-alerta{margin-left:0}
-  /* La inicial del responsable en círculo (lienzo .av.sm: 22px). */
+  /* El monto de la tarjeta: el `.amt` del lienzo de Roles — negrita, a
+     la misma altura del nombre y sin encogerse nunca. */
+  .ctl-monto{font-size:14px;font-weight:700;color:var(--d-tinta);white-space:nowrap}
+  .ctl-hace{font-size:12.5px;color:var(--d-suave);white-space:nowrap}
+  /* La inicial del responsable en círculo (lienzo .av.sm: 22px). Con el
+     lienzo de Roles baja a la fila de abajo, pegada al borde derecho. */
   .ctl-av{
     width:22px;height:22px;border-radius:50%;
     background:var(--d-gris-activo);color:#3F3F3F;
     display:inline-grid;place-items:center;
     font-size:10.5px;font-weight:700;flex-shrink:0;
+    margin-left:auto;
   }
+  /* «Asignar» en la tarjeta sin dueño: el botón de borde del lienzo
+     (.ob), que acá es un enlace — abre una capa, no escribe nada. */
+  .ctl-asignar{
+    margin-left:auto;height:24px;padding:0 10px;
+    display:inline-flex;align-items:center;flex-shrink:0;
+    border:1px solid var(--d-tinta);border-radius:12px;
+    background:#fff;color:var(--d-tinta);
+    font-size:12px;font-weight:600;text-decoration:none;
+  }
+  /* Con el círculo Y el enlace no puede haber dos `margin-left:auto`
+     peleando: el chip «Sin asignar» y el enlace van juntos. */
+  .ctl-av + .ctl-asignar,.ctl-asignar + .ctl-av{margin-left:6px}
+  /* El total de la columna, a la derecha del encabezado (lienzo .tot). */
+  .ret-total{margin-left:auto;font-size:12.5px;font-weight:600;color:var(--d-tinta)}
   /* Rojo solo para plata que se debe; verde para lo saldado (la clase la
      decide Python: control._clase_pago). */
   .etq-pago.dc-debe{background:var(--d-rojo-fondo);color:var(--d-rojo)}
@@ -238,6 +309,70 @@
   }
   .panel-der .dato span{text-align:right;min-width:0}
 
+  /* ---- El monto grande y las CINCO filas del panel del lead (BLOQUE 43,
+     lienzo de Roles «crm-lead-abierto»). El número es el `.amt` de 34px
+     del canon; las filas, su `.r`: clave gris a la izquierda, valor al
+     medio y la flecha a la derecha, con la FILA ENTERA de área activa
+     (el <a> es la fila, no un enlacito al final). ---- */
+  .dc-monto{display:flex;flex-direction:column;gap:2px;padding:2px 0 6px}
+  .dc-monto-amt{font-size:34px;font-weight:600;line-height:1.1}
+  .dc-monto-nota{font-size:13px;color:var(--d-suave)}
+
+  /* Las rayas de las filas van de borde a borde del panel, como en el
+     lienzo: el margen negativo cancela el padding lateral y cada fila lo
+     repone adentro. El valor es el del padding de ESTA cara (20px); la
+     computadora lo recalza a 24px al final del archivo. */
+  .dc-filas{display:flex;flex-direction:column;border-top:1px solid #EFEFEF;margin:0 -20px}
+  .dc-fila{
+    display:grid;grid-template-columns:106px minmax(0,1fr) auto;
+    align-items:center;column-gap:10px;min-height:58px;
+    padding:8px 20px;box-sizing:border-box;
+    border-bottom:1px solid #EFEFEF;
+    color:inherit;text-decoration:none;
+  }
+  a.dc-fila:hover{background:var(--d-col)}
+  .dc-fila-l{font-size:13px;color:var(--d-suave)}
+  .dc-fila-v{display:flex;flex-direction:column;gap:3px;min-width:0;font-size:14.5px}
+  .dc-fila-dato{
+    display:flex;align-items:center;gap:8px;min-width:0;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  /* Lo que pide ojo (un lead sin dueño, cotizaciones sin una real) en el
+     rojo del canon — la clase la decide Python, no un texto comparado. */
+  .dc-fila-ojo{color:var(--d-rojo);font-weight:600}
+  .dc-fila-det{
+    font-size:12.5px;color:var(--d-suave);min-width:0;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  /* La inicial de quien lo atiende: el mismo círculo negro del lienzo. */
+  .dc-fila-av{
+    display:inline-grid;place-items:center;width:24px;height:24px;
+    border-radius:50%;background:var(--d-tinta);color:#fff;
+    font-size:11px;font-weight:700;flex-shrink:0;
+  }
+  .dc-fila-go{color:#8A8A8A;flex-shrink:0}
+  /* La fila sin acción todavía: en vez de la flecha, su «Todavía no». No
+     se esconde — el lugar queda dicho para cuando exista. */
+  .dc-fila-no{
+    font-size:11.5px;font-weight:600;color:var(--d-suave);
+    background:var(--d-col);border:1px solid var(--d-borde);
+    border-radius:11px;padding:3px 8px;white-space:nowrap;flex-shrink:0;
+  }
+
+  /* Un envoltorio que solo existe para llevar un id de ancla: no debe
+     cambiar ni el layout ni los espacios de la columna del panel. */
+  .dc-seccion{display:contents}
+
+  /* El pie de la ficha del lienzo: el botón grande y, centrado debajo,
+     el enlace chico «Ver contacto» (el `.lk` del canon). */
+  .dc-pie{display:flex;flex-direction:column;gap:12px;align-items:stretch}
+  .dc-lk{
+    align-self:center;height:28px;display:inline-flex;align-items:center;
+    font-size:14px;color:var(--d-tinta);text-decoration:underline;
+    text-underline-offset:2px;
+  }
+  .dc-lk-off{color:var(--d-suave);text-decoration:none}
+
   /* El botón negro del lienzo es «COBRAR SALDO $X», que acá no existe:
      va apagado (ver control.html). Apagado se ve apagado — nunca con la
      cara del botón vivo. */
@@ -264,6 +399,28 @@
   /* El modal del motivo, con los radios del lienzo. */
   .modal{border-radius:16px;border-color:var(--d-borde)}
   .modal .btn.oro{min-height:44px;border-radius:12px;font-size:14px}
+
+  /* ---- El cuadro de asignar / reasignar (lienzo de Roles
+     «crm-asignar»): 440px, cada persona en su caja de 60px con el radio
+     a la izquierda, y la nota y la fecha en dos columnas. ---- */
+  .dc-asignar{width:min(440px,94vw)}
+  .dc-asignar .dc-cab-sub{margin-top:6px}
+  .dc-opt{
+    display:flex;align-items:center;gap:12px;min-height:60px;
+    padding:0 14px;box-sizing:border-box;
+    border:1px solid var(--d-borde-campo);border-radius:12px;
+    cursor:pointer;
+  }
+  .dc-opt input{width:20px;height:20px;accent-color:var(--d-tinta);margin:0;flex-shrink:0}
+  .dc-opt-av{
+    display:inline-grid;place-items:center;width:28px;height:28px;
+    border-radius:50%;background:var(--d-tinta);color:#fff;
+    font-size:12px;font-weight:700;flex-shrink:0;
+  }
+  .dc-opt-quien{display:flex;flex-direction:column;gap:1px;flex-grow:1;min-width:0}
+  .dc-opt-quien .tenue{font-size:12.5px}
+  .dc-asignar-dos{display:grid;grid-template-columns:minmax(0,1fr) 150px;gap:10px}
+  .dc-asignar .acciones{margin-top:2px}
 }
 
 /* El ancho de la ficha en computadora (pantalla 06): 480px. Va al final y
@@ -276,6 +433,10 @@
      siga sangrando hasta el borde. El top:-20px no cambia (el padding
      de ARRIBA sigue siendo 20px). */
   .panel-der .cab-panel{margin:-20px -24px 0;padding:20px 24px 0}
+  /* Y lo mismo para las rayas de las cinco filas: acá el padding lateral
+     del panel es 24px, no 20. */
+  .dc-filas{margin:0 -24px}
+  .dc-fila{padding:8px 24px}
 }
 
 /* Los campos de escritura del teléfono ya crecen a 16px en calendario.css
@@ -283,4 +444,13 @@
    cotizaciones si algún corte lo dejara fuera. */
 @media (max-width:767.98px){
   .panel-der .campo-caja .campo{font-size:16px}
+  /* En el teléfono las dos cajas de peticiones se apilan: lado a lado
+     no caben sin partir sus títulos. */
+  .dc-strip{grid-template-columns:minmax(0,1fr)}
+  /* En el teléfono el cuadro de asignar es pantalla completa (lo hace
+     `.modal` de calendario.css) y la nota y la fecha se apilan: 150px
+     para la fecha al lado de la nota no caben. */
+  .dc-asignar{width:100%}
+  .dc-asignar-dos{grid-template-columns:minmax(0,1fr)}
+  .dc-asignar .campo{font-size:16px}
 }

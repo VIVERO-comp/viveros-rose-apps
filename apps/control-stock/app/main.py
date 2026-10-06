@@ -4455,10 +4455,20 @@ def control_pantalla(request: Request):
     leads = linear_leads.listar(
         refrescar=request.query_params.get("refrescar") == "1")
 
+    # «Ver a:» (BLOQUE 43, lienzo de Roles): una vista, no un permiso —
+    # filtra lo que se pinta y nada más. Los avisos y la caché de espera
+    # siguen mirando el tablero COMPLETO, abajo.
+    ver = request.query_params.get("ver", "")
+    filtros_ver = control.filtros_ver(leads, ver, vista)
+    vistos = control.filtrar_por_ver(leads, ver)
+
+    # El alcance viaja al tablero (BLOQUE 43): decide de qué tarjetas se
+    # lee el monto de la orden real — la plata de un lead la ven quien lo
+    # atiende, el Director y Finanzas, y de nadie más se pide a Odoo.
     if vista == "empleado":
-        columnas = control.tablero_por_empleado(leads)
+        columnas = control.tablero_por_empleado(vistos, alc)
     else:
-        columnas = control.tablero_por_estado(leads)
+        columnas = control.tablero_por_estado(vistos, alc)
 
     # El celular del encargado suena cuando un lead gana «Te toca»; una
     # sola vez por lead, y por detrás para que la pantalla no espere.
@@ -4472,11 +4482,19 @@ def control_pantalla(request: Request):
     # que ya estaba guardado.
     control.refrescar_espera_en_fondo(leads)
 
-    abierta = control.ficha(request.query_params.get("abrir", ""),
-                           request.query_params.get("buscar", ""))
+    # El panel del lead: el ref del ?abrir= se resuelve una vez y se le
+    # dice a la ficha si esta sesión ve la plata de ESE lead (el candado
+    # de lectura vive en control.puede_ver_plata, no en la plantilla).
+    ref_abierta = request.query_params.get("abrir", "")
+    lead_abierto = linear_leads.uno(ref_abierta) if ref_abierta else None
+    abierta = control.ficha(
+        ref_abierta, request.query_params.get("buscar", ""), vista=vista,
+        ve_plata=control.puede_ver_plata(lead_abierto, alc))
     # BLOQUE 39.2: en el modo lectura de Atención la ficha ajena se abre
     # (ver todos es ver), pero su CHAT no se muestra — es conversación de
-    # otro responsable. Decidido aquí, en Python; la plantilla solo pinta
+    # otro responsable. Va DESPUÉS de armar la ficha: el candado de la
+    # PLATA (ve_plata) y el del CHAT son dos cosas distintas y cada una
+    # tapa lo suyo. Decidido aquí, en Python; la plantilla solo pinta
     # hilo_error como siempre.
     lectura_crm = _crm_lectura(empleada)
     if abierta and lectura_crm and not control.puede_tocar(abierta, alc):
@@ -4484,6 +4502,12 @@ def control_pantalla(request: Request):
         abierta["hilo_error"] = ("El chat de este lead es de otro "
                                  "responsable: en tu vista de solo "
                                  "lectura no se muestra.")
+    # El cuadro de asignar/reasignar (BLOQUE 43): una capa más sobre el
+    # mismo panel, abierta por enlace GET (?asignar=1) como el modal del
+    # motivo. Repartir sigue siendo cosa del dueño.
+    asignando = None
+    if abierta and request.query_params.get("asignar") == "1" and alc["admin"]:
+        asignando = control.cuadro_asignar(abierta, leads)
     # El modal de la corrección manual: a un estado nuevo no se llega sin
     # motivo, así que el drag (y el botón) pasan por aquí.
     moviendo = None
@@ -4500,9 +4524,19 @@ def control_pantalla(request: Request):
         "modo": linear_leads.modo(),
         "alc": alc,
         "vista": vista,
+        # La tira «Ver a:» y el pedacito de query que la mantiene puesta
+        # al abrir una tarjeta o cerrar el panel (lo arma Python: la
+        # plantilla no concatena URLs).
+        "filtros_ver": filtros_ver,
+        "ver_query": ("&ver=" + quote(ver)) if ver else "",
         "columnas": columnas,
         "abierta": abierta,
+        "asignando": asignando,
         "moviendo": moviendo,
+        # Quién ve la plata, escrito UNA vez (control.LEYENDA_SIN_PLATA):
+        # la misma frase en la fila «Cotización» y donde iría el detalle
+        # de la orden real.
+        "leyenda_sin_plata": control.LEYENDA_SIN_PLATA,
         "estados": linear_leads.ESTADOS,
         "responsables": linear_leads.responsables(),
         "motivos": linear_leads.MOTIVOS_PERDIDA,

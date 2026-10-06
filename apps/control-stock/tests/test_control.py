@@ -50,8 +50,12 @@ def de_dueno(monkeypatch):
     monkeypatch.setenv("AJUSTES_ADMINS", "genesis")
 
 
-ADMIN = {"vistas": ["empleado", "estado"], "resp_propio": "", "admin": True}
-EMPLEADO = {"vistas": ["estado"], "resp_propio": "Ruben", "admin": False}
+# `plata_todo` (BLOQUE 43): ver el dinero de CUALQUIER lead, no solo el de
+# los suyos. El dueño sí; un empleado con su `Resp:`, no.
+ADMIN = {"vistas": ["empleado", "estado"], "resp_propio": "", "admin": True,
+         "plata_todo": True}
+EMPLEADO = {"vistas": ["estado"], "resp_propio": "Ruben", "admin": False,
+            "plata_todo": False}
 
 # La función real, capturada ANTES de que el autouse de arriba la tape con
 # un lambda: la necesitan las pruebas que congelan el reloj para probar la
@@ -139,6 +143,9 @@ def test_un_empleado_sin_etiqueta_resp_ve_todo_pero_no_toca_nada():
 def test_el_dueno_ve_las_dos_vistas_y_todo():
     alc = control.alcance({"id": "abraham"}, es_admin=True)
     assert alc == ADMIN
+    # Y «todo» incluye la plata de cualquier lead (BLOQUE 43), que es lo
+    # que el resto de la app pregunta con `puede_ver_plata`.
+    assert alc["plata_todo"] is True
 
 
 def test_el_empleado_solo_tiene_la_vista_por_estado():
@@ -1199,6 +1206,9 @@ def test_la_tarjeta_es_de_dos_lineas_sin_chip_de_interes(cliente, de_dueno):
     assert "LEAD-91 ·" not in t91
     assert 'aria-label="Abrir chat"' in t91 and "💬" in t91
     # El resaltado del «hace»: LEAD-88 (5 días) lo lleva; LEAD-91 (1), no.
+    # Con el lienzo de ROLES (BLOQUE 43) el «hace» se mudó al rincón de
+    # arriba de la tarjeta (`ctl-hace`) cuando no hay monto — el
+    # resaltado se mudó con él, que es lo que esta prueba cuida.
     t88 = cuerpo[cuerpo.index('data-ref="LEAD-88"'):][:1400]
-    assert 'class="hace-alerta"' in t88
-    assert 'class="hace-alerta"' not in t91
+    assert "hace-alerta" in t88
+    assert "hace-alerta" not in t91

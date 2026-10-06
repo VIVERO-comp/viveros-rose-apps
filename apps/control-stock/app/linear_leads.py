@@ -150,7 +150,13 @@ LABEL_TE_TOCA = "Te toca"
 # una solo aparece en la pantalla si Abraham ya creó su etiqueta en Linear
 # (`senales_disponibles` más abajo); el código nunca la crea — «Llamar»
 # aún no existe en Linear y su botón aparecerá solo cuando él la cree.
-LABELS_SENAL = ("Seguimiento", "Importante", "Cliente potencial", "Llamar")
+# «Seguimiento» tiene nombre propio porque la fila del panel del lead
+# (BLOQUE 43) pregunta por ELLA: nombrarla con un literal suelto allá
+# sería el segundo lugar donde se escribe, y el día que cambie aquí la
+# fila quedaría preguntando por una etiqueta que ya no existe.
+LABEL_SEGUIMIENTO = "Seguimiento"
+
+LABELS_SENAL = (LABEL_SEGUIMIENTO, "Importante", "Cliente potencial", "Llamar")
 
 # La segunda etiqueta que «Responder» prende junto a «Te toca» cuando se
 # enciende A MANO (28/09/2026, pedido de Abraham: "que no se vaya hasta
