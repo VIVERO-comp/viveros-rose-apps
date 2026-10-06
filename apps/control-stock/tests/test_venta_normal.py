@@ -258,10 +258,17 @@ def test_venta_confirmada_y_cotizacion_salen_en_la_lista_de_vender(cliente_venta
     cliente_venta.post("/venta/cotizar", data={"cliente": "Beto", "celular": ""})
     r = cliente_venta.get("/venta")
     assert "Ana" in r.text and "Beto" in r.text
-    assert '<span class="vd-chip vd-ok">Venta</span>' in r.text
-    assert '<span class="vd-chip">Cotización</span>' in r.text
+    # BLOQUE 32: los chips de estado viven en el panel de cada tarjeta.
+    todas = ventas.ventas_todas()
+    n_cot = next(v["n"] for v in todas if v["estado"] == "cotizacion")
+    n_vend = next(v["n"] for v in todas if v["estado"] == "vendida")
+    panel_vendida = cliente_venta.get(f"/venta?abrir=v{n_vend}").text
+    assert '<span class="vd-chip vd-ok">Venta</span>' in panel_vendida
     # "vendida" no ofrece Facturar/Reintentar: el cobro vive en Odoo.
-    assert "Descargar / Compartir (PDF)" in r.text
+    assert "Descargar / Compartir PDF" in panel_vendida
+    assert "Facturar / Pagado" not in panel_vendida
+    panel_cotizada = cliente_venta.get(f"/venta?abrir=v{n_cot}").text
+    assert '<span class="vd-chip">Cotización</span>' in panel_cotizada
 
 
 def test_la_orden_vendida_baja_con_target_blank_y_download(cliente_venta, con_comodin):
@@ -271,7 +278,9 @@ def test_la_orden_vendida_baja_con_target_blank_y_download(cliente_venta, con_co
     cliente_venta.post("/venta/carrito/agregar",
                        data={"producto_id": 501, "cantidad": 1})
     cliente_venta.post("/venta/vender", data={"cliente": "Ana", "celular": ""})
-    pagina = cliente_venta.get("/venta").text
+    # BLOQUE 32: el enlace del PDF vive en el panel de la tarjeta.
+    registro = ventas.ventas_todas()[0]
+    pagina = cliente_venta.get(f"/venta?abrir=v{registro['n']}").text
     encontrado = False
     for trozo in pagina.split("<a ")[1:]:
         enlace = trozo.split(">")[0]
@@ -377,7 +386,8 @@ def test_la_orden_vendida_lleva_data_pdf_con_su_nombre(cliente_venta, con_comodi
     registro = ventas.ventas_todas()[0]
     esperado = ventas.nombre_de_pdf(registro["orden"].replace("/", "-"),
                                     registro["cliente"])
-    pagina = cliente_venta.get("/venta").text
+    # BLOQUE 32: el enlace vive en el panel de la tarjeta.
+    pagina = cliente_venta.get(f"/venta?abrir=v{registro['n']}").text
     encontrado = False
     for trozo in pagina.split("<a ")[1:]:
         enlace = trozo.split(">")[0]

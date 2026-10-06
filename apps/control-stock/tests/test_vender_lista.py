@@ -155,20 +155,21 @@ def test_renglon_sin_numero_va_al_fondo_sin_romper_el_orden(cliente, odoo):
 # ---------------------------------------------------------------------------
 
 def test_cada_tarjeta_conserva_sus_propias_acciones(cliente, odoo):
-    _insertar_venta(501, "S00050", cliente="AnaVenta")
-    _insertar_servicio(601, "S00049", cliente="BetoServicio")
+    """Con la tarjeta simple (BLOQUE 32) las acciones viven en el PANEL
+    de cada tarjeta — y cada panel sigue ofreciendo SOLO las suyas."""
+    n_venta = _insertar_venta(501, "S00050", cliente="AnaVenta")
+    n_serv = _insertar_servicio(601, "S00049", cliente="BetoServicio")
     odoo.ordenes[601] = {"state": "sale", "invoice_ids": []}
-    pagina = cliente.get("/venta").text
-    inicio_servicio = pagina.index("BetoServicio")
-    bloque_venta = pagina[:inicio_servicio]
-    bloque_servicio = pagina[inicio_servicio:]
     # La venta de plantas: Facturar/Pagado y Cancelar, nunca Editar.
-    assert "Facturar / Pagado" in bloque_venta
-    assert "Editar" not in bloque_venta
+    panel_venta = cliente.get(f"/venta?abrir=v{n_venta}").text
+    assert "Facturar / Pagado" in panel_venta
+    assert f'action="/venta/cancelar/{n_venta}"' in panel_venta
+    assert ">Editar</a>" not in panel_venta
     # La cotización de servicio: Editar y Quitar, nunca Facturar/Pagado.
-    assert "Editar" in bloque_servicio
-    assert "Quitar" in bloque_servicio
-    assert "Facturar / Pagado" not in bloque_servicio
+    panel_servicio = cliente.get(f"/venta?abrir=s{n_serv}").text
+    assert f'href="/venta/servicio/{n_serv}/editar"' in panel_servicio
+    assert ">Quitar</button>" in panel_servicio
+    assert "Facturar / Pagado" not in panel_servicio
 
 
 # ---------------------------------------------------------------------------

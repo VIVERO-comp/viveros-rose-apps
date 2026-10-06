@@ -644,8 +644,12 @@ def test_historial_muestra_estado_parcial(cliente_venta, odoo):
     odoo.fallar_una_vez = ("sale.advance.payment.inv", "create_invoices")
     cliente_venta.post(f"/venta/cobrar/{n}", data={"metodo": "efectivo"},
                       follow_redirects=False)
+    # La tarjeta simple (BLOQUE 32) dice el paso pendiente en su línea
+    # contextual; el botón Reintentar vive en el panel que abre.
     pagina = cliente_venta.get("/venta")
-    assert "factura pendiente" in pagina.text and "Reintentar" in pagina.text
+    assert "factura pendiente" in pagina.text
+    panel = cliente_venta.get(f"/venta?abrir=v{n}")
+    assert "Reintentar" in panel.text
 
 
 def test_foto_se_cachea_en_disco(cliente_venta, odoo, monkeypatch):
@@ -779,7 +783,8 @@ def test_mandar_factura_solo_con_celular(cliente_venta, odoo):
                            follow_redirects=False)
     n = r.headers["location"].rsplit("/", 1)[1]
     cliente_venta.post(f"/venta/cobrar/{n}", data={"metodo": "yappy"})
-    pagina = cliente_venta.get("/venta")
+    # BLOQUE 32: Mandar factura y el PDF viven en el panel de la tarjeta.
+    pagina = cliente_venta.get(f"/venta?abrir=v{n}")
     assert "Mandar factura" in pagina.text
     assert "wa.me/50761234567" in pagina.text
     token = ventas.obtener_venta(int(n))["token"]
@@ -810,8 +815,10 @@ def test_tarjeta_muestra_lo_comprado(cliente_venta, odoo):
     _agregar(cliente_venta, 501)
     _agregar(cliente_venta, 502, veces=3)
     cliente_venta.post("/venta/cotizar", data={"cliente": ""})
-    assert ventas.ventas_todas()[0]["resumen"] == "1\u00d7 ROMERO, 3\u00d7 JADE"
-    pagina = cliente_venta.get("/venta")
+    registro = ventas.ventas_todas()[0]
+    assert registro["resumen"] == "1\u00d7 ROMERO, 3\u00d7 JADE"
+    # BLOQUE 32: lo comprado se lee en el panel de la tarjeta.
+    pagina = cliente_venta.get(f"/venta?abrir=v{registro['n']}")
     assert "1\u00d7 ROMERO, 3\u00d7 JADE" in pagina.text
 
 
@@ -819,7 +826,9 @@ def test_cotizacion_publica_por_whatsapp(cliente_venta, odoo):
     _agregar(cliente_venta, 501)
     cliente_venta.post("/venta/cotizar",
                        data={"cliente": "María", "celular": "6123-4567"})
-    pagina = cliente_venta.get("/venta")
+    # BLOQUE 32: las acciones viven en el panel de la tarjeta.
+    pagina = cliente_venta.get(
+        f"/venta?abrir=v{ventas.ventas_todas()[0]['n']}")
     # "Mandar cotización" se fue de las ventas locales (dueño, 23/09/2026:
     # "pon facturar y mandar factura y ya"); la ruta pública /f/<token>
     # sigue viva y se manda la FACTURA después de facturar.
@@ -1292,7 +1301,8 @@ def test_la_factura_baja_con_target_blank_y_download(cliente_venta, odoo):
                            follow_redirects=False)
     n = r.headers["location"].rsplit("/", 1)[1]
     cliente_venta.post(f"/venta/cobrar/{n}", data={"metodo": "yappy"})
-    pagina = cliente_venta.get("/venta").text
+    # BLOQUE 32: el enlace de la factura vive en el panel de la tarjeta.
+    pagina = cliente_venta.get(f"/venta?abrir=v{n}").text
     encontrado = False
     for trozo in pagina.split("<a ")[1:]:
         enlace = trozo.split(">")[0]
@@ -1336,7 +1346,8 @@ def test_la_factura_ya_no_tiene_boton_compartir_aparte(cliente_venta, odoo):
                            follow_redirects=False)
     n = r.headers["location"].rsplit("/", 1)[1]
     cliente_venta.post(f"/venta/cobrar/{n}", data={"metodo": "yappy"})
-    pagina = cliente_venta.get("/venta").text
+    # BLOQUE 32: el control del PDF vive en el panel de la tarjeta.
+    pagina = cliente_venta.get(f"/venta?abrir=v{n}").text
     assert f'data-compartir="/venta/{n}/factura.pdf"' not in pagina
     assert ">Descargar / Compartir factura</a>" in pagina
 
@@ -1369,7 +1380,8 @@ def test_la_factura_lleva_el_marcador_data_pdf_con_su_nombre(cliente_venta, odoo
     registro = ventas.obtener_venta(int(n))
     esperado = ventas.nombre_de_pdf(
         (registro["factura"] or str(n)).replace("/", "-"), registro["cliente"])
-    pagina = cliente_venta.get("/venta").text
+    # BLOQUE 32: el enlace vive en el panel de la tarjeta.
+    pagina = cliente_venta.get(f"/venta?abrir=v{n}").text
     encontrado = False
     for trozo in pagina.split("<a ")[1:]:
         enlace = trozo.split(">")[0]
@@ -1430,7 +1442,8 @@ def test_cotizacion_dice_facturar_pagado_y_ofrece_su_pdf(cliente_venta, odoo):
     assert registro["estado"] == "cotizacion"
     esperado = ventas.nombre_de_pdf(registro["orden"].replace("/", "-"),
                                     registro["cliente"])
-    pagina = cliente_venta.get("/venta").text
+    # BLOQUE 32: Facturar/Pagado y el PDF viven juntos en el panel.
+    pagina = cliente_venta.get(f"/venta?abrir=v{registro['n']}").text
     assert ">Facturar / Pagado<" in pagina
     encontrado = False
     for trozo in pagina.split("<a ")[1:]:
@@ -1450,7 +1463,8 @@ def test_cotizacion_conserva_cancelar(cliente_venta, odoo):
     _agregar(cliente_venta, 501)
     cliente_venta.post("/venta/cotizar", data={"cliente": "María"})
     registro = ventas.ventas_todas()[0]
-    pagina = cliente_venta.get("/venta").text
+    # BLOQUE 32: Cancelar vive en el panel de la tarjeta.
+    pagina = cliente_venta.get(f"/venta?abrir=v{registro['n']}").text
     assert f'action="/venta/cancelar/{registro["n"]}"' in pagina
     assert ">Cancelar</button>" in pagina
 
@@ -1464,8 +1478,10 @@ def test_vendida_no_gana_ni_pierde_controles(cliente_venta, odoo):
     cliente_venta.post("/venta/vender", data={"cliente": "Ana", "celular": ""})
     registro = ventas.ventas_todas()[0]
     assert registro["estado"] == "vendida"
-    pagina = cliente_venta.get("/venta").text
-    assert pagina.count("Descargar / Compartir (PDF)") == 1
+    # BLOQUE 32: el único control vive en el panel — el PDF es el botón
+    # principal (sin el «(PDF)» entre paréntesis de la tarjeta vieja).
+    pagina = cliente_venta.get(f"/venta?abrir=v{registro['n']}").text
+    assert pagina.count("Descargar / Compartir PDF") == 1
     assert "Facturar / Pagado" not in pagina
     assert f'action="/venta/cancelar/{registro["n"]}"' not in pagina
 
@@ -1479,7 +1495,8 @@ def test_pagado_no_gana_ni_pierde_controles(cliente_venta, odoo):
                            follow_redirects=False)
     n = r.headers["location"].rsplit("/", 1)[1]
     cliente_venta.post(f"/venta/cobrar/{n}", data={"metodo": "yappy"})
-    pagina = cliente_venta.get("/venta").text
+    # BLOQUE 32: los controles viven en el panel de la tarjeta.
+    pagina = cliente_venta.get(f"/venta?abrir=v{n}").text
     assert ">Descargar / Compartir factura</a>" in pagina
     assert "Facturar / Pagado" not in pagina
     assert f"/venta/{n}/cotizacion.pdf" not in pagina

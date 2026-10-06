@@ -65,12 +65,15 @@ def _insertar_servicio(orden_id, orden, cliente="Beto", total=200.0,
 
 
 # ---------------------------------------------------------------------------
-# Ninguna acción de hoy desaparece (límite duro del rediseño)
+# Ninguna acción de hoy desaparece (límite duro del rediseño). Con la
+# tarjeta SIMPLE (BLOQUE 32) las acciones viven en el PANEL que la
+# tarjeta abre (?abrir=) — la sustancia es la misma: cada función sigue
+# viva, con su misma ruta.
 # ---------------------------------------------------------------------------
 
 def test_cotizacion_de_planta_conserva_sus_tres_acciones(cliente, odoo):
     n = _insertar_venta(501, "S00050")
-    pagina = cliente.get("/venta").text
+    pagina = cliente.get(f"/venta?abrir=v{n}").text
     assert f'href="/venta/pago/{n}"' in pagina          # Facturar / Pagado
     assert "Facturar / Pagado" in pagina
     assert f"/venta/{n}/cotizacion.pdf" in pagina          # Descargar / Compartir
@@ -82,7 +85,7 @@ def test_cotizacion_de_planta_conserva_sus_tres_acciones(cliente, odoo):
 def test_cotizacion_de_servicio_conserva_sus_tres_acciones(cliente, odoo):
     n = _insertar_servicio(601, "S00049")
     odoo.ordenes[601] = {"state": "sale", "invoice_ids": []}
-    pagina = cliente.get("/venta").text
+    pagina = cliente.get(f"/venta?abrir=s{n}").text
     assert f"/venta/servicio/{n}/propuesta.pdf" in pagina
     assert "Descargar / Compartir" in pagina               # el nombre del botón
     assert f'href="/venta/servicio/{n}/editar"' in pagina  # Editar
@@ -94,7 +97,7 @@ def test_venta_pagada_conserva_factura_y_mandar_factura(cliente, odoo):
     n = _insertar_venta(502, "S00051", cliente="Carla", estado="pagado",
                         celular="61234567", factura_id=9, factura="F00009",
                         metodo="yappy")
-    pagina = cliente.get("/venta").text
+    pagina = cliente.get(f"/venta?abrir=v{n}").text
     assert f"/venta/{n}/factura.pdf" in pagina
     assert "Descargar / Compartir factura" in pagina
     assert "Mandar factura" in pagina and "wa.me/50761234567" in pagina
@@ -103,18 +106,67 @@ def test_venta_pagada_conserva_factura_y_mandar_factura(cliente, odoo):
 
 def test_venta_atorada_conserva_reintentar(cliente, odoo):
     n = _insertar_venta(503, "S00052", cliente="Atorada", estado="facturada")
-    pagina = cliente.get("/venta").text
+    pagina = cliente.get(f"/venta?abrir=v{n}").text
     assert f'href="/venta/pago/{n}"' in pagina
     assert "Reintentar" in pagina
+    # Y la TARJETA avisa que algo está pendiente (su único dato
+    # contextual): la etiqueta del paso sigue en el tablero.
+    assert "pago pendiente" in cliente.get("/venta").text
 
 
 def test_vendida_conserva_descargar_con_download_y_data_pdf(cliente, odoo):
-    _insertar_venta(504, "S00053", cliente="Vendida", estado="vendida")
-    pagina = cliente.get("/venta").text
+    n = _insertar_venta(504, "S00053", cliente="Vendida", estado="vendida")
+    pagina = cliente.get(f"/venta?abrir=v{n}").text
     # La regla del 28/09: descarga Y pestaña nueva; y data-pdf para la
     # hoja nativa del iPhone (compartir.js).
     assert 'target="_blank"' in pagina and "data-pdf" in pagina
     assert 'download="' in pagina
+
+
+# ---------------------------------------------------------------------------
+# La tarjeta SIMPLE (BLOQUE 32, pág. 09): nombre, monto, color y UN dato
+# contextual — nada de acciones ni chips en el tablero.
+# ---------------------------------------------------------------------------
+
+def test_la_tarjeta_no_lleva_acciones_ni_chips(cliente, odoo):
+    n = _insertar_venta(512, "S00072", cliente="TarjetaSimple")
+    n_s = _insertar_servicio(605, "S00073", cliente="ServicioSimple")
+    odoo.ordenes[605] = {"state": "sale", "invoice_ids": []}
+    pagina = cliente.get("/venta").text  # sin ?abrir=: puro tablero
+    # Lo que la tarjeta SÍ tiene: nombre (enlace al panel) y monto.
+    assert "TarjetaSimple" in pagina and "ServicioSimple" in pagina
+    assert f'href="/venta?abrir=v{n}#v-{n}"' in pagina
+    assert f'href="/venta?abrir=s{n_s}#cot-{n_s}"' in pagina
+    # Lo que se mudó al panel: acciones, chips y el chip de 3 estados.
+    assert f'href="/venta/pago/{n}"' not in pagina
+    assert "Facturar / Pagado" not in pagina
+    assert f"/venta/{n}/cotizacion.pdf" not in pagina
+    assert "forma-cancelar" not in pagina
+    assert f'href="/venta/servicio/{n_s}/editar"' not in pagina
+    assert '<span class="vd-chip">Cotización</span>' not in pagina
+    assert "Acordada" not in pagina
+
+
+def test_la_linea_contextual_la_decide_python(cliente, odoo):
+    """El único dato contextual de cada tarjeta llega listo de Python
+    (main._linea_tarjeta): cómo pagó la pagada, cuándo se cotizó la
+    cotización."""
+    _insertar_venta(513, "S00074", cliente="PagadaConYappy",
+                    estado="pagado", metodo="yappy")
+    _insertar_venta(514, "S00075", cliente="CotizadaConFecha")
+    pagina = cliente.get("/venta").text
+    assert "Yappy ·" in pagina        # la pagada dice cómo pagó
+    assert "Cotizada ·" in pagina     # la cotización dice cuándo
+
+
+def test_el_panel_muestra_los_chips_y_el_estado3(cliente, odoo):
+    """Los chips que la tarjeta vieja mostraba («Cotización», «1 ·
+    Acordada» con su enlace a /venta/estado) viven ahora en el panel."""
+    n = _insertar_venta(515, "S00076", cliente="ConChips")
+    pagina = cliente.get(f"/venta?abrir=v{n}").text
+    assert '<span class="vd-chip">Cotización</span>' in pagina
+    assert "1 · Acordada" in pagina
+    assert f'href="/venta/estado/venta/{n}"' in pagina
 
 
 def test_nueva_venta_y_cotizar_servicio_siguen(cliente, odoo, monkeypatch):
@@ -168,16 +220,16 @@ def test_abrir_cotizacion_de_servicio_muestra_el_panel(cliente, odoo):
     odoo.ordenes[604] = {"state": "sale", "invoice_ids": []}
     pagina = cliente.get(f"/venta?abrir=s{n}").text
     assert 'class="vd-panel"' in pagina
-    # Las mismas acciones de la tarjeta, dentro del panel.
-    assert pagina.count(f'href="/venta/servicio/{n}/editar"') == 2  # tarjeta + panel
-    assert pagina.count(f'action="/venta/servicio/{n}/cancelar"') == 2
+    # Las acciones viven SOLO en el panel (la tarjeta es simple).
+    assert pagina.count(f'href="/venta/servicio/{n}/editar"') == 1
+    assert pagina.count(f'action="/venta/servicio/{n}/cancelar"') == 1
 
 
 def test_abrir_venta_muestra_el_panel_con_facturar(cliente, odoo):
     n = _insertar_venta(509, "S00067", cliente="PanelVenta")
     pagina = cliente.get(f"/venta?abrir=v{n}").text
     assert 'class="vd-panel"' in pagina
-    assert pagina.count(f'href="/venta/pago/{n}"') == 2  # tarjeta + panel
+    assert pagina.count(f'href="/venta/pago/{n}"') == 1  # solo el panel
     # Cerrar es un enlace que vuelve al ancla (no perder el lugar).
     assert f'href="/venta#v-{n}"' in pagina
 
