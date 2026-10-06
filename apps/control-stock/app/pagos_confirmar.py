@@ -203,12 +203,23 @@ def _venta_local_de(orden_id):
 
 
 def confirmar(orden_id, orden, cliente, monto, evidencia, nota,
-              por_usuario, por_nombre=None, completo=False):
+              por_usuario, por_nombre=None, completo=False,
+              pagado_total=None):
     """Registra la confirmación humana: quién marcó, cuándo y qué vio
     (la evidencia del selector) + la nota. Solo el system manager.
     Devuelve el código de error o None. Deja además el hecho del pago en
     venta_estado si la orden es una venta local (completo solo con el
-    saldo en 0 — jamás convierte un depósito en cierre)."""
+    saldo en 0 — jamás convierte un depósito en cierre).
+
+    **Idempotencia (review, 5/10): el MISMO pago repetido es no-op**
+    (devuelve 'ya_confirmado', sin fila nueva ni hecho en venta_estado).
+    Es repetido cuando la ÚLTIMA confirmación de la orden tiene el mismo
+    monto y evidencia Y no hay plata nueva que lo justifique: con
+    `pagado_total` (lo pagado según Odoo, lo pasa la ruta desde la fila
+    de la cola), plata nueva = pagado_total supera la suma confirmada —
+    la frontera del Requerido 1: dos abonos iguales con plata nueva SÍ
+    son dos hechos. Sin `pagado_total`, el calce de monto+evidencia
+    basta (lado conservador: no duplicar)."""
     if not puede_confirmar(por_usuario):
         return "solo_system_manager"
     if evidencia not in EVIDENCIAS:
@@ -222,6 +233,20 @@ def confirmar(orden_id, orden, cliente, monto, evidencia, nota,
         monto = round(float(monto), 2)
     except (TypeError, ValueError):
         monto = None
+    with _db() as con:
+        ultima = con.execute(
+            "SELECT monto, evidencia FROM pago_confirmado WHERE orden_id=?"
+            " ORDER BY n DESC LIMIT 1", (orden_id,)).fetchone()
+    if ultima is not None and ultima["evidencia"] == evidencia \
+            and ultima["monto"] == monto:
+        suma = sumas_confirmadas().get(orden_id, 0.0)
+        try:
+            hay_plata_nueva = (pagado_total is not None
+                               and float(pagado_total) > suma + _CENTAVO)
+        except (TypeError, ValueError):
+            hay_plata_nueva = False
+        if not hay_plata_nueva:
+            return "ya_confirmado"
     with _db() as con:
         con.execute(
             "INSERT INTO pago_confirmado (orden_id, orden, cliente, monto,"

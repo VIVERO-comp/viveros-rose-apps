@@ -510,6 +510,33 @@ def test_registrar_pago_completo_con_yappy(cliente_venta, odoo):
     assert hechos["pago_monto"] == 8.75  # amount_untaxed (3.50 + 5.25)
 
 
+def test_doble_post_del_mismo_pago_no_duplica_nada(cliente_venta, odoo):
+    """Idempotencia (Requerido 4): repetir «Registrar pago» —doble POST
+    idéntico, retry— no duplica. Los pasos sellados ya protegen Odoo
+    (con estado 'pagado' ningún paso corre: ni otra factura ni otro
+    pago), y el hecho local tampoco se acumula dos veces: el sello va
+    solo cuando la llamada movió la venta a 'pagado'."""
+    from app import venta_estado
+    _agregar(cliente_venta, 501)
+    _agregar(cliente_venta, 502)
+    r = cliente_venta.post("/venta/pagar", data={"cliente": "María"},
+                           follow_redirects=False)
+    n = int(r.headers["location"].rsplit("/", 1)[1])
+    cliente_venta.post(f"/venta/pago/{n}", data={"metodo": "yappy"})
+    # El doble POST por la ruta Y el retry directo del módulo.
+    cliente_venta.post(f"/venta/pago/{n}", data={"metodo": "yappy"})
+    ventas.registrar_pago(n, "yappy", por="Génesis")
+    # Odoo: UNA factura y UN pago, clavado.
+    assert len(odoo.pagos) == 1
+    assert len(next(iter(odoo.ordenes.values()))["invoice_ids"]) == 1
+    # venta_estado: el monto NO se acumuló otra vez y hay UN solo hecho.
+    hechos = venta_estado.estado_de("venta", n)
+    assert hechos["pago_monto"] == 8.75  # no 17.50 ni 26.25
+    pagos = [c for c in venta_estado.historial_de("venta", n)
+             if c["hecho"] == "pago"]
+    assert len(pagos) == 1
+
+
 def test_la_url_vieja_de_cobrar_sigue_viva_y_hace_lo_nuevo(cliente_venta, odoo):
     """/venta/cobrar no desaparece: el GET redirige a /venta/pago y el
     POST registra el pago — sin entregar, igual que la ruta nueva."""

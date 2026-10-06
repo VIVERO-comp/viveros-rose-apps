@@ -2991,7 +2991,14 @@ async def pagos_por_confirmar_confirmar(request: Request):
         fila["orden_id"], fila["orden"], fila["cliente"],
         fila["monto_nuevo"],  # la plata de ESTE hecho, no el total
         form.get("evidencia") or "", form.get("nota") or "",
-        usuario, nombre, completo=fila["completo"])
+        usuario, nombre, completo=fila["completo"],
+        pagado_total=fila["pagado"])
+    if codigo == "ya_confirmado":
+        # El doble clic / doble POST del MISMO pago: no-op con aviso.
+        return RedirectResponse(
+            "/pagos-por-confirmar?aviso="
+            + quote(f"El pago de {fila['orden']} ya estaba confirmado."),
+            status_code=303)
     if codigo:
         textos = {
             "solo_system_manager": "Confirmar es del system manager: "
