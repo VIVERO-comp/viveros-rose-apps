@@ -50,13 +50,21 @@
 
   <div class="pd-tablero">
     {% for col in tablero.columnas %}
-    <section class="pd-col" aria-label="{{ col.titulo }}">
+    {# data-arrastre-destino (BLOQUE 40): zona de drop; qué tarjeta
+       acepta lo dicen los destinos que Python puso en la tarjeta, y
+       soltar solo NAVEGA (arrastre.js). «Entregado reciente» nunca
+       aparece como destino de ninguna tarjeta. #}
+    <section class="pd-col" aria-label="{{ col.titulo }}" data-arrastre-destino="{{ col.clave }}">
       <div class="pd-ch"><span class="pd-ch-t">{{ col.titulo }}<span class="pd-cnt num">{{ col.cuenta }}</span></span></div>
       <span class="pd-pista">{{ col.pista }}</span>
       {% for t in col.tarjetas %}
-      <article class="pd-card">
+      {# Arrastrable solo si Python le puso gesto (pedidos.gesto_arrastre:
+         únicamente «Por programar» → «Programado»): el drop NAVEGA al
+         editor de fecha de la ficha, nunca escribe. Los <a> internos van
+         con draggable="false" (la trampa del 29/09 de control.js). #}
+      <article class="pd-card"{% if t.arrastre %} draggable="true" data-arrastre-url="{{ t.arrastre.url }}" data-arrastre-destinos="{{ t.arrastre.destinos | join(' ') }}"{% endif %}>
         <div class="pd-fila">
-          <a class="pd-abrir" href="{{ t.href }}">{{ t.cliente }}</a>
+          <a class="pd-abrir" draggable="false" href="{{ t.href }}">{{ t.cliente }}</a>
           <b class="pd-monto num">{% if t.total is not none %}{{ t.total | dinero }}{% else %}—{% endif %}</b>
         </div>
         <div class="pd-fila">
@@ -73,9 +81,12 @@
         <div class="pd-fila">
           <span class="pd-plata {{ 'pd-debe' if t.plata.clase == 'debe' else ('pd-pagado' if t.plata.clase == 'pagado' else 'pd-sin-dato') }} num">{{ t.plata.texto }}</span>
           {% if col.clave == 'por_programar' and not col.solo_lectura %}
-          <a class="pd-chip" href="{{ t.href }}" style="text-decoration:none">Programar →</a>
+          <a class="pd-chip" draggable="false" href="{{ t.href }}" style="text-decoration:none">Programar →</a>
           {% endif %}
         </div>
+        {# «Mover a» (BLOQUE 40): el gesto del arrastre para el celular,
+           como enlaces al editor de fecha — decidido en Python. #}
+        {% with mover_a=t.mover_a %}{% include "_mover_a.html" %}{% endwith %}
       </article>
       {% endfor %}
       {% if not col.tarjetas %}<span class="pd-pista">Nada por aquí.</span>{% endif %}
@@ -83,6 +94,11 @@
     {% endfor %}
   </div>
 </main>
+
+{# El arrastre como gesto de navegación (BLOQUE 40): soltar nunca
+   escribe, solo abre el editor de fecha existente de la ficha. #}
+<link rel="stylesheet" href="/static/arrastre.css?v={{ v_estaticos }}">
+<script src="/static/arrastre.js?v={{ v_estaticos }}"></script>
 
 {% set activa = 'pedidos' %}{% include '_nav.html' %}
 {% endblock %}
