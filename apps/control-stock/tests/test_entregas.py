@@ -244,3 +244,39 @@ def test_ficha_estado_entrega_por_http(cliente):
 def test_ficha_de_origen_invalido_redirige(cliente):
     r = cliente.get("/venta/estado/otracosa/1", follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/venta"
+
+
+def test_ficha_edita_la_fecha_programada(cliente):
+    n = _venta_local()
+    pagina = cliente.get(f"/venta/estado/venta/{n}")
+    assert "Fecha programada de entrega" in pagina.text
+    r = cliente.post(f"/venta/estado/venta/{n}/entrega",
+                     data={"direccion": "Calle 50", "asignado_sel": "",
+                           "asignado_libre": "Sam",
+                           "fecha_programada": "2026-10-15"},
+                     follow_redirects=False)
+    assert r.status_code == 303
+    assert entregas.obligacion_de(
+        "venta", n)["fecha_programada"] == "2026-10-15"
+
+
+def test_ficha_rechaza_fecha_mala_conservando_lo_tecleado(cliente):
+    """Regla forms-lote por HTTP: el error sale DEBAJO del campo, lo
+    tecleado se queda en el formulario (fecha, dirección y asignado) y
+    el motor no escribió nada."""
+    n = _venta_local()
+    entregas.guardar("venta", n, "Calle 50", "Sam", "Génesis")
+    r = cliente.post(f"/venta/estado/venta/{n}/entrega",
+                     data={"direccion": "Otra calle", "asignado_sel": "",
+                           "asignado_libre": "Otro",
+                           "fecha_programada": "15/10/2026"},
+                     follow_redirects=False)
+    assert r.status_code == 200  # re-pinta, no redirige
+    assert "La fecha no se entiende" in r.text
+    assert 'value="15/10/2026"' in r.text      # lo tecleado se conserva
+    assert 'value="Otra calle"' in r.text
+    assert "error-campo" in r.text
+    fila = entregas.obligacion_de("venta", n)
+    assert fila["direccion"] == "Calle 50"     # nada se escribió
+    assert fila["asignado"] == "Sam"
+    assert fila["fecha_programada"] == ""

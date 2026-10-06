@@ -3040,14 +3040,14 @@ _TEXTO_ERROR_ESTADO = {
 }
 
 
-@app.get("/venta/estado/{origen}/{n}")
-def venta_estado_ficha(request: Request, origen: str, n: int,
-                       error: str = "", aviso: str = ""):
-    if origen not in venta_estado.ORIGENES:
-        return RedirectResponse("/venta", status_code=303)
+def _contexto_ficha_estado(request, origen, n, error="", aviso=""):
+    """El contexto completo de la ficha Estado/Entrega, o None si la venta
+    no existe. Lo usan el GET y el re-pintado del POST que rechaza una
+    fecha programada mal escrita (regla forms-lote: mismo contexto, con
+    lo tecleado encima)."""
     registro = _registro_local(origen, n)
     if registro is None:
-        return RedirectResponse("/venta", status_code=303)
+        return None
     usuario, _nombre = _quien_es(request)
     hechos = venta_estado.estado_de(origen, n)
     # Los botones del chip a mano: cada estado con su candado ya decidido
@@ -3063,7 +3063,7 @@ def venta_estado_ficha(request: Request, origen: str, n: int,
         })
     manager = datos_roles.quien_ocupa("system_manager")
     termino = venta_estado.termino_de(origen, n)
-    return plantillas.TemplateResponse(request, "venta_trato.html", {
+    return {
         "origen": origen, "n": n,
         "registro": registro,
         "titulo_doc": f"{registro.get('orden') or ''} · {registro.get('cliente') or ''}",
@@ -3095,7 +3095,22 @@ def venta_estado_ficha(request: Request, origen: str, n: int,
                                      "facturada")),
         "error_texto": _TEXTO_ERROR_ESTADO.get(error, error or None),
         "aviso": aviso or None,
-    })
+        # La regla forms-lote: cuando un campo falla, el POST re-pinta
+        # con estos dos puestos (acá nacen vacíos).
+        "campo_error": "",
+        "error_campo_texto": "",
+    }
+
+
+@app.get("/venta/estado/{origen}/{n}")
+def venta_estado_ficha(request: Request, origen: str, n: int,
+                       error: str = "", aviso: str = ""):
+    if origen not in venta_estado.ORIGENES:
+        return RedirectResponse("/venta", status_code=303)
+    contexto = _contexto_ficha_estado(request, origen, n, error, aviso)
+    if contexto is None:
+        return RedirectResponse("/venta", status_code=303)
+    return plantillas.TemplateResponse(request, "venta_trato.html", contexto)
 
 
 @app.post("/venta/estado/{origen}/{n}")
@@ -3119,15 +3134,40 @@ async def venta_estado_manual(request: Request, origen: str, n: int):
 async def venta_estado_obligacion(request: Request, origen: str, n: int):
     """Guardar la obligación nombrada: dirección + asignado (empleada
     activa del selector, o el texto libre si se escribió — mensajero,
-    tercero, contratista). Editable hasta cerrar."""
+    tercero, contratista) + la fecha programada de entrega (el plan,
+    AAAA-MM-DD — la que decide «Programado» en la pestaña Pedidos).
+    Editable hasta cerrar.
+
+    Una fecha mal escrita NO redirige: re-pinta la ficha con el error
+    DEBAJO del campo y lo tecleado conservado (regla forms-lote) — el
+    motor no escribió nada."""
     if origen not in venta_estado.ORIGENES:
         return RedirectResponse("/venta", status_code=303)
     form = await request.form()
     _usuario, nombre = _quien_es(request)
     libre = (form.get("asignado_libre") or "").strip()
     asignado = libre or (form.get("asignado_sel") or "").strip()
+    fecha_programada = (form.get("fecha_programada") or "").strip()
     error = entregas.guardar(origen, n, form.get("direccion"),
-                             asignado, nombre)
+                             asignado, nombre,
+                             fecha_programada=fecha_programada)
+    if error == "fecha_programada_invalida":
+        contexto = _contexto_ficha_estado(request, origen, n)
+        if contexto is None:
+            return RedirectResponse("/venta", status_code=303)
+        # Lo tecleado se conserva tal cual encima de lo guardado — nada
+        # se escribió en el motor.
+        contexto["obligacion"] = {
+            **contexto["obligacion"],
+            "direccion": (form.get("direccion") or "").strip(),
+            "asignado": asignado,
+            "fecha_programada": fecha_programada,
+        }
+        contexto["campo_error"] = "fecha_programada"
+        contexto["error_campo_texto"] = (
+            "La fecha no se entiende: va AAAA-MM-DD (ej. 2026-10-15).")
+        return plantillas.TemplateResponse(request, "venta_trato.html",
+                                           contexto)
     aviso = "" if error else "Entrega guardada."
     return RedirectResponse(_url_estado(origen, n, error or "", aviso),
                             status_code=303)
