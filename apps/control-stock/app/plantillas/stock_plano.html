@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block titulo %}Stock — Control Viverorose{% endblock %}
+{# Sin pre-render de pestañas: para este rol esas rutas son 303 a /stock
+   y pre-renderizarlas sería ofrecer puertas que no existen. #}
+{% block prerender %}{% endblock %}
+{% block contenido %}
+{# La vista plana del rol Inventario (BLOQUE 13, 5/10/2026). PROPUESTA:
+   la captura la toma la coordinadora antes de darla por buena.
+
+   El menú de este rol es [Stock] y nada más: no se incluye _nav.html
+   (Vender, Control, Compras y Ajustes no existen para esta persona; el
+   middleware ya corta esas rutas — esto solo deja de ofrecerlas). Lista
+   única sin pestañas de categoría, buscador arriba, orden por nombre.
+   Cada fila guarda la CANTIDAD ABSOLUTA contada con un POST normal y
+   vuelve anclada al mismo producto (#p-SKU). Sin una línea de JS. #}
+<main class="plano">
+  <header class="plano-top">
+    <div class="plano-marca">
+      <img src="/static/logo.jpg" alt="Vivero Rose">
+      <div>
+        <b>Stock</b>
+        <span>{{ empleada.nombre }}</span>
+      </div>
+    </div>
+    <form method="post" action="/logout">
+      <button class="plano-salir" type="submit">Salir</button>
+    </form>
+  </header>
+
+  <form method="get" action="/stock" class="plano-buscar">
+    <input type="search" name="q" value="{{ q }}" placeholder="Buscar por nombre o referencia…" aria-label="Buscar producto">
+    <button type="submit">Buscar</button>
+    {% if q %}<a href="/stock">Limpiar</a>{% endif %}
+  </form>
+
+  {% if error %}<p class="plano-error" role="alert">{{ error }}</p>{% endif %}
+  {% if sin_proxy %}<p class="plano-error" role="alert">No se pudo leer el inventario: {{ sin_proxy }}</p>{% endif %}
+
+  {% if not productos and not sin_proxy %}
+  <p class="plano-vacio">No hay productos{% if q %} que casen con «{{ q }}»{% endif %}.</p>
+  {% endif %}
+
+  <ul class="plano-lista">
+    {% for p in productos %}
+    <li id="p-{{ p.sku }}" class="plano-fila{% if aviso == 'guardado' and aviso_sku == p.sku %} guardada{% endif %}">
+      {# La foto, solo VER: se abre tal cual en el navegador. Subir,
+         cambiar o quitar fotos no existe para este rol (candado también
+         en el servidor). #}
+      {% if p.foto %}
+      <a class="plano-foto" href="{{ p.foto }}" target="_blank" rel="noopener" aria-label="Ver la foto de {{ p.nombre }}">
+        <img src="{{ p.foto }}" alt="" loading="lazy">
+      </a>
+      {% else %}
+      <span class="plano-foto plano-sinfoto" aria-hidden="true">🌿</span>
+      {% endif %}
+      <div class="plano-datos">
+        <b>{{ p.nombre }}</b>
+        <span class="plano-sub">
+          {{ p.sku }}
+          {% if p.tamano %} · {{ p.tamano }}{% endif %}
+          {% if p.precio %} · {{ p.precio }}{% endif %}
+        </span>
+      </div>
+      <form method="post" action="/stock/cantidad" class="plano-conteo">
+        <input type="hidden" name="sku" value="{{ p.sku }}">
+        <input type="hidden" name="esperada" value="{{ p.fisico }}">
+        <input type="hidden" name="q" value="{{ q }}">
+        {# type=text (regla del lote de formularios): el que valida es el
+           servidor, y lo ilegible rebota con su aviso debajo, sin que el
+           navegador lo mutile a 0. #}
+        <input class="plano-cantidad{% if campo_error == 'cantidad-' + p.sku %} con-error{% endif %}"
+               type="text" inputmode="numeric" name="cantidad"
+               value="{{ valores.get('cantidad-' + p.sku, p.fisico) }}"
+               aria-label="Cantidad contada de {{ p.nombre }}"
+               {% if campo_error == 'cantidad-' + p.sku %}autofocus{% endif %}>
+        <button type="submit">Guardar</button>
+        {% if aviso == 'guardado' and aviso_sku == p.sku %}
+        <span class="plano-ok" role="status">✓ Guardado</span>
+        {% endif %}
+      </form>
+      {% if campo_error == 'cantidad-' + p.sku %}
+      <p class="error-campo plano-error-campo" role="alert">{{ error_campo_texto }}</p>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</main>
+{% endblock %}

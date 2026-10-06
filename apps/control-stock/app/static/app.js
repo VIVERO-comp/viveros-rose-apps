@@ -330,7 +330,9 @@ async function guardarStock() {
     // aplicado o sin_cambio: recargar trae el stock fresco de Odoo y
     // recalcula score y alertas en el servidor. La URL conserva pestaña,
     // categoría y búsqueda para volver exactamente donde estaba el empleado.
-    sessionStorage.setItem("toast-pendiente",
+    // r.aviso: la bitácora local falló con Odoo ya escrito (lo decide y
+    // redacta Python); se muestra en vez de celebrar en silencio.
+    sessionStorage.setItem("toast-pendiente", r.aviso ? "⚠️ " + r.aviso :
       "✓ " + editando.n + " ajustado a " + nueva + " en Odoo");
     location.href = "/?" + parametrosDeEstado().toString();
   } catch (e) {
@@ -535,9 +537,10 @@ async function crearPlanta() {
     cerrarAgregar();
     // El stock inicial puede fallar con la planta ya creada: se dice, en vez
     // de cantar un éxito que dejaría al empleado creyendo que hay existencias.
-    toast(datos.stock === "falló"
+    toast((datos.stock === "falló"
       ? `✓ ${datos.nombre} creada, pero el stock quedó en 0: ajústalo a mano`
-      : `✓ ${datos.nombre} creada en Odoo`);
+      : `✓ ${datos.nombre} creada en Odoo`)
+      + (datos.registroAviso ? ` ⚠️ ${datos.registroAviso}` : ""));
     /* A dónde ir ahora lo decide PYTHON (DATOS.destinoTrasCrear): la
        recarga de Stock de siempre —la planta nueva tiene que entrar a la
        lista con su stock— o la pantalla que mandó a crearla, con la planta
@@ -800,7 +803,8 @@ async function guardarPie(fila, p, nueva) {
     }
     // Igual que el modal: recargar trae el stock fresco y recalcula score y
     // alertas en el servidor, conservando pestaña, filtro y búsqueda.
-    sessionStorage.setItem("toast-pendiente", "✓ " + p.n + " ajustado a " + nueva + " en Odoo");
+    sessionStorage.setItem("toast-pendiente", r.aviso ? "⚠️ " + r.aviso :
+      "✓ " + p.n + " ajustado a " + nueva + " en Odoo");
     location.href = "/?" + parametrosDeEstado().toString();
   } catch {
     toast("Sin conexión. Intenta de nuevo.");

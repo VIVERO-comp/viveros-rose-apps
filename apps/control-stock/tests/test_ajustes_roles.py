@@ -67,10 +67,13 @@ def test_migracion_idempotente_y_semillas_completas(db_limpia):
     datos_roles.iniciar_tablas()
     datos_roles.iniciar_tablas()
     roles = datos_roles.listar_roles(solo_activos=False)
+    # «Inventario» cierra la lista desde el BLOQUE 13 (5/10/2026): nace de
+    # su propia semilla (slug inmutable, sin persona) — ver
+    # test_rol_inventario.py.
     assert [r["nombre"] for r in roles] == [
         "Eventos", "PH y proyectos grandes",
         "Ventas Plantas Panamá / Vivero Rose", "System manager",
-        "Operaciones y banco", "Owner view"]
+        "Operaciones y banco", "Owner view", "Inventario"]
     # Los 3 deberes vienen marcados en sus roles de la semilla.
     assert {r["nombre"]: r["deber"] for r in roles if r["deber"]} == {
         "System manager": "system_manager",

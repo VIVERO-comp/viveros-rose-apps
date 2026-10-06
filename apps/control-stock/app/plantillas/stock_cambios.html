@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block titulo %}Bitácora de stock — Control Viverorose{% endblock %}
+{% block contenido %}
+{# La bitácora de stock_cambio, solo admins: quién, cuándo, cuánto había
+   y cuánto quedó por cada cambio de cantidad hecho desde la app (la
+   escribe el punto único, stock_escritura.escribir_stock). La puerta es
+   el enlace «Bitácora» de la pestaña Stock. #}
+<main class="plano">
+  <header class="plano-top">
+    <div class="plano-marca">
+      <img src="/static/logo.jpg" alt="Vivero Rose">
+      <div>
+        <b>Bitácora de stock</b>
+        <span>cambios de cantidad hechos desde la app</span>
+      </div>
+    </div>
+    <a class="plano-salir" href="/?tab=stock">← Volver a Stock</a>
+  </header>
+
+  <form method="get" action="/stock/cambios" class="plano-buscar">
+    <input type="search" name="sku" value="{{ sku }}" placeholder="Filtrar por referencia exacta (PL-…)" aria-label="Filtrar por SKU">
+    <button type="submit">Filtrar</button>
+    {% if sku %}<a href="/stock/cambios">Todos</a>{% endif %}
+  </form>
+
+  {% if not cambios %}
+  <p class="plano-vacio">Sin cambios registrados{% if sku %} para {{ sku }}{% endif %}.</p>
+  {% else %}
+  <div class="plano-tabla-envoltura">
+    <table class="plano-tabla">
+      <thead>
+        <tr><th>Cuándo</th><th>Producto</th><th>Había</th><th>Quedó</th><th>Operación</th><th>Quién</th></tr>
+      </thead>
+      <tbody>
+        {% for c in cambios %}
+        <tr>
+          <td>{{ c.fecha }}</td>
+          <td>{{ c.sku }}</td>
+          <td>{{ c.antes if c.antes is not none else "—" }}</td>
+          <td>{{ c.despues }}</td>
+          <td>{{ c.tipo_operacion }}</td>
+          <td>{{ c.por }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</main>
+{% endblock %}
