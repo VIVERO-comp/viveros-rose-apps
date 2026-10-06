@@ -1,0 +1,45 @@
+/* El arrastre como gesto de navegación (BLOQUE 40) — compartido por
+   Vender y Pedidos. Solo viste el gesto: quién se arrastra y a dónde
+   navega lo decidió Python (data-arrastre-*), y soltar nunca escribe. */
+
+[data-arrastre-url] { cursor: grab; }
+[data-arrastre-url].arrastrando { opacity: .55; cursor: grabbing; }
+
+/* La columna que SÍ acepta, mientras la tarjeta pasa por encima. */
+[data-arrastre-destino].dropok {
+  outline: 2px dashed #9368cf;
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
+/* La columna que NO acepta mientras algo se arrastra (hacia atrás, o
+   «Entregado reciente»): zona gris — el no-drop se ve, no solo se
+   siente en el cursor del navegador. */
+[data-arrastre-destino].dropno { opacity: .45; filter: grayscale(1); }
+
+/* «Mover a»: el mismo gesto para el celular (≤899px), como enlaces que
+   decidió el servidor. En computadora no existe — ahí el gesto es el
+   arrastre. El corte es el MISMO de la casa (diseno-vender.css y
+   diseno-pedidos.css cortan en 899px): con otro número habría anchos
+   intermedios con el tablero de computadora y los enlaces de celular
+   a la vez. */
+.mover-a { display: none; }
+@media (max-width: 899px) {
+  .mover-a {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .mover-a-t { font-size: 12px; color: #6b7280; }
+  .mover-a-ln {
+    font-size: 13px;
+    font-weight: 600;
+    color: inherit;
+    text-decoration: none;
+    border: 1px solid #d1d5db;
+    border-radius: 999px;
+    padding: 4px 10px;
+  }
+}

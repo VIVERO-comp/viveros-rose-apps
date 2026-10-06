@@ -117,8 +117,14 @@
        corto con el conteo inline (vd-ch-mv), su orden (vd-mv-N: «Falta
        cobrar» antes que «Cotizado, sin pagar») y fuera de su vista no
        se pinta (vd-mv-fuera). En computadora esas clases no hacen nada
-       y la columna queda igual que siempre. #}
-    <section class="vd-col vd-mv-{{ col.movil.orden }}{% if not col.movil.visible %} vd-mv-fuera{% endif %}">
+       y la columna queda igual que siempre.
+       data-arrastre-destino (BLOQUE 40): la columna es zona de drop; si
+       acepta ESTA tarjeta lo dicen los destinos que Python puso en la
+       tarjeta, y soltar solo NAVEGA (arrastre.js). En el teléfono no hay
+       arrastre: ahí el camino es el «Mover a» del panel. #}
+    <section class="vd-col vd-mv-{{ col.movil.orden }}{% if not col.movil.visible %} vd-mv-fuera{% endif %}"
+             data-arrastre-destino="{{ col.clave }}">
+
       <div class="vd-ch">
         <span class="vd-ch-t"><span class="vd-ch-pc">{{ col.titulo }}</span><span class="vd-ch-mv">{{ col.movil.titulo }} · {{ col.cuenta }}</span><span class="vd-cnt num">{{ col.cuenta }}</span></span>
         <span class="vd-tot num {{ 'vd-rojo' if col.clave == 'confirmado' }}">{{ col.total | dinero }}</span>
@@ -130,9 +136,12 @@
          factura— vive en el panel que abre la tarjeta. Mismo lenguaje
          que las tarjetas de Pedidos (pd-card). #}
       {% for item in col["items"] %}
-      <article class="vd-card" id="{{ item.ancla }}" style="border-left-color:{{ item.acento }}">
+      {# Arrastrable solo si Python le puso gesto (main._arrastre_vender):
+         el drop NAVEGA al panel de cobro, nunca escribe. El <a> interno
+         va con draggable="false" (la trampa del 29/09 de control.js). #}
+      <article class="vd-card" id="{{ item.ancla }}" style="border-left-color:{{ item.acento }}"{% if item.arrastre %} draggable="true" data-arrastre-url="{{ item.arrastre.url }}" data-arrastre-destinos="{{ item.arrastre.destinos | join(' ') }}"{% endif %}>
         <div class="vd-fila">
-          <a class="vd-abrir" href="{{ item.abrir_url }}">{{ item.cliente }}</a>
+          <a class="vd-abrir" draggable="false" href="{{ item.abrir_url }}">{{ item.cliente }}</a>
           <b class="vd-monto num">{{ item.total | dinero }}</b>
         </div>
         <div class="vd-fila vd-pie">
@@ -263,10 +272,16 @@
       {% endfor %}
     </div>
     {% endif %}
+    {% with mover_a=abierta.panel.mover_a %}{% include "_mover_a.html" %}{% endwith %}
     <span class="vd-hint vd-p-nota">Se cierra con la X, con ← Atrás o tocando afuera.</span>
   </div>
 </aside>
 {% endif %}
+
+{# El arrastre como gesto de navegación (BLOQUE 40): soltar nunca
+   escribe, solo abre el panel de cobro existente. #}
+<link rel="stylesheet" href="/static/arrastre.css?v={{ v_estaticos }}">
+<script src="/static/arrastre.js?v={{ v_estaticos }}"></script>
 
 {# El navbar compartido de la app. #}
 {% set activa = 'vender' %}{% include '_nav.html' %}

@@ -1,0 +1,14 @@
+{# El bloque «Mover a» (BLOQUE 40): el gesto del arrastre, para el
+   celular (≤899px, donde no hay drag), como enlaces. QUÉ destinos
+   ofrece cada estado lo decidió Python al armar la pantalla (regla 10):
+   la plantilla solo recorre `mover_a` ({texto, href}). Cada enlace
+   NAVEGA a la pantalla existente (el panel de cobro, el editor de
+   fecha) — tocar nunca escribe, igual que soltar. #}
+{% if mover_a %}
+<div class="mover-a">
+  <span class="mover-a-t">Mover a</span>
+  {% for destino in mover_a %}
+  <a class="mover-a-ln" href="{{ destino.href }}">{{ destino.texto }} →</a>
+  {% endfor %}
+</div>
+{% endif %}

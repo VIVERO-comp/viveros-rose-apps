@@ -1735,6 +1735,10 @@ def _lista_vender(request, vista="pendientes"):
         fila["linea"], fila["linea_alerta"] = _linea_tarjeta(fila)
         fila["pagada"] = (fila["tipo"] == "venta"
                           and fila["estado"] == "pagado")
+        # El arrastre como gesto de NAVEGACIÓN (BLOQUE 40): a qué
+        # columnas se puede soltar esta tarjeta y a qué URL navega el
+        # drop. Decidido acá (regla 10); soltar nunca escribe.
+        fila["arrastre"] = _arrastre_vender(fila)
     return filas, aviso
 
 
@@ -1819,6 +1823,68 @@ def _columna_vender(f):
     if f["estado"] == "pagado":
         return "pagado"
     return "confirmado"
+
+
+_TITULOS_VENDER = {clave: titulo for clave, titulo, _pista in COLUMNAS_VENDER}
+
+
+def _arrastre_vender(f):
+    """El arrastre de una tarjeta de Vender como GESTO DE NAVEGACIÓN
+    (BLOQUE 40): {url, destinos} — a qué columnas se puede SOLTAR y a
+    qué URL NAVEGA el drop —, o None si la tarjeta no se arrastra.
+
+    LA REGLA DE ORO: SOLTAR NUNCA ESCRIBE. El drop solo abre el panel
+    de cobro EXISTENTE (/venta/pago/<n>): método, monto y botón negro
+    ya viven allá, y cerrarlo sin pagar deja todo como estaba — no hay
+    nada que revertir, porque nada se escribió. Por eso:
+
+    - una cotización va hacia «Confirmado · falta cobrar» o «Pagado»
+      (los dos gestos terminan en el mismo panel de cobro);
+    - una confirmada (vendida, facturada o atorada a medio pipeline)
+      solo hacia «Pagado» — su paso pendiente es el mismo panel;
+    - una pagada no se arrastra: no tiene paso siguiente;
+    - un servicio no se arrastra: su cobro vive en el kanban de Odoo,
+      no hay panel propio al que navegar.
+
+    HACIA ATRÁS no hay destino (el JS pinta no-drop): el candado real
+    del retroceso sigue siendo el del motor (venta_estado.bloqueo_manual
+    tras POST /venta/estado — solo el system manager baja un estado);
+    esto es cortesía, como el draggable de las tarjetas de Control."""
+    if f["tipo"] != "venta":
+        return None
+    columna = _columna_vender(f)
+    if columna == "cotizado":
+        destinos = ["confirmado", "pagado"]
+    elif columna == "confirmado":
+        destinos = ["pagado"]
+    else:
+        return None
+    return {"url": f"/venta/pago/{f['n']}", "destinos": destinos}
+
+
+def _mover_a_vender(f, panel):
+    """El bloque «Mover a» del panel (BLOQUE 40): el MISMO gesto del
+    arrastre para el celular (≤899px, sin drag), como enlaces {texto,
+    href} ya decididos acá (regla 10). Cada enlace navega al panel de
+    cobro existente — tocar nunca escribe, igual que soltar.
+
+    NO se repite la puerta que el panel YA tiene. Si el botón negro
+    lleva al mismo lugar que el gesto, «Mover a» queda vacío: en una
+    cotización ese botón ES «Facturar / Pagado» → /venta/pago/<n>, el
+    mismo destino del arrastre y con mejor nombre, así que ofrecerlo de
+    nuevo serían tres puertas al mismo cuarto (y rompería la regla de
+    siempre: un solo botón negro, las acciones una sola vez).
+
+    Donde SÍ aporta es en una confirmada: ahí el botón negro es el PDF
+    y el panel no tiene ninguna puerta al cobro, así que en el celular
+    —sin arrastre— «Mover a → Pagado» es el ÚNICO camino."""
+    gesto = f.get("arrastre")
+    if not gesto:
+        return []
+    if gesto["url"] == ((panel.get("boton") or {}).get("href") or ""):
+        return []
+    return [{"texto": _TITULOS_VENDER[destino], "href": gesto["url"]}
+            for destino in gesto["destinos"]]
 
 
 def _vender_columnas(filas):
@@ -1934,6 +2000,10 @@ def _vender_abierta(filas, abrir):
         if f["tipo"] == tipo and f["n"] == n:
             f = dict(f)
             f["panel"] = _panel_vender(f)
+            # «Mover a» (BLOQUE 40): el gesto del arrastre, en enlaces,
+            # para el celular. Lo decide Python, no la plantilla — y
+            # mirando el panel, para no repetir el botón negro.
+            f["panel"]["mover_a"] = _mover_a_vender(f, f["panel"])
             return f
     return None
 
