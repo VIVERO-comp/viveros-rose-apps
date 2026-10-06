@@ -1,8 +1,24 @@
-"""Contactos — la pantalla SOLO LECTURA (BLOQUE 37, item 2 de Jay).
+"""Contactos — las tres pantallas SOLO LECTURA (BLOQUE 37 + BLOQUE 43).
 
 Diseño corto aprobado: docs/DISENO-ITEM2-contactos.md del repo
-plantaspanama; lienzo v3 en docs/diseno-roles/pantallas/
-abraham-contactos.html.
+plantaspanama; lienzos en docs/diseno-roles/pantallas/
+abraham-contactos.html (la lista, a TODO EL ANCHO: tocar un contacto abre
+su página, no un panel al costado), abraham-contacto-abierto.html (la
+página del contacto, estilo ficha de Odoo: datos a la izquierda y un panel
+derecho con dos pestañas) y contacto-whatsapp.html (la pestaña del chat).
+
+El BLOQUE 43 suma tres cosas al módulo:
+
+- **Las dos pestañas del panel derecho** («Historial de leads», la que
+  abre, y «WhatsApp»), que son ENLACES GET decididos en Python
+  (`?panel=leads|whatsapp`) — cero JS nuevo, regla 10.
+- **El candado del DINERO y del CHAT** (`_permiso`): los ve quien atiende
+  al contacto (su `Resp:` casa con el usuario en sesión), el director y
+  finanzas. Para los demás la página abre igual y esas DOS zonas dicen de
+  quién son, SIN montos y SIN hilo — y el recorte se hace **en Python,
+  antes de la plantilla**, así que lo tapado no viaja en el HTML.
+- **Los apagados del lienzo** (`APAGADOS`), presentes en su lugar con
+  «Todavía no»: ningún número inventado para ellos.
 
 Qué es — y qué no:
 
@@ -39,7 +55,8 @@ import os
 import re
 import time
 
-from . import cotizaciones, crm_twenty, ventas
+from . import (agenda, control, cotizaciones, crm_twenty, datos_roles,
+               linear_leads, ventas)
 
 # ---------------------------------------------------------------------------
 # Los avisos honestos, en un solo lugar (las pruebas los reusan)
@@ -51,12 +68,59 @@ AVISO_TWENTY_LUEGO = ("La lectura de Twenty (la ficha del cliente y el "
                       "último mensaje) llega con su propia parte.")
 AVISO_SIN_ODOO = ("Odoo no está configurado en esta instancia: la lista "
                   "sale solo de los clientes locales de Vender.")
-AVISO_LEADS_LUEGO = ("Los leads de Linear de este contacto llegan con su "
-                     "propia parte.")
 AVISO_CITAS_LUEGO = ("Las citas del calendario de este contacto llegan "
                      "con su propia parte.")
 AVISO_SIN_TRATOS = "Sin cotizaciones ni ventas con nosotros todavía."
 VACIO_LISTA = "Ningún contacto con lo que hay en las fuentes de hoy."
+
+# --- la pestaña «Historial de leads» ---------------------------------------
+AVISO_LINEAR_PRUEBAS = ("Linear no está conectado en pruebas: los leads de "
+                        "este contacto no se pueden leer.")
+AVISO_LINEAR_CAIDO = ("Linear no contestó: los leads de este contacto no se "
+                      "pudieron leer.")
+SIN_LEADS = "Este contacto todavía no tiene ningún lead en el tablero."
+SIN_TELEFONO_LEADS = ("Sin teléfono no hay con qué casar: los leads se buscan "
+                      "por el número del contacto.")
+PIE_LEADS = ("Verde: leads activos. Gris: terminados y los que nunca se "
+             "activaron. Toca uno para abrirlo en el CRM.")
+
+# --- la pestaña «WhatsApp» -------------------------------------------------
+AVISO_CHAT_PRUEBAS = ("Twenty no está conectado en pruebas: el chat de "
+                      "WhatsApp de este contacto no se puede leer.")
+AVISO_CHAT_CAIDO = ("Twenty no contestó: el chat de este contacto no se pudo "
+                    "cargar.")
+SIN_CHAT = "No hay mensajes de WhatsApp de este contacto en Twenty."
+SIN_TELEFONO_CHAT = ("Sin teléfono no hay chat que buscar: este contacto no "
+                     "tiene número.")
+PIE_CHAT = ("Solo lectura. Se responde desde WhatsApp y el mensaje aparece "
+            "aquí solo.")
+
+# --- el candado del dinero y del chat (frente D) ---------------------------
+CANDADO_AJENO = ("El dinero y el chat de este contacto son de otro "
+                 "responsable.")
+CANDADO_SIN_MIO = ("Este contacto no tiene ningún lead a tu nombre: su dinero "
+                   "y su chat no se muestran.")
+CANDADO_SIN_FUENTE = ("No se pueden leer los leads, así que no se sabe quién "
+                      "atiende a este contacto: su dinero y su chat no se "
+                      "muestran.")
+CANDADO_SIN_SESION = ("Sin sesión no se muestran ni el dinero ni el chat de "
+                      "un contacto.")
+
+# Lo que todavía NO existe, presente en su lugar del lienzo y apagado. Ni un
+# número inventado para ninguno (frente C del BLOQUE 43).
+TODAVIA_NO = "Todavía no"
+APAGADOS_ACCION = ("Mandar petición", "Reasignar",
+                   "Poner o cambiar seguimiento")
+APAGADOS_PLATA = ("Gastado", "Ganancia")
+APAGADO_TOTAL_GASTADO = "Total gastado"
+
+# Las dos pestañas del panel derecho, en su orden: abre la primera.
+PANELES = (("leads", "Historial de leads"), ("whatsapp", "WhatsApp"))
+PANEL_POR_DEFECTO = PANELES[0][0]
+
+# Cuántos mensajes se traen del chat. El mismo orden de magnitud del hilo
+# de la ficha del lead (60): es una supervisión, no un archivo.
+MENSAJES_DEL_CHAT = 60
 
 # Los filtros como enlaces GET (?f=). «Sin responsable» NO está aquí:
 # va aparte, APAGADO, porque el dato no existe todavía en ninguna fuente.
@@ -183,6 +247,25 @@ def aviso_twenty():
     if not twenty_conectado():
         return AVISO_TWENTY_PRUEBAS
     return AVISO_TWENTY_LUEGO
+
+
+def linear_conectado():
+    """¿Linear se puede leer DE VERDAD? La MISMA pregunta que
+    `twenty_conectado()`, por el mismo motivo.
+
+    `linear_leads.configurado()` solo mira que `LINEAR_API_KEY` exista, y
+    una key neutralizada (la convención de la casa: arranca con «CLAVE»)
+    existe igual. Importa el doble aquí porque
+    **`linear_leads.listar()` devuelve leads DE MUESTRA cuando no hay
+    key**: sin esta pregunta la pestaña pintaría leads de ejemplo con
+    pinta de reales, que es justo lo que no puede pasar (medido en el
+    8095 el 6/10/2026: allá la key de Linear SÍ es real y
+    `CALENDARIO_ESCRITURA=0`, o sea lectura; la neutralizada es la de
+    Twenty)."""
+    if not linear_leads.configurado():
+        return False
+    valor = (os.environ.get("LINEAR_API_KEY") or "").strip()
+    return not valor.upper().startswith("CLAVE")
 
 
 # ---------------------------------------------------------------------------
@@ -320,13 +403,204 @@ def _unir(od):
 
 
 # ---------------------------------------------------------------------------
+# La pestaña «Historial de leads»: los leads REALES de esa persona
+# ---------------------------------------------------------------------------
+
+def _leads_crudos():
+    """(leads, aviso). NUNCA la muestra: `linear_leads.listar()` devuelve
+    leads de ejemplo cuando no hay key, y una pantalla que inventa un lead
+    es mucho peor que una que dice su hueco."""
+    if not linear_conectado():
+        return [], AVISO_LINEAR_PRUEBAS
+    try:
+        return linear_leads.listar(), ""
+    except Exception as fallo:
+        return [], f"{AVISO_LINEAR_CAIDO} ({fallo})"
+
+
+def _chip_de_lead(lead):
+    """(texto, activo) — los tres chips del lienzo, por regla explícita:
+
+    - **Terminado** (gris): el issue está cerrado en Linear (Ganado o
+      Perdido).
+    - **No activado** (gris): sigue en «Nuevo» y nadie lo tomó (sin
+      `Resp:`) — el «nunca se activó» del lienzo.
+    - **Activo** (verde): todo lo demás, que es trabajo en curso.
+    """
+    if lead.get("cerrado") or lead.get("estado") in linear_leads.CERRADOS:
+        return "Terminado", False
+    if lead.get("estado") == "NUEVO" and not (lead.get("resp") or ""):
+        return "No activado", False
+    return "Activo", True
+
+
+def _leads_del_contacto(contacto, leads):
+    """Los leads de ESA persona, casados por el MISMO teléfono normalizado
+    del resto del módulo. Sin teléfono no se casa nada: el nombre plano
+    sugiere, jamás amarra (diseño corto)."""
+    tel = contacto.get("tel_norm") or ""
+    if not tel:
+        return []
+    filas = []
+    for lead in leads:
+        if normalizar_telefono(lead.get("celular")) != tel:
+            continue
+        chip, activo = _chip_de_lead(lead)
+        filas.append({
+            "ref": lead.get("ref") or "",
+            "url": lead.get("url") or "",
+            "titulo": (lead.get("nombre") or lead.get("titulo")
+                       or lead.get("ref") or "—"),
+            "estado_nombre": lead.get("estado_nombre") or "",
+            "interes": lead.get("interes") or "",
+            "resp": lead.get("resp") or "",
+            "chip": chip,
+            "activo": activo,
+            "hace": lead.get("hace") or "",
+        })
+    # Los activos arriba; dentro de cada grupo, el más reciente primero
+    # (las refs de Linear suben: LEAD-94 es posterior a LEAD-62).
+    filas.sort(key=lambda f: (not f["activo"], -_numero_de_ref(f["ref"])))
+    return filas
+
+
+def _numero_de_ref(ref):
+    digitos = re.sub(r"\D", "", str(ref or ""))
+    return int(digitos) if digitos else 0
+
+
+def panel_leads(contacto, leads, aviso_leads):
+    """TODO lo que pinta la pestaña «Historial de leads», ya decidido."""
+    filas = _leads_del_contacto(contacto, leads)
+    aviso = aviso_leads
+    if not aviso and not filas:
+        aviso = (SIN_TELEFONO_LEADS if not contacto.get("tel_norm")
+                 else SIN_LEADS)
+    activos = sum(1 for f in filas if f["activo"])
+    return {
+        "leads": filas,
+        "cuenta": len(filas),
+        "activos": activos,
+        "resumen": (f"{len(filas)} · {activos} activo"
+                    f"{'s' if activos != 1 else ''}") if filas else "",
+        "aviso": aviso,
+        "pie": PIE_LEADS,
+    }
+
+
+# ---------------------------------------------------------------------------
+# La pestaña «WhatsApp»: el chat en SOLO LECTURA
+# ---------------------------------------------------------------------------
+
+def panel_chat(contacto):
+    """El hilo del contacto, armado con el MISMO `control.hilo()` de la
+    ficha del lead (cliente a la izquierda, equipo a la derecha con el
+    nombre de quien respondió). Acá NUNCA se escribe ni se manda nada:
+    esta pantalla no tiene una sola ruta POST.
+
+    Se busca por teléfono, que es lo que Twenty guarda del chat
+    (`_mensajes_por_telefono` ya resuelve las dos grafías de Panamá en UN
+    solo `filter`, porque dos `filter=` en la misma URL no se suman)."""
+    panel = {"ok": False, "hilo": [], "cant": 0, "aviso": "", "pie": PIE_CHAT}
+    telefono = contacto.get("telefono") or contacto.get("tel_norm") or ""
+    if not telefono:
+        panel["aviso"] = SIN_TELEFONO_CHAT
+        return panel
+    if not twenty_conectado():
+        panel["aviso"] = AVISO_CHAT_PRUEBAS
+        return panel
+    try:
+        crudos = crm_twenty._mensajes_por_telefono(telefono, MENSAJES_DEL_CHAT)
+    except Exception as fallo:
+        panel["aviso"] = f"{AVISO_CHAT_CAIDO} ({fallo})"
+        return panel
+    panel["ok"] = True
+    if not crudos:
+        panel["aviso"] = SIN_CHAT
+        return panel
+    mensajes = [crm_twenty.mensaje_legible(m) for m in crudos]
+    panel["cant"] = len(crudos)
+    # Sin sucesos: esos son comentarios del issue de un lead, y un
+    # contacto puede no tener ninguno (el mismo criterio de
+    # /conversaciones).
+    panel["hilo"] = control.hilo(mensajes, (), contacto.get("nombre") or "")
+    return panel
+
+
+# ---------------------------------------------------------------------------
+# El candado del DINERO y del CHAT (frente D) — decidido en el SERVIDOR
+# ---------------------------------------------------------------------------
+
+def sesion_de(empleada, es_admin=False):
+    """Quién está mirando, reducido a lo único que el candado necesita:
+    {"ve_todo", "resp"}.
+
+    `ve_todo` es el director, finanzas y el admin — y también quien no
+    tiene una puerta por rol, que es el MISMO fail-open de transición que
+    ya aplica `datos_roles.acceso_de` en toda la app (alcance None =
+    director, sin rol, o un rol sin slug). Operaciones y Atención sí
+    quedan acotados: su alcance existe y no es de ver-todo.
+
+    `resp` es la etiqueta `Resp:` que le corresponde a la persona, la
+    misma que usa `control.puede_tocar()`. Solo se pregunta cuando hace
+    falta: a quien ve todo no se le consulta Linear."""
+    ve_todo = bool(es_admin)
+    if not ve_todo:
+        alcance = datos_roles.acceso_de(empleada)["alcance"]
+        ve_todo = alcance is None or bool(alcance.get("ver_todo"))
+    return {
+        "ve_todo": ve_todo,
+        "resp": "" if ve_todo else agenda.responsable_de_empleada(empleada),
+    }
+
+
+def _permiso(sesion, leads, aviso_leads=""):
+    """¿Quien mira puede ver el DINERO y el CHAT de ESTE contacto?
+
+    La regla del diseño corto, punto 5: los ve quien lo atiende (alguno de
+    sus leads lleva su `Resp:`), el director y finanzas. Los datos de
+    contacto puros —nombre, teléfono, de dónde llegó— los ve todo el que
+    ve la lista: el candado es sobre el dinero y el chat ajenos, no sobre
+    la persona.
+
+    Dos decisiones que NO se aflojan:
+
+    - **Sin sesión, cerrado.** Una llamada que no dice quién es no puede
+      ver plata; el módulo no tiene un default abierto que una ruta nueva
+      pueda heredar sin darse cuenta.
+    - **Sin poder leer Linear, cerrado.** Si no se sabe de quién es el
+      contacto, no se adivina a favor: se dice y se tapa.
+    """
+    if sesion is None:
+        return {"dinero": False, "chat": False, "motivo": CANDADO_SIN_SESION}
+    if sesion.get("ve_todo"):
+        return {"dinero": True, "chat": True, "motivo": ""}
+    resp = sesion.get("resp") or ""
+    if resp and any((l.get("resp") or "") == resp for l in leads):
+        return {"dinero": True, "chat": True, "motivo": ""}
+    if aviso_leads:
+        return {"dinero": False, "chat": False, "motivo": CANDADO_SIN_FUENTE}
+    if any((l.get("resp") or "") for l in leads):
+        return {"dinero": False, "chat": False, "motivo": CANDADO_AJENO}
+    return {"dinero": False, "chat": False, "motivo": CANDADO_SIN_MIO}
+
+
+# ---------------------------------------------------------------------------
 # La lista (GET /contactos)
 # ---------------------------------------------------------------------------
 
-def lista(q="", filtro=""):
+def lista(q="", filtro="", sesion=None):
     """TODO lo que la plantilla de la lista pinta, ya decidido (regla 10):
     los contactos filtrados, los filtros GET con su activo, el buscador
-    server-rendered y los avisos honestos de cada fuente."""
+    server-rendered y los avisos honestos de cada fuente.
+
+    La lista va a TODO EL ANCHO desde el BLOQUE 43 (lienzo refrescado):
+    sin panel al costado — tocar un contacto abre su página.
+
+    El candado del dinero viaja hasta acá: las columnas Ventas y Total de
+    un contacto ajeno salen TAPADAS (`dinero` en False y los montos en
+    None), porque si no, quien no puede abrir su página leería su plata de
+    la fila. Se tapa en Python: el monto no llega al HTML."""
     od = datos_odoo()
     contactos = _unir(od)
     total_sin_filtrar = len(contactos)
@@ -348,9 +622,29 @@ def lista(q="", filtro=""):
             if q_plano in c["nombre"].lower()
             or (q_tel and q_tel in c["tel_norm"])]
 
+    # El candado, fila por fila. A quien ve todo no se le consulta Linear:
+    # la pregunta no cambia la respuesta y la lista es la pantalla que más
+    # se abre.
+    ve_todo = bool(sesion and sesion.get("ve_todo"))
+    leads, aviso_leads = ([], "") if ve_todo else _leads_crudos()
+    tapados = 0
+    for c in contactos:
+        c["dinero"] = ve_todo or _permiso(
+            sesion, _leads_del_contacto(c, leads), aviso_leads)["dinero"]
+        if not c["dinero"]:
+            tapados += 1
+            # El recorte es aquí, no en la plantilla: lo tapado no viaja.
+            for campo in ("ventas_n", "ventas_total", "cotiz_n",
+                          "cotiz_total"):
+                c[campo] = None
+
     return {
         "contactos": contactos,
         "cuenta": len(contactos),
+        "tapados": tapados,
+        "aviso_tapados": (
+            "Las ventas y los totales de los contactos que no atiendes no "
+            "se muestran." if tapados else ""),
         "total": total_sin_filtrar,
         "q": q,
         "filtro": filtro,
@@ -387,45 +681,66 @@ def _ordenes_odoo(partner_ids):
             for f in filas]
 
 
-def ficha(cid):
-    """La ficha agrupada del lienzo en su versión mínima honesta: datos
-    del contacto, sus tratos (locales + Odoo, apuntando con href a
-    /venta donde aplica, sin duplicar la misma orden) y las secciones
-    sin fuente hoy como huecos honestos. None si el id ya no existe."""
+def ficha(cid, sesion=None, panel=""):
+    """LA PÁGINA del contacto (BLOQUE 43, lienzo abraham-contacto-abierto):
+    los datos a la izquierda y el panel derecho con sus dos pestañas.
+    None si el id ya no existe.
+
+    Las pestañas son enlaces GET resueltos ACÁ (`?panel=leads|whatsapp`),
+    abriendo siempre en «Historial de leads»; un valor inventado cae en
+    esa misma. Cero JS: la plantilla solo pinta lo que este dict trae.
+
+    El candado (frente D) se aplica antes de devolver nada: con el dinero
+    tapado, los montos salen en None, «Lo que tiene con nosotros» va vacío
+    y **a Odoo ni se le preguntan las órdenes** — lo que no se puede ver
+    no se lee. Con el chat tapado, el hilo no se arma siquiera."""
     od = datos_odoo()
     contactos = _unir(od)
     contacto = next((c for c in contactos if c["id"] == cid), None)
     if contacto is None:
         return None
 
-    # Los tratos: primero lo local (trae href a la ficha existente),
-    # luego lo de Odoo que no sea la MISMA orden ya listada.
-    tratos = []
-    ordenes_vistas = set()
-    for fila in contacto["locales"]:
-        tratos.append({
-            "titulo": fila["titulo"], "orden": fila["orden"] or "—",
-            "total": fila["total"], "href": fila["href"],
-            "estado": "Cancelada" if fila["cancelada"] else "",
-            "fecha": fila["creado_en"],
-        })
-        if fila["orden"]:
-            ordenes_vistas.add(fila["orden"])
+    leads, aviso_leads = _leads_crudos()
+    mios = _leads_del_contacto(contacto, leads)
+    permiso = _permiso(sesion, mios, aviso_leads)
+
+    # Quién lo atiende: sale de los `Resp:` de SUS leads, que es el único
+    # lugar donde ese dato existe hoy. Sin leads legibles, vacío honesto.
+    atiende = sorted({f["resp"] for f in mios if f["resp"]})
+
     aviso_odoo_ficha = od["aviso"]
-    if contacto["partner_ids"] and od["ok"]:
-        try:
-            for orden in _ordenes_odoo(contacto["partner_ids"]):
-                if orden["orden"] in ordenes_vistas:
-                    continue
-                tratos.append({
-                    "titulo": "Orden en Odoo", "orden": orden["orden"],
-                    "total": orden["total"], "href": "",
-                    "estado": orden["estado"], "fecha": orden["fecha"],
-                })
-        except Exception as fallo:
-            aviso_odoo_ficha = (f"Odoo no contestó las órdenes de este "
-                                f"contacto ({fallo}). Nada se inventa.")
-    tratos.sort(key=lambda t: t["fecha"], reverse=True)
+    tratos = []
+    if permiso["dinero"]:
+        # Los tratos: primero lo local (trae href a la ficha existente),
+        # luego lo de Odoo que no sea la MISMA orden ya listada.
+        ordenes_vistas = set()
+        for fila in contacto["locales"]:
+            tratos.append({
+                "titulo": fila["titulo"], "orden": fila["orden"] or "—",
+                "total": fila["total"], "href": fila["href"],
+                "estado": "Cancelada" if fila["cancelada"] else "",
+                "fecha": fila["creado_en"],
+            })
+            if fila["orden"]:
+                ordenes_vistas.add(fila["orden"])
+        if contacto["partner_ids"] and od["ok"]:
+            try:
+                for orden in _ordenes_odoo(contacto["partner_ids"]):
+                    if orden["orden"] in ordenes_vistas:
+                        continue
+                    tratos.append({
+                        "titulo": "Orden en Odoo", "orden": orden["orden"],
+                        "total": orden["total"], "href": "",
+                        "estado": orden["estado"], "fecha": orden["fecha"],
+                    })
+            except Exception as fallo:
+                aviso_odoo_ficha = (f"Odoo no contestó las órdenes de este "
+                                    f"contacto ({fallo}). Nada se inventa.")
+        tratos.sort(key=lambda t: t["fecha"], reverse=True)
+    else:
+        contacto = dict(contacto)
+        for campo in ("ventas_n", "ventas_total", "cotiz_n", "cotiz_total"):
+            contacto[campo] = None
 
     # «Posible mismo»: mismo nombre plano en OTRO contacto. Solo sugiere
     # y apunta — jamás amarra ni escribe.
@@ -436,13 +751,31 @@ def ficha(cid):
                 if c["id"] != cid and plano and plano != "—"
                 and _nombre_plano(c["nombre"]) == plano]
 
+    claves = [clave for clave, _n in PANELES]
+    panel = panel if panel in claves else PANEL_POR_DEFECTO
+    chat = (panel_chat(contacto) if permiso["chat"]
+            else {"ok": False, "hilo": [], "cant": 0,
+                  "aviso": permiso["motivo"], "pie": PIE_CHAT})
+
     return {
         "contacto": contacto,
         "tratos": tratos,
         "sin_tratos": AVISO_SIN_TRATOS,
         "posibles": posibles,
+        "atiende": atiende,
         "aviso_odoo": aviso_odoo_ficha,
         "aviso_twenty": aviso_twenty(),
-        "aviso_leads": AVISO_LEADS_LUEGO,
         "aviso_citas": AVISO_CITAS_LUEGO,
+        "permiso": permiso,
+        "panel": panel,
+        "paneles": [{"clave": clave, "nombre": nombre,
+                     "activo": clave == panel,
+                     "href": f"/contactos/{cid}?panel={clave}"}
+                    for clave, nombre in PANELES],
+        "leads": panel_leads(contacto, leads, aviso_leads),
+        "chat": chat,
+        "apagados_accion": APAGADOS_ACCION,
+        "apagados_plata": APAGADOS_PLATA,
+        "apagado_total_gastado": APAGADO_TOTAL_GASTADO,
+        "todavia_no": TODAVIA_NO,
     }
