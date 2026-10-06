@@ -30,7 +30,8 @@ from . import (acceso_google, agenda, altas, avisos, calculos, calendario,
                calendario_ics, conteos, control, conversaciones, cot_lead,
                cotizaciones, coworkers, crm_twenty, datos, datos_roles,
                fichas, fotos, linear_leads, mantenimiento, proveedores,
-               resumen, seguridad, vehiculos, ventas, wa_autor)
+               resumen, seguridad, stock_escritura, vehiculos, ventas,
+               wa_autor)
 
 app = FastAPI(title="Control Viverorose")
 
@@ -229,6 +230,10 @@ calendario_google.iniciar_tablas()
 # términos por defecto. Mismo patrón: crear al importar es idempotente, y
 # la semilla solo entra si la tabla nace vacía.
 datos_roles.iniciar_tablas()
+# La bitácora de cambios de stock (rol Inventario, 5/10/2026): el punto
+# único de escritura (stock_escritura.escribir_stock) la necesita desde
+# la primera petición.
+stock_escritura.iniciar_tablas()
 calendario_google.arrancar_hilo()
 # El calendario arranca calentándose en fondo (catálogo + mes en curso):
 # ni la primera visita del día espera a Linear (velocidad, 22/09/2026).
@@ -715,8 +720,9 @@ def _destino_tras_crear_planta(volver=""):
 
 @app.post("/ajustar")
 async def ajustar(request: Request):
-    """El ajuste rápido del modal. El guardado real pasa por el order-api,
-    que compara `esperada` contra Odoo: si alguien movió el stock en el
+    """El ajuste rápido del modal. El guardado real pasa por el punto
+    único de escritura (stock_escritura.escribir_stock → order-api), que
+    compara `esperada` contra Odoo: si alguien movió el stock en el
     medio, vuelve `conflicto` con el valor fresco y nada se escribe."""
     cuerpo = await request.json()
     sku = cuerpo.get("sku")
@@ -727,7 +733,7 @@ async def ajustar(request: Request):
         return Response(json.dumps({"error": "peticion_invalida"}), status_code=400,
                         media_type="application/json")
     try:
-        respuesta = datos.ajustar_en_odoo(
+        respuesta = stock_escritura.escribir_stock(
             [{"sku": sku, "cantidad": cantidad, "esperada": esperada}],
             request.state.empleada["id"], "ajuste_rapido",
         )
@@ -740,6 +746,10 @@ async def ajustar(request: Request):
         # cierra a nombre de quien ajustó; si sigue crítico, la próxima
         # carga la vuelve a abrir con la cantidad nueva.
         datos.atender_alerta(sku, request.state.empleada["id"])
+    if respuesta["registro_fallo"]:
+        # El error ruidoso del review: Odoo quedó escrito pero la bitácora
+        # no. El texto lo decide Python; app.js solo lo muestra.
+        resultado = {**resultado, "aviso": stock_escritura.AVISO_REGISTRO}
     return resultado
 
 
@@ -807,13 +817,16 @@ async def crear_producto(request: Request):
         return error(str(fallo), "no_creada", 502)
 
     stock = "sin_stock"
+    registro_aviso = ""
     if cantidad > 0:
         try:
-            respuesta = datos.ajustar_en_odoo(
+            respuesta = stock_escritura.escribir_stock(
                 [{"sku": sku, "cantidad": cantidad, "esperada": 0}],
                 request.state.empleada["id"], "alta_de_planta",
             )
             stock = respuesta["resultados"][0]["resultado"]
+            if respuesta["registro_fallo"]:
+                registro_aviso = stock_escritura.AVISO_REGISTRO
         except datos.SinConexion:
             stock = "falló"
     # La planta ya está en Odoo. Si alguien la estaba esperando, se le
@@ -831,7 +844,10 @@ async def crear_producto(request: Request):
                 f"La planta {sku} se creó pero no se pudo agregar a la "
                 f"compra en curso: {fallo!r}")
     return {"ok": True, "sku": sku, "nombre": nombre, "id": creada.get("id"),
-            "cantidad": cantidad, "stock": stock, "agregadaA": agregada_a}
+            "cantidad": cantidad, "stock": stock, "agregadaA": agregada_a,
+            # El error ruidoso de la bitácora (stock_cambio): vacío casi
+            # siempre; con texto, el JS lo muestra tal cual.
+            "registroAviso": registro_aviso}
 
 
 def _agregar_planta_a_la_compra(request, sku, nombre):
@@ -1368,8 +1384,8 @@ def confirmar(request: Request, n: int):
         for d in conteo["datos"]["diferencias"]
     ]
     try:
-        respuesta = datos.ajustar_en_odoo(ajustes, request.state.empleada["id"],
-                                          "conteo_quincenal")
+        respuesta = stock_escritura.escribir_stock(
+            ajustes, request.state.empleada["id"], "conteo_quincenal")
     except datos.SinConexion as error:
         return plantillas.TemplateResponse(request, "revisar.html", {
             "empleada": request.state.empleada, "conteo": conteo,
@@ -1380,6 +1396,18 @@ def confirmar(request: Request, n: int):
     datos.actualizar_conteo(n, "confirmado", {
         **conteo["datos"], "resultados": respuesta["resultados"],
     })
+    if respuesta["registro_fallo"]:
+        # Odoo quedó ajustado y el conteo confirmado, pero la bitácora
+        # local no se pudo escribir para estos SKUs: se dice en la misma
+        # pantalla de revisión (error ruidoso del review), nunca silencio.
+        conteo = datos.conteo(n)
+        return plantillas.TemplateResponse(request, "revisar.html", {
+            "empleada": request.state.empleada, "conteo": conteo,
+            "errores": [stock_escritura.AVISO_REGISTRO + " Productos: "
+                        + ", ".join(respuesta["registro_fallo"]) + "."],
+            "diferencias": conteo["datos"]["diferencias"],
+            "sin_contar": conteo["datos"].get("sin_contar", 0),
+        })
     return RedirectResponse(f"/conteos/{n}/revisar", status_code=303)
 
 
