@@ -41,12 +41,14 @@ def _panel(cuerpo):
 # El tablero: todo lo de hoy sigue en el HTML nuevo
 # ---------------------------------------------------------------------------
 
-def test_la_pestana_sigue_llamandose_control(cliente, de_dueno):
-    # El lienzo la llama «CRM», pero la pestaña NO se renombra (decisión
-    # vigente hasta que Korto diga): el título y el menú dicen Control.
+def test_la_pestana_se_llama_crm(cliente, de_dueno):
+    # BLOQUE 35: la pestaña se llama «CRM» para todos — la RUTA /control
+    # se queda, lo que cambia es el texto visible (título, cabecera y la
+    # entrada del menú).
     cuerpo = cliente.get("/control", params={"vista": "estado"}).text
-    assert "<h3>Control</h3>" in cuerpo
-    assert "<title>Control — Control Viverorose</title>" in cuerpo
+    assert "<h3>CRM</h3>" in cuerpo
+    assert "<title>CRM — Control Viverorose</title>" in cuerpo
+    assert "<h3>Control</h3>" not in cuerpo
 
 
 def test_la_piel_nueva_se_carga_despues_de_la_base(cliente, de_dueno):

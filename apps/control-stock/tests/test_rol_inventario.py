@@ -6,8 +6,9 @@ Lo que se prueba, del plan aprobado con review del Arquitecto
 - la semilla: el rol existe siempre, con slug inmutable 'inventario' y SIN
   persona (a Omar lo invita Korto por la pantalla del item 1); idempotente,
   y un «Inventario» creado a mano ANTES del slug se adopta, no se duplica;
-- el predicado único `solo_inventario()` con su matriz completa: admin /
-  solo-inventario / inventario+otro rol / sin roles;
+- el predicado único `solo_inventario()` con su matriz completa en su V2
+  (BLOQUE 29, «el rol manda aunque seas admin»): admin+inventario → SÍ
+  encerrado, solo-inventario / inventario+otro rol / sin roles;
 - renombrar la fila NO suelta los candados (se compara por slug, jamás por
   nombre — la trampa es_maceta);
 - el redirect global a /stock con sus excepciones (logout, estáticos) y sin
@@ -112,7 +113,8 @@ def test_matriz_solo_inventario(db_limpia, monkeypatch):
     with datos._db() as con:
         otro = con.execute("SELECT n FROM roles WHERE slug IS NULL "
                            "AND activo=1 LIMIT 1").fetchone()["n"]
-    # jefa: admin fijada en el servidor, AUNQUE tenga el rol.
+    # jefa: admin fijada en el servidor Y con el rol — en la V2 el rol
+    # manda: también queda encerrada (su timón es Ajustes, por ruta).
     assert datos_roles.poner_persona(rol_inv, "jefa", "x") is None
     # omar: solo el rol Inventario.
     assert datos_roles.poner_persona(rol_inv, "omar", "x") is None
@@ -120,18 +122,21 @@ def test_matriz_solo_inventario(db_limpia, monkeypatch):
     assert datos_roles.poner_persona(rol_inv, "mixta", "x") is None
     assert datos_roles.poner_persona(otro, "mixta", "x") is None
     # nueva: sin roles.
-    assert datos_roles.solo_inventario(_empleada("jefa")) is False
+    assert datos_roles.solo_inventario(_empleada("jefa")) is True
     assert datos_roles.solo_inventario(_empleada("omar")) is True
     assert datos_roles.solo_inventario(_empleada("mixta")) is False
     assert datos_roles.solo_inventario(_empleada("nueva")) is False
 
 
-def test_admin_dada_por_pantalla_tampoco_queda_presa(db_limpia):
+def test_admin_dada_por_pantalla_tambien_queda_presa(db_limpia):
+    """V2 (BLOQUE 29): hacerla admin desde la pantalla YA NO la saca del
+    rol. El timón no se pierde: la excepción del admin vive POR RUTA
+    (RUTAS_SISTEMA → Ajustes), no en este predicado."""
     seguridad.crear_empleada("ruth", "Ruth", "clave-de-prueba")
     assert datos_roles.poner_persona(_rol_inventario_n(), "ruth", "x") is None
     assert datos_roles.solo_inventario(_empleada("ruth")) is True
     seguridad.fijar_admin("ruth", True, "la jefa")
-    assert datos_roles.solo_inventario(_empleada("ruth")) is False
+    assert datos_roles.solo_inventario(_empleada("ruth")) is True
 
 
 def test_renombrar_el_rol_no_suelta_los_candados(omar):
@@ -153,12 +158,21 @@ def test_renombrar_el_rol_no_suelta_los_candados(omar):
 
 def test_redirect_global_a_stock_sin_loop(cliente_omar, con_inventario):
     for ruta in ("/", "/?tab=stock", "/?tab=ajustes", "/venta", "/compras",
-                 "/control", "/calendario", "/productos/crear", "/revisar",
-                 "/conversaciones", "/resumen", "/equipo"):
+                 "/control", "/mi-crm", "/contactos", "/calendario",
+                 "/productos/crear", "/revisar", "/conversaciones",
+                 "/conversaciones/respuestas", "/finanzas", "/resumen",
+                 "/equipo"):
         r = cliente_omar.get(ruta, follow_redirects=False)
-        assert (r.status_code, r.headers.get("location")) == (303, "/stock"), ruta
-    # Sin loop: /stock se pinta (200), no redirige a sí misma.
+        destino = r.headers.get("location") or ""
+        # El rebote es honesto (BLOQUE 39.3): va a su casa Y lleva el
+        # aviso que la pantalla pinta — nunca un 403 pelado en un clic.
+        assert (r.status_code, destino.split("?")[0]) == (303, "/stock"), ruta
+        assert "rebote=" in destino, ruta
+    # Sin loop: /stock se pinta (200), no redirige a sí misma — ni
+    # siquiera llegando con el aviso puesto.
     assert cliente_omar.get("/stock", follow_redirects=False).status_code == 200
+    r = cliente_omar.get("/stock?rebote=hola", follow_redirects=False)
+    assert r.status_code == 200 and "hola" in r.text
 
 
 def test_logout_y_estaticos_quedan_fuera_del_redirect(cliente_omar):
@@ -172,7 +186,8 @@ def test_menu_del_rol_es_solo_stock(cliente_omar, con_inventario):
     pantalla = cliente_omar.get("/stock").text
     assert "Salir" in pantalla
     for enlace in ('href="/venta"', 'href="/compras"', 'href="/control"',
-                   'href="/calendario"', 'href="/?tab=ajustes"'):
+                   'href="/mi-crm"', 'href="/calendario"',
+                   'href="/?tab=ajustes"'):
         assert enlace not in pantalla, enlace
     # Ni siquiera el pre-render ofrece esas rutas (bloque vaciado).
     assert "speculationrules" not in pantalla
@@ -231,7 +246,8 @@ def test_endpoints_prohibidos_rechazan_403_sin_efecto(
 def test_el_candado_sobrevive_el_renombre_del_rol(cliente_omar, con_inventario):
     assert datos_roles.renombrar_rol(_rol_inventario_n(), "Conteo") is None
     r = cliente_omar.get("/venta", follow_redirects=False)
-    assert (r.status_code, r.headers["location"]) == (303, "/stock")
+    assert (r.status_code,
+            r.headers["location"].split("?")[0]) == (303, "/stock")
     assert cliente_omar.post("/ajustar", json={
         "sku": "PL-ROMERO", "cantidad": 7, "esperada": 2}).status_code == 403
 

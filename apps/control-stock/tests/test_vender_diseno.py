@@ -370,12 +370,14 @@ def test_menu_sin_pestanas_inventadas(cliente, odoo):
     # «Pedidos» dejó de ser inventada el 6/10/2026: la pestaña existe de
     # verdad (punto 4 del BLOQUE 12, diseño con ACK del Arquitecto). Las
     # del lienzo que siguen sin construirse siguen prohibidas.
+    # Y «Control» pasó a llamarse «CRM» el 6/10/2026 (BLOQUE 35): la
+    # ruta /control se queda, el nombre visible no.
     pagina = cliente.get("/venta").text
     nav = pagina.split("<nav>")[1].split("</nav>")[0]
-    for pestana in ("Calendario", "Stock", "Vender", "Control", "Compras",
+    for pestana in ("Calendario", "Stock", "Vender", "CRM", "Compras",
                     "Pedidos", "Ajustes"):
         assert pestana in nav
-    for inventada in ("CRM", "Analytics"):
+    for inventada in ("Control</a>", "Analytics"):
         assert inventada not in nav
 
 

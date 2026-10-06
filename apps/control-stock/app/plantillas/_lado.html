@@ -1,0 +1,29 @@
+{# El costado compartido de las pantallas de tablero (BLOQUE 37, brecha
+   B1: UN solo menú por rol en TODAS las pantallas). El menú llega YA
+   DECIDIDO del middleware (datos_roles.acceso_de → request.state.menu_nav,
+   regla 10: cero lógica aquí); `activa` marca la píldora encendida.
+   La marca es el monograma VR del lienzo (B3) y el pie lleva nombre y
+   rol del usuario (B4: request.state.rol_rotulo, decidido en Python);
+   `lado_pie_extra` deja a cada pantalla sumar su renglón de contexto
+   (el modo de Linear, «solo lectura», etc.) sin perder el del rol.
+   Esconder una pestaña NO es el permiso: el permiso es _puerta_por_rol,
+   en el servidor. #}
+{% import '_iconos.html' as ic %}
+<aside class="lado">
+  <div class="marca">
+    <span class="logo-vr" aria-hidden="true">VR</span>
+    <span>Control Viverorose</span>
+  </div>
+  {# La píldora encendida sigue siendo un ENLACE: hay pantallas que son
+     parte de una pestaña sin ser su portada (Proveedores y «Lo que
+     llegó» viven bajo Compras), y ahí el enlace es la vuelta a casa. En
+     la portada misma el enlace no estorba: recarga y ya. #}
+  {% for p in request.state.menu_nav %}
+  <a class="pil{{ ' on' if activa == p.clave }}" href="{{ p.href }}">{{ ic.icono(p.clave) }}{{ p.titulo }}</a>
+  {% endfor %}
+  <div class="pie">
+    <b>{{ request.state.empleada.nombre or request.state.empleada.id }}</b>
+    <span>{{ request.state.rol_rotulo }}</span>
+    {% if lado_pie_extra %}<span>{{ lado_pie_extra }}</span>{% endif %}
+  </div>
+</aside>

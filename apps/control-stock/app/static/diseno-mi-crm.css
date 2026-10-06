@@ -88,3 +88,21 @@
   .mc-pc{display:none}
   .mc-main{padding:12px 16px calc(24px + env(safe-area-inset-bottom))}
 }
+
+/* ---------- la columna izquierda del lienzo: dos cajas ---------- */
+/* Peticiones y «Compras que pediste» comparten columna (lienzo
+   mary-atencion-al-cliente-mi-crm, bloque .left). Sin el envoltorio la
+   segunda caja caería a una fila nueva y partiría el grid. */
+.mc-izq{display:flex;flex-direction:column;gap:14px;min-width:0;align-self:start}
+/* La caja «callada» del lienzo (.pet.q): el mismo borde suave de las
+   cajas de la derecha, para que no compita con Peticiones. */
+.mc-pet.q{border-color:var(--d-borde)}
+/* «Ver todos» (BLOQUE 39.2): un enlace de contorno, no un botón negro —
+   es una vista secundaria, no la acción principal de la pantalla. */
+.mc-ver-todos{
+  display:inline-flex;align-items:center;height:32px;padding:0 13px;
+  border:1px solid var(--d-tinta);border-radius:16px;background:#fff;
+  color:var(--d-tinta);font-size:13px;font-weight:600;text-decoration:none;
+  white-space:nowrap;
+}
+.mc-ver-todos:hover{background:var(--d-gris-activo)}

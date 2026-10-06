@@ -86,11 +86,14 @@ def test_sin_sesion_redirige_al_login(db_limpia):
     assert r.status_code == 303 and r.headers["location"] == "/login"
 
 
-def test_no_admin_recibe_403(cliente, monkeypatch):
+def test_sin_rol_de_supervision_recibe_403(cliente, monkeypatch):
+    """V2 (BLOQUE 29): Conversaciones dejó de ser «solo admin» y pasó a
+    ser de los ROLES Director y Finanzas. Una empleada sin ninguno de los
+    dos —y sin admin— recibe 403 con el texto que lo dice."""
     monkeypatch.delenv("AJUSTES_ADMINS", raising=False)
     r = cliente.get("/conversaciones")
     assert r.status_code == 403
-    assert "Solo para administradores" in r.text
+    assert "Director y Finanzas" in r.text
 
 
 def test_cero_rutas_post_nuevas():
@@ -101,13 +104,22 @@ def test_cero_rutas_post_nuevas():
             assert "POST" not in (getattr(ruta, "methods", None) or set())
 
 
-def test_el_enlace_del_tablero_solo_lo_ve_el_admin(admin):
-    assert 'href="/conversaciones"' in admin.get("/control").text
+def test_conversaciones_es_una_entrada_del_menu(admin):
+    """BLOQUE 36.1: el enlace suelto de la barra de /control murió —
+    Conversaciones es una pestaña del menú por rol, y el menú lo decide
+    Python (request.state.menu_nav) para todas las pantallas."""
+    cuerpo = admin.get("/control").text
+    assert 'href="/conversaciones"' in cuerpo
+    # Y vive en el costado, no colgando de la barra del tablero.
+    assert cuerpo.index('href="/conversaciones"') < cuerpo.index("<h3>CRM</h3>")
 
 
-def test_el_enlace_del_tablero_no_sale_para_el_empleado(cliente, monkeypatch):
-    monkeypatch.delenv("AJUSTES_ADMINS", raising=False)
-    assert 'href="/conversaciones"' not in cliente.get("/control").text
+def test_la_capa_de_adentro_lleva_a_respuestas(admin, twenty_con_chats):
+    """«Respuestas» ya no es pestaña del menú: es la otra vista DE
+    Conversaciones, y se llega por la capa de arriba (dos enlaces)."""
+    cuerpo = admin.get("/conversaciones").text
+    assert 'href="/conversaciones/respuestas"' in cuerpo
+    assert ">Todos los chats<" in cuerpo
 
 
 # ---------------------------------------------------------------------------

@@ -294,25 +294,25 @@ def _texto_403_rol(slugs):
 
 
 def _puerta_por_rol(request, empleada, alcance):
-    """LA puerta global por rol (BLOQUE 20 punto 1): generaliza la del rol
-    Inventario (BLOQUE 13) sin cambiarle ni un pelo la semántica. Recibe
-    `alcance` ya calculado por datos_roles.acceso_de (la MISMA fuente del
-    menú, precisión 4). Con alcance None (director, sin rol, o un rol sin
+    """LA puerta global por rol (BLOQUE 20 punto 1), en su V2 (BLOQUE 29
+    aprobado: «el rol manda aunque seas admin»). Recibe `alcance` ya
+    calculado por datos_roles.acceso_de (la MISMA fuente del menú,
+    precisión 4). Con alcance None (director, sin rol, o un rol sin
     slug) no corta nada: el fail-open de transición es decisión explícita
     (precisión 8), fijada con test.
 
-    - La EXCEPCIÓN DEL ADMIN vive SOLO aquí: hoy un admin pasa siempre,
-      igual que pasaba con solo_inventario, y _solo_admin sigue aparte e
-      intacto. BLOQUE 29 aprobado: la v2 quita la excepción admin y parte
-      Ajustes en negocio/técnico — ver
-      docs/ANALISIS-rol-manda-sobre-admin.md del repo plantaspanama. Ese
-      cambio es un ciclo aparte; aquí queda el punto único a tocar.
+    - La EXCEPCIÓN DEL ADMIN ya NO es global: es POR RUTA
+      (datos_roles.RUTAS_SISTEMA — Ajustes y sistema): un admin con rol
+      restrictivo conserva el timón de Ajustes y nada más. Ver
+      docs/ANALISIS-rol-manda-sobre-admin.md del repo plantaspanama.
     - /logout pasa siempre (precisión 9); /login y los estáticos ya
       pasaron ANTES de la sesión, en la lista exenta del middleware.
     - Ruta dentro del alcance → pasa (adentro, cada pantalla conserva sus
-      candados propios: /stock/cambios con _solo_admin, etc.).
+      candados propios: /stock/cambios con admin-o-director, etc.).
     - Otro GET/HEAD → pasa si el rol es de ver-todo (finanzas: modo ver
-      de verdad, abre fichas), si no 303 a su casa.
+      de verdad, abre fichas), si no 303 a su casa CON el aviso honesto
+      («La pestaña X es de <rol>; tu rol no la usa», BLOQUE 39.3) — la
+      casa lo pinta, nunca un 403 pelado en un clic del menú.
     - Cualquier otra escritura (POST/PUT/PATCH/DELETE) → 403: un endpoint
       nuevo nace cerrado para estos roles sin acordarse de nada, y
       finanzas no tiene NINGUNA escritura (sin lista blanca de POST hasta
@@ -321,26 +321,35 @@ def _puerta_por_rol(request, empleada, alcance):
     Devuelve la respuesta que corta, o None si puede seguir."""
     if alcance is None:
         return None
-    if seguridad.es_admin(empleada):
-        return None
     ruta = request.url.path
     if ruta == "/logout" or _ruta_en_alcance(ruta, alcance["prefijos"]):
+        return None
+    if (seguridad.es_admin(empleada)
+            and _ruta_en_alcance(ruta, datos_roles.RUTAS_SISTEMA)):
         return None
     if request.method in ("GET", "HEAD"):
         if alcance["ver_todo"]:
             return None
-        return RedirectResponse(alcance["casa"], status_code=303)
+        aviso = quote(datos_roles.texto_pestana_ajena(
+            ruta, request.query_params.get("tab", "")))
+        # `rebote` y no `aviso`: la casa ya usa `aviso` para SUS mensajes
+        # de éxito, y un rebote no es un éxito — se pinta distinto.
+        return RedirectResponse(f"{alcance['casa']}?rebote={aviso}",
+                                status_code=303)
     return PlainTextResponse(_texto_403_rol(set(alcance["slugs"])),
                              status_code=403)
 
 
 def _entrar_con(request, empleada):
-    """Deja la sesión y el menú por rol en request.state y aplica la
-    puerta. El menú viaja ya decidido en Python (regla 10) y _nav.html
-    solo lo recorre. Devuelve la respuesta que corta, o None."""
+    """Deja la sesión, el menú por rol y el rótulo del pie en
+    request.state y aplica la puerta. Todo viaja ya decidido en Python
+    (regla 10): _nav.html y _lado.html solo lo recorren. Devuelve la
+    respuesta que corta, o None."""
     request.state.empleada = empleada
     acceso = datos_roles.acceso_de(empleada)
     request.state.menu_nav = acceso["menu"]
+    request.state.alcance_rol = acceso["alcance"]
+    request.state.rol_rotulo = datos_roles.rotulo_de(empleada)
     return _puerta_por_rol(request, empleada, acceso["alcance"])
 
 
@@ -665,10 +674,20 @@ def inicio(request: Request, refrescar: int = 0, crear: str = "",
     # La vista de detalle muestra la ficha a todos; editarla sigue limitado
     # a FICHAS_EDITORES (y el POST /fichas lo verifica en el servidor).
     puede_fichas = fichas.es_editora(request.state.empleada["id"])
-    # La pestaña Ajustes la ven todos (cada quien guarda su email en Mi
-    # cuenta); las invitaciones y accesos, solo los admins (AJUSTES_ADMINS
-    # o hechos admin desde la pantalla: seguridad.es_admin).
+    # La pestaña Ajustes en la V2 (BLOQUE 29): el admin ve TODOS los
+    # paneles; el Director sin admin, los de NEGOCIO (roles y catálogos);
+    # el fail-open de transición (sin rol que acote) la sigue viendo como
+    # hoy; el resto NO la ve — pedirla por URL rebota a su casa con el
+    # aviso honesto. Los paneles los decide Python, no la URL.
     es_admin = _es_admin(request.state.empleada)
+    es_director = _es_director(request.state.empleada)
+    puede_negocio = es_admin or es_director
+    ve_ajustes = puede_negocio or request.state.alcance_rol is None
+    if request.query_params.get("tab") == "ajustes" and not ve_ajustes:
+        aviso = quote(datos_roles.texto_pestana_ajena("/ajustes"))
+        return RedirectResponse(
+            f"{request.state.alcance_rol['casa']}?rebote={aviso}",
+            status_code=303)
     # Números de coworkers (chats internos que no se vuelven leads): la lista
     # vive en la base `tienda` del droplet; si no responde, Ajustes lo dice
     # sin tumbar el resto de la pestaña.
@@ -687,6 +706,8 @@ def inicio(request: Request, refrescar: int = 0, crear: str = "",
         "empleada": request.state.empleada,
         "puede_fichas": puede_fichas,
         "es_admin": es_admin,
+        "puede_negocio": puede_negocio,
+        "ve_ajustes": ve_ajustes,
         "empleadas": (_empleadas_para_ajustes(request.state.empleada)
                       if es_admin else []),
         "invitaciones": seguridad.invitaciones_pendientes() if es_admin else [],
@@ -700,14 +721,14 @@ def inicio(request: Request, refrescar: int = 0, crear: str = "",
         # roles (inactivos incluidos, apagados), los 3 deberes con su
         # ocupante o su aviso, los catálogos enteros y las empleadas
         # activas del login para el selector de "poner persona".
-        "roles_ajustes": datos_roles.listar_roles(solo_activos=False) if es_admin else [],
-        "deberes_ajustes": datos_roles.deberes_estado() if es_admin else [],
-        "marcas_ajustes": datos_roles.catalogo_completo("marcas") if es_admin else [],
-        "tipos_ajustes": datos_roles.catalogo_completo("tipos_venta") if es_admin else [],
-        "llegadas_ajustes": datos_roles.catalogo_completo("llegadas") if es_admin else [],
+        "roles_ajustes": datos_roles.listar_roles(solo_activos=False) if puede_negocio else [],
+        "deberes_ajustes": datos_roles.deberes_estado() if puede_negocio else [],
+        "marcas_ajustes": datos_roles.catalogo_completo("marcas") if puede_negocio else [],
+        "tipos_ajustes": datos_roles.catalogo_completo("tipos_venta") if puede_negocio else [],
+        "llegadas_ajustes": datos_roles.catalogo_completo("llegadas") if puede_negocio else [],
         "personas_roles": ([{"usuario": e["usuario"], "nombre": e["nombre"]}
                             for e in seguridad.listar() if e["activa"]]
-                           if es_admin else []),
+                           if puede_negocio else []),
         "aviso_ajustes": request.query_params.get("aviso"),
         # Precios de envío rebotados (regla 5, Nº7 del lote): el campo que
         # falló, el mensaje que va debajo de él y lo que se había tecleado
@@ -1014,10 +1035,72 @@ EMAIL_VALIDO = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def _solo_admin(request):
-    """403 si quien llama no es admin; None si puede seguir."""
+    """403 si quien llama no es admin; None si puede seguir. Es el
+    candado de lo TÉCNICO de Ajustes (quién entra / cómo corre el
+    sistema): invitar, cancelar invitación, revocar, admin, coworkers,
+    envío y dispositivos — la partición de la V2 (BLOQUE 28/29)."""
     if not _es_admin(request.state.empleada):
         return Response("Solo para administradores.", status_code=403)
     return None
+
+
+def _slugs_de(empleada):
+    """Los slugs de los roles activos de la sesión (solo los 5 del plan)."""
+    return {r["slug"] for r in datos_roles.roles_activos_de(empleada["id"])
+            if r["slug"]}
+
+
+def _es_director(empleada):
+    return datos_roles.SLUG_DIRECTOR in _slugs_de(empleada)
+
+
+def _admin_o_director(request):
+    """El candado de lo de NEGOCIO de Ajustes (V2, BLOQUE 28: el Director
+    sin ser admin reparte roles y edita los catálogos del negocio) y de
+    /stock/cambios (la auditoría que el Director necesita). 403 con texto
+    claro si no es ni admin ni Director; None si puede seguir."""
+    empleada = request.state.empleada
+    if _es_admin(empleada) or _es_director(empleada):
+        return None
+    return Response("Solo para administradores o el rol Director "
+                    "(Ajustes → Roles).", status_code=403)
+
+
+def _puede_supervisar(empleada):
+    """La supervisión de negocio (/conversaciones, /revisar y su nota):
+    en la V2 es de los ROLES Director y Finanzas, ya no del admin pelado.
+    EXCEPCIÓN DE TRANSICIÓN, parte del fail-open sin-rol (precisión 8):
+    un admin cuyo alcance es None (sin rol, o solo pods sin slug — hoy
+    korto-qa) la sigue viendo; cuando el fail-open muera, esta línea
+    muere con él. Un admin con rol restrictivo NO llega aquí de todos
+    modos: la puerta global ya lo rebotó."""
+    if _slugs_de(empleada) & {datos_roles.SLUG_DIRECTOR,
+                              datos_roles.SLUG_FINANZAS}:
+        return True
+    return (_es_admin(empleada)
+            and datos_roles.acceso_de(empleada)["alcance"] is None)
+
+
+def _crm_lectura(empleada):
+    """BLOQUE 39.2: el rol Atención abre el CRM completo (/control) en
+    SOLO LECTURA — ve el tablero entero («Ver todos» desde su Mi CRM),
+    pero lo ajeno no se toca: 403 duro en los POST (no el redirect con
+    error de siempre) y el chat de una ficha ajena no se muestra. No
+    aplica si además es Director u Operaciones, ni a un admin."""
+    slugs = _slugs_de(empleada)
+    return (datos_roles.SLUG_ATENCION in slugs
+            and not slugs & {datos_roles.SLUG_DIRECTOR,
+                             datos_roles.SLUG_OPERACIONES}
+            and not _es_admin(empleada))
+
+
+def _solo_supervision(request):
+    """403 si quien llama no supervisa (ver _puede_supervisar); None si
+    puede seguir."""
+    if _puede_supervisar(request.state.empleada):
+        return None
+    return Response("Esta pantalla es de los roles Director y Finanzas "
+                    "(Ajustes → Roles).", status_code=403)
 
 
 @app.post("/ajustes/mi-email")
@@ -1235,9 +1318,12 @@ async def ajustes_admin(request: Request):
 
 # ---------------------------------------------------------------------------
 # Ajustes: roles y catálogos de venta (Item 1 de Jay, 5/10/2026).
-# Todas estas rutas son solo-admin (mismo candado central que el resto de
-# Ajustes) y solo tocan las tablas locales de datos_roles: ni Linear, ni
-# Twenty, ni Odoo. Cada POST redirige a la pestaña con su aviso.
+# Son el lado de NEGOCIO de Ajustes (V2, BLOQUE 28/29): candado
+# _admin_o_director — el Director reparte roles y edita los catálogos
+# sin ser admin; lo TÉCNICO (invitar, revocar, admin, coworkers, envío,
+# dispositivos) sigue _solo_admin. Solo tocan las tablas locales de
+# datos_roles: ni Linear, ni Twenty, ni Odoo. Cada POST redirige a la
+# pestaña con su aviso.
 # ---------------------------------------------------------------------------
 
 def _vuelta_ajustes(aviso):
@@ -1267,7 +1353,7 @@ def _n_entero(valor):
 
 @app.post("/ajustes/roles/renombrar")
 async def ajustes_rol_renombrar(request: Request):
-    if (rechazo := _solo_admin(request)) is not None:
+    if (rechazo := _admin_o_director(request)) is not None:
         return rechazo
     form = await request.form()
     error = datos_roles.renombrar_rol(_n_entero(form.get("rol")),
@@ -1279,7 +1365,7 @@ async def ajustes_rol_renombrar(request: Request):
 async def ajustes_rol_duplicar(request: Request):
     """La copia para los pods: mismas personas, sin el deber. El nombre es
     opcional (sin él sale "Copia de <rol>")."""
-    if (rechazo := _solo_admin(request)) is not None:
+    if (rechazo := _admin_o_director(request)) is not None:
         return rechazo
     form = await request.form()
     yo = request.state.empleada
@@ -1291,7 +1377,7 @@ async def ajustes_rol_duplicar(request: Request):
 
 @app.post("/ajustes/roles/persona/poner")
 async def ajustes_rol_persona_poner(request: Request):
-    if (rechazo := _solo_admin(request)) is not None:
+    if (rechazo := _admin_o_director(request)) is not None:
         return rechazo
     form = await request.form()
     yo = request.state.empleada
@@ -1306,7 +1392,7 @@ async def ajustes_rol_persona_quitar(request: Request):
     """Quitar a alguien de un rol. Si el rol carga un deber y queda sin
     nadie, el quite se aplica y el aviso lo DICE (deber-sin-persona): un
     deber se reasigna, nunca se vacía en silencio."""
-    if (rechazo := _solo_admin(request)) is not None:
+    if (rechazo := _admin_o_director(request)) is not None:
         return rechazo
     form = await request.form()
     yo = request.state.empleada
@@ -1318,7 +1404,7 @@ async def ajustes_rol_persona_quitar(request: Request):
 
 @app.post("/ajustes/deberes")
 async def ajustes_deber_asignar(request: Request):
-    if (rechazo := _solo_admin(request)) is not None:
+    if (rechazo := _admin_o_director(request)) is not None:
         return rechazo
     form = await request.form()
     error = datos_roles.asignar_deber((form.get("deber") or "").strip(),
@@ -1328,7 +1414,7 @@ async def ajustes_deber_asignar(request: Request):
 
 @app.post("/ajustes/catalogo/agregar")
 async def ajustes_catalogo_agregar(request: Request):
-    if (rechazo := _solo_admin(request)) is not None:
+    if (rechazo := _admin_o_director(request)) is not None:
         return rechazo
     form = await request.form()
     error = datos_roles.catalogo_agregar(
@@ -1340,7 +1426,7 @@ async def ajustes_catalogo_agregar(request: Request):
 
 @app.post("/ajustes/catalogo/renombrar")
 async def ajustes_catalogo_renombrar(request: Request):
-    if (rechazo := _solo_admin(request)) is not None:
+    if (rechazo := _admin_o_director(request)) is not None:
         return rechazo
     form = await request.form()
     error = datos_roles.catalogo_renombrar(
@@ -1353,7 +1439,7 @@ async def ajustes_catalogo_renombrar(request: Request):
 async def ajustes_catalogo_activar(request: Request):
     """Desactivar o reactivar una fila de catálogo. Nada se borra: la
     inactiva se queda con su historia y sale de los selectores futuros."""
-    if (rechazo := _solo_admin(request)) is not None:
+    if (rechazo := _admin_o_director(request)) is not None:
         return rechazo
     form = await request.form()
     prender = form.get("activo") == "1"
@@ -1365,7 +1451,7 @@ async def ajustes_catalogo_activar(request: Request):
 
 @app.post("/ajustes/tipos/termino")
 async def ajustes_tipo_termino(request: Request):
-    if (rechazo := _solo_admin(request)) is not None:
+    if (rechazo := _admin_o_director(request)) is not None:
         return rechazo
     form = await request.form()
     error = datos_roles.fijar_termino(
@@ -3816,6 +3902,9 @@ def _pantalla_stock_plano(request, q="", aviso="", aviso_sku="", error="",
         "campo_error": campo_error,
         "error_campo_texto": error_campo_texto,
         "valores": valores or {},
+        # El rebote honesto (BLOQUE 39.3): /stock es la casa del rol
+        # Inventario, así que los avisos de la puerta aterrizan acá.
+        "rebote": request.query_params.get("rebote"),
     })
     respuesta.status_code = estado
     return respuesta
@@ -3910,7 +3999,7 @@ def stock_cambios(request: Request, sku: str = ""):
     había y cuánto quedó. La puerta vive en el enlace «Bitácora» de la
     pestaña Stock; la fecha se pinta en hora de Panamá (en_epoch es
     epoch UTC: quien muestra decide la zona)."""
-    if (rechazo := _solo_admin(request)) is not None:
+    if (rechazo := _admin_o_director(request)) is not None:
         return rechazo
     sku = sku.strip()[:80]
     cambios = [
@@ -4385,6 +4474,16 @@ def control_pantalla(request: Request):
 
     abierta = control.ficha(request.query_params.get("abrir", ""),
                            request.query_params.get("buscar", ""))
+    # BLOQUE 39.2: en el modo lectura de Atención la ficha ajena se abre
+    # (ver todos es ver), pero su CHAT no se muestra — es conversación de
+    # otro responsable. Decidido aquí, en Python; la plantilla solo pinta
+    # hilo_error como siempre.
+    lectura_crm = _crm_lectura(empleada)
+    if abierta and lectura_crm and not control.puede_tocar(abierta, alc):
+        abierta["hilo"] = []
+        abierta["hilo_error"] = ("El chat de este lead es de otro "
+                                 "responsable: en tu vista de solo "
+                                 "lectura no se muestra.")
     # El modal de la corrección manual: a un estado nuevo no se llega sin
     # motivo, así que el drag (y el botón) pasan por aquí.
     moviendo = None
@@ -4413,10 +4512,26 @@ def control_pantalla(request: Request):
             if abierta else False),
         "aviso": request.query_params.get("aviso"),
         "error": request.query_params.get("error"),
+        # El rebote honesto (BLOQUE 39.3): cuando esta pantalla es la casa
+        # del rol, el aviso de la puerta llega acá y se pinta.
+        "rebote": request.query_params.get("rebote"),
+        # BLOQUE 35 + 39.2: el título es «CRM» para todos; la marca de al
+        # lado la decide Python según quién mira. Para Atención la vista
+        # es el «Ver todos» de solo lectura y se dice.
+        "crm_marca": ("Todos · solo lectura de lo ajeno" if lectura_crm
+                      else "Todos" if alc["admin"] or _es_director(empleada)
+                      else "Todos · movés solo lo tuyo"),
+        # El enlace de vuelta a SU Mi CRM: solo para quien entró acá por
+        # el «Ver todos» de Atención.
+        "volver_mi_crm": lectura_crm,
     })
 
 
 def _control_vuelve(vista, aviso="", error="", abrir=""):
+    if isinstance(error, Response):
+        # El 403 duro del modo lectura (BLOQUE 39.2) ya viene armado:
+        # no se disfraza de redirect.
+        return error
     partes = [f"vista={quote(vista)}"]
     if abrir:
         partes.append("abrir=" + quote(abrir))
@@ -4450,7 +4565,15 @@ def _control_permiso(request, ref):
     if lead is None:
         return alc, vista, linear_leads.mensaje_lead_ausente(ref)
     if not control.puede_tocar(lead, alc):
-        return alc, vista, f"Ese lead es de {lead.get('resp') or 'nadie'}: no lo movés vos."
+        quien = lead.get('resp') or 'nadie'
+        if _crm_lectura(request.state.empleada):
+            # BLOQUE 39.2: el CRM completo de Atención es solo lectura
+            # sobre lo ajeno — escritura fuera de alcance = 403 claro.
+            return alc, vista, PlainTextResponse(
+                f"Ese lead es de {quien}: tu vista del CRM completo es de "
+                "solo lectura y lo ajeno no se mueve desde tu rol.",
+                status_code=403)
+        return alc, vista, f"Ese lead es de {quien}: no lo movés vos."
     return alc, vista, ""
 
 
@@ -6469,7 +6592,7 @@ def ventas_a_revisar(request: Request):
     una (`?abrir=<orden>`) en el panel lateral — el mismo mecanismo de
     Proveedores, sin JS. Nada se inventa: si el informe trae huecos, la
     pantalla los dice en un renglón visible, nunca un 0 fingido."""
-    if (rechazo := _solo_admin(request)) is not None:
+    if (rechazo := _solo_supervision(request)) is not None:
         return rechazo
     apoyo = _revisar_apoyo()
     informe = apoyo.informe()
@@ -6506,7 +6629,7 @@ async def ventas_a_revisar_nota(request: Request):
     #orden-<id>): en esta casa nunca se pierde el lugar en una lista.
     La nota es texto y nada más — jamás escribe algo que signifique
     «pagado»."""
-    if (rechazo := _solo_admin(request)) is not None:
+    if (rechazo := _solo_supervision(request)) is not None:
         return rechazo
     apoyo = _revisar_apoyo()
     form = await request.form()
@@ -6541,7 +6664,7 @@ def conversaciones_whatsapp(request: Request):
     """La lista agrupada por chat y el hilo de una (`?abrir=<chatId>`) en
     el panel lateral — el mismo mecanismo de /revisar, sin JS. Twenty
     caído o sin key: la pantalla carga igual y lo dice."""
-    if (rechazo := _solo_admin(request)) is not None:
+    if (rechazo := _solo_supervision(request)) is not None:
         return rechazo
     try:
         n = int(request.query_params.get("n") or conversaciones.LIMITE_BASE)
@@ -6597,6 +6720,15 @@ def mi_crm_pantalla(request: Request, pestana: str = "", etapa: str = ""):
         "empleada": empleada,
         "v": mi_crm.vista(empleada, _es_admin(empleada),
                           pestana=pestana, etapa=etapa),
+        # El rebote honesto de la puerta (BLOQUE 39.3) llega aquí cuando
+        # esta es la casa del rol; la pantalla lo pinta y listo.
+        "rebote": request.query_params.get("rebote"),
+        # El «Ver todos» (BLOQUE 39.2): el tablero completo desde el CRM
+        # chico. Lo lleva quien tiene a /mi-crm como su entrada «CRM»
+        # (Operaciones y Atención); para Atención además es de SOLO
+        # LECTURA y el enlace lo dice.
+        "ver_todos": datos_roles.crm_chico(_slugs_de(empleada)),
+        "ver_todos_lectura": _crm_lectura(empleada),
     })
 
 
@@ -6624,6 +6756,7 @@ def finanzas_pantalla(request: Request):
     return plantillas.TemplateResponse(request, "finanzas.html", {
         "empleada": empleada,
         "f": finanzas.resumen(),
+        "rebote": request.query_params.get("rebote"),
     })
 
 
@@ -6633,16 +6766,12 @@ from . import respuestas  # noqa: E402
 
 @app.get("/conversaciones/respuestas")
 def conversaciones_respuestas(request: Request):
-    """La vista «Respuestas» de Conversaciones (BLOQUE 21), SOLO
-    LECTURA. La ven los roles Finanzas y Director (BLOQUE 29) y los
-    admins (el candado histórico de /conversaciones, que en la v2 de
-    rol-sobre-admin pasará a ser solo de esos dos roles)."""
-    empleada = request.state.empleada
-    slugs = {r["slug"]
-             for r in datos_roles.roles_activos_de(empleada["id"])}
-    if not (slugs & {datos_roles.SLUG_FINANZAS, datos_roles.SLUG_DIRECTOR}):
-        if (rechazo := _solo_admin(request)) is not None:
-            return rechazo
+    """La sub-pestaña «Respuestas» DENTRO de Conversaciones (BLOQUES 21
+    y 36.1), SOLO LECTURA. Mismo candado V2 que /conversaciones: los
+    roles Director y Finanzas (y el admin-sin-rol, mientras viva el
+    fail-open de transición)."""
+    if (rechazo := _solo_supervision(request)) is not None:
+        return rechazo
     return plantillas.TemplateResponse(request, "respuestas.html", {
         "empleada": request.state.empleada,
         "r": respuestas.vista(),
