@@ -2235,8 +2235,9 @@ def _sellar_estado_y_termino(origen, n, tipo_venta, form, empleada):
         venta_estado.guardar_termino(origen, n, tipo_venta,
                                      form.get("termino") or "", por)
     except Exception as error:
-        print(f"venta_estado: el estado/término de {origen} {n} no quedó "
-              f"anotado: {error!r}", flush=True)
+        logging.getLogger("control_stock").warning(
+            f"venta_estado: el estado/término de {origen} {n} no quedó "
+            f"anotado: {error!r}")
 
 
 def _contexto_servicio(request, tipo, q="", error=None, servicios=None):

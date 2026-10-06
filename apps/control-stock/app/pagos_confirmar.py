@@ -24,6 +24,8 @@ Qué es esta pantalla — y qué no:
   cierra). JAMÁS escribe en Odoo, Linear ni Twenty.
 """
 
+import logging
+
 from .datos import _db, ahora_iso
 from . import venta_estado
 
@@ -261,6 +263,7 @@ def confirmar(orden_id, orden, cliente, monto, evidencia, nota,
                 origen, n, por, monto=monto, completo=bool(completo),
                 detalle=f"confirmado en la cola ({evidencia})")
         except Exception as error:
-            print(f"pagos_confirmar: el hecho del pago de {origen} {n} no "
-                  f"quedó anotado: {error!r}", flush=True)
+            logging.getLogger("control_stock").warning(
+                f"pagos_confirmar: el hecho del pago de {origen} {n} no "
+                f"quedó anotado: {error!r}")
     return None
