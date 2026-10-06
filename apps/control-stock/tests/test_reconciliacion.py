@@ -37,9 +37,12 @@ def _hace(dias, horas=0):
 
 
 def _fecha_hace(dias):
-    """Una fecha (date) de Odoo a N días de ahora, para validity_date."""
-    return (datetime.now(timezone.utc) - timedelta(days=dias)).strftime(
-        "%Y-%m-%d")
+    """Una fecha (date) de Odoo a N días de HOY PANAMÁ — la misma zona que
+    usa reconciliacion._hoy(). Con UTC, entre las 19:00 y medianoche de
+    Panamá 'hace 1 día' caía en el hoy panameño y el test mentía (trampa
+    de zonas, 5/10/2026)."""
+    return (datetime.now(reconciliacion.ZONA_PANAMA)
+            - timedelta(days=dias)).strftime("%Y-%m-%d")
 
 
 # ---------------------------------------------------------------------------

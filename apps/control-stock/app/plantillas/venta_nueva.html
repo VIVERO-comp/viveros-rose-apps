@@ -196,6 +196,9 @@
        arriba, sin recargar. #}
     {% with form_cargos="form-acciones", cargos=borrador %}{% include "_cargos.html" %}{% endwith %}
     {% with form_casillas="form-acciones" %}{% include "_casillas.html" %}{% endwith %}
+    {# Términos de pago (item 5 de Jay, 5/10/2026): el default del tipo se
+       guarda con la venta; cambiarlo queda registrado como override. #}
+    {% with form_terminos="form-acciones" %}{% include "_terminos.html" %}{% endwith %}
 
     {# Ver el PDF ANTES de generar (dueño, 23/09/2026). Mismo formulario: el
        botón solo cambia a dónde se manda, así viajan los mismos datos que

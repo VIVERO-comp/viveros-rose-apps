@@ -57,6 +57,10 @@
 
   {% with form_cargos="form-servicio", cargos=borrador %}{% include "_cargos.html" %}{% endwith %}
 
+  {# Términos de pago (item 5 de Jay, 5/10/2026): el default del tipo de
+     venta se guarda con la cotización; cambiarlo queda registrado. #}
+  {% with form_terminos="form-servicio" %}{% include "_terminos.html" %}{% endwith %}
+
   {% for seccion in meta.secciones %}
     {# Renglones de servicio repetibles: el párrafo crece al escribir y
        "+ Añadir otro servicio" clona el renglón (venta.js). Cada uno sale

@@ -40,6 +40,12 @@
   <div class="vd-alerta">{{ error_venta }}</div>
   {% endif %}
 
+  {# La cola «Pagos por confirmar» (item 6): solo la ven los tres
+     deberes (lo decide Python: pagos_confirmar.puede_ver). #}
+  {% if cola_pagos_visible %}
+  <p style="margin:0 0 8px"><a href="/pagos-por-confirmar">Pagos por confirmar →</a></p>
+  {% endif %}
+
   {# El aviso honesto cuando Odoo no contestó al armar la lista: sin él,
      las cotizaciones salían sin Editar ni Quitar y parecían «raras»
      (2/10/2026). Lo decide Python (main._cotizaciones_con_estado). #}
@@ -114,6 +120,9 @@
               {% if item.facturada %}<span class="vd-chip vd-ok">Facturado</span>
               {% else %}<span class="vd-chip">Cotización</span>{% endif %}
             {% endif %}
+            {# El chip de los 3 estados (items 5-7): 1 Acordada · 2 Plata
+               confirmada · 3 Cerrada. Python lo arma en _lista_vender. #}
+            {% if item.estado3 %}<a class="vd-chip" href="{{ item.estado3.href }}" style="text-decoration:none">{{ item.estado3.texto }}</a>{% endif %}
           </span>
           <span class="vd-acts">
             {% if item.tipo == "venta" %}
@@ -122,14 +131,14 @@
                 {% with form_action="/venta/cancelar/" + item.n|string,
                         form_confirm="Cancela la cotización " + (item.orden or "sin número") + " también en Odoo y no tiene marcha atrás desde la app: para revivirla habría que crear la venta de nuevo. ¿Cancelar?",
                         form_boton="Cancelar" %}{% include "_vender_cancelar.html" %}{% endwith %}
-                <a class="vd-ob" href="/venta/cobrar/{{ item.n }}">Facturar / Pagado</a>
+                <a class="vd-ob" href="/venta/pago/{{ item.n }}">Facturar / Pagado</a>
               {% elif item.estado == "vendida" %}
                 <a class="vd-lnk" href="/venta/{{ item.n }}/cotizacion.pdf" target="_blank" rel="noopener" download="{{ item.nombre_cotizacion_pdf }}" data-pdf>Descargar / Compartir (PDF)</a>
               {% elif item.estado == "pagado" %}
                 <a class="vd-lnk" href="/venta/{{ item.n }}/factura.pdf" target="_blank" rel="noopener" download="{{ item.nombre_factura_pdf }}" data-pdf>Descargar / Compartir factura</a>
                 {% if item.whatsapp %}<a class="vd-lnk" href="{{ item.whatsapp }}" target="_blank" rel="noopener">Mandar factura</a>{% endif %}
               {% else %}
-                <a class="vd-ob vd-ob-debe" href="/venta/cobrar/{{ item.n }}">Reintentar</a>
+                <a class="vd-ob vd-ob-debe" href="/venta/pago/{{ item.n }}">Reintentar</a>
               {% endif %}
             {% else %}
               <a class="vd-lnk" href="/venta/servicio/{{ item.n }}/propuesta.pdf" target="_blank" rel="noopener" download="{{ item.nombre_pdf }}" data-pdf>Descargar / Compartir (PDF)</a>
