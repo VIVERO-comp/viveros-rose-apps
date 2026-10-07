@@ -105,9 +105,13 @@ def test_la_vista_plana_del_rol_inventario_queda_intacta(db_limpia, monkeypatch)
 
 
 def test_app_js_no_gano_logica_nueva():
-    """La piel restila las clases que pintar() ya emite; el JS heredado no
-    se tocó (regla 5 de la tanda): las clases de la tarjeta siguen siendo
-    las mismas y no aparece ninguna clase de la piel nueva."""
+    """La piel restila las clases que pintar() ya emite: las clases de la
+    tarjeta siguen siendo las mismas y el JS no sabe que existe la hoja
+    nueva (si un día la nombrara, el aspecto dejaría de vivir en el CSS).
+
+    Lo de dentro del pie SÍ cambió después, con A3/A4 del BLOQUE 53 (el
+    − cantidad + que se guarda solo); eso lo amarra test_stock_pie.py.
+    Lo que esta prueba cuida es el contrato entre el JS y la piel."""
     js = open("app/static/app.js").read()
     for clase in ('class="planta', 'class="foto"', 'class="card-pie solo-pc"'):
         assert clase in js, clase

@@ -1097,8 +1097,8 @@ button.enlace-sub{
 
 @media (min-width: 900px){
   /* Tarjeta de producto estilo panel claro: extracto de la descripción y
-     pie con − / + para el físico. Nada se escribe en Odoo hasta apretar
-     "Guardar en Odoo" (el pie aparece al cambiar la cantidad). */
+     pie con − cantidad + para el físico, que se guarda solo un momento
+     después del último toque (A3/A4 del BLOQUE 53). */
   /* -webkit-box y no block: el recorte a 2 líneas lo necesita. */
   .planta .info .extracto.solo-pc{display:-webkit-box}
   .card-pie.solo-pc{display:flex}
@@ -1122,9 +1122,44 @@ button.enlace-sub{
   }
   .pie-etiqueta{font-size:11px;color:var(--texto-suave)}
   .pie-btn{width:30px;height:30px;border-radius:9px;font-size:15px;background:#f1ece1}
-  .pie-valor{font-size:14px;min-width:24px;text-align:center}
-  .pie-acciones{display:flex;gap:7px;margin-left:auto}
-  .pie-acciones[hidden]{display:none}
+  /* A3 (BLOQUE 53): el número SE TECLEA. Ancho y alto FIJOS: ni pasar de
+     9 a 100 ni guardar mueve un pixel de la fila. */
+  .pie-valor{
+    flex:0 0 auto;width:54px;height:30px;box-sizing:border-box;padding:0 4px;
+    border:1px solid #e4e4e7;border-radius:9px;background:#ffffff;
+    color:var(--texto);font-family:inherit;font-size:14px;font-weight:700;
+    text-align:center;font-variant-numeric:tabular-nums;
+  }
+  .pie-valor:focus{outline:2px solid var(--dorado-suave);outline-offset:1px}
+  /* Lo que el servidor rechazó queda marcado en el campo (como en la
+     vista plana): el avisito se va a los segundos, el borde rojo se
+     queda hasta que se corrija. */
+  .pie-valor.con-error{border-color:var(--critico)}
+  /* A4: ni "Guardar en Odoo" ni "Cancelar" — el aviso de "Guardado" (con
+     su Deshacer) y el error del servidor salen DEBAJO del campo y FUERA
+     del flujo, así la fila mide lo mismo en todos sus estados. */
+  .card-pie{position:relative}
+  .pie-estado{
+    position:absolute;top:100%;right:0;z-index:4;margin-top:5px;
+    max-width:320px;padding:6px 10px;border-radius:10px;
+    background:#ffffff;border:1px solid #e4e4e7;
+    box-shadow:0 8px 22px rgba(0,0,0,.12);
+    font-size:11.5px;line-height:1.4;color:var(--texto-suave);
+    white-space:normal;
+  }
+  .pie-estado.ok{color:#17603a;border-color:#cfe8d9}
+  /* El error se queda hasta que la persona corrija, así que NO puede
+     robarle el clic a la fila de abajo: lo atraviesan. (El "Guardado" sí
+     recibe clics: lleva el Deshacer, y se va solo a los pocos segundos.) */
+  .pie-estado.mal{
+    color:var(--critico);border-color:#f3b9b9;background:#fdecec;
+    pointer-events:none;
+  }
+  .pie-deshacer{
+    border:none;background:none;padding:0;cursor:pointer;
+    font-family:inherit;font-size:11.5px;font-weight:700;
+    color:var(--dorado);text-decoration:underline;
+  }
 
   /* Detalle a dos columnas dentro del lienzo blanco. Con el lienzo a
      pantalla completa, el formulario se acota para que los campos no
@@ -1826,6 +1861,14 @@ nav .marca{display:none}
    La pantalla única del rol: lista plana con buscador, conteo por fila y
    la bitácora de admins (/stock/cambios). Propuesta: la captura la toma
    la coordinadora. Solo presentación; toda decisión viene de Python. */
+/* Los tres tokens que este bloque usa y NADIE definía (BLOQUE 53): viven
+   en calendario.css, que estas dos pantallas no cargan. Un var() sin
+   valor no da ningún error — invalida la propiedad entera y calla: el
+   campo de la cantidad se quedaba SIN BORDE (parecía texto, no un campo
+   donde se puede escribir) y el botón «Guardar» salía con fondo
+   transparente y letra blanca, o sea invisible sobre el blanco. Van
+   acotados a esta pantalla para no moverle un pixel a nadie más. */
+main.plano{--tinta:#18181b; --borde:#e4e4e7; --suave:#52525b}
 .plano{max-width:720px;margin:0 auto;padding:14px 14px 40px;display:flex;flex-direction:column;gap:12px}
 .plano-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .plano-marca{display:flex;align-items:center;gap:10px}
