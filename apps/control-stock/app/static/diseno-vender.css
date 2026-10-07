@@ -49,8 +49,33 @@
   border-radius:var(--d-radio-col);padding:8px;
   display:flex;flex-direction:column;gap:8px;
 }
-.vd-col>.vd-pista{margin:0;padding:0 2px}
-.vd-ch{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:14px;font-weight:700;padding:2px 2px 0}
+/* ── LA CABECERA DE COLUMNA, DE ALTURA FIJA (BLOQUE 59, 7/10/2026) ──────
+   Medido antes de tocar nada, con el elemento renderizado: la primera
+   tarjeta de cada columna arrancaba en y=204, 205 y 187 — la de «Pagado»
+   18px más arriba que las otras dos, que es lo que se ve como «las
+   tarjetas no miden igual». (No medían distinto: las nueve miden 78px
+   exactas en las tres columnas, a 1024, 1280, 1440, 1600 y 1920. Lo que
+   estaba desparejo era dónde EMPIEZAN.)
+
+   Dos causas, las dos medidas, y ninguna es la tarjeta:
+     · «Confirmado · falta cobrar» no cabe en un renglón con su contador,
+       así que esa cabecera medía 42px contra 24 de las otras dos;
+     · el pie de «Cotizado» ocupa 2 renglones (34px) contra 17 de las
+       otras.
+   Juntas dan los 18px.
+
+   La cura es la que pidió el dueño: altura fija aunque el texto sea
+   largo. 42 y 34 no son números elegidos, son LO MEDIDO del caso más
+   largo que ya existe — el título de dos renglones y el pie de dos
+   renglones. Un texto más largo que eso crecería y volvería a
+   desalinear; hoy no lo hay, y si algún día lo hubiera la prueba de
+   abajo no lo caza, así que queda dicho acá.
+
+   El `display:block` NO es decorativo: `.vd-pista` es un <span>, y a una
+   caja en línea el `min-height` no le hace nada. Va ANTES del bloque del
+   teléfono, que le pone `display:none` y sigue ganando por orden. */
+.vd-col>.vd-pista{margin:0;padding:0 2px;display:block;min-height:34px}
+.vd-ch{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:14px;font-weight:700;padding:2px 2px 0;min-height:42px}
 .vd-ch-t{min-width:0}
 .vd-cnt{
   display:inline-grid;place-items:center;min-width:22px;height:22px;
@@ -218,7 +243,19 @@
    abierto se disparaba con 960 de lienzo y con el menú escondido con
    1200: el mismo tablero, dos anchos distintos.) */
 @container lienzo (min-width: 860px){
-  .vd-col{flex:0 0 276px}
+  /* …y DESDE EL BLOQUE 59 también lo llenan. Medido: a 1280 de ventana
+     las tres columnas usaban 852 de los 984 del lienzo —el 87%— y
+     quedaba una franja gris muerta a la derecha de «Pagado». Con
+     `flex:1 0 276px` crecen hasta llenar el carril: el `0` de encoger es
+     lo que impide que bajen de 276 y la tarjeta se parta en una palabra
+     por línea (la regla de A1), y el `1` de crecer es lo que se lleva la
+     franja. Despué: 320px de columna y el 95% del lienzo usado.
+
+     El tope de 340px es el ancho del panel de la ficha del contacto
+     (`.ct-cols` en diseno-contactos.css), no un número nuevo: pasado
+     eso, una tarjeta con un nombre a la izquierda y un monto a la
+     derecha deja de ser tarjeta y se vuelve una banda. */
+  .vd-col{flex:1 0 276px;max-width:340px}
 }
 @container lienzo (min-width: 1120px){
   /* Con 1120px de LIENZO el resumen vuelve al costado: 852 del tablero +
@@ -234,6 +271,26 @@
   .vd-tablero{flex:0 1 auto}
   .vd-res{flex:1 1 236px;min-width:236px;flex-direction:column;flex-wrap:nowrap}
   .vd-res>*{flex:0 0 auto}
+  /* Y acá las columnas vuelven a su ancho fijo del lienzo. No es un
+     capricho: con el resumen AL COSTADO el tablero se dimensiona por su
+     contenido (`flex:0 1 auto`, arriba), así que si las columnas
+     pudieran crecer hasta 340 su contenido pediría 1044 y el resumen ya
+     no cabría en la fila — se iría abajo a 1440, que es DONDE HOY SÍ
+     CABE. O sea: dejarlas crecer acá rompería lo que A11 arregló.
+
+     ESTE BLOQUE ENTERO ES DEL PANEL y se va con él (punto 8 del BLOQUE
+     56). El día que el resumen se quite, borrarlo deja al tablero solo
+     en el lienzo y las columnas crecen hasta 340 en todos los anchos,
+     que es lo que se quiere. No hace falta tocar nada más.
+
+     LO QUE ESTE BLOQUE NO ARREGLA, dicho en voz alta: de 1440 para
+     arriba el tablero se queda en 852 y el resumen se estira —280 a
+     1440, 440 a 1600, 760 a 1920—. O sea que la mitad vacía que se ve a
+     1920 **es del RESUMEN, no del tablero**. Para dárselo al tablero
+     habría que cambiarle el `flex` a `.vd-tablero` de acá arriba, y eso
+     ya es tocar el tablero: queda sin hacer a propósito y reportado,
+     porque se resuelve solo cuando el panel se vaya. */
+  .vd-col{flex:0 0 276px;max-width:none}
 }
 
 /* ---------- teléfono ---------- */
@@ -275,7 +332,11 @@
   .vd-ch-pc,.vd-ch .vd-cnt{display:none}
   .vd-ch-mv{display:inline}
   .vd-col>.vd-pista{display:none}
-  .vd-ch{border:0;padding:0}
+  /* El `min-height:42px` de la cabecera es de COMPUTADORA: ahí empareja
+     tres columnas que se miran entre sí. En el teléfono las columnas son
+     secciones apiladas —no hay con quién alinearse— y 42px serían 24 de
+     aire por sección. (BLOQUE 59.) */
+  .vd-ch{border:0;padding:0;min-height:0}
   .vd-ch-t{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--d-suave)}
   .vd-tot{font-size:14px}
   /* El «Cobrar» por tarjeta del lienzo, APAGADO: pide el flujo de
