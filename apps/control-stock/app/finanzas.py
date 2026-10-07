@@ -156,14 +156,43 @@ TEXTO_DIF_SIN_FOTO = ("No se pudo revisar si todo calza: arriba dice qué "
 
 
 def ventas_del_universo(informe):
-    """EL universo de los cinco términos, en UN SOLO lugar: las ventas
-    CONFIRMADAS del informe, sin canceladas.
+    """EL universo de los cinco términos, en UN SOLO lugar.
+
+    **EL CRITERIO, escrito completo** (son TRES condiciones, y dos de
+    ellas se aplican antes de llegar acá):
+
+    1. **No es utilería de la app** — `client_order_ref` que empiece con
+       «VISTA PREVIA» o sea «MUESTRA-PDF». Lo filtra `_leer_universo()`
+       con `_es_ref_interna`, así que estas órdenes nunca llegan a esta
+       función. **Es la condición que costó el caso de los $990**
+       (7/10/2026): producción tiene DOS órdenes de vista previa
+       —S00137 $190 y S00093 $800— y una medición hecha con el motor
+       desplegado (que es anterior a ese filtro) las contaba. De ahí el
+       desvío de $990,00 clavados en «Vendido» y en «Por cobrar» a la
+       vez. Las dos son `draft`, así que el universo de abajo no cambia;
+       pero la orden de vista previa es FIJA y se reusa, y confirmada
+       entraría a «Vendido» — hay prueba que lo fija.
+    2. **No está cancelada** — `clase != CANCELADA`.
+    3. **Está confirmada** — `state` en `sale`/`done`, que viaja como
+       `confirmada` en el contrato del informe.
 
     Está suelta a propósito. **A18 (abrir «Por cobrar» por antigüedad)
     tiene que leer exactamente esta lista**, no una copia: si cada
     pantalla filtra por su cuenta, el día que cambie la frontera una de
     las dos se queda vieja sin que nada avise — que es justo el bug que
-    este bloque vino a cerrar. Devuelve (confirmadas, sin_confirmar)."""
+    este bloque vino a cerrar.
+
+    Ojo con A18, que mide por el OTRO lado: sus facturas abiertas de
+    producción son $5.176,35, de los cuales **$3.109,85 en 29 facturas
+    del diario «Ventas Super Extra» no tienen orden ninguna**, así que no
+    pueden entrar acá (y el motor además excluye ese diario del dinero).
+    Dentro del alcance quedan $2.066,50 en 3 facturas, mientras este
+    «Por cobrar» da $2.069,00: los **$2,50** de diferencia son S00084, la
+    venta en línea `VR-549312`, **confirmada y todavía sin factura** — se
+    ve por el lado de la orden y no por el de la factura. Los dos números
+    están bien; miden cosas distintas.
+
+    Devuelve (confirmadas, sin_confirmar)."""
     vivas = [v for v in (informe.get("ventas") or [])
              if (v.get("clase") or "").strip().upper() != "CANCELADA"]
     return ([v for v in vivas if v.get("confirmada")],

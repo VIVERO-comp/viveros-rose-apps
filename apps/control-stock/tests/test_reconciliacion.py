@@ -807,6 +807,31 @@ def test_las_ordenes_internas_quedan_fuera_del_informe_y_de_creado_hoy(odoo):
     assert datos_informe["creado_hoy"]["total_ordenes"] == 0.0
 
 
+def test_una_orden_de_utileria_CONFIRMADA_tampoco_entra(odoo):
+    """El caso de los $990 (7/10/2026). En producción hay DOS órdenes de
+    utilería de la vista previa de Vender —S00137 $190 y S00093 $800, las
+    dos `draft`— y por eso el desvío entre dos mediciones era de $990
+    clavados en «Vendido» y en «Por cobrar» a la vez.
+
+    Hoy las dos son borradores, así que el universo de ventas confirmadas
+    no las ve de ninguna manera. Pero la orden de la vista previa es FIJA
+    y se reusa: si alguna vez quedara confirmada, entraría derecho a
+    «Vendido» y falsearía el cuadre. El filtro de `client_order_ref` es
+    el que lo impide, y no depende del estado. Esto lo fija."""
+    comodin = odoo.agregar_partner("Comodín", "6000-0001")
+    odoo.agregar_orden(comodin, "S00310", state="sale", amount_total=190.0,
+                       client_order_ref="VISTA PREVIA abraham")
+    odoo.agregar_orden(comodin, "S00311", state="done", amount_total=800.0,
+                       client_order_ref="MUESTRA-PDF")
+    real = odoo.agregar_partner("Clienta Real", "6111-4444")
+    odoo.agregar_orden(real, "S00312", state="sale", amount_total=50.0)
+    filas = reconciliacion.informe_datos()["ventas"]
+    assert [v["nombre"] for v in filas] == ["S00312"]
+    # La que queda sí es confirmada: el filtro saca la utilería, no las
+    # ventas de verdad.
+    assert filas[0]["confirmada"] is True
+
+
 def test_limite_de_creado_hoy_es_la_medianoche_de_panama(odoo):
     # Una creación 1/10 03:00 UTC es 30/09 22:00 en Panamá: NO es de hoy.
     # La de las 05:00 UTC es exactamente la medianoche de Panamá: SÍ.
