@@ -13,17 +13,16 @@
    - el color del interés NO vive aquí: llega de paleta.json vía Python
      en la variable --dc-interes de cada tarjeta y de la ficha.
 
-   La tablet (768–860.98px) no se toca: todo va en los dos cortes de
-   calendario.css — computadora (≥861px) y teléfono (≤767.98px). */
+   La tablet (768–899.98px) no se toca: todo va en los dos cortes de
+   calendario.css — computadora (≥900px) y teléfono (≤767.98px). */
 
 /* ==================== computadora (pantallas 05 y 06) ================= */
 
-@media (min-width:861px){
+@media (min-width:900px){
 
   /* ---- la barra de arriba: hamburguesa cuadrada, título 22px ---- */
   .tablero{padding:18px 28px 20px;gap:12px}
-  .barra{border-bottom:0;padding-bottom:4px;gap:12px}
-  .barra h3{font-size:22px;font-weight:600;letter-spacing:-.01em}
+  .barra{gap:12px}
   .barra .btn.icono.hamb{
     width:44px;height:44px;padding:0;justify-content:center;
     border:1px solid var(--d-borde-boton);border-radius:var(--d-radio-boton);
@@ -125,7 +124,7 @@
    (chips y ficha: mismos valores en los dos cortes; la tablet queda
    fuera porque cada bloque vive dentro de su media query). */
 
-@media (min-width:861px), (max-width:767.98px){
+@media (min-width:900px), (max-width:767.98px){
 
   /* ---- «Ver a:» (lienzo de Roles): la tira de filtros de vista, en
      píldoras de 34px; la puesta va con borde doble y negrita, como el
@@ -268,8 +267,8 @@
     background:#fff;color:var(--d-tinta);
     display:grid;place-items:center;text-decoration:none;
   }
-  .dc-ic.dc-tel{background:#EDF2FE;border-color:#EDF2FE;color:#3A5BC7}
-  .dc-ic.dc-wa{background:#E6F4EA;border-color:#E6F4EA;color:#17603A}
+  .dc-ic.dc-tel{background:var(--d-tel-fondo);border-color:var(--d-tel-fondo);color:var(--d-tel-tinta)}
+  .dc-ic.dc-wa{background:var(--d-verde-fondo);border-color:var(--d-verde-fondo);color:var(--d-verde)}
 
   /* Los titulitos de sección, como el .d-sec del lienzo: mayúscula
      chica con su raya arriba. */
@@ -424,9 +423,9 @@
 }
 
 /* El ancho de la ficha en computadora (pantalla 06): 480px. Va al final y
-   solo en ≥861px, para no pisar el width:100% del teléfono ni tocar la
+   solo en ≥900px, para no pisar el width:100% del teléfono ni tocar la
    tablet. */
-@media (min-width:861px){
+@media (min-width:900px){
   .panel-der{width:min(480px,94vw);border-left:1px solid var(--d-borde);padding:20px 24px}
   /* El cab-panel pegajoso de calendario.css está calzado a 20px: con el
      padding de 24px del lienzo hay que recalzarle los márgenes para que

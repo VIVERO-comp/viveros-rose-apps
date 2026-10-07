@@ -34,6 +34,7 @@
 {# El menú lateral arranca como quedó la última vez (cookie `menu`): el
    servidor pinta la clase y no hay parpadeo al cargar. #}
 <body class="{{ 'menu-oculto' if request.cookies.get('menu') == '0' }}">
+{% import '_cabecera.html' as cab with context %}
 
 {% macro pinta_actividad(a, liga, mostrar_fecha=false, atrasada=false) %}
 <a class="act {{ 'hecha' if a.estado == 'hecha' }} {{ 'cancel' if a.estado == 'cancel' }}"
@@ -156,7 +157,7 @@
   {# El costado es UNO solo para todas las pantallas y lo arma el rol
      (_lado.html + request.state.menu_nav, regla 10): el menú de cada
      persona es el mismo en todas partes. #}
-  {% with activa='calendario', lado_pie_extra=("Datos de muestra (sin Linear)" if modo == 'muestra' else "Linear · solo lectura" if modo == 'lectura' else "Linear · CALENDARIO ROSE") %}{% include '_lado.html' %}{% endwith %}
+  {% with activa='calendario' %}{% include '_lado.html' %}{% endwith %}
 
   <div class="tablero">
     {# La barra única del teléfono; en computadora el CSS la esconde y
@@ -166,14 +167,7 @@
     {% with bm_titulo='Calendario' %}{% include '_barra_movil.html' %}{% endwith %}
     {# Una sola fila de controles: antes eran dos (marca y buscador arriba,
        fechas y vistas abajo) y el calendario empezaba a media pantalla. #}
-    <div class="barra">
-      {# Hamburguesa como la de Google Calendar (dueño, 22/09/2026):
-         esconde/muestra el menú lateral; menu.js guarda la preferencia. #}
-      <button class="btn icono hamb" type="button" aria-label="Mostrar u ocultar el menú"
-              aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-      </button>
-      <h3>{{ titulo_rango }}</h3>
+    {% call cab.cabecera(titulo_rango, extra='barra') %}
       <span class="flechas">
         <a class="btn icono" href="{{ ligas.anterior }}" aria-label="Anterior">‹</a>
         <a class="btn chico" href="{{ ligas.hoy }}">Hoy</a>
@@ -186,6 +180,11 @@
         <a class="{{ 'on' if estado.vista == 'lista' }}" href="{{ ligas_vista.lista }}">Lista</a>
       </span>
       <span class="crece"></span>
+      {# A2 (BLOQUE 53): la lupa, el «⋯» y el botón van en UN grupo. La
+         `.barra` envuelve cuando no cabe, y envolviendo item por item la
+         lupa y el «⋯» se quedaban solos en una fila huérfana. Agrupados,
+         o entran los tres o bajan los tres juntos. #}
+      <span class="barra-der">
       {# El segmento "Mi calendario / Todo el equipo" se quitó (dueño,
          22/09/2026): el alcance sigue decidiéndose en el servidor — el
          empleado entra viendo lo suyo y el dueño, el equipo. #}
@@ -226,7 +225,8 @@
       {% if puede_escribir %}
       <a class="btn oro" href="{{ ligas.nueva }}">+ Nueva actividad</a>
       {% endif %}
-    </div>
+      </span>
+    {% endcall %}
 
     {# Los 4 filtros de tipos, como chips bajo la barra (diseño Orquesta,
        pantalla 01). Antes vivían en la columna derecha; son los MISMOS
@@ -246,6 +246,19 @@
         {% endfor %}
       </div>
     </div>
+
+    {# BLOQUE 54, G1: de qué Linear sale esto vivía en el PIE DEL MENÚ. El
+       pie es parte del marco —igual en las once pestañas— así que el aviso
+       se mudó acá. El de «muestra» no se decía en ningún otro lado: el de
+       «solo lectura» sí, pero solo dentro de la ficha de una actividad. #}
+    {% if modo == 'muestra' %}
+    <div class="solo-lectura"><b>Datos de muestra.</b> Este servidor no
+      está conectado a Linear: lo que ves son actividades de ejemplo, no la
+      agenda del vivero.</div>
+    {% elif modo == 'lectura' %}
+    <div class="solo-lectura"><b>Solo lectura.</b> Esta instancia mira el
+      calendario real pero no escribe en Linear.</div>
+    {% endif %}
 
     {# La franja queda para errores SIN campo (Linear caído): el de un campo
        sale debajo del campo mismo (regla 5, _error_campo.html). #}
@@ -312,6 +325,11 @@
       </div>
     </div>
 
+    {# G2 (BLOQUE 54): la pestaña NO se desplaza entera. El menú y el
+       encabezado se quedan quietos y lo que se mueve es ESTE cuerpo —
+       el calendario y, cuando la columna derecha no cabe, los leads que
+       bajan debajo. #}
+    <div class="cal-cuerpo">
     <div class="zona">
       <div id="vista">
         {% if carril %}
@@ -430,6 +448,7 @@
        entera se esconde y esta sección queda debajo de la agenda del día. #}
     <div class="leads-abajo">
       {{ pinta_leads_lado() }}
+    </div>
     </div>
   </div>
 </div>

@@ -35,6 +35,15 @@
   /* Pagado / en verde. */
   --d-verde:#17603A;
   --d-verde-fondo:#E6F4EA;
+  /* Los atajos de contacto de los paneles (llamar · WhatsApp · mapa).
+     Vivían copiados a mano en CUATRO hojas (calendario, control, vender y
+     proveedores): hoy coincidían, pero el día que alguien tocara uno se
+     habrían separado en silencio — la misma trampa de los breakpoints.
+     El verde de WhatsApp usa --d-verde / --d-verde-fondo de arriba. */
+  --d-tel-fondo:#EDF2FE;
+  --d-tel-tinta:#3A5BC7;
+  --d-map-fondo:#F7EDFD;
+  --d-map-tinta:#8145B5;
   /* Radios del diseño. */
   --d-radio-boton:10px;        /* botones cuadrados y campos */
   --d-radio-pil:12px;          /* píldoras del menú, alertas */
@@ -45,41 +54,123 @@
 
 body{font-family:var(--d-fuente);background:#fff}
 
-/* ==================== piel styles.css (el <nav> compartido) ============ */
+/* ============== A1 · LA ESCALA DE ANCHOS, UNA SOLA Y COMPARTIDA =======
+   (BLOQUE 53, 7/10/2026)
+
+   LA TRAMPA QUE ESTO ARREGLA: un `@media` mide la VENTANA, pero el sitio
+   que tiene el contenido es la ventana MENOS el menú de 240px. Un corte
+   escrito en 768px se dispara con 528px de lienzo de verdad; uno escrito
+   en 1200px, con 960. Por eso en una ventana de 900px el panel de 340px
+   de la ficha del contacto dejaba el contenido en 244px y se le montaba
+   encima: el breakpoint creía que había 900 y había 660.
+   Y al revés: con el menú escondido (`body.menu-oculto`) el lienzo SÍ es
+   la ventana entera, así que sumarle 240 fijo al corte se equivoca en el
+   otro sentido. Ninguna cuenta con la ventana acierta en los dos estados.
+
+   LA SOLUCIÓN: las decisiones de LAYOUT del contenido (cuántas columnas,
+   si un panel va al lado o baja debajo) se toman con `@container` sobre
+   el propio contenedor del contenido, que mide EXACTAMENTE el lienzo que
+   hay — con el menú abierto o cerrado, sin cuentas.
+
+   Las decisiones del CROMO (si el menú es costado o cajón) siguen siendo
+   de VENTANA y siguen en `@media`: ahí lo que se decide ES el menú, y
+   medirlo contra un lienzo que depende de él sería circular.
+
+   ── LA ESCALA (anchos de LIENZO, no de ventana) ──
+     (sin query)  ANGOSTO   todo en una columna
+     ≥  560px     MEDIO     dos columnas de fichas; tablas enteras
+     ≥  940px     ANCHO     el panel lateral CABE al lado del contenido
+     ≥ 1180px     HOLGADO   el tablero y su resumen, al lado
+
+   Estos cuatro números son la escala: ninguna hoja inventa los suyos. Si
+   una pestaña necesita otro valor, va con el porqué escrito al lado.
+
+   ── EL CORTE DEL CROMO (ancho de VENTANA) ──
+     < 900px   el menú es cajón (piel styles.css) o fila de arriba
+               (piel calendario.css, 768–899) o el navbar del teléfono
+     ≥ 900px   el menú es el costado de 240px
+   UNO SOLO para las dos pieles. Antes eran tres (768, 861 y 900) y entre
+   861 y 899 el CRM ya era de computadora mientras Vender seguía siendo
+   la tarjeta de teléfono, en la misma ventana.
+
+   SOPORTE: `@container` anda en Chrome 105+ y Safari 16+ (2022). Las
+   reglas están escritas angosto-primero: si algún día un navegador no lo
+   entendiera, todo se queda apilado en una columna — feo, pero nada se
+   esconde ni se monta encima, que es por donde hay que fallar. */
+main, .tablero{container-type:inline-size;container-name:lienzo}
+
+/* ================ G1 · EL MARCO, EN UNA SOLA PIEZA ====================
+   (BLOQUE 54, 7/10/2026)
+
+   La app tiene DOS armazones de HTML por historia: el de base.html
+   (`.phone` + `<nav>`, piel styles.css) y el de las pantallas de tablero
+   (`.app` + `.lado`, piel calendario.css). Cambiar uno de los dos por el
+   otro sería mover el DOM de veinte plantillas con cuatro frentes
+   trabajando dentro; lo que SÍ se puede —y es lo que el dueño ve— es que
+   los dos midan EXACTAMENTE lo mismo.
+
+   Así que las medidas del marco viven acá, UNA VEZ, en variables, y las
+   consume un solo bloque de reglas cuya lista de selectores nombra a los
+   dos armazones. Ninguna otra hoja vuelve a escribir estos números: si
+   alguna lo hace, la prueba `tests/test_marco_unico.py` lo caza.
+
+   Antes el menú NO medía lo mismo: 240px en una piel y 212px en la otra,
+   píldoras de 15px contra 14px, y el corte de computadora en 900px contra
+   861px — entre 861 y 899 el CRM ya era de computadora mientras Vender
+   seguía siendo la tarjeta de teléfono, en la misma ventana. */
+:root{
+  --marco-menu:240px;          /* el ancho del costado */
+  --marco-menu-pad:20px 16px;  /* su respiro */
+  --marco-menu-gap:10px;
+  --marco-pil:48px;            /* el alto de una píldora del menú */
+  --marco-pil-letra:15px;
+  --marco-cab-alto:72px;       /* el alto del encabezado */
+  --marco-margen:28px;         /* el margen lateral del contenido */
+  --marco-cab-letra:22px;      /* el título de la pestaña */
+  --marco-boton:36px;          /* el alto del botón negro principal */
+  --marco-hamb:44px;           /* el cuadrado de las tres rayas */
+}
 
 /* La X del cajón móvil (_nav.html): en computadora no existe. */
 .nav-cerrar{display:none}
 
 @media (min-width: 900px){
-  /* El lienzo deja de flotar como tarjeta: pantalla completa en blanco,
-     con el menú de 240px pegado al borde (pantalla 09). */
-  .phone{
+  /* ---- el armazón: pantalla completa, el menú pegado al borde ---- */
+  .phone, .app{
     margin:0;height:100vh;height:100dvh;max-width:none;
-    border-radius:0;border:none;box-shadow:none;
-    grid-template-columns:240px 1fr;
+    border:none;border-radius:0;box-shadow:none;
+    grid-template-columns:var(--marco-menu) 1fr;
   }
-  nav{
-    background:#fff;border-right:1px solid var(--d-borde);
-    border-radius:0;padding:20px 16px;gap:10px;
+  body.menu-oculto .phone, body.menu-oculto .app{grid-template-columns:0px 1fr}
+
+  /* ---- el menú: UNA receta para los dos armazones ---- */
+  nav, .lado{
+    background:#fff;border-right:1px solid var(--d-borde);border-radius:0;
+    padding:var(--marco-menu-pad);gap:var(--marco-menu-gap);
   }
-  nav .marca{display:flex;align-items:center;gap:10px;padding:4px 6px 14px}
-  nav .marca img{width:34px;height:34px;border:1px solid var(--d-borde-campo)}
-  nav .marca span{font-size:15px;font-weight:700;color:var(--d-tinta)}
-  nav button, nav a{
-    height:48px;padding:0 14px;align-items:center;
+  nav .marca, .lado .marca{
+    display:flex;align-items:center;gap:10px;padding:4px 6px 14px;
+  }
+  nav .marca img, .lado .marca img{
+    width:34px;height:34px;border:1px solid var(--d-borde-campo);
+  }
+  nav .marca span, .lado .marca span{
+    font-size:15px;font-weight:700;color:var(--d-tinta);
+  }
+  nav button, nav a, .lado .pil{
+    height:var(--marco-pil);min-height:var(--marco-pil);padding:0 14px;
+    display:flex;align-items:center;gap:12px;box-shadow:none;
     border:1px solid var(--d-borde-pil);border-radius:var(--d-radio-pil);
-    font-size:15px;font-weight:600;color:var(--d-tinta);gap:12px;
-  }
-  nav button.on, nav a.on{
-    background:var(--d-gris-activo);border-color:var(--d-gris-activo);
+    background:#fff;font-size:var(--marco-pil-letra);font-weight:600;
     color:var(--d-tinta);
   }
-  /* La hamburguesa de la zona de contenido: botón cuadrado de 44px. */
-  .hamb{
-    width:44px;height:44px;border:1px solid var(--d-borde-boton);
-    border-radius:var(--d-radio-boton);background:#fff;color:var(--d-tinta);
-    display:grid;place-items:center;padding:0;
+  nav .pil svg, .lado .pil svg{color:var(--d-tinta)}
+  nav a:hover, .lado .pil:hover{background:var(--d-gris-activo)}
+  nav button.on, nav a.on, .lado .pil.on{
+    background:var(--d-gris-activo);border-color:var(--d-gris-activo);
+    color:var(--d-tinta);font-weight:600;
   }
+  .lado .pie{color:var(--d-suave);font-size:13px}
 }
 
 @media (max-width: 899px){
@@ -120,32 +211,129 @@ body{font-family:var(--d-fuente);background:#fff}
   }
 }
 
-/* ==================== piel calendario.css (.lado + cajón) ============= */
+/* ============ G1 · EL ENCABEZADO, TAMBIÉN EN UNA SOLA PIEZA ===========
+   El esqueleto lo pinta `_cabecera.html` (una sola pieza de HTML) y las
+   medidas salen de acá (una sola pieza de CSS):
 
-/* El marco deja de flotar: pantalla completa, menú de 240px. Solo en
-   computadora (≥861px, el corte de calendario.css): en tablet el .lado es
-   la fila horizontal de siempre y en el teléfono manda el cajón — esas
-   dos caras no se tocan aquí. */
-@media (min-width:861px){
-  .app{
-    margin:0;height:100vh;height:100dvh;border:none;border-radius:0;
-    box-shadow:none;grid-template-columns:240px 1fr;
-  }
-  body.menu-oculto .app{grid-template-columns:0px 1fr}
-  .lado{background:#fff;border-right:1px solid var(--d-borde);padding:20px 16px;gap:10px}
-  .lado .marca{padding:4px 6px 14px;gap:10px}
-  .lado .marca img{width:34px;height:34px;border:1px solid var(--d-borde-campo)}
-  .lado .marca span{font-size:15px;font-weight:700;color:var(--d-tinta)}
-  .lado .pil{
-    height:48px;min-height:48px;padding:0 14px;display:flex;align-items:center;gap:12px;
-    border:1px solid var(--d-borde-pil);border-radius:var(--d-radio-pil);
-    background:#fff;box-shadow:none;font-size:14px;font-weight:600;color:var(--d-tinta);
-  }
-  .lado .pil svg{color:var(--d-tinta)}
-  .lado .pil:hover{background:var(--d-gris-activo)}
-  .lado .pil.on{background:var(--d-gris-activo);border-color:var(--d-gris-activo);font-weight:600}
-  .lado .pie{color:var(--d-suave);font-size:13px}
+     [tres rayas]  Título   …   el botón negro, a la derecha
+
+   Antes había SEIS encabezados distintos (.vd-top, .ct-top, .pd-top,
+   .fz-top, .mc-top y la .barra de los tableros), cada uno con su padding
+   y su tamaño de título.
+
+   Dónde se ancla, para que el título caiga en el MISMO punto en las dos
+   pieles: en base.html el encabezado es un hijo directo del armazón y
+   lleva su propio margen; en las pantallas de tablero vive dentro de
+   `.tablero`, que ya pone ese margen, así que ahí va sin padding. En los
+   dos casos el texto arranca a `--marco-menu` + `--marco-margen` del
+   borde izquierdo de la ventana. */
+.cab{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;row-gap:8px;
+  min-height:var(--marco-cab-alto);box-sizing:border-box;
 }
+.cab-izq{display:flex;align-items:center;gap:10px;min-width:0}
+.cab-titulo{
+  margin:0;font-size:var(--marco-cab-letra);font-weight:600;
+  letter-spacing:-.01em;line-height:1.2;color:var(--d-tinta);min-width:0;
+}
+.cab-med{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}
+.cab-crece{flex:1}
+.cab-chip{
+  display:inline-flex;align-items:center;height:26px;padding:0 10px;
+  border-radius:13px;background:var(--d-gris-activo);color:#3F3F3F;
+  font-size:12.5px;font-weight:600;white-space:nowrap;
+}
+.cab-volver{
+  font-size:13px;font-weight:600;color:var(--d-suave);text-decoration:none;
+  white-space:nowrap;
+}
+.cab-volver:hover{text-decoration:underline;text-underline-offset:2px}
+/* El ÚNICO botón negro de cada pantalla, arriba a la derecha. */
+.cab-boton{
+  display:inline-flex;align-items:center;height:var(--marco-boton);
+  padding:0 16px;border:0;border-radius:calc(var(--marco-boton) / 2);
+  background:var(--d-tinta);color:#fff;font-size:14px;font-weight:600;
+  text-decoration:none;white-space:nowrap;margin-left:auto;
+}
+/* Las tres rayas: el mismo cuadrado en las once pestañas. */
+.cab .hamb{
+  width:var(--marco-hamb);height:var(--marco-hamb);flex:0 0 auto;padding:0;
+  display:grid;place-items:center;cursor:pointer;
+  border:1px solid var(--d-borde-boton);border-radius:var(--d-radio-boton);
+  background:#fff;color:var(--d-tinta);
+}
+.cab .hamb:hover{background:var(--d-gris-activo)}
+@media (min-width:900px){
+  /* base.html: el encabezado pone su propio margen, arriba y a los lados. */
+  .phone > .cab{
+    padding:18px var(--marco-margen) 10px;
+    min-height:var(--marco-cab-alto);
+  }
+  /* Pantallas de tablero: el margen de arriba y de los lados ya lo puso
+     `.tablero`, así que acá se descuenta — y la FILA de adentro queda de
+     44px en las dos pieles, que es lo que hace que la hamburguesa y el
+     título caigan en el mismo píxel. 72 − 18 de arriba − 10 de abajo = 44. */
+  .tablero > .cab{
+    padding:0 0 10px;border-bottom:0;
+    min-height:calc(var(--marco-cab-alto) - 18px);
+  }
+}
+/* Dónde se esconde para dejar paso a la barra única del teléfono
+   (_barra_movil.html). Cada armazón conserva SU corte, que es el de su
+   cara de celular en el lienzo: base.html cambia de cara a los 900px y
+   las pantallas de tablero a los 768px. Entre 768 y 899 las dos pieles
+   siguen siendo distintas; está medido y anotado en el informe — mover
+   ese corte pide tocar las veinte consultas de CONTENIDO que viven en
+   900/899 dentro de styles.css, que son de otros frentes. */
+@media (max-width:899.98px){ .phone > .cab{display:none} }
+@media (max-width:767.98px){ .tablero > .cab{display:none} }
+
+/* =============== G2 · NINGUNA PANTALLA SE DESPLAZA ENTERA ============
+   (BLOQUE 54)
+
+   La app ocupa justo el alto de la ventana; el menú y el encabezado se
+   quedan QUIETOS y lo que se mueve es el cuerpo. La referencia de cómo
+   tiene que sentirse es Stock, que ya lo hacía: `.phone` mide 100dvh,
+   el encabezado es su propia fila del grid y `main` es el único que
+   scrollea.
+
+   Las pantallas de tablero (`.app` + `.tablero`) ya tenían la misma
+   forma. Lo que faltaba era adentro: que cada COLUMNA de un tablero
+   lleve su propio desplazamiento en vez de estirar la página, y que el
+   tablero se vaya de lado cuando las columnas no caben.
+
+   La única excepción es Ajustes, que SÍ se desplaza como página — y lo
+   hace solo, porque es una sección de `main`.
+
+   Nota: esto vale de 900px para arriba. En el teléfono manda el scroll
+   normal de la página, que es lo que la gente espera ahí. */
+@media (min-width:900px){
+  /* El cuerpo de las pestañas de base.html: una columna de alto fijo con
+     su propio scroll (ya era así; queda escrito acá para que sea UNA
+     decisión y no seis). El encabezado es otra fila del grid, así que se
+     queda quieto solo. */
+  .vd-main, .pd-main, .mc-main, .ct-main, .fz-main{
+    overflow-y:auto;overscroll-behavior:contain;
+  }
+  /* Los TABLEROS se deslizan de LADO cuando las columnas no caben (A1 y
+     G2): el ancho de columna es fijo y el carril lleva el scroll. */
+  .vd-tablero, .pd-tablero{overflow-x:auto}
+  /* Las LISTAS: el buscador y los filtros se quedan pegados arriba y lo
+     que se mueve es la lista. `main` es el contenedor que scrollea, así
+     que el sticky se ancla contra SU borde de contenido. */
+  .ct-filtros, .pd-capas, .vd-svc-pc{
+    position:sticky;top:0;z-index:5;background:#fff;
+  }
+  /* LO QUE FALTA DE G2, dicho en voz alta: que CADA COLUMNA del tablero
+     lleve su propio desplazamiento hacia abajo. Para eso el tablero tiene
+     que tener un alto acotado, y acotarlo con el resumen de Vender debajo
+     hace que el tablero se encoja hasta 0 — es exactamente el defecto que
+     se acaba de arreglar en el calendario (ver `.zona` en calendario.css).
+     Se hace bien cuando el resumen tenga su sitio definitivo; mientras
+     tanto se mueve el cuerpo entero, que es lo que ya hacía. */
+}
+
+/* ==================== piel calendario.css (el cajón) ================== */
 @media (max-width:767.98px){
   /* El cajón móvil de estas pantallas es el mismo <nav> de _nav.html:
      misma receta que arriba, y la marca que calendario.css escondía
@@ -196,12 +384,19 @@ nav .pie, .lado .pie{
   padding:10px 6px 2px;font-size:13px;color:var(--d-suave);
 }
 nav .pie b, .lado .pie b{color:var(--d-tinta);font-weight:700}
+/* …pero en la fila horizontal del tablet (768–899px, piel calendario.css)
+   el costado NO tiene pie ni marca: calendario.css los esconde y esta
+   regla de arriba, que no llevaba media query, se los devolvía ganando
+   por orden de carga. El resultado era una franja de menú de 211px de
+   alto —media pantalla de tablet— con las píldoras perdidas en el medio.
+   Aquí se respeta lo que decidió calendario.css. (BLOQUE 53, A1.) */
+@media (max-width:899.98px){
+  .lado .pie, .lado .marca{display:none}
+}
 @media (min-width: 900px){
   nav .marca .logo-vr{width:34px;height:34px;font-size:12px}
+  .lado .marca .logo-vr{width:34px;height:34px;font-size:12px}
 }
 @media (max-width: 899px){
   nav .marca .logo-vr{width:34px;height:34px;font-size:12px}
-}
-@media (min-width:861px){
-  .lado .marca .logo-vr{width:34px;height:34px;font-size:12px}
 }

@@ -1,0 +1,50 @@
+{# EL ENCABEZADO DE LA APP — una sola pieza de código (BLOQUE 54, G1).
+
+   Antes cada pestaña escribía el suyo: seis encabezados distintos con la
+   MISMA hamburguesa copiada a mano y seis clases de geometría distintas
+   (.vd-top, .ct-top, .pd-top, .fz-top, .mc-top… y en las pantallas de
+   tablero, la .barra). Se veían parecidos pero NO medían lo mismo, y es
+   parte de por qué la app «parece cinco apps distintas».
+
+   Ahora el esqueleto sale de acá y la geometría de UNA sola regla
+   (`.cab` en diseno-base.css):
+
+     [tres rayas]  Título   …   el botón negro, a la derecha
+
+   Las tres rayas y el título SIEMPRE arriba a la izquierda. Lo que la
+   pestaña agregue va DESPUÉS, y su botón principal a la derecha.
+
+   Cómo se usa (el bloque del call se pinta a la derecha del título):
+
+     importar el archivo como `cab` CON CONTEXTO, y después
+     llamar a cab.cabecera('Vender') envolviendo los botones.
+
+   El `with context` del import es obligatorio: la hamburguesa lee la
+   cookie `menu` de `request` para decir si el menú está abierto.
+
+   Para meter algo PEGADO al título (un chip, un buscador) va envuelto en
+   `.cab-med` dentro del mismo bloque: el CSS lo acomoda a la izquierda,
+   antes del hueco que empuja el botón a la derecha. #}
+
+{% macro cabecera(titulo, volver=None, volver_texto='Volver', chip=None, extra='') %}
+{# `extra` es para las pantallas de tablero, que además de la cabecera
+   usan la `.barra` de siempre como fila de controles (flechas, vistas,
+   buscador): ahí el encabezado es `class="cab barra"` y conserva TODA su
+   piel vieja, pero la geometría —alto, márgenes, hamburguesa y título—
+   sale de `.cab`, que es una sola regla para las once pestañas. #}
+<header class="cab {{ extra }}">
+  <div class="cab-izq">
+    {# La MISMA hamburguesa en las once pestañas: mismo tamaño, mismo
+       trazo, mismo sitio. menu.js escucha `.hamb` donde sea que esté. #}
+    <button class="hamb" type="button" aria-label="Mostrar u ocultar el menú"
+            aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+    {% if volver %}<a class="cab-volver" href="{{ volver }}">← {{ volver_texto }}</a>{% endif %}
+    <h1 class="cab-titulo">{{ titulo }}</h1>
+    {% if chip %}<span class="cab-chip">{{ chip }}</span>{% endif %}
+  </div>
+  {{ caller() }}
+</header>
+{% endmacro %}

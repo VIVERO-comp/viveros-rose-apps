@@ -2,6 +2,7 @@
 {% block titulo %}Mi CRM — Control Viverorose{% endblock %}
 
 {% block contenido %}
+{% import '_cabecera.html' as cab with context %}
 {# MI CRM (BLOQUE 20, esqueleto navegable 6/10/2026; diseño: pantallas
    ruben-gerente-de-operaciones-mi-crm / mary-atencion-al-cliente-mi-crm
    y las dos del celular). TODO lo que se pinta llegó decidido de Python
@@ -26,15 +27,8 @@
 
 {% with bm_titulo='Mi CRM', bm_sub='Solo lo tuyo' %}{% include '_barra_movil.html' %}{% endwith %}
 
-<header class="mc-top">
-  <div class="cab-izq">
-    <button class="hamb" type="button" aria-label="Mostrar u ocultar el menú"
-            aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
-    </button>
-    <h1 class="mc-titulo">Mi CRM</h1>
-    <span class="mc-tag">Solo lo tuyo{% if v.resp %} · {{ v.resp }}{% endif %}</span>
-  </div>
+{% call cab.cabecera('Mi CRM', chip='Solo lo tuyo' ~ (' · ' ~ v.resp if v.resp else '')) %}
+  <span class="cab-crece"></span>
   <div class="mc-acciones">
     {# «Ver todos» (BLOQUE 39.2): el tablero completo desde el CRM chico.
        Quién lo lleva lo decide Python (ver_todos) y si esa vista es de
@@ -47,10 +41,14 @@
     <button class="mc-apagado" type="button" disabled>Pedir compra — Todavía no</button>
     <button class="mc-apagado" type="button" disabled>+ Nuevo lead — Todavía no</button>
   </div>
-</header>
-<p class="mc-sub">Arriba ves a quién le debes respuesta y a quién le toca seguimiento. Abajo, tu tablero.</p>
+{% endcall %}
 
 <main class="mc-main">
+  {# Este renglón vivía ENTRE el encabezado y el main, o sea suelto en el
+     grid del armazón: se comía una fila y dejaba el menú 65px más corto
+     que en las otras diez pestañas (BLOQUE 54, G1). Es contenido, así que
+     va adentro del contenido. #}
+  <p class="mc-sub">Arriba ves a quién le debes respuesta y a quién le toca seguimiento. Abajo, tu tablero.</p>
   {# El rebote honesto de la puerta (BLOQUE 39.3): quien pidió una pestaña
      que su rol no usa aterriza acá y LEE por qué. #}
   {% if rebote %}<div class="mc-alerta">{{ rebote }}</div>{% endif %}

@@ -30,12 +30,13 @@
 <link rel="stylesheet" href="/static/diseno-proveedores.css?v={{ v_estaticos }}">
 </head>
 <body class="pvd {{ 'menu-oculto' if request.cookies.get('menu') == '0' }}">
+{% import '_cabecera.html' as cab with context %}
 
 <div class="app">
   {# El costado es UNO solo para todas las pantallas y lo arma el rol
      (_lado.html + request.state.menu_nav, regla 10): el menú de cada
      persona es el mismo en todas partes. #}
-  {% with activa='compras', lado_pie_extra='Proveedores · calculado de Odoo' %}{% include '_lado.html' %}{% endwith %}
+  {% with activa='compras' %}{% include '_lado.html' %}{% endwith %}
 
   <div class="tablero">
     {# Sin `bm_volver`: el «← Volver» es para los formularios de pantalla
@@ -46,12 +47,7 @@
     {% with bm_titulo='Proveedores',
             bm_sub='Lo que de verdad se les compró' %}{% include '_barra_movil.html' %}{% endwith %}
     {% with vc_activa='proveedores', vc_clase='seg-movil' %}{% include '_vistas_compras.html' %}{% endwith %}
-    <div class="barra">
-      <button class="btn icono hamb" type="button" aria-label="Mostrar u ocultar el menú"
-              aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-      </button>
-      <h3>Proveedores</h3>
+    {% call cab.cabecera('Proveedores', extra='barra') %}
       {# El MISMO segmento del tablero. Reemplaza al «← Compras» que esta
          pantalla traía: eran dos inventos para la misma cosa. #}
       {% with vc_activa='proveedores' %}{% include '_vistas_compras.html' %}{% endwith %}
@@ -64,7 +60,7 @@
               title="Un proveedor nace al anotar la compra que se le hace">+ Nuevo proveedor — Todavía no</button>
       <span class="tenue" style="font-size:12px">Todo calculado de Odoo —
         «Preferido» es la única marca a mano</span>
-    </div>
+    {% endcall %}
 
     {# Las X de los banners vuelven a la vista limpia, sin query: acá no hay
        tarjeta ni formulario que "donde estaba" tenga que recordar más que

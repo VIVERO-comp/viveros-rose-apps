@@ -5,15 +5,11 @@
    son los .html de docs/diseno-orquesta: 09/10/11 (Mac) y 25/26/27
    (celular). */
 
+/* Los números del encabezado ya NO viven acá: el marco es una sola pieza
+   (`.cab` en diseno-base.css, BLOQUE 54 G1). Lo que había era la receta
+   propia de ESTA pestaña, y era por qué el encabezado de cada una medía
+   distinto. */
 /* ---------- cabecera ---------- */
-.vd-top{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:18px 28px}
-.vd-top .cab-izq{display:flex;align-items:center;gap:8px}
-.vd-titulo{font-size:22px;font-weight:600;letter-spacing:0}
-.vd-nueva{
-  display:inline-flex;align-items:center;height:36px;padding:0 16px;
-  border:0;border-radius:18px;background:var(--d-tinta);color:#fff;
-  font-size:14px;font-weight:600;text-decoration:none;white-space:nowrap;
-}
 
 /* ---------- avisos ---------- */
 .vd-alerta{
@@ -131,7 +127,7 @@
   border-radius:var(--d-radio-boton);background:#fff;color:var(--d-tinta);
   display:grid;place-items:center;text-decoration:none;
 }
-.vd-c-tel{background:#EDF2FE;border-color:#EDF2FE;color:#3A5BC7}
+.vd-c-tel{background:var(--d-tel-fondo);border-color:var(--d-tel-fondo);color:var(--d-tel-tinta)}
 .vd-c-wa{background:var(--d-verde-fondo);border-color:var(--d-verde-fondo);color:var(--d-verde)}
 .vd-p-cuerpo{display:flex;flex-direction:column;gap:12px;font-size:15px}
 .vd-p-chips{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -169,10 +165,24 @@
 .vd-p-nota{text-align:center}
 .num{font-variant-numeric:tabular-nums}
 
-/* ---------- el resumen lateral (pantalla 09) ---------- */
-.vd-lienzo{display:flex;gap:12px;align-items:flex-start}
-.vd-tablero{flex:1;min-width:0;overflow-x:auto;padding-bottom:4px}
-.vd-res{display:none}
+/* ---------- el resumen lateral (pantalla 09) ----------
+   A11 (BLOQUE 53): el resumen YA NO SE ESCONDE. Antes, por debajo de
+   1400px de ventana, se guardaba entero (su `display:none` de base) para
+   que la tercera columna del tablero no quedara clipeada — o sea que
+   Cotizado, Confirmado, Pagado y «Cómo pagaron» desaparecían sin decir
+   nada. Ahora BAJA DEBAJO del tablero: el lienzo envuelve, el tablero se
+   lleva el ancho entero y el resumen se acomoda como una fila de tiles
+   debajo. Nada desaparece.
+   Y la pregunta «¿cabe al lado?» la contesta el LIENZO (@container), no
+   la ventana: con el menú escondido el resumen cabe al lado en una
+   ventana donde con el menú abierto no cabría, y las dos cosas son
+   ciertas. */
+.vd-lienzo{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
+.vd-tablero{flex:1 1 100%;min-width:0;overflow-x:auto;padding-bottom:4px}
+.vd-res{
+  display:flex;flex:1 1 100%;flex-direction:row;flex-wrap:wrap;gap:10px;
+}
+.vd-res>*{flex:1 1 236px}
 .vd-tile{
   border:1.5px solid #5DBB8C;border-radius:var(--d-radio-col);
   padding:12px 16px;display:flex;flex-direction:column;gap:2px;background:#fff;
@@ -200,26 +210,31 @@
   .vd-main{padding:0 28px 28px}
   .vd-svc-pc{padding:0}
 }
-@media (min-width: 1200px){
-  /* En pantalla ancha las columnas van a su ancho del diseño (276px). */
+/* Las columnas del tablero van a su ancho del lienzo (276px) en cuanto
+   hay sitio, y si las tres no caben el tablero se desliza de lado — que
+   es lo que pide A1 para los tableros. 860px de LIENZO es el escalón de
+   esta pestaña: 3×276 + 2 de hueco = 852, más los 56 de padding de
+   .vd-main. (Antes era un @media de 1200px de VENTANA, que con el menú
+   abierto se disparaba con 960 de lienzo y con el menú escondido con
+   1200: el mismo tablero, dos anchos distintos.) */
+@container lienzo (min-width: 860px){
   .vd-col{flex:0 0 276px}
 }
-@media (min-width: 1400px){
-  /* El resumen lateral solo aparece cuando TODO cabe de verdad: con el
-     sidebar de 240px y los paddings, el lienzo necesita ~1400px de
-     ventana para 3 columnas de 276 + los tiles (236 mínimo). El tablero
+@container lienzo (min-width: 1180px){
+  /* Con 1180px de LIENZO el resumen vuelve al costado: 852 del tablero +
+     12 de hueco + 236 de los tiles + 56 del padding = 1156. El tablero
      dimensiona por su CONTENIDO (flex-basis auto) y el resumen toma el
      resto — con flex:1 en los dos hermanos, el resumen se llevaba la
      mitad del lienzo y la tercera columna quedaba clipeada debajo
-     (visto en vivo a 1500px). Más angosto que esto, el resumen se
-     guarda (su display:none base) y las columnas respiran. */
+     (visto en vivo a 1500px). 1180 es el escalón HOLGADO de la escala
+     compartida (diseno-base.css). */
   .vd-tablero{flex:0 1 auto}
-  .vd-res{display:flex;flex:1;min-width:236px;flex-direction:column;gap:10px}
+  .vd-res{flex:1 1 236px;min-width:236px;flex-direction:column;flex-wrap:nowrap}
+  .vd-res>*{flex:0 0 auto}
 }
 
 /* ---------- teléfono ---------- */
 @media (max-width: 899px){
-  .vd-top{display:none}           /* manda la barra única de arriba */
   .vd-svc-pc{display:none}        /* los chips viven en la barra de abajo */
   .vd-main{padding:12px 16px 170px}
   /* El aviso rojo de arriba (lienzo: «N ventas por revisar»; el dato

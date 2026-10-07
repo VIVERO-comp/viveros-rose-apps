@@ -111,7 +111,9 @@ def test_conversaciones_es_una_entrada_del_menu(admin):
     cuerpo = admin.get("/control").text
     assert 'href="/conversaciones"' in cuerpo
     # Y vive en el costado, no colgando de la barra del tablero.
-    assert cuerpo.index('href="/conversaciones"') < cuerpo.index("<h3>CRM</h3>")
+    # (BLOQUE 54, G1: el título de la pestaña ya no es un <h3> propio de
+    # cada plantilla, es el <h1 class="cab-titulo"> del encabezado único.)
+    assert cuerpo.index('href="/conversaciones"') < cuerpo.index(">CRM</h1>")
 
 
 def test_la_capa_de_adentro_lleva_a_respuestas(admin, twenty_con_chats):

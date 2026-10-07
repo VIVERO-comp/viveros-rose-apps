@@ -2,6 +2,7 @@
 {% block titulo %}Contactos — Control Viverorose{% endblock %}
 
 {% block contenido %}
+{% import '_cabecera.html' as cab with context %}
 {# CONTACTOS — la LISTA (BLOQUE 37 + BLOQUE 43; lienzo abraham-contactos,
    refrescado el 6/10: el panel del costado quedó `hidden` y la grilla en
    una sola columna). Acá eso es literal: la lista ocupa TODO EL ANCHO y
@@ -18,13 +19,8 @@
 
 {% with bm_titulo='Contactos', bm_sub='Todo el mundo, en un solo lugar' %}{% include '_barra_movil.html' %}{% endwith %}
 
-<header class="ct-top">
-  <div class="cab-izq">
-    <button class="hamb" type="button" aria-label="Mostrar u ocultar el menú"
-            aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
-    </button>
-    <h1 class="ct-titulo">Contactos</h1>
+{% call cab.cabecera('Contactos') %}
+  <div class="cab-med">
     {# El buscador del lienzo: server-rendered, un form GET que filtra
        nombre y teléfono en Python. No escribe nada. #}
     <form class="ct-busca" method="get" action="/contactos">
@@ -41,7 +37,7 @@
        en el 8095 está neutralizado: nace APAGADO (diseño corto). #}
     <button class="ct-apagado" type="button" disabled>+ Nuevo contacto — Todavía no</button>
   </div>
-</header>
+{% endcall %}
 
 <main class="ct-main">
   {% if error_aviso %}<div class="ct-alerta">{{ error_aviso }}</div>{% endif %}
@@ -91,4 +87,12 @@
     <div class="ct-r ct-pie"><span class="ct-pista">Un contacto puede existir sin venta. Toca uno para abrir su página con el chat y su dinero.</span><span></span><span></span><span></span><span></span><span></span></div>
   </div>
 </main>
+
+{# EL MENÚ (A6 del BLOQUE 53 / G1 del 54): esta pantalla era la ÚNICA de
+   base.html que no incluía el menú, y por eso al entrar a Contactos la
+   app se quedaba «sin menú» y lo seguía pareciendo en las demás. Es el
+   MISMO parcial de las otras diez pestañas.
+   OJO AL FUSIONAR: el frente de A6 está arreglando lo mismo; si su rama
+   también agrega este include, queda UNO solo. #}
+{% set activa = 'contactos' %}{% include '_nav.html' %}
 {% endblock %}

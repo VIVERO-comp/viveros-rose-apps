@@ -5,6 +5,7 @@
    Stock o Vender y hacía sentir lento el cambio. #}
 
 {% block contenido %}
+{% import '_cabecera.html' as cab with context %}
 {# Stock con el diseño Orquesta (pantallas 03/04 Mac y 19/20 celular de
    docs/diseno-orquesta/). SOLO el aspecto: mismas rutas, mismos POST,
    mismo app.js pintando #lista — la piel vive en diseno-stock.css,
@@ -29,6 +30,18 @@
      pantalla. Es un enlace, no un botón: el paso de elegir no usa JS. #}
   <a class="bm-negro" id="bm-crear" href="/productos/crear" style="display:none">+ Crear producto</a>
 </div>
+{# El encabezado compartido de la app (BLOQUE 54, G1): las tres rayas y
+   el título arriba a la izquierda, el botón negro a la derecha — igual que
+   en las otras diez pestañas. Antes esta pantalla no tenía encabezado y la
+   hamburguesa quedaba suelta EN MEDIO del contenido (Ajustes 1); y en
+   Ajustes se colaba el «+ Crear producto» de Stock (Ajustes 2).
+   Esta página cambia de pestaña con JS, así que el título y el botón los
+   reparte tab() en app.js, el mismo reparto que ya hace con la barra del
+   teléfono. Arranca en Inicio, que es la pestaña que nace activa. #}
+{% call cab.cabecera('Inicio') %}
+  <span class="cab-crece"></span>
+  <a class="cab-boton" id="cab-crear" href="/productos/crear" hidden>+ Crear producto</a>
+{% endcall %}
 <main>
   {% if sin_proxy %}
   <div class="aviso-error">No hay conexión con el stock: {{ sin_proxy }}. Vuelve a intentar en un momento.</div>
@@ -36,16 +49,8 @@
 
   <!-- ================= HOME ================= -->
   <section class="tab activa" id="tab-home">
-    {# La hamburguesa de computadora (28/09/2026), sola, arriba a la
-       izquierda — sin título nuevo (pedido del dueño, 22/09/2026: Inicio
-       no lleva cabecera propia). En el teléfono no existe (la de arriba
-       ya está en .barra-m). #}
-    <div class="fila-hamb">
-      <button class="hamb" type="button" aria-label="Mostrar u ocultar el menú"
-              aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-      </button>
-    </div>
+    {# La hamburguesa ya no vive acá: vive en el encabezado compartido
+       de arriba (BLOQUE 54, G1). #}
     <div class="score-card">
       <div class="score-ring">
         <svg width="150" height="150" viewBox="0 0 150 150">
@@ -157,10 +162,6 @@
          fila, a la izquierda: pegada al bloque Stock online/global +
          buscador + chips, sin fila ni hueco propio. #}
       <div class="fila-sub">
-        <button class="hamb" type="button" aria-label="Mostrar u ocultar el menú"
-                aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-        </button>
         <div class="sub-tabs" id="sub-stock">
           <button class="sub on" data-vista="online" onclick="vistaStock('online',this)">Stock online</button>
           <button class="sub" data-vista="global" onclick="vistaStock('global',this)">Stock global</button>
@@ -387,15 +388,8 @@
      servidor: esto solo deja de ofrecer lo que no se puede. #}
   {% if ve_ajustes %}
   <section class="tab" id="tab-ajustes">
-    {# La hamburguesa de computadora (28/09/2026), sola, arriba a la
-       izquierda del contenido. En el teléfono no existe (la de arriba ya
-       está en .barra-m). #}
-    <div class="fila-hamb">
-      <button class="hamb" type="button" aria-label="Mostrar u ocultar el menú"
-              aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-      </button>
-    </div>
+    {# La hamburguesa ya no vive acá: vive en el encabezado compartido
+       de arriba (BLOQUE 54, G1). #}
     <div class="aviso">
       <span class="ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
       <div><b>Ajustes</b><span>Tu cuenta y el acceso a la app</span></div>
@@ -1125,37 +1119,16 @@
 <div class="toast" id="toast"></div>
 
 {# EL MENÚ, por rol (BLOQUE 39.1). La lista llega YA DECIDIDA de Python
-   (datos_roles.acceso_de → request.state.menu_nav, regla 10) y acá solo
-   se pinta — es la MISMA lista de _nav.html y _lado.html, así que este
-   Inicio ofrece exactamente lo que el rol puede abrir. Esconder una
-   pestaña NO es el permiso: el permiso es _puerta_por_rol, en el
-   servidor.
+   (datos_roles.acceso_de → request.state.menu_nav, regla 10). Esconder
+   una pestaña NO es el permiso: el permiso es _puerta_por_rol, en el
+   servidor. Inventario sigue sin entrada: su pestaña vive en /?tab=inv.
 
-   La única diferencia con _nav.html: en ESTA pantalla Stock y Ajustes no
-   son otra página, son dos secciones de aquí mismo — así que esas dos
-   claves salen como <button data-tab> (lo que app.js ya sabe manejar) y
-   el resto como enlaces. Inventario sigue sin entrada: su pestaña vive
-   en /?tab=inv. #}
-{% import '_iconos.html' as ic %}
-<nav>
-  {# La marca arriba del todo: el monograma VR del lienzo Roles v3. #}
-  <div class="marca">
-    <span class="logo-vr" aria-hidden="true">VR</span>
-    <span>Control Viverorose</span>
-  </div>
-  {% for p in request.state.menu_nav %}
-  {% if p.clave in ('stock', 'ajustes') %}
-  <button data-tab="{{ p.clave }}" onclick="tab('{{ p.clave }}',this)"><span class="ic">{{ ic.icono(p.clave) }}</span>{{ p.titulo }}</button>
-  {% else %}
-  <a href="{{ p.href }}"><span class="ic">{{ ic.icono(p.clave) }}</span>{{ p.titulo }}</a>
-  {% endif %}
-  {% endfor %}
-  {# El pie del costado: nombre y rol de quien mira (rotulo_de). #}
-  <div class="pie">
-    <b>{{ request.state.empleada.nombre or request.state.empleada.id }}</b>
-    <span>{{ request.state.rol_rotulo }}</span>
-  </div>
-</nav>
+   Es el MISMO parcial de las otras diez pestañas (BLOQUE 54, G1): antes
+   esta pantalla se escribía su propio <nav> porque acá Stock y Ajustes
+   no son otra página sino dos secciones de esta misma. Eso ahora lo
+   resuelve `tabs_locales` DENTRO del parcial, así que no queda un
+   segundo menú que mantener (ni que se despinte solo). #}
+{% with tabs_locales=('stock','ajustes') %}{% include '_nav.html' %}{% endwith %}
 {% endblock %}
 
 {% block scripts %}

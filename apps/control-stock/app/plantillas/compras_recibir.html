@@ -35,12 +35,13 @@
 <link rel="stylesheet" href="/static/diseno-compras.css?v={{ v_estaticos }}">
 </head>
 <body class="cpd {{ 'menu-oculto' if request.cookies.get('menu') == '0' }}">
+{% import '_cabecera.html' as cab with context %}
 
 <div class="app">
   {# El costado es UNO solo para todas las pantallas y lo arma el rol
      (_lado.html + request.state.menu_nav, regla 10): el menú de cada
      persona es el mismo en todas partes. #}
-  {% with activa='compras', lado_pie_extra='Lo que llegó · sube el stock en Odoo' %}{% include '_lado.html' %}{% endwith %}
+  {% with activa='compras' %}{% include '_lado.html' %}{% endwith %}
 
   <div class="tablero">
     {# Acá sí va «← Volver»: esta pantalla ES un formulario de pantalla
@@ -51,21 +52,19 @@
     {% set vuelta_tarjeta = '/compras?abrir=' ~ (compra.ref | urlencode) ~ '#c-' ~ compra.ref %}
     {% with bm_titulo='Lo que llegó', bm_sub=compra.que_compro,
             bm_volver=vuelta_tarjeta %}{% include '_barra_movil.html' %}{% endwith %}
-    <div class="barra">
-      <button class="btn icono hamb" type="button" aria-label="Mostrar u ocultar el menú"
-              aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-      </button>
-      <h3>Lo que llegó</h3>
+    {% call cab.cabecera('Lo que llegó', extra='barra') %}
       <span class="crece"></span>
+      {# «Sube el stock en Odoo» venía del pie del menú (BLOQUE 54, G1):
+         es lo más importante de esta pantalla y ahora se lee acá. #}
       <span class="tenue" style="font-size:12px">
-        {{ compra.ref }} · {{ compra.proveedor or 'sin proveedor' }}
+        {{ compra.ref }} · {{ compra.proveedor or 'sin proveedor' }} ·
+        lo que anotes acá SUBE el stock en Odoo
       </span>
       {# El botón negro de esta pantalla vive al pie del formulario, junto a
          los renglones: es el que hace subir el stock. Este es el de volver,
          y va gris. #}
       <a class="btn" href="{{ vuelta_tarjeta }}">← Compras</a>
-    </div>
+    {% endcall %}
 
     {% set vuelta = '/compras/recibir?ref=' ~ (compra.ref | urlencode) ~ '#cp-recibir' %}
     {# El banner solo para errores SIN campo (Odoo caído, permisos): el de
