@@ -361,7 +361,9 @@ def test_el_enlace_de_sync_vive_en_ajustes(cliente):
     pantalla del calendario."""
     inicio = cliente.get("/?tab=stock").text
     assert "calendario.ics?t=" in inicio
-    assert "Sync con iPhone o Google Calendar" in inicio
+    # El título dejó de decir «Sync» (BLOQUE 53 · A10); la sección
+    # sigue siendo la misma y sigue viviendo en Ajustes.
+    assert "Conectarlo con iPhone o Google Calendar" in inicio
     assert "calendario.ics?t=" not in cliente.get("/calendario").text
 
 
