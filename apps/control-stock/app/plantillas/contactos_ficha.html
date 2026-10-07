@@ -69,6 +69,33 @@
         {% endfor %}
       </div>
 
+      {# «Cuándo nos pagan» (A14, BLOQUE 53): sale de las facturas REALES
+         de Odoo. Sin partner de Odoo no hay facturas y eso se DICE; con
+         Odoo caído los tres números salen «sin dato», nunca en $0. #}
+      <div class="ct-caja">
+        <span class="ct-sec">Cuándo nos pagan</span>
+        {% if not v.permiso.dinero %}
+        <p class="ct-hueco">{{ v.permiso.motivo }}</p>
+        {% else %}
+        <div class="ct-fila">
+          <span class="ct-lb">Facturado</span>
+          {% if v.facturacion.facturado is not none %}<b class="num">{{ v.facturacion.facturado | dinero }}</b>
+          {% else %}<span class="ct-pista">sin dato</span>{% endif %}
+        </div>
+        <div class="ct-fila">
+          <span class="ct-lb">Por cobrar</span>
+          {% if v.facturacion.por_cobrar is not none %}<b class="num">{{ v.facturacion.por_cobrar | dinero }}</b>
+          {% else %}<span class="ct-pista">sin dato</span>{% endif %}
+        </div>
+        <div class="ct-fila">
+          <span class="ct-lb">Próximo vencimiento</span>
+          <span class="num">{{ v.facturacion.vence or '—' }}</span>
+        </div>
+        {% if v.facturacion.nota %}<p class="ct-hueco">{{ v.facturacion.nota }}</p>{% endif %}
+        {% if v.facturacion.aviso %}<p class="ct-hueco">{{ v.facturacion.aviso }}</p>{% endif %}
+        {% endif %}
+      </div>
+
       <div class="ct-caja">
         <span class="ct-sec">Cómo contactarlos</span>
         <div class="ct-fila"><span class="ct-lb">Teléfono</span><span class="num">{{ v.contacto.telefono or 'Sin teléfono' }}</span></div>
@@ -86,27 +113,70 @@
          hay montos escondidos con CSS, no llegaron. #}
       <p class="ct-hueco">{{ v.permiso.motivo }}</p>
       {% else %}
-      {% for t in v.tratos %}
-      <div class="ct-it">
-        <div class="ct-fila">
-          {% if t.href %}<a class="ct-abrir" href="{{ t.href }}">{{ t.titulo }}</a>
-          {% else %}<b>{{ t.titulo }}</b>{% endif %}
-          <b class="num">{% if t.total is not none and t.total != '' %}{{ t.total | dinero }}{% else %}—{% endif %}</b>
-        </div>
-        <div class="ct-fila">
-          <span class="ct-pista num">{{ t.orden }}</span>
-          <span class="ct-pista">{{ t.estado or '' }}</span>
-        </div>
-      </div>
-      {% else %}
-      <p class="ct-hueco">{{ v.sin_tratos }}</p>
-      {% endfor %}
-      {% endif %}
+      {% if v.nada_con_nosotros %}<p class="ct-hueco">{{ v.sin_tratos }}</p>{% endif %}
 
-      <div class="ct-foot">
-        <span class="ct-sec">Gastos y compras</span>
-        <span class="ct-pista">{{ v.apagado_total_gastado }}: <span class="ct-tn">{{ v.todavia_no }}</span></span>
+      {# LAS TRES TABLAS DEL LIENZO (A14). Cotizado = lo que todavía no
+         está facturado; Facturado = facturas con saldo; Pagado = las que
+         ya se cobraron. Cada una dice su vacío con palabras, nunca con un
+         «—» mudo. #}
+      <div class="ct-tabla">
+        <div class="ct-sec">Cotizado</div>
+        {% for t in v.tratos %}
+        <div class="ct-it">
+          <div class="ct-fila">
+            {% if t.href %}<a class="ct-abrir" href="{{ t.href }}">{{ t.titulo }}</a>
+            {% else %}<b>{{ t.titulo }}</b>{% endif %}
+            <b class="num">{% if t.total is not none and t.total != '' %}{{ t.total | dinero }}{% else %}—{% endif %}</b>
+          </div>
+          <div class="ct-fila">
+            <span class="ct-pista num">{{ t.orden }}</span>
+            <span class="ct-pista">{{ t.estado or '' }}</span>
+          </div>
+        </div>
+        {% else %}
+        {% if not v.nada_con_nosotros %}<p class="ct-hueco">{{ v.sin_cotizado }}</p>{% endif %}
+        {% endfor %}
       </div>
+
+      <div class="ct-tabla">
+        <div class="ct-sec">Facturado</div>
+        {% for f in v.facturacion.facturas %}
+        <div class="ct-it">
+          <div class="ct-fila">
+            <b class="num">{{ f.factura }}</b>
+            <b class="num">{{ f.total | dinero }}</b>
+          </div>
+          <div class="ct-fila">
+            <span class="ct-pista">Vence {{ f.vence }}</span>
+            <span class="ct-pista num">debe {{ f.saldo | dinero }}</span>
+          </div>
+        </div>
+        {% else %}
+        {% if not v.nada_con_nosotros %}<p class="ct-hueco">{{ v.facturacion.aviso or v.sin_facturado }}</p>{% endif %}
+        {% endfor %}
+      </div>
+
+      <div class="ct-tabla">
+        <div class="ct-sec">Pagado</div>
+        {% for f in v.facturacion.pagadas %}
+        <div class="ct-it">
+          <div class="ct-fila">
+            <b class="num">{{ f.factura }}</b>
+            <b class="num">{{ f.total | dinero }}</b>
+          </div>
+          <div class="ct-fila">
+            <span class="ct-pista">Fecha</span>
+            <span class="ct-pista num">{{ f.fecha }}</span>
+          </div>
+        </div>
+        {% else %}
+        {% if not v.nada_con_nosotros %}<p class="ct-hueco">{{ v.sin_pagado }}</p>{% endif %}
+        {% endfor %}
+        {% if v.facturacion.cobrado %}
+        <div class="ct-pie-tabla">Cobrado de este contacto: <b class="num">{{ v.facturacion.cobrado | dinero }}</b></div>
+        {% endif %}
+      </div>
+      {% endif %}
 
       {% if v.posibles %}
       <div class="ct-sec">Posible mismo contacto</div>

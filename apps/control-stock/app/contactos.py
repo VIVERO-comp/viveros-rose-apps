@@ -49,6 +49,33 @@ Qué es — y qué no:
   no» — no se inventa.
 - SOLO LECTURA hacia Odoo/Twenty/Linear. Este módulo no escribe nada,
   ni siquiera local.
+
+El BLOQUE 53 (7/10/2026) suma tres cosas más, las tres MEDIDAS contra el
+proceso del 8095 antes de escribirlas:
+
+- **A7 · «todo lead debe tener su contacto».** El buscador por teléfono ya
+  normalizaba la consulta Y el dato (`normalizar_telefono`: solo dígitos,
+  sin 507 inicial), y medido en el 8095 encuentra con guiones, con
+  espacios, con `+507` y con `00507`. Los 0 resultados que vio Abraham NO
+  eran del buscador: eran de la LISTA. Salía solo de Odoo + los clientes
+  locales de Vender, así que **66 de 83 leads del CRM no tenían fila**
+  (22 sin teléfono y 44 cuyo número no casaba con ningún partner ni
+  cliente local). Desde aquí **el lead de Linear es una TERCERA FUENTE**
+  de la lista, casada por el mismo teléfono normalizado: un lead que ya
+  casa con un partner o con un cliente local se UNE a esa fila (no la
+  duplica), y uno que no casa con nada estrena su propia fila con fuente
+  «CRM». Si Linear no se puede leer, esas filas no están y **la pantalla
+  lo dice** — jamás un contacto inventado.
+- **A8 · las cuentas de SISTEMA fuera de la lista** (`_ids_de_sistema`),
+  con un criterio estructural y conservador, nunca una lista de nombres:
+  ver el docstring de esa función. Si la comprobación no se puede hacer,
+  **no se saca a nadie** y el aviso lo dice.
+- **A14 · la página del contacto como el lienzo**: fuera «Gastos y
+  compras / Total gastado»; dentro «Cuándo nos pagan» y las TRES tablas
+  (Cotizado · Facturado · Pagado), que salen de las facturas reales de
+  Odoo (`account.move`) del partner casado. «Citas» se queda. Con Odoo
+  sin configurar o caído los tres números salen «sin dato» y el hueco se
+  dice — nunca un $0 fingido.
 """
 
 import os
@@ -72,6 +99,29 @@ AVISO_CITAS_LUEGO = ("Las citas del calendario de este contacto llegan "
                      "con su propia parte.")
 AVISO_SIN_TRATOS = "Sin cotizaciones ni ventas con nosotros todavía."
 VACIO_LISTA = "Ningún contacto con lo que hay en las fuentes de hoy."
+
+# --- A7: el lead como tercera fuente de la lista ---------------------------
+AVISO_CRM_HUECO = ("Los leads del CRM no se pudieron leer, así que los "
+                   "contactos que solo existen como lead no están en la "
+                   "lista.")
+
+# --- A8: las cuentas de sistema fuera de la lista --------------------------
+AVISO_SISTEMA_SIN_COMPROBAR = ("No se pudo comprobar cuáles partner de Odoo "
+                               "son del sistema, así que no se sacó a "
+                               "ninguno de la lista.")
+
+# --- A14: «Cuándo nos pagan» y las tres tablas ----------------------------
+AVISO_FACTURAS_CAIDO = ("Las facturas de este contacto no se pudieron leer, "
+                        "así que lo facturado y lo cobrado salen sin dato.")
+AVISO_FACTURAS_SIN_ODOO = ("Sin Odoo no hay facturas que leer: lo facturado "
+                           "y lo cobrado salen sin dato.")
+SIN_PARTNER_FACTURAS = ("Este contacto todavía no es un cliente de Odoo, así "
+                        "que no tiene ninguna factura.")
+SIN_COTIZADO = "Nada cotizado pendiente de facturar."
+SIN_FACTURADO = "Nada facturado pendiente de cobro."
+SIN_PAGADO = "Todavía no se le ha cobrado nada a este contacto."
+TODO_COBRADO = ("Todo lo facturado a este contacto ya está cobrado, así que "
+                "no hay fecha de cobro.")
 
 # --- la pestaña «Historial de leads» ---------------------------------------
 AVISO_LINEAR_PRUEBAS = ("Linear no está conectado en pruebas: los leads de "
@@ -112,7 +162,9 @@ TODAVIA_NO = "Todavía no"
 APAGADOS_ACCION = ("Mandar petición", "Reasignar",
                    "Poner o cambiar seguimiento")
 APAGADOS_PLATA = ("Gastado", "Ganancia")
-APAGADO_TOTAL_GASTADO = "Total gastado"
+# «Gastos y compras / Total gastado» SALIÓ de la página el 7/10/2026
+# (BLOQUE 53, A14: lo pidió Abraham). No volver a ponerlo sin su palabra:
+# los dos apagados de plata que quedan son los del lienzo, arriba.
 
 # Las dos pestañas del panel derecho, en su orden: abre la primera.
 PANELES = (("leads", "Historial de leads"), ("whatsapp", "WhatsApp"))
@@ -163,7 +215,8 @@ def _nombre_plano(nombre):
 # Odoo: una lectura (partners + plata por partner), con la última buena
 # ---------------------------------------------------------------------------
 
-_cache_odoo = {"en": None, "partners": [], "plata": {}}
+_cache_odoo = {"en": None, "partners": [], "plata": {}, "sistema": 0,
+               "aviso_sistema": ""}
 
 
 def reiniciar_cache():
@@ -171,16 +224,82 @@ def reiniciar_cache():
     _cache_odoo["en"] = None
     _cache_odoo["partners"] = []
     _cache_odoo["plata"] = {}
+    _cache_odoo["sistema"] = 0
+    _cache_odoo["aviso_sistema"] = ""
+
+
+def _ids_de_sistema():
+    """(ids, aviso) — los partner de Odoo que NO son el contacto de nadie.
+
+    **A8 del BLOQUE 53.** El criterio es ESTRUCTURAL y conservador: nada
+    de una lista de nombres a dedo (un nombre raro puede ser un cliente de
+    verdad, y una lista a dedo envejece sola). Dos preguntas, las dos
+    sobre el papel del registro en Odoo, no sobre cómo se llama:
+
+    1. **¿Ese partner es un USUARIO del sistema?** (`res.users`, incluidos
+       los archivados). Son los administradores y las cuentas de las apps
+       —«Administrator», «ADMINISTRADOR WEB», «App Ventas», «ORDER-API»,
+       «App recepcion»—. Un cliente de verdad **nunca** entra a Odoo, así
+       que esta pregunta no puede sacar a ninguno.
+    2. **¿Vino instalado con un módulo?** (tiene xmlid en `ir.model.data`).
+       Así nacen la compañía, OdooBot, el «Public user» y los registros de
+       demostración. Un cliente lo crea una persona o la app, y eso **no
+       deja xmlid**: esta pregunta tampoco puede sacar a ninguno.
+
+    Y de yapa, por si una compañía no trajera xmlid, el partner de cada
+    `res.company`: la empresa no es cliente de sí misma.
+
+    **Si alguna de las tres lecturas falla, no se saca a NADIE** y el
+    aviso lo dice. Tapar un cliente por un error de lectura sería peor que
+    mostrar un administrador.
+
+    Lo que este criterio NO saca, y se dice para que no sorprenda: las
+    filas de PRUEBA cargadas a mano en la base de pruebas (nombres tipo
+    «QA …», «Prueba …», «cliente_relleno», «EJEMPLO»). Son partner
+    normales, creados como se crea un cliente: no hay una sola señal
+    estructural que las separe de uno real, y sacarlas por su nombre es
+    justo la lista a dedo que la regla prohíbe. Viven en Odoo PRUEBAS, no
+    en producción.
+    """
+    ids = set()
+    try:
+        usuarios = ventas._ejecutar(
+            "res.users", "search_read", [[]],
+            {"fields": ["partner_id"], "limit": 1000,
+             "context": {"active_test": False}})
+        ids.update(u["partner_id"][0] for u in usuarios if u.get("partner_id"))
+        xmlids = ventas._ejecutar(
+            "ir.model.data", "search_read",
+            [[["model", "=", "res.partner"]]],
+            {"fields": ["res_id"], "limit": 5000})
+        ids.update(x["res_id"] for x in xmlids if x.get("res_id"))
+        companias = ventas._ejecutar(
+            "res.company", "search_read", [[]],
+            {"fields": ["partner_id"], "limit": 50})
+        ids.update(c["partner_id"][0] for c in companias
+                   if c.get("partner_id"))
+    except Exception as fallo:
+        return set(), f"{AVISO_SISTEMA_SIN_COMPROBAR} ({fallo})"
+    return ids, ""
 
 
 def _leer_odoo():
-    """Los res.partner activos con nombre, y la plata por partner contada
-    de UNA pasada por sale.order (sin canceladas) — nunca una consulta
-    por contacto."""
+    """Los res.partner activos con nombre —menos las cuentas de sistema
+    (A8)—, y la plata por partner contada de UNA pasada por sale.order
+    (sin canceladas) — nunca una consulta por contacto.
+
+    Devuelve (partners, plata, sistema_n, aviso_sistema)."""
     partners = ventas._ejecutar(
         "res.partner", "search_read",
         [[["active", "=", True], ["name", "!=", False]]],
         {"fields": ["name", "phone", "is_company"], "limit": 2000})
+    de_sistema, aviso_sistema = _ids_de_sistema()
+    if de_sistema:
+        antes = len(partners)
+        partners = [p for p in partners if p["id"] not in de_sistema]
+        sistema_n = antes - len(partners)
+    else:
+        sistema_n = 0
     ordenes = ventas._ejecutar(
         "sale.order", "search_read",
         [[["partner_id", "!=", False], ["state", "!=", "cancel"]]],
@@ -197,33 +316,44 @@ def _leer_odoo():
         elif orden.get("state") in _ESTADOS_COTIZACION:
             fila["cotiz_n"] += 1
             fila["cotiz_total"] += monto
-    return partners, plata
+    return partners, plata, sistema_n, aviso_sistema
+
+
+def _odoo_vacio(aviso):
+    return {"partners": [], "plata": {}, "ok": False, "aviso": aviso,
+            "sistema": 0, "aviso_sistema": ""}
 
 
 def datos_odoo():
-    """{'partners', 'plata', 'ok', 'aviso'}. Nada se inventa: sin
-    configuración o con Odoo caído y sin lectura previa, ok=False y el
-    aviso lo dice; con una lectura buena anterior se sirve ESA con su
-    edad en minutos (el patrón de pedidos.plata)."""
+    """{'partners', 'plata', 'ok', 'aviso', 'sistema', 'aviso_sistema'}.
+    Nada se inventa: sin configuración o con Odoo caído y sin lectura
+    previa, ok=False y el aviso lo dice; con una lectura buena anterior se
+    sirve ESA con su edad en minutos (el patrón de pedidos.plata).
+
+    `sistema` es cuántas cuentas de sistema quedaron fuera (A8) y
+    `aviso_sistema` el hueco cuando esa comprobación no se pudo hacer."""
     if not ventas.configurado():
-        return {"partners": [], "plata": {}, "ok": False,
-                "aviso": AVISO_SIN_ODOO}
+        return _odoo_vacio(AVISO_SIN_ODOO)
     try:
-        partners, plata = _leer_odoo()
+        partners, plata, sistema_n, aviso_sistema = _leer_odoo()
     except Exception as fallo:
         if _cache_odoo["en"] is not None:
             edad = max(0, int((time.time() - _cache_odoo["en"]) // 60))
             return {"partners": _cache_odoo["partners"],
                     "plata": _cache_odoo["plata"], "ok": True,
+                    "sistema": _cache_odoo["sistema"],
+                    "aviso_sistema": _cache_odoo["aviso_sistema"],
                     "aviso": (f"Odoo no contestó: mostrando la última "
                               f"lectura buena, de hace {edad} min.")}
-        return {"partners": [], "plata": {}, "ok": False,
-                "aviso": (f"Odoo no contestó: la lista sale solo de los "
-                          f"clientes locales de Vender ({fallo}).")}
+        return _odoo_vacio(f"Odoo no contestó: la lista sale solo de los "
+                           f"clientes locales de Vender ({fallo}).")
     _cache_odoo["en"] = time.time()
     _cache_odoo["partners"] = partners
     _cache_odoo["plata"] = plata
-    return {"partners": partners, "plata": plata, "ok": True, "aviso": ""}
+    _cache_odoo["sistema"] = sistema_n
+    _cache_odoo["aviso_sistema"] = aviso_sistema
+    return {"partners": partners, "plata": plata, "ok": True, "aviso": "",
+            "sistema": sistema_n, "aviso_sistema": aviso_sistema}
 
 
 def twenty_conectado():
@@ -315,16 +445,30 @@ def _locales():
 def _contacto_nuevo(cid, tel_norm):
     return {
         "id": cid, "tel_norm": tel_norm, "nombre": "", "telefono": "",
-        "tipo": "Persona", "partner_ids": [], "locales": [],
-        "fuentes": [],  # se arma al final: Odoo / Local
+        "tipo": "Persona", "partner_ids": [], "locales": [], "leads": [],
+        "fuentes": [],  # se arma al final: Odoo / Local / CRM
     }
 
 
-def _unir(od):
+def _clave_de_lead(lead):
+    """La clave de un lead SIN teléfono: su ref de Linear, que es única y
+    estable (LEAD-62 → «ldLEAD-62»). Sin ref —que no pasa— su id."""
+    ref = (lead.get("ref") or lead.get("id") or "").strip()
+    return "ld" + re.sub(r"[^A-Za-z0-9_-]", "", ref)
+
+
+def _unir(od, leads=()):
     """La lista unificada, calculada al armar la vista (casamiento EN
     LECTURA, sin escribir NADA). Clave: el teléfono normalizado; sin
     teléfono cada aparición queda como su propio contacto (el nombre
-    plano no amarra — solo sugerirá «posible mismo» en la ficha)."""
+    plano no amarra — solo sugerirá «posible mismo» en la ficha).
+
+    TRES fuentes desde el BLOQUE 53 (A7, «todo lead debe tener su
+    contacto»): los partner de Odoo, los clientes locales de Vender y
+    **los leads del CRM**. Los leads van al final a propósito, para que el
+    nombre que manda siga siendo el de Odoo y después el local: el título
+    de un issue de Linear es el nombre tal como lo escribió quien atendió
+    el chat, y la ficha de Odoo suele estar más cuidada."""
     contactos = {}
 
     def tomar(clave, tel_norm):
@@ -360,6 +504,21 @@ def _unir(od):
         if not c["telefono"] and fila["celular"]:
             c["telefono"] = str(fila["celular"]).strip()
 
+    # La TERCERA fuente (A7): el lead del CRM. Un lead cuyo número ya casa
+    # con un partner o con un cliente local se UNE a esa fila; uno que no
+    # casa con nada estrena la suya, para que ningún lead quede sin
+    # contacto. No aporta un centavo: la plata sigue saliendo de Odoo y de
+    # lo local.
+    for lead in leads:
+        tel_norm = normalizar_telefono(lead.get("celular"))
+        clave = f"t{tel_norm}" if tel_norm else _clave_de_lead(lead)
+        c = tomar(clave, tel_norm)
+        c["leads"].append(lead.get("ref") or "")
+        if not c["nombre"] or c["nombre"] == "—":
+            c["nombre"] = (lead.get("nombre") or "").strip() or c["nombre"]
+        if not c["telefono"] and lead.get("celular"):
+            c["telefono"] = str(lead["celular"]).strip()
+
     lista = []
     for c in contactos.values():
         c.pop("_nombre_odoo", None)
@@ -369,6 +528,8 @@ def _unir(od):
             fuentes.append("Odoo")
         if c["locales"]:
             fuentes.append("Local")
+        if c["leads"]:
+            fuentes.append("CRM")
         c["fuentes"] = fuentes
         c["fuente_texto"] = " + ".join(fuentes)
         # La plata: con partner casado manda Odoo (la venta local vive
@@ -591,6 +752,40 @@ def _permiso(sesion, leads, aviso_leads=""):
 
 
 # ---------------------------------------------------------------------------
+# El buscador (A7)
+# ---------------------------------------------------------------------------
+
+def _casa_busqueda(contacto, q):
+    """¿Este contacto casa con lo que se escribió en el buscador?
+
+    **A7 del BLOQUE 53.** El teléfono se compara NORMALIZADO de los dos
+    lados con el mismo `normalizar_telefono` del casamiento, así que da
+    igual cómo se escriba: «6000-0001», «6000 0001», «+507 6000-0001»,
+    «00507 6000 0001» y «60000001» encuentran lo mismo, aunque Odoo tenga
+    guardado el número con guiones y con el +507 por delante (medido en el
+    8095 el 7/10/2026). El nombre va por texto suelto, como siempre.
+
+    Ojo con lo que NO arregla este buscador, porque es el hallazgo de
+    fondo de A7: si la persona no está en NINGUNA de las tres fuentes de
+    la lista, no hay nada que encontrar. Por eso el lead es fuente."""
+    q = (q or "").strip()
+    if not q:
+        return True
+    if q.lower() in (contacto.get("nombre") or "").lower():
+        return True
+    q_tel = normalizar_telefono(q)
+    if not q_tel:
+        return False
+    # La forma normalizada del contacto y, por si acaso, la del texto
+    # crudo que se muestra: las dos salen del mismo normalizador.
+    for guardado in (contacto.get("tel_norm") or "",
+                     normalizar_telefono(contacto.get("telefono"))):
+        if guardado and q_tel in guardado:
+            return True
+    return False
+
+
+# ---------------------------------------------------------------------------
 # La lista (GET /contactos)
 # ---------------------------------------------------------------------------
 
@@ -605,9 +800,15 @@ def lista(q="", filtro="", sesion=None):
     El candado del dinero viaja hasta acá: las columnas Ventas y Total de
     un contacto ajeno salen TAPADAS (`dinero` en False y los montos en
     None), porque si no, quien no puede abrir su página leería su plata de
-    la fila. Se tapa en Python: el monto no llega al HTML."""
+    la fila. Se tapa en Python: el monto no llega al HTML.
+
+    Desde el BLOQUE 53 los leads se leen SIEMPRE, también para quien ve
+    todo: ya no son solo la pregunta del candado, son una FUENTE de la
+    lista (A7). Cuesta poco: `linear_leads.listar()` sirve lo guardado al
+    instante y refresca por detrás."""
     od = datos_odoo()
-    contactos = _unir(od)
+    leads, aviso_leads = _leads_crudos()
+    contactos = _unir(od, leads)
     total_sin_filtrar = len(contactos)
 
     filtro = filtro if filtro in {clave for clave, _n in FILTROS} else "todos"
@@ -620,18 +821,10 @@ def lista(q="", filtro="", sesion=None):
 
     q = (q or "").strip()
     if q:
-        q_plano = q.lower()
-        q_tel = normalizar_telefono(q)
-        contactos = [
-            c for c in contactos
-            if q_plano in c["nombre"].lower()
-            or (q_tel and q_tel in c["tel_norm"])]
+        contactos = [c for c in contactos if _casa_busqueda(c, q)]
 
-    # El candado, fila por fila. A quien ve todo no se le consulta Linear:
-    # la pregunta no cambia la respuesta y la lista es la pantalla que más
-    # se abre.
+    # El candado, fila por fila.
     ve_todo = bool(sesion and sesion.get("ve_todo"))
-    leads, aviso_leads = ([], "") if ve_todo else _leads_crudos()
     tapados = 0
     for c in contactos:
         c["dinero"] = ve_todo or _permiso(
@@ -659,6 +852,16 @@ def lista(q="", filtro="", sesion=None):
         "filtro_apagado": FILTRO_APAGADO,
         "aviso_odoo": od["aviso"],
         "aviso_twenty": aviso_twenty(),
+        # A7: si los leads no se pudieron leer, falta una fuente entera y
+        # se dice. A8: cuántas cuentas de sistema quedaron fuera (o el
+        # hueco de no haber podido comprobarlo).
+        "aviso_crm": AVISO_CRM_HUECO if aviso_leads else "",
+        "sistema": od.get("sistema") or 0,
+        "aviso_sistema": (
+            od.get("aviso_sistema")
+            or (f"{od['sistema']} cuenta{'s' if od['sistema'] != 1 else ''} "
+                f"del sistema (administradores, apps y la compañía) fuera "
+                f"de la lista." if od.get("sistema") else "")),
         "vacio": VACIO_LISTA,
     }
 
@@ -669,21 +872,108 @@ def lista(q="", filtro="", sesion=None):
 
 def _ordenes_odoo(partner_ids):
     """Las órdenes del partner casado: números S00xxx, montos y estado.
-    Una sola consulta; 'cancel' fuera."""
+    Una sola consulta; 'cancel' fuera.
+
+    `facturada` dice si esa orden ya está facturada (`invoice_status`):
+    las facturadas salen de la tabla «Cotizado» y su plata se ve en
+    «Facturado» o en «Pagado», que es lo que hace el lienzo."""
     if not partner_ids:
         return []
     filas = ventas._ejecutar(
         "sale.order", "search_read",
         [[["partner_id", "in", list(partner_ids)],
           ["state", "!=", "cancel"]]],
-        {"fields": ["name", "amount_total", "state", "date_order"],
+        {"fields": ["name", "amount_total", "state", "date_order",
+                    "invoice_status"],
          "limit": 200})
     etiqueta = {"draft": "Cotización", "sent": "Cotización enviada",
                 "sale": "Confirmada", "done": "Entregada"}
     return [{"orden": f.get("name") or "", "total": f.get("amount_total"),
              "estado": etiqueta.get(f.get("state"), f.get("state") or ""),
-             "fecha": str(f.get("date_order") or "")}
+             "fecha": str(f.get("date_order") or ""),
+             "facturada": f.get("invoice_status") == "invoiced"}
             for f in filas]
+
+
+# ---------------------------------------------------------------------------
+# A14 · «Cuándo nos pagan» y las tablas «Facturado» y «Pagado»
+# ---------------------------------------------------------------------------
+
+_CENTAVO = 0.009
+
+
+def _facturas_odoo(partner_ids):
+    """Las facturas de venta PUBLICADAS del partner casado. Una sola
+    consulta; los borradores y las canceladas no son plata facturada."""
+    return ventas._ejecutar(
+        "account.move", "search_read",
+        [[["partner_id", "in", list(partner_ids)],
+          ["move_type", "=", "out_invoice"],
+          ["state", "=", "posted"]]],
+        {"fields": ["name", "amount_total", "amount_residual",
+                    "invoice_date", "invoice_date_due"],
+         "limit": 200})
+
+
+def _facturacion(contacto, hay_odoo):
+    """«Cuándo nos pagan» y las dos tablas de facturas, ya decididas.
+
+    Reglas, para que nadie tenga que adivinar mirando la pantalla:
+
+    - **Facturado** = la suma de las facturas de venta publicadas.
+    - **Por cobrar** = la suma de sus saldos (`amount_residual`).
+    - **Próximo vencimiento** = el `invoice_date_due` más cercano de las
+      que todavía deben; si no debe nada, «—» y la frase lo explica.
+    - **Pagado** = las facturas con saldo 0; «Cobrado» es su suma.
+
+    Nada se inventa: sin partner de Odoo la respuesta honesta es que no
+    tiene facturas (no es un hueco, es un hecho); con Odoo caído o sin
+    configurar los tres números salen en None —«sin dato»— y el aviso lo
+    dice. Jamás un $0 fingido, que es lo que se celebra o se cobra mal.
+    """
+    vacio = {"ok": False, "aviso": "", "facturado": None, "por_cobrar": None,
+             "cobrado": None, "vence": "", "nota": "", "facturas": [],
+             "pagadas": []}
+    if not contacto.get("partner_ids"):
+        return dict(vacio, ok=True, aviso=SIN_PARTNER_FACTURAS)
+    if not hay_odoo:
+        return dict(vacio, aviso=(AVISO_FACTURAS_SIN_ODOO
+                                  if not ventas.configurado()
+                                  else AVISO_FACTURAS_CAIDO))
+    try:
+        filas = _facturas_odoo(contacto["partner_ids"])
+    except Exception as fallo:
+        return dict(vacio, aviso=f"{AVISO_FACTURAS_CAIDO} ({fallo})")
+
+    deben, pagadas, vencimientos = [], [], []
+    facturado = cobrado = por_cobrar = 0.0
+    for f in filas:
+        total = float(f.get("amount_total") or 0)
+        saldo = float(f.get("amount_residual") or 0)
+        facturado += total
+        renglon = {"factura": f.get("name") or "", "total": total,
+                   "saldo": round(saldo, 2),
+                   "fecha": str(f.get("invoice_date") or "") or "—",
+                   "vence": str(f.get("invoice_date_due") or "") or "—"}
+        if saldo > _CENTAVO:
+            por_cobrar += saldo
+            deben.append(renglon)
+            if f.get("invoice_date_due"):
+                vencimientos.append(str(f["invoice_date_due"]))
+        else:
+            cobrado += total
+            pagadas.append(renglon)
+    deben.sort(key=lambda r: r["vence"])
+    pagadas.sort(key=lambda r: r["fecha"], reverse=True)
+    return {
+        "ok": True, "aviso": "",
+        "facturado": round(facturado, 2),
+        "por_cobrar": round(por_cobrar, 2),
+        "cobrado": round(cobrado, 2),
+        "vence": min(vencimientos) if vencimientos else "—",
+        "nota": "" if vencimientos else (TODO_COBRADO if filas else ""),
+        "facturas": deben, "pagadas": pagadas,
+    }
 
 
 def ficha(cid, sesion=None, panel=""):
@@ -696,16 +986,20 @@ def ficha(cid, sesion=None, panel=""):
     esa misma. Cero JS: la plantilla solo pinta lo que este dict trae.
 
     El candado (frente D) se aplica antes de devolver nada: con el dinero
-    tapado, los montos salen en None, «Lo que tiene con nosotros» va vacío
-    y **a Odoo ni se le preguntan las órdenes** — lo que no se puede ver
-    no se lee. Con el chat tapado, el hilo no se arma siquiera."""
+    tapado, los montos salen en None, las tres tablas van vacías y **a
+    Odoo ni se le preguntan las órdenes ni las facturas** — lo que no se
+    puede ver no se lee. Con el chat tapado, el hilo no se arma siquiera.
+
+    Del BLOQUE 53 (A14): la página es la del lienzo. «Gastos y compras /
+    Total gastado» SALIÓ, y entraron «Cuándo nos pagan» y las tres tablas
+    (Cotizado · Facturado · Pagado). «Citas» se queda."""
     od = datos_odoo()
-    contactos = _unir(od)
+    leads, aviso_leads = _leads_crudos()
+    contactos = _unir(od, leads)
     contacto = next((c for c in contactos if c["id"] == cid), None)
     if contacto is None:
         return None
 
-    leads, aviso_leads = _leads_crudos()
     mios = _leads_del_contacto(contacto, leads)
     permiso = _permiso(sesion, mios, aviso_leads)
 
@@ -715,11 +1009,29 @@ def ficha(cid, sesion=None, panel=""):
 
     aviso_odoo_ficha = od["aviso"]
     tratos = []
+    facturacion = {"ok": False, "aviso": "", "facturado": None,
+                   "por_cobrar": None, "cobrado": None, "vence": "",
+                   "nota": "", "facturas": [], "pagadas": []}
     if permiso["dinero"]:
-        # Los tratos: primero lo local (trae href a la ficha existente),
-        # luego lo de Odoo que no sea la MISMA orden ya listada.
+        # TABLA 1 «Cotizado»: lo que todavía no está facturado. Primero lo
+        # local (trae href a la ficha existente), luego lo de Odoo que no
+        # sea la MISMA orden ya listada.
+        facturadas = set()
+        ordenes_odoo = []
+        if contacto["partner_ids"] and od["ok"]:
+            try:
+                ordenes_odoo = _ordenes_odoo(contacto["partner_ids"])
+                facturadas = {o["orden"] for o in ordenes_odoo
+                              if o["facturada"] and o["orden"]}
+            except Exception as fallo:
+                aviso_odoo_ficha = (f"Odoo no contestó las órdenes de este "
+                                    f"contacto ({fallo}). Nada se inventa.")
         ordenes_vistas = set()
         for fila in contacto["locales"]:
+            if fila["orden"] and fila["orden"] in facturadas:
+                # Ya facturada: su plata se ve en «Facturado» o «Pagado».
+                ordenes_vistas.add(fila["orden"])
+                continue
             tratos.append({
                 "titulo": fila["titulo"], "orden": fila["orden"] or "—",
                 "total": fila["total"], "href": fila["href"],
@@ -728,20 +1040,17 @@ def ficha(cid, sesion=None, panel=""):
             })
             if fila["orden"]:
                 ordenes_vistas.add(fila["orden"])
-        if contacto["partner_ids"] and od["ok"]:
-            try:
-                for orden in _ordenes_odoo(contacto["partner_ids"]):
-                    if orden["orden"] in ordenes_vistas:
-                        continue
-                    tratos.append({
-                        "titulo": "Orden en Odoo", "orden": orden["orden"],
-                        "total": orden["total"], "href": "",
-                        "estado": orden["estado"], "fecha": orden["fecha"],
-                    })
-            except Exception as fallo:
-                aviso_odoo_ficha = (f"Odoo no contestó las órdenes de este "
-                                    f"contacto ({fallo}). Nada se inventa.")
+        for orden in ordenes_odoo:
+            if orden["orden"] in ordenes_vistas or orden["facturada"]:
+                continue
+            tratos.append({
+                "titulo": "Orden en Odoo", "orden": orden["orden"],
+                "total": orden["total"], "href": "",
+                "estado": orden["estado"], "fecha": orden["fecha"],
+            })
         tratos.sort(key=lambda t: t["fecha"], reverse=True)
+        # TABLAS 2 y 3 y «Cuándo nos pagan»: las facturas reales.
+        facturacion = _facturacion(contacto, od["ok"])
     else:
         contacto = dict(contacto)
         for campo in ("ventas_n", "ventas_total", "cotiz_n", "cotiz_total"):
@@ -766,6 +1075,15 @@ def ficha(cid, sesion=None, panel=""):
         "contacto": contacto,
         "tratos": tratos,
         "sin_tratos": AVISO_SIN_TRATOS,
+        # A14: las tres tablas del lienzo y «Cuándo nos pagan».
+        "facturacion": facturacion,
+        "sin_cotizado": SIN_COTIZADO,
+        "sin_facturado": SIN_FACTURADO,
+        "sin_pagado": SIN_PAGADO,
+        # Nada en ninguna de las tres: se dice UNA vez, no tres.
+        "nada_con_nosotros": (permiso["dinero"] and not tratos
+                              and not facturacion["facturas"]
+                              and not facturacion["pagadas"]),
         "posibles": posibles,
         "atiende": atiende,
         "aviso_odoo": aviso_odoo_ficha,
@@ -781,6 +1099,5 @@ def ficha(cid, sesion=None, panel=""):
         "chat": chat,
         "apagados_accion": APAGADOS_ACCION,
         "apagados_plata": APAGADOS_PLATA,
-        "apagado_total_gastado": APAGADO_TOTAL_GASTADO,
         "todavia_no": TODAVIA_NO,
     }

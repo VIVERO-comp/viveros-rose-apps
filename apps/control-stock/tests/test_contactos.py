@@ -23,6 +23,21 @@ Lo que se prueba, por regla:
   finanzas. Se comprueba sobre el CUERPO de la respuesta —que el monto y
   el hilo no estén en el HTML—, no sobre lo que se vería en pantalla.
 
+Y del BLOQUE 53, al final del archivo:
+
+- **A7 · todo lead tiene su contacto**: el buscador por teléfono encuentra
+  escriba uno como escriba (guiones, espacios, `+507`, `00507`), y el lead
+  del CRM es una TERCERA FUENTE de la lista — el que casa por teléfono se
+  une a su fila y el que no casa estrena la suya, incluso sin número.
+  Si Linear no se puede leer, falta una fuente y la lista lo DICE.
+- **A8 · las cuentas de sistema fuera**, por su papel en Odoo (ser usuario
+  o haber venido con un módulo) y nunca por su nombre; y si la
+  comprobación falla, **no se saca a nadie**.
+- **A14 · la página como el lienzo**: «Gastos y compras / Total gastado»
+  salió, «Citas» se queda, y entraron «Cuándo nos pagan» y las tres tablas
+  (Cotizado · Facturado · Pagado) desde las facturas reales — con sus tres
+  números en «sin dato» cuando Odoo no contesta, nunca en $0.
+
 Datos QA solamente — acá no entra ningún nombre de cliente real.
 """
 
@@ -53,20 +68,44 @@ _PARTNERS_QA = [
      "is_company": False},
 ]
 
+# Las cuentas de SISTEMA del doble (A8 del BLOQUE 53): una es usuario de
+# Odoo y la otra es la compañía (con su xmlid). Las dos tienen que quedar
+# FUERA de la lista, y por su papel en Odoo, no por cómo se llaman.
+_PARTNERS_SISTEMA_QA = [
+    {"id": 1, "name": "Vivero QA S.A.", "phone": "+507 6000-0099",
+     "is_company": True},
+    {"id": 2, "name": "ADMINISTRADOR QA", "phone": "6000-0098",
+     "is_company": False},
+]
+_USUARIOS_QA = [{"id": 2, "partner_id": [2, "ADMINISTRADOR QA"]}]
+_XMLIDS_QA = [{"id": 900, "res_id": 1}]
+_COMPANIAS_QA = [{"id": 1, "partner_id": [1, "Vivero QA S.A."]}]
+
 _ORDENES_QA = [
+    # Ya facturada: su plata se ve en «Pagado», no en «Cotizado» (A14).
     {"id": 110, "name": "S00110", "partner_id": [11, "Empresa QA Hotel"],
-     "amount_total": 480.0, "state": "sale",
+     "amount_total": 480.0, "state": "sale", "invoice_status": "invoiced",
      "date_order": "2026-10-01 10:00:00"},
     {"id": 111, "name": "S00111", "partner_id": [11, "Empresa QA Hotel"],
-     "amount_total": 1150.0, "state": "draft",
+     "amount_total": 1150.0, "state": "draft", "invoice_status": "to invoice",
      "date_order": "2026-10-03 09:00:00"},
     {"id": 112, "name": "S00112", "partner_id": [12, "Cliente QA Rosa"],
-     "amount_total": 35.0, "state": "sale",
+     "amount_total": 35.0, "state": "sale", "invoice_status": "to invoice",
      "date_order": "2026-10-02 12:00:00"},
     # Una cancelada: no cuenta en ningún lado.
     {"id": 113, "name": "S00113", "partner_id": [12, "Cliente QA Rosa"],
-     "amount_total": 999.0, "state": "cancel",
+     "amount_total": 999.0, "state": "cancel", "invoice_status": "no",
      "date_order": "2026-10-02 13:00:00"},
+]
+
+# Las facturas publicadas del doble (A14): una cobrada y una con saldo.
+_FACTURAS_QA = [
+    {"id": 12, "name": "INV QA 00012", "partner_id": [11, "Empresa QA Hotel"],
+     "amount_total": 480.0, "amount_residual": 0.0,
+     "invoice_date": "2026-09-28", "invoice_date_due": "2026-09-28"},
+    {"id": 14, "name": "INV QA 00014", "partner_id": [11, "Empresa QA Hotel"],
+     "amount_total": 200.0, "amount_residual": 200.0,
+     "invoice_date": "2026-10-04", "invoice_date_due": "2026-10-20"},
 ]
 
 
@@ -82,16 +121,34 @@ def fuentes_de_pruebas(monkeypatch, db_limpia):
     contactos.reiniciar_cache()
 
 
-def _doble_odoo():
+def _doble_odoo(sistema=True, facturas=True):
     """Un Odoo falso que SOLO acepta search_read — cualquier escritura
-    revienta la prueba (el módulo es de lectura)."""
+    revienta la prueba (el módulo es de lectura).
+
+    `sistema=False` deja las tres lecturas de A8 reventando, para probar
+    el fail-open: si no se puede comprobar, no se saca a nadie."""
     def ejecutar(modelo, metodo, args, kw=None):
         assert metodo == "search_read", \
             f"Contactos debe ser SOLO LECTURA y llamó {modelo}.{metodo}"
         if modelo == "res.partner":
-            return [dict(p) for p in _PARTNERS_QA]
+            return [dict(p) for p in _PARTNERS_SISTEMA_QA + _PARTNERS_QA]
+        if modelo in ("res.users", "ir.model.data", "res.company"):
+            if not sistema:
+                raise RuntimeError(f"{modelo} no se puede leer")
+            return [dict(f) for f in {"res.users": _USUARIOS_QA,
+                                      "ir.model.data": _XMLIDS_QA,
+                                      "res.company": _COMPANIAS_QA}[modelo]]
         if modelo == "sale.order":
             filas = [dict(o) for o in _ORDENES_QA if o["state"] != "cancel"]
+            for condicion in args[0]:
+                if condicion[0] == "partner_id" and condicion[1] == "in":
+                    filas = [f for f in filas
+                             if f["partner_id"][0] in set(condicion[2])]
+            return filas
+        if modelo == "account.move":
+            if not facturas:
+                raise RuntimeError("account.move no contesta")
+            filas = [dict(f) for f in _FACTURAS_QA]
             for condicion in args[0]:
                 if condicion[0] == "partner_id" and condicion[1] == "in":
                     filas = [f for f in filas
@@ -315,11 +372,14 @@ def test_ficha_agrupa_sin_duplicar_la_misma_orden(cliente, con_odoo_qa):
     f = contactos.ficha("t60000030", sesion=sesion_abierta())
     ordenes = [t["orden"] for t in f["tratos"]]
     assert ordenes.count("S00111") == 1
-    assert "S00110" in ordenes  # la confirmada de Odoo también sale
+    # Y S00110 NO está en «Cotizado», porque ya está facturada (A14): su
+    # plata se ve en «Pagado». Lo que no puede pasar es que se cuente dos
+    # veces, una como cotización y otra como factura.
+    assert "S00110" not in ordenes
     local = next(t for t in f["tratos"] if t["orden"] == "S00111")
     assert local["href"] == f"/venta/estado/servicio/{n}"
     texto = cliente.get("/contactos/t60000030").text
-    assert "S00110" in texto and "S00111" in texto
+    assert "S00111" in texto and "INV QA 00012" in texto
     assert f'href="/venta/estado/servicio/{n}"' in texto
 
 
@@ -575,11 +635,10 @@ def test_el_chat_se_arma_con_el_hilo_de_control_y_es_solo_lectura(
 # (C) Los apagados del lienzo: en su lugar, disabled, sin números
 # ---------------------------------------------------------------------------
 
-def test_los_seis_apagados_estan_en_su_lugar_y_sin_numero(cliente,
-                                                          con_odoo_qa):
+def test_los_cinco_apagados_estan_en_su_lugar_y_sin_numero(cliente,
+                                                           con_odoo_qa):
     texto = cliente.get("/contactos/t60000030").text
-    for nombre in (contactos.APAGADOS_ACCION + contactos.APAGADOS_PLATA
-                   + (contactos.APAGADO_TOTAL_GASTADO,)):
+    for nombre in contactos.APAGADOS_ACCION + contactos.APAGADOS_PLATA:
         assert nombre in texto, nombre
     # Los tres botones de acción, apagados de verdad.
     for nombre in contactos.APAGADOS_ACCION:
@@ -798,3 +857,256 @@ def test_con_el_dinero_tapado_a_odoo_ni_se_le_preguntan_las_ordenes(
     assert not [p for p in pedidas
                 if p[0] == "sale.order" and "partner_id" in p[1]
                 and "'in'" in p[1]]
+
+
+# ===========================================================================
+# BLOQUE 53 — A7 (todo lead debe tener su contacto), A8 (cuentas de
+# sistema fuera) y A14 (la página como el lienzo)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# A7 · el buscador por teléfono, en todas las grafías
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("escrito", [
+    "60000030", "6000-0030", "6000 0030", "+507 6000-0030",
+    "+50760000030", "507 6000 0030", "00507 6000-0030", " 6000-0030 ",
+    "(507) 6000-0030",
+])
+def test_el_buscador_por_telefono_ignora_guiones_espacios_y_507(
+        con_odoo_qa, escrito):
+    """A7: los dos lados se normalizan con el MISMO normalizador, así que
+    da igual cómo se escriba el número — y Odoo lo tiene guardado como
+    «+507 6000-0030», con guion y con prefijo."""
+    v = contactos.lista(q=escrito, sesion=sesion_abierta())
+    assert [c["nombre"] for c in v["contactos"]] == ["Empresa QA Hotel"], \
+        escrito
+
+
+def test_el_buscador_no_confunde_un_numero_con_otro(con_odoo_qa):
+    v = contactos.lista(q="6000-0001", sesion=sesion_abierta())
+    assert [c["nombre"] for c in v["contactos"]] == ["Cliente QA Rosa"]
+    assert contactos.lista(q="6000-9999",
+                           sesion=sesion_abierta())["cuenta"] == 0
+
+
+# ---------------------------------------------------------------------------
+# A7 · el LEAD es una tercera fuente: ningún lead sin contacto
+# ---------------------------------------------------------------------------
+
+_LEADS_QA = [
+    # Casa con el teléfono del partner: se UNE a su fila, no la duplica.
+    {"ref": "LEAD-20", "url": "", "nombre": "Hotel escrito en el chat",
+     "celular": "6000-0030", "estado": "COTIZADO",
+     "estado_nombre": "Cotizado", "cerrado": False, "interes": "Paisajismo",
+     "resp": "Ruben", "hace": "hace 2 días"},
+    # No casa con nada: estrena su propia fila con fuente «CRM».
+    {"ref": "LEAD-21", "url": "", "nombre": "Cliente QA Solo Lead",
+     "celular": "6000-0077", "estado": "NUEVO", "estado_nombre": "Nuevo",
+     "cerrado": False, "interes": "Plantas", "resp": "", "hace": "hoy"},
+    # Un lead SIN teléfono: también tiene su fila, por su ref.
+    {"ref": "LEAD-22", "url": "", "nombre": "Cliente QA Sin Numero",
+     "celular": "", "estado": "NUEVO", "estado_nombre": "Nuevo",
+     "cerrado": False, "interes": "", "resp": "", "hace": "hoy"},
+]
+
+
+@pytest.fixture
+def con_linear_qa(monkeypatch):
+    monkeypatch.setenv("LINEAR_API_KEY", "lin_api_de_verdad")
+    monkeypatch.setattr(linear_leads, "listar",
+                        lambda refrescar=False: [dict(l) for l in _LEADS_QA])
+
+
+def test_todo_lead_tiene_su_contacto_en_la_lista(con_odoo_qa, con_linear_qa):
+    """EL hallazgo de A7: la lista salía solo de Odoo + los clientes
+    locales, así que un lead del CRM cuyo número no estuviera en Odoo no
+    tenía fila y buscarlo por teléfono daba 0. Ahora el lead es fuente."""
+    v = contactos.lista(sesion=sesion_abierta())
+    por_nombre = {c["nombre"]: c for c in v["contactos"]}
+    # El que casa se UNIÓ: una sola fila, con las dos fuentes.
+    hotel = por_nombre["Empresa QA Hotel"]
+    assert hotel["fuente_texto"] == "Odoo + CRM"
+    assert hotel["leads"] == ["LEAD-20"]
+    assert "Hotel escrito en el chat" not in por_nombre
+    # Los que no casan estrenan fila, y se encuentran por su teléfono.
+    solo = por_nombre["Cliente QA Solo Lead"]
+    assert solo["fuente_texto"] == "CRM"
+    assert solo["id"] == "t60000077"
+    assert contactos.lista(q="6000-0077",
+                           sesion=sesion_abierta())["cuenta"] == 1
+    # Y el lead sin teléfono tiene fila por su ref, sin inventarle número.
+    sin_numero = por_nombre["Cliente QA Sin Numero"]
+    assert sin_numero["id"] == "ldLEAD-22"
+    assert sin_numero["telefono"] == ""
+
+
+def test_un_lead_no_aporta_plata_ni_se_cuenta_como_venta(con_odoo_qa,
+                                                         con_linear_qa):
+    v = contactos.lista(sesion=sesion_abierta())
+    solo = next(c for c in v["contactos"]
+                if c["nombre"] == "Cliente QA Solo Lead")
+    assert solo["ventas_n"] == 0 and solo["ventas_total"] == 0.0
+    assert solo["cotiz_n"] == 0 and not solo["con_venta"]
+    # Y sigue estando en la lista: un contacto puede existir sin venta.
+    assert any(c["nombre"] == "Cliente QA Solo Lead"
+               for c in contactos.lista(filtro="sin_venta",
+                                        sesion=sesion_abierta())["contactos"])
+
+
+def test_la_ficha_de_un_contacto_que_solo_es_lead_abre(cliente, con_odoo_qa,
+                                                       con_linear_qa):
+    f = contactos.ficha("t60000077", sesion=sesion_abierta())
+    assert f is not None
+    assert f["contacto"]["fuente_texto"] == "CRM"
+    assert [l["ref"] for l in f["leads"]["leads"]] == ["LEAD-21"]
+    # Sin partner de Odoo no hay facturas, y eso es un HECHO, no un hueco.
+    assert f["facturacion"]["aviso"] == contactos.SIN_PARTNER_FACTURAS
+    texto = cliente.get("/contactos/t60000077").text
+    assert "Cliente QA Solo Lead" in texto
+    assert contactos.SIN_PARTNER_FACTURAS in texto
+
+
+def test_sin_linear_falta_una_fuente_y_la_lista_lo_dice(cliente, con_odoo_qa):
+    """Nada se inventa: si los leads no se pudieron leer, la lista avisa
+    que le faltan filas en vez de parecer completa."""
+    assert contactos.linear_conectado() is False
+    v = contactos.lista(sesion=sesion_abierta())
+    assert v["aviso_crm"] == contactos.AVISO_CRM_HUECO
+    assert contactos.AVISO_CRM_HUECO in cliente.get("/contactos").text
+
+
+def test_con_linear_legible_la_lista_no_avisa_hueco_de_crm(cliente,
+                                                           con_odoo_qa,
+                                                           con_linear_qa):
+    v = contactos.lista(sesion=sesion_abierta())
+    assert v["aviso_crm"] == ""
+    assert contactos.AVISO_CRM_HUECO not in cliente.get("/contactos").text
+
+
+# ---------------------------------------------------------------------------
+# A8 · las cuentas de SISTEMA fuera, con un criterio estructural
+# ---------------------------------------------------------------------------
+
+def test_las_cuentas_de_sistema_no_salen_en_la_lista(cliente, con_odoo_qa):
+    """A8: fuera por su PAPEL en Odoo (ser usuario, o haber venido
+    instalado con un módulo), nunca por su nombre."""
+    v = contactos.lista(sesion=sesion_abierta())
+    nombres = [c["nombre"] for c in v["contactos"]]
+    assert "ADMINISTRADOR QA" not in nombres
+    assert "Vivero QA S.A." not in nombres
+    assert sorted(nombres) == ["Cliente QA Rosa", "Cliente QA Sin Tel",
+                               "Empresa QA Hotel"]
+    assert v["sistema"] == 2
+    texto = cliente.get("/contactos").text
+    assert "2 cuentas del sistema" in texto
+    assert "ADMINISTRADOR QA" not in texto
+
+
+def test_una_cuenta_de_sistema_tampoco_se_puede_abrir(cliente, con_odoo_qa):
+    """No basta con esconderla de la lista: su página no existe."""
+    assert contactos.ficha("o2", sesion=sesion_abierta()) is None
+    assert contactos.ficha("t60000098", sesion=sesion_abierta()) is None
+    r = cliente.get("/contactos/t60000098", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_si_no_se_puede_comprobar_NO_se_saca_a_nadie(cliente, monkeypatch):
+    """Lo conservador: tapar un cliente por un error de lectura es peor
+    que mostrar un administrador. Si las tres lecturas fallan, la lista
+    sale completa y el hueco se DICE."""
+    monkeypatch.setattr(ventas, "configurado", lambda: True)
+    monkeypatch.setattr(ventas, "_ejecutar", _doble_odoo(sistema=False))
+    contactos.reiniciar_cache()
+    v = contactos.lista(sesion=sesion_abierta())
+    assert v["sistema"] == 0
+    assert "ADMINISTRADOR QA" in [c["nombre"] for c in v["contactos"]]
+    assert contactos.AVISO_SISTEMA_SIN_COMPROBAR in v["aviso_sistema"]
+    assert contactos.AVISO_SISTEMA_SIN_COMPROBAR in \
+        cliente.get("/contactos").text
+
+
+# ---------------------------------------------------------------------------
+# A14 · la página del contacto como el lienzo
+# ---------------------------------------------------------------------------
+
+def test_gastos_y_compras_salio_de_la_pagina(cliente, con_odoo_qa):
+    """A14, lo que Abraham pidió QUITAR. Y «Citas» SE QUEDA."""
+    texto = cliente.get("/contactos/t60000030").text
+    assert "Gastos y compras" not in texto
+    assert "Total gastado" not in texto
+    assert "Citas" in texto
+    assert contactos.AVISO_CITAS_LUEGO in texto
+    assert not hasattr(contactos, "APAGADO_TOTAL_GASTADO")
+
+
+def test_cuando_nos_pagan_sale_de_las_facturas_reales(cliente, con_odoo_qa):
+    f = contactos.ficha("t60000030", sesion=sesion_abierta())
+    fac = f["facturacion"]
+    assert fac["ok"] is True
+    assert fac["facturado"] == 680.0      # 480 cobrada + 200 con saldo
+    assert fac["por_cobrar"] == 200.0
+    assert fac["cobrado"] == 480.0
+    assert fac["vence"] == "2026-10-20"   # la más cercana de las que deben
+    assert fac["nota"] == ""
+    texto = cliente.get("/contactos/t60000030").text
+    assert "Cuándo nos pagan" in texto
+    assert "Facturado" in texto and "Por cobrar" in texto
+    assert "Próximo vencimiento" in texto and "2026-10-20" in texto
+
+
+def test_las_tres_tablas_del_lienzo_estan_y_cada_factura_en_la_suya(
+        cliente, con_odoo_qa):
+    f = contactos.ficha("t60000030", sesion=sesion_abierta())
+    assert [r["factura"] for r in f["facturacion"]["facturas"]] == \
+        ["INV QA 00014"]                                   # con saldo
+    assert [r["factura"] for r in f["facturacion"]["pagadas"]] == \
+        ["INV QA 00012"]                                   # cobrada
+    assert [t["orden"] for t in f["tratos"]] == ["S00111"]  # sin facturar
+    texto = cliente.get("/contactos/t60000030").text
+    for titulo in ("Cotizado", "Facturado", "Pagado"):
+        assert f">{titulo}</div>" in texto, titulo
+    assert "Cobrado de este contacto" in texto
+
+
+def test_sin_facturas_lo_dice_con_palabras_y_no_con_un_cero(cliente,
+                                                            con_odoo_qa):
+    """Un contacto de Odoo sin ninguna factura: «nada facturado» es la
+    verdad, no un hueco — pero tampoco se celebra un $0 inventado."""
+    f = contactos.ficha("t60000001", sesion=sesion_abierta())
+    assert f["facturacion"]["facturado"] == 0.0
+    assert f["facturacion"]["vence"] == "—"
+    assert f["facturacion"]["facturas"] == []
+    texto = cliente.get("/contactos/t60000001").text
+    assert contactos.SIN_FACTURADO in texto
+    assert contactos.SIN_PAGADO in texto
+
+
+def test_facturas_caidas_salen_SIN_DATO_y_lo_dicen(cliente, monkeypatch):
+    """Odoo contesta los partner pero no las facturas: los tres números
+    van en None («sin dato») y el aviso lo dice. Jamás un $0 fingido."""
+    monkeypatch.setattr(ventas, "configurado", lambda: True)
+    monkeypatch.setattr(ventas, "_ejecutar", _doble_odoo(facturas=False))
+    contactos.reiniciar_cache()
+    f = contactos.ficha("t60000030", sesion=sesion_abierta())
+    assert f["facturacion"]["facturado"] is None
+    assert f["facturacion"]["por_cobrar"] is None
+    assert contactos.AVISO_FACTURAS_CAIDO in f["facturacion"]["aviso"]
+    texto = cliente.get("/contactos/t60000030").text
+    assert "sin dato" in texto
+    assert contactos.AVISO_FACTURAS_CAIDO in texto
+
+
+def test_el_candado_tambien_tapa_las_facturas(con_odoo_qa,
+                                              con_linear_de_ruben):
+    """Las facturas son DINERO: a quien no atiende el contacto no se le
+    leen siquiera (y por eso el doble de Odoo no revienta por una
+    escritura: no hay ni una lectura de account.move)."""
+    mary = _empleada_con_rol("mary", "Mary", datos_roles.SLUG_OPERACIONES)
+    sesion = contactos.sesion_de(mary, es_admin=False)
+    f = contactos.ficha("t60000030", sesion=sesion)
+    assert f["permiso"]["dinero"] is False
+    assert f["facturacion"]["facturado"] is None
+    assert f["facturacion"]["facturas"] == []
+    assert f["facturacion"]["pagadas"] == []
+    assert f["nada_con_nosotros"] is False
