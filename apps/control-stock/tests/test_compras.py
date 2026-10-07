@@ -319,7 +319,7 @@ def test_la_tarjeta_sin_plata_no_pinta_barra(cliente):
     assert "cmp-barra" not in tarjeta_201
     tarjeta_205 = texto.split('data-ref="VIV-205"')[1].split("</div>")[0]
     assert "cmp-barra" in tarjeta_205
-    assert "$625.00 / $1250.00" in tarjeta_205
+    assert "$625.00 / $1,250.00" in tarjeta_205   # con la coma (item 6)
 
 
 def test_la_pantalla_no_espera_a_odoo_para_la_plata(monkeypatch):

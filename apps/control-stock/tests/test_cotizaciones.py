@@ -1316,7 +1316,7 @@ def leads_de_muestra(monkeypatch):
 def test_editar_comenta_el_antes_y_el_despues_si_esta_conectada(odoo, leads_de_muestra):
     registro = _cotizacion_de_renta(odoo)
     # $850 de servicio + 10 CROTO a $45 (el fake no fuerza $0 en renta,
-    # ver el comentario de _cotizacion_de_renta): nace en $1300.00.
+    # ver el comentario de _cotizacion_de_renta): nace en $1,300.00.
     assert registro["total"] == 1300.0
     cotizaciones.vincular_lead(registro["n"], "LEAD-91")  # Tamara, de muestra
     cotizaciones.editar_cotizacion(

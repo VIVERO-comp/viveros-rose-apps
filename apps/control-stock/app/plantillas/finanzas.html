@@ -62,7 +62,7 @@
          todavía no se sabe — ninguna se inventa. #}
       <div class="fz-r">
         <span class="fz-quien"><b>{{ p.orden or '—' }}</b><span class="fz-hint">{{ p.cliente or 'Sin cliente' }}{% if p.fuera_de_odoo %} · el pago se informó por fuera: todavía no está en el sistema{% endif %}{% if p.aviso_reentrada %} · {{ p.aviso_reentrada }}{% endif %}</span>
-          <span class="fz-hint">Venta del {{ p.fecha_texto }} · {{ p.metodo_texto }} · marcó: {{ p.marco_texto }}</span></span>
+          <span class="fz-hint">Venta del {{ p.fecha_texto }} · Cómo llegó: {{ p.metodo_texto }} · Marcó: {{ p.marco_texto }}</span></span>
         <b class="num">{{ p.monto_nuevo | dinero }}</b>
         <button class="fz-apagado chico" type="button" disabled>Confirmar — {{ f.boton_confirmar }}</button>
       </div>
