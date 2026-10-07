@@ -84,18 +84,29 @@ def test_lo_unico_que_guarda_es_el_acuse_de_los_avisos():
 
 def test_las_columnas_son_las_etiquetas_de_responsable():
     columnas = control.tablero_por_empleado()
+    # La CLAVE de cada columna es la etiqueta `Resp:` de Linear, tal cual:
+    # es con lo que casa el reparto y no se toca.
+    assert [c["clave"] for c in columnas] == [
+        "", "Abraham", "Mary", "Ruben"]
+    # El TÍTULO es cómo se escribe en pantalla, y «Mary» se escribe «Mari»
+    # (BLOQUE 53 · A15).
     assert [c["titulo"] for c in columnas] == [
-        "Sin asignar", "Abraham", "Mary", "Ruben"]
+        "Sin asignar", "Abraham", "Mari", "Ruben"]
 
 
 def test_cada_lead_cae_en_la_columna_de_su_responsable():
-    por_titulo = {c["titulo"]: {l["ref"] for l in c["leads"]}
-                  for c in control.tablero_por_empleado()}
-    assert por_titulo["Ruben"] == {"LEAD-91", "LEAD-88"}
-    assert por_titulo["Mary"] == {"LEAD-89"}
+    # Por CLAVE (la etiqueta de Linear): es lo que decide en qué columna
+    # cae cada lead, independiente de cómo se escriba el nombre.
+    por_clave = {c["clave"]: {l["ref"] for l in c["leads"]}
+                 for c in control.tablero_por_empleado()}
+    assert por_clave["Ruben"] == {"LEAD-91", "LEAD-88"}
+    assert por_clave["Mary"] == {"LEAD-89"}
     # LEAD-86 (Nedjaira) cae aquí: era de Salomón, y sin su etiqueta queda
     # sin responsable, igual que cualquier lead que nunca tuvo uno.
-    assert por_titulo["Sin asignar"] == {"LEAD-90", "LEAD-87", "LEAD-85", "LEAD-86"}
+    assert por_clave[""] == {"LEAD-90", "LEAD-87", "LEAD-85", "LEAD-86"}
+    # Y la columna de Mary se LEE «Mari».
+    titulos = {c["clave"]: c["titulo"] for c in control.tablero_por_empleado()}
+    assert titulos["Mary"] == "Mari"
 
 
 def test_los_cerrados_no_se_reparten():
