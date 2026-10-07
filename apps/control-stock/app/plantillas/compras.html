@@ -33,7 +33,7 @@
   {# El costado es UNO solo para todas las pantallas y lo arma el rol
      (_lado.html + request.state.menu_nav, regla 10): el menú de cada
      persona es el mismo en todas partes. #}
-  {% with activa='compras', lado_pie_extra=("Compras de muestra (sin Linear)" if modo == 'muestra' else "Solo lectura del tablero real" if modo == 'lectura' else "Equipo VIV · proyecto COMPRAS") %}{% include '_lado.html' %}{% endwith %}
+  {% with activa='compras', lado_pie_extra=("Compras de ejemplo" if modo == 'muestra' else "Solo para mirar" if modo == 'lectura' else "Lo que le compramos al proveedor") %}{% include '_lado.html' %}{% endwith %}
 
   <div class="tablero">
     {% with bm_titulo='Compras', bm_sub='Lo que le compramos al proveedor',
@@ -75,8 +75,11 @@
     {% if aviso %}<div class="aviso-ok">{{ aviso }}
       <a class="cierra-banner" href="{{ sin_banner }}" aria-label="Cerrar el aviso">×</a></div>{% endif %}
     {% if modo == 'lectura' %}
-    <div class="solo-lectura"><b>Solo lectura.</b> Esta instancia mira el
-      tablero real pero no escribe en Linear.</div>
+    {# Item 9 (7/10/2026): decía «esta instancia» y «Linear». Quien abre
+       Compras no sabe qué instancia está mirando ni tiene que saber dónde
+       vive el tablero: le importa que acá no puede cambiar nada. #}
+    <div class="solo-lectura"><b>Solo para mirar.</b> Esta copia muestra las
+      compras de verdad, pero nada de lo que hagas acá se guarda.</div>
     {% endif %}
     {# Si a Linear le falta el proyecto COMPRAS o alguna de las 7 columnas,
        el tablero sale vacío y este renglón lo dice en palabras simples: no
@@ -84,12 +87,12 @@
        30/09/2026 de tarde, medido en el proceso vivo; esto se queda para
        una base nueva o un Odoo/Linear de pruebas.) #}
     {% if falta %}
-    <div class="solo-lectura"><b>Falta prepararlo en Linear.</b> {{ falta }}</div>
+    <div class="solo-lectura"><b>Falta prepararlo.</b> {{ falta }}</div>
     {% endif %}
     {% if not alc.admin and not alc.resp_propio %}
-    <div class="solo-lectura"><b>Sin etiqueta.</b> Tu cuenta todavía no tiene
-      su etiqueta <b>Resp:</b> en Linear: ves el tablero completo, pero
-      ninguna compra es tuya para mover.</div>
+    <div class="solo-lectura"><b>Todavía no te toca ninguna.</b> Nadie te ha
+      puesto como responsable de una compra: ves el tablero completo, pero
+      no podés mover nada.</div>
     {% endif %}
 
     {# Los `id` del tablero, de la columna y de la tarjeta son los ANCLAS a
@@ -158,6 +161,13 @@
               <span class="{{ 'hace-alerta' if c.hace_alerta }}">{{ c.hace }}</span>
               {% if c.resp %}<span class="chip-est">{{ c.resp }}</span>
               {% else %}<span class="chip-est chip-nadie">Sin asignar</span>{% endif %}
+              {# La MARCA del pago (item 8, 7/10/2026): el adelanto al
+                 proveedor es una marca de la tarjeta, no una columna del
+                 tablero — pagar es una cosa y dónde va la mercancía es
+                 otra. La decide Python (`compras.marca_pago`) con la plata
+                 de Odoo y, cuando Odoo no sabe, con lo que diga el tablero;
+                 vacía cuando no se sabe nada, y entonces no se pinta. #}
+              {% if c.marca_pago %}<span class="cmp-marca{{ ' cmp-marca-full' if c.marca_pago == 'Pagado' }}">{{ c.marca_pago }}</span>{% endif %}
               {# La barra SOLO si hay plata conocida: sin dato no se pinta
                  nada, nunca un 0 inventado (lo decide compras.plata_de). #}
               {% if c.plata and c.plata.hay %}
@@ -207,17 +217,24 @@
       <div class="cpd-tile cpd-pvs">
         <span class="k">Proveedores
           <a href="/compras/proveedores">Ver todos</a></span>
-        <span class="h">Los montos salen de Odoo y todavía no llegan a
-          este resumen; mientras, se calculan en la vista de
-          Proveedores.</span>
+        {# Mismo item 9: el tile decía «salen de Odoo». Dice qué falta y
+           dónde está mientras tanto, que es lo accionable. #}
+        <span class="h">Los montos de este resumen todavía no se calculan;
+          mientras, están en la vista de Proveedores.</span>
       </div>
     </aside>
     </div>
+    {# Item 9 (7/10/2026): este párrafo era el mapa de los sistemas —
+       nombres de proyecto, de equipo, de etiqueta, de campo. Dice lo mismo
+       en lo que el lector puede usar: en qué columna está la compra, de
+       dónde sale la plata, quién la mueve. Lo técnico vive en el docstring
+       de app/compras.py, que es donde sirve. #}
     <p class="pie-nota" style="padding:0 4px">
-      El estado de la compra vive en el proyecto <b>COMPRAS</b> del equipo VIV
-      de Linear; la orden <b>P000xx</b>, la factura del proveedor y los pagos,
-      en Odoo. El responsable es la etiqueta <b>Resp:</b> del issue, no el
-      asignado. Los proveedores son contactos de Odoo: no tocan WhatsApp.
+      La columna dice en qué va cada compra, y se cambia arrastrando la
+      tarjeta. Los montos —lo pedido, lo que se le pagó al proveedor y lo
+      que falta— salen de la contabilidad y no se editan desde acá. Cada
+      compra la mueve su responsable; los proveedores no reciben nada por
+      WhatsApp.
     </p>
   </div>
 </div>
@@ -235,7 +252,7 @@
   <div class="cab-panel">
     {# La pantalla 13 pone el estado en la cabecera («P00030 · Pedida, por
        llegar»), no como renglón aparte: mismo dato, el lugar del lienzo. #}
-    <div><span class="tenue">{{ abierta.ref }} · {{ abierta.estado_ficha.titulo }}</span>
+    <div><span class="tenue">{{ abierta.ref }} · {{ abierta.columna_ficha.titulo or abierta.estado_ficha.titulo }}</span>
       <h4>{{ abierta.que_compro }}</h4></div>
     {# La X del lienzo (pantalla 13): mismo enlace de cerrar de siempre,
        ahora como botón cuadrado con icono. Cerrar vuelve a SU tarjeta. #}
@@ -312,7 +329,7 @@
   {% if abierta.falta_orden %}
   <div class="campo-caja">
     <label>Orden de compra</label>
-    <span class="err">Esta compra dice «{{ abierta.estado_ficha.titulo }}» en
+    <span class="err">Esta compra dice «{{ abierta.columna_ficha.titulo or abierta.estado_ficha.titulo }}» en
       el tablero y Odoo no tiene su orden. El tablero manda sobre el estado,
       así que la compra se queda donde está — pero la orden hay que
       crearla.</span>

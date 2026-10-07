@@ -1064,6 +1064,14 @@ a{color:inherit}
 .cmp-barra > span{display:block;height:100%;background:var(--texto);border-radius:999px}
 .cmp-barra.cmp-llena > span{background:#30a46c}
 .cmp-plata{font-variant-numeric:tabular-nums;white-space:nowrap}
+/* La marca del pago al proveedor (item 8, 7/10/2026). Acá va la versión
+   base —la piel de Compras la repinta en diseno-compras.css— para que la
+   tarjeta no quede con un texto suelto si esa hoja no cargó. */
+.cmp-marca{
+  display:inline-block;font-size:9.5px;font-weight:700;line-height:1.5;
+  padding:1px 6px;border-radius:999px;border:1px solid var(--borde);
+  background:var(--crema-2);color:var(--suave);white-space:nowrap;
+}
 /* El proveedor y el P000xx de la tarjeta: texto tenue, nunca chips — la
    tarjeta T2 son dos líneas y los chips la volvían tres. */
 .cmp-prov{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px}

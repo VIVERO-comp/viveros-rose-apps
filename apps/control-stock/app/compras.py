@@ -11,7 +11,12 @@ proveedores y el calendario son fases de después.
 **Un sistema, un trabajo**, igual que con los leads:
 
 - **Linear es el único tablero**: el estado de la compra vive en la
-  columna del issue, en ningún otro lado.
+  columna del issue, en ningún otro lado. **Pero la PANTALLA no pinta una
+  columna por estado** (item 8, 7/10/2026): «Abonado» no es un lugar donde
+  esté la mercancía, es plata adelantada al proveedor, así que bajó a ser
+  una MARCA de la tarjeta y su columna se absorbe en «Pedido». El estado
+  sigue vivo en Linear —no se borra nada allá— y `mover()` lo acepta. Ver
+  `ABSORBE` y `marca_pago`.
 - **Odoo es solo dinero y stock**: la orden de compra (`P000xx`), la
   factura del proveedor, los pagos y la entrada al inventario. De Odoo este
   módulo LEE —para pintar cuánto se pagó de cuánto y para sugerir
@@ -142,6 +147,40 @@ for _e in ESTADOS:
 
 POR_CLAVE = {e["clave"]: e for e in ESTADOS}
 ORDEN = [e["clave"] for e in ESTADOS]
+
+# ---------------------------------------------------------------------------
+# Columnas que EXISTEN en Linear pero no tienen columna propia en pantalla
+# (item 8 del lote, 7/10/2026)
+#
+# «Abonado» no es un lugar donde esté la mercancía: es que al proveedor se le
+# adelantó plata. Mezclar las dos cosas en la misma fila obliga a elegir —una
+# compra pedida Y abonada no puede estar en dos columnas— y el camino deja de
+# leerse. Pagar es una cosa, dónde va la mercancía es otra: el adelanto baja a
+# ser una MARCA en la tarjeta («Abonado» / «Pagado»), igual que en las ventas.
+#
+# **El estado NO se borra de Linear** (eso lo decide Abraham, y este módulo
+# nunca crea ni borra nada del catálogo). Sigue en `ESTADOS`, así que
+# `mover()` lo acepta, `columnas_que_faltan()` lo exige y un enlace viejo
+# sigue funcionando. Lo único que cambia es la PANTALLA: la compra que esté
+# en «Abonado» se muestra en la columna que la ABSORBE —«Pedido», porque una
+# compra abonada ya se le pidió al proveedor— y su tarjeta lleva la marca.
+# Así no desaparece ninguna: medido el 7/10/2026, hoy el proyecto COMPRAS
+# tiene 0 compras en total, «Abonado» incluida.
+#
+# Para devolverle la columna: sacar la clave de ABSORBE. Una línea.
+# ---------------------------------------------------------------------------
+
+ABSORBE = {"ABONADO": "PEDIDO"}
+
+# Las columnas que SÍ se pintan, en orden: Por pedir · Cotizando · Pedido ·
+# En camino · Recibido · Cerrado.
+ORDEN_PANTALLA = [c for c in ORDEN if c not in ABSORBE]
+
+
+def columna_en_pantalla(clave):
+    """En qué columna de la PANTALLA cae una compra con este estado de
+    Linear. La propia, salvo las absorbidas."""
+    return ABSORBE.get(clave, clave)
 
 # En qué lugar de la fila va cada columna. Sirve para una sola pregunta —
 # «¿esta compra ya se pidió?» (`desde_pedido`)— y no es una escalera que
@@ -1134,16 +1173,19 @@ def falta_en_linear():
     except ErrorCompras as fallo:
         return (f"No se pudo leer Linear, así que el tablero está vacío: "
                 f"{fallo}")
+    # En palabras simples (item 9, 7/10/2026): sin el nombre del proyecto
+    # ni del equipo ni de Linear. Quien abre Compras no administra ninguno
+    # de los tres, y el que sí lo hace tiene el detalle en el log y en el
+    # docstring de este módulo.
     if not cat["proyecto"]:
-        return (f"El proyecto {PROYECTO} todavía no existe en el equipo "
-                f"{EQUIPO_CLAVE} de Linear. El tablero se queda vacío hasta "
-                f"que alguien lo cree allá: el código no crea proyectos ni "
-                f"columnas.")
+        return ("El tablero de compras todavía no está creado, así que las "
+                "columnas salen vacías. Lo crea Abraham: la app no lo hace "
+                "sola.")
     faltan = columnas_que_faltan()
     if faltan:
-        return ("Al equipo %s de Linear le faltan estas columnas: %s. Las "
-                "compras que caigan en ellas no se van a poder mover hasta "
-                "que existan." % (EQUIPO_CLAVE, ", ".join(faltan)))
+        return ("Faltan columnas por crear: %s. Una compra que caiga en una "
+                "de ellas no se va a poder mover hasta que exista."
+                % ", ".join(faltan))
     return ""
 
 
@@ -1427,6 +1469,44 @@ def ancla_de_compra(ref):
     return ANCLA_TABLERO
 
 
+# Las dos palabras de la marca del pago en la tarjeta (item 8, 7/10/2026),
+# el mismo vocabulario que ya usan las ventas en Linear («Abono 50%» /
+# «Pagado 100%»), dicho corto porque acá cabe poco.
+MARCA_ABONADO = "Abonado"
+MARCA_PAGADO = "Pagado"
+
+# Centavos de tolerancia al decidir si el saldo de una compra quedó en 0.
+_CENTAVO_COMPRA = 0.009
+
+
+def marca_pago(compra, plata):
+    """La marca del pago de la tarjeta: «Pagado», «Abonado» o "" (nada).
+
+    Dos fuentes, en este orden, y ninguna se inventa:
+
+    1. **La plata de Odoo**, que es la verdad del dinero: con el saldo en 0
+       es «Pagado»; con algo pagado y saldo pendiente, «Abonado». Sin nada
+       pagado no hay marca — la tarjeta ya pinta su barra.
+    2. **El estado de Linear**, solo cuando Odoo no sabe (no hay orden
+       conectada, o la caché de plata está fría): una compra que el tablero
+       puso en «Abonado» se marca «Abonado» porque eso es lo que alguien
+       dijo, no una deducción nuestra.
+
+    Sin ninguna de las dos, "" — y la tarjeta no dice nada del pago, que es
+    exactamente lo que se sabe.
+    """
+    if plata and plata.get("hay"):
+        total = float(plata.get("total") or 0.0)
+        pagado = float(plata.get("pagado") or 0.0)
+        if pagado > _CENTAVO_COMPRA:
+            saldo = total - pagado
+            return MARCA_PAGADO if saldo <= _CENTAVO_COMPRA else MARCA_ABONADO
+        return ""
+    if (compra or {}).get("estado") == "ABONADO":
+        return MARCA_ABONADO
+    return ""
+
+
 def _tarjeta(compra, plata_por_ref, lineas_por_ref=None):
     """La compra lista para la tarjeta: lo que se ve y nada más.
 
@@ -1439,9 +1519,12 @@ def _tarjeta(compra, plata_por_ref, lineas_por_ref=None):
     """
     from . import control
     lineas = (lineas_por_ref or {}).get(compra["ref"]) or []
+    plata = plata_por_ref.get(compra["ref"])
     return dict(compra, **{
         "hace_alerta": control.hace_alerta(compra.get("dias")),
-        "plata": plata_por_ref.get(compra["ref"]),
+        "plata": plata,
+        # El adelanto al proveedor, como MARCA y no como columna (item 8).
+        "marca_pago": marca_pago(compra, plata),
         "lineas": lineas,
         "cuantas_lineas": len(lineas),
         "lineas_resumen": resumen_de_lineas(lineas),
@@ -1454,7 +1537,13 @@ def _tarjeta(compra, plata_por_ref, lineas_por_ref=None):
 
 def con_lineas(compra):
     """Una compra con sus líneas, para el panel que las muestra. None si no
-    hay tal compra."""
+    hay tal compra.
+
+    `columna_ficha` es la columna donde el TABLERO pinta esta compra, que
+    desde el item 8 no siempre es la de su estado: una compra en «Abonado»
+    se ve en «Pedido», y el panel tiene que nombrar lo mismo que la
+    persona acaba de ver. Su estado real sigue en `estado` / `estado_ficha`.
+    """
     if compra is None:
         return None
     lineas = lineas_de(compra["ref"])
@@ -1464,13 +1553,20 @@ def con_lineas(compra):
         "lineas_total": total_de_lineas(lineas),
         "falta_orden": falta_la_orden(compra, lineas),
         "pedida": desde_pedido(compra.get("estado")),
+        "columna_ficha": POR_CLAVE.get(
+            columna_en_pantalla(compra.get("estado"))),
     })
 
 
 def tablero(lista=None):
-    """[{clave, titulo, color, chip, pie, compras}] — las 7 columnas, en
-    orden. La más vieja arriba dentro de cada columna: es la que lleva más
-    tiempo esperando."""
+    """[{clave, titulo, color, chip, pie, compras}] — las columnas de
+    PANTALLA, en orden. La más vieja arriba dentro de cada columna: es la
+    que lleva más tiempo esperando.
+
+    Son las de `ORDEN_PANTALLA`, que no es lo mismo que `ESTADOS`: una
+    compra en un estado absorbido («Abonado») se pinta en la columna que lo
+    absorbe («Pedido») y su tarjeta lleva la marca del pago. Ver `ABSORBE`.
+    """
     # El orden se decide ACÁ y no en la consulta, para que el modo muestra
     # y el real se vean igual: la que lleva más días arriba.
     todas = sorted(lista if lista is not None else listar(),
@@ -1480,12 +1576,14 @@ def tablero(lista=None):
     lineas_por_ref = lineas_de_varias([c["ref"] for c in todas])
     todas = [_tarjeta(c, plata_por_ref, lineas_por_ref) for c in todas]
     columnas = []
-    for estado in ESTADOS:
+    for clave in ORDEN_PANTALLA:
+        estado = POR_CLAVE[clave]
         columnas.append({
-            "clave": estado["clave"], "titulo": estado["titulo"],
+            "clave": clave, "titulo": estado["titulo"],
             "nombre": estado["nombre"], "color": estado["color"],
             "chip": estado["chip"], "pie": estado["pie"],
-            "compras": [c for c in todas if c["estado"] == estado["clave"]],
+            "compras": [c for c in todas
+                        if columna_en_pantalla(c["estado"]) == clave],
         })
     return columnas
 
