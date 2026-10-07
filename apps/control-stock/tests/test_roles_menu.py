@@ -182,6 +182,27 @@ def test_la_casa_de_cada_rol_esta_dentro_de_su_alcance():
         assert _ruta_en_alcance(alcance["casa"], alcance["prefijos"]), slug
 
 
+def test_todo_slug_del_codigo_tiene_su_fila_de_alcance():
+    """La entrada que FALTA no da error: cambia el comportamiento.
+
+    Desde el BLOQUE 59 el alcance sale solo de los roles con slug, y un
+    slug sin fila en ALCANCE_DE_ROL cae al fail-open —o sea, ABRE la
+    puerta en vez de cerrarla, sin un solo aviso. Es la hermana exacta
+    del lookup directo a la paleta de `linear_leads`: agregar el slug es
+    una línea y olvidarse de su fila es gratis.
+
+    Esta prueba es el aviso: los dos juegos de claves son el mismo, y
+    también el de los rótulos del rebote (ROTULO_ROL) y el del orden de
+    casa (PRIORIDAD_CASA)."""
+    del_codigo = {slug for slug, _ in datos_roles.ROLES_CON_SLUG}
+    assert del_codigo == set(datos_roles.ALCANCE_DE_ROL), (
+        "un slug sin fila en ALCANCE_DE_ROL cae al fail-open: "
+        f"{del_codigo ^ set(datos_roles.ALCANCE_DE_ROL)}")
+    assert del_codigo == set(datos_roles.ROTULO_ROL)
+    assert del_codigo == set(datos_roles.PRIORIDAD_CASA)
+    assert del_codigo == set(datos_roles.MENU_DE_ROL)
+
+
 def test_menus_por_rol_segun_el_diseno():
     """Los 5 menús EXACTOS del BLOQUE 39.1, en su orden."""
     menus = {s: list(datos_roles.MENU_DE_ROL[s]) for s in LOS_5}
