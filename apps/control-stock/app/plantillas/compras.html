@@ -216,6 +216,21 @@
         </div>
       </div>
       {% endfor %}
+      {# LA ORILLA DEL CARRIL (BLOQUE 59, 7/10/2026). Seis columnas de 276px
+         piden 1716px de lienzo —o sea ~2010 de ventana— así que en una
+         pantalla real SIEMPRE quedan columnas al costado, y hasta hoy no
+         había ni una señal de eso: el tablero se veía cortado, no corrido.
+
+         Esto es la señal, y no puede mentir: va PEGADA (`position:sticky`)
+         al borde derecho del carril mientras haya columnas a la derecha, y
+         al llegar al final su sitio natural coincide con el borde, donde
+         solo hay blanco — así que el degradado pinta blanco sobre blanco y
+         desaparece solo. Medido: al principio debajo de la orilla hay una
+         columna; al final, el fondo.
+
+         No lleva texto ni función: es paint, y por eso `aria-hidden`. En el
+         teléfono el tablero es una pila y el CSS la esconde. #}
+      <b class="cpd-orilla" aria-hidden="true"></b>
     </div>
     <aside class="cpd-res" aria-label="Resumen de compras">
       <div class="cpd-tile"><span class="k">Hay que comprar</span>

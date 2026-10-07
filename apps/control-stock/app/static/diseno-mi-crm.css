@@ -50,28 +50,48 @@
 .mc-fr{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:10px;min-height:48px;border-top:1px solid #EFEFEF;padding:4px 0}
 .mc-quien{display:flex;flex-direction:column;gap:1px;min-width:0}
 .mc-quien b,.mc-quien .mc-pista{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mc-hoy{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
-@container lienzo (min-width:560px){
-  .mc-hoy{grid-template-columns:repeat(2,minmax(0,1fr))}
-}
+/* `.mc-hoy` fue una reja de dos cajas gemelas (Por responder y
+   Seguimientos). Desde el BLOQUE 59 Seguimientos es una tira aparte y acá
+   queda «Por responder» sola, a todo el ancho de su columna: dejarla en la
+   mitad izquierda con un hueco al lado sería el mismo defecto que esta
+   tanda viene a arreglar. La CAJA no cambió —sigue siendo caja, no tira—
+   porque esa decisión es de Abraham y está abierta. */
+.mc-hoy{display:flex;flex-direction:column;gap:12px;min-width:0}
 .mc-bx{border:1px solid var(--d-borde-pil);border-radius:var(--d-radio-col);padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0;box-sizing:border-box}
 
-/* ---------- el tablero chico ----------
-   Una columna, dos o las cuatro según el LIENZO: con las cuatro metidas
-   a la fuerza en 316px salían tarjetas de 70px con una palabra por
-   línea, que es justo lo que A1 prohíbe. */
-.mc-board{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;min-width:0}
-@container lienzo (min-width:560px){
-  .mc-board{grid-template-columns:repeat(2,minmax(0,1fr))}
+/* ---------- la TIRA (BLOQUE 59) ----------
+   Un cuadro grande con párrafo para decir «0 seguimientos» ocupaba la
+   mitad del ancho y empujaba el tablero fuera de la pantalla. La tira dice
+   lo mismo en un renglón: título, cuenta y la explicación al lado, en gris.
+   Si algún día trae filas, crecen debajo y la tira sigue siendo tira.
+   Es la misma pieza que necesitaría «Por responder» el día que se decida:
+   cambiar `mc-bx` por `mc-tira` y nada más. */
+/* Con filas crece hacia abajo; sin filas es UN renglón. */
+.mc-tira{
+  background:var(--d-col);border-radius:var(--d-radio-col);
+  padding:10px 12px;display:flex;flex-direction:column;gap:8px;min-width:0;
+  box-sizing:border-box;
 }
-/* Las cuatro del lienzo recién en HOLGADO, no en ANCHO: este tablero no
-   vive en el lienzo entero sino en la columna derecha de .mc-work, que se
-   lleva 288px menos. Con 1120 de lienzo esa columna mide ~836 y cada
-   tarjeta queda en los ~200px del lienzo de Korto. */
-@container lienzo (min-width:1120px){
-  .mc-board{grid-template-columns:repeat(4,minmax(0,1fr))}
-}
-.mc-col{background:var(--d-col);border-radius:var(--d-radio-col);padding:10px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.mc-th{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;row-gap:2px;min-width:0}
+.mc-tt{font-size:15px;font-weight:700}
+.mc-th .mc-cnt{align-self:center}
+/* La explicación deja de ser párrafo y pasa a ser el final del renglón. */
+.mc-tnota{flex:1;min-width:0}
+
+/* ---------- el tablero, que ahora SE LEE COMO TABLERO ----------
+   Era una reja que se partía: medido antes de tocar nada, a 1024 y a 1280
+   de ventana las cuatro etapas salían en DOS FILAS de dos cuadros, y solo
+   desde 1120px de lienzo (≈1420 de ventana) se ponían en fila.
+
+   Ahora es un carril de kanban, que es lo que A1 pide para un tablero que
+   no cabe: columnas de ancho FIJO (200px, el del lienzo) que crecen
+   cuando sobra sitio, y desplazamiento lateral cuando no. Una sola regla
+   en vez de tres escalones, y el mismo mecanismo que Compras.
+   `flex:1 0 200px` es lo que hace las dos cosas: `0` de encoger (nunca
+   caen por debajo de 200 y se parten las palabras) y `1` de crecer (a
+   1600 de ventana cada columna mide 245, igual que antes). */
+.mc-board{display:flex;gap:12px;min-width:0;align-items:stretch}
+.mc-col{background:var(--d-col);border-radius:var(--d-radio-col);padding:10px;display:flex;flex-direction:column;gap:8px;flex:1 0 200px;min-width:0}
 .mc-ch{display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:700;padding:2px 2px 0}
 
 /* ---------- la tarjeta ---------- */
@@ -108,6 +128,39 @@
 @media (min-width: 768px){
   .mc-main{padding:0 28px 28px}
   .mc-movil{display:none}
+
+  /* ── QUE SE VEA QUE LAS COLUMNAS SIGUEN AL COSTADO ──────────────────
+     Misma receta que Compras, y por la misma razón: el carril se desplaza
+     y hasta hoy nada lo decía. La barra se PINTA a mano (eso es lo que la
+     vuelve visible en macOS, donde la de fábrica es flotante y se
+     esconde) y se deja en `auto`, para que donde las cuatro columnas
+     quepan no haya un riel vacío; y la orilla en degradado, que al llegar
+     al final cae sobre blanco y se apaga sola — por eso no puede mentir.
+
+     Va en `@media` y no en `@container` porque lo que se pregunta es si
+     esta pantalla muestra el tablero de computadora o las dos pestañas
+     del celular, y eso lo parte `.mc-pc` / `.mc-movil` en 767.98px de
+     VENTANA, tres renglones más abajo. Misma lógica que el cromo.
+
+     (Esta receta está hoy copiada en diseno-compras.css. El sitio bueno
+     es `diseno-base.css`, que es donde vive lo compartido — pero esa hoja
+     la están tocando otros dos frentes, así que la unificación va aparte
+     y anunciada, no de contrabando.) */
+  .mc-board{
+    overflow-x:auto;padding-bottom:9px;
+    scrollbar-width:thin;scrollbar-color:#BFBFBF transparent;
+    scroll-snap-type:x proximity;overscroll-behavior-x:contain;
+  }
+  .mc-board::-webkit-scrollbar{height:10px}
+  .mc-board::-webkit-scrollbar-track{background:var(--d-col);border-radius:5px}
+  .mc-board::-webkit-scrollbar-thumb{background:#BFBFBF;border-radius:5px}
+  .mc-board::-webkit-scrollbar-thumb:hover{background:#A6A6A6}
+  .mc-col{scroll-snap-align:start}
+  .mc-orilla{
+    position:sticky;right:0;flex:0 0 40px;align-self:stretch;
+    pointer-events:none;
+    background:linear-gradient(to left,#fff 12%,rgba(255,255,255,0));
+  }
 }
 @media (max-width: 767.98px){
   .mc-sub{display:none}

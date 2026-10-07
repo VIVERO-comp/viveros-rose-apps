@@ -78,6 +78,34 @@
       </section>
       </div>
       <div class="mc-der">
+        {# SEGUIMIENTOS, EN TIRA (BLOQUE 59, 7/10/2026). Era un cuadro del
+           mismo tamaño que «Por responder», con su párrafo de explicación
+           debajo: dos cajas grandes empujaban el tablero fuera de la
+           pantalla. Ahora es una tira de una línea —título, cuenta y la
+           explicación al lado— que crece sola si algún día trae filas.
+
+           «Por responder» NO se tocó: sigue siendo la caja de siempre,
+           porque esa decisión es de Abraham y está abierta. El día que
+           diga que sí, es cambiar `mc-bx` por `mc-tira` y mover el
+           `<section>` acá arriba: la tira ya está construida. #}
+        <section class="mc-tira" aria-label="Seguimientos">
+          {# Una SOLA línea cuando no hay nada que hacer: el aviso honesto y
+             la explicación van en el mismo renglón, en gris, en vez de un
+             párrafo dentro de una caja dentro de otra caja. El aviso sigue
+             saliendo de Python (`v.seguimientos.aviso`) — acá solo se
+             pinta. #}
+          <div class="mc-th">
+            <span class="mc-tt">Seguimientos</span>
+            <span class="mc-cnt num">{{ v.seguimientos.filas | length }}</span>
+            <span class="mc-pista mc-tnota">{% if not v.seguimientos.filas %}{{ v.seguimientos.aviso }} · {% endif %}Los que el Director te marque con fecha. Primero los vencidos y los de hoy.</span>
+          </div>
+          {% for fila in v.seguimientos.filas %}
+          <div class="mc-fr">
+            <span class="mc-quien"><b>{{ fila.nombre }}</b><span class="mc-pista">{{ fila.detalle }}</span></span>
+            <button class="mc-apagado chico" type="button" disabled>Hecho — Todavía no</button>
+          </div>
+          {% endfor %}
+        </section>
         <div class="mc-hoy">
           <section class="mc-bx" aria-label="Por responder">
             <div class="mc-ph"><span>Por responder</span><span class="mc-cnt num">{{ v.por_responder.filas | length }}</span></div>
@@ -95,19 +123,13 @@
             {% endfor %}
             <span class="mc-pista">Clientes que llevan más del umbral esperando. Saldrán solos de la lista cuando les respondas.</span>
           </section>
-          <section class="mc-bx" aria-label="Seguimientos">
-            <div class="mc-ph"><span>Seguimientos</span><span class="mc-cnt num">{{ v.seguimientos.filas | length }}</span></div>
-            {% for fila in v.seguimientos.filas %}
-            <div class="mc-fr">
-              <span class="mc-quien"><b>{{ fila.nombre }}</b><span class="mc-pista">{{ fila.detalle }}</span></span>
-              <button class="mc-apagado chico" type="button" disabled>Hecho — Todavía no</button>
-            </div>
-            {% else %}
-            <p class="mc-hueco">{{ v.seguimientos.aviso }}</p>
-            {% endfor %}
-            <span class="mc-pista">Los que el Director te marque con fecha. Primero los vencidos y los de hoy.</span>
-          </section>
         </div>
+        {# EL TABLERO, COMO TABLERO (BLOQUE 59). Era una reja que se partía
+           en dos filas de dos cuadros: medido, a 1024 y a 1280 de ventana
+           las cuatro etapas salían 2×2 y no se leían como un camino. Ahora
+           son cuatro COLUMNAS al lado una de otra —el ancho fijo del lienzo
+           (200px), que crece cuando sobra sitio— y si no caben el carril se
+           corre de lado con la misma señal que Compras. #}
         <div class="mc-board">
           {% for col in v.columnas %}
           <section class="mc-col" aria-label="{{ col.titulo }}">
@@ -123,6 +145,11 @@
             <span class="mc-pista mc-pie">{{ col.pie }}</span>
           </section>
           {% endfor %}
+          {# La orilla del carril: pegada al borde derecho mientras haya
+             columnas más allá, y sobre blanco —o sea invisible— al llegar
+             al final. Es paint, no función: `aria-hidden`. Misma pieza que
+             en Compras. #}
+          <b class="mc-orilla" aria-hidden="true"></b>
         </div>
       </div>
     </div>
