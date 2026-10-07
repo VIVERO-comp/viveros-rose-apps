@@ -441,7 +441,12 @@ def test_boton_venta_visible_en_computadora(cliente_venta):
     # Diseño Orquesta (2/10/2026): el botón es la píldora negra de la
     # cabecera (computadora) y el botón de la barra de abajo (teléfono) —
     # los DOS llevan el enlace a /venta/nueva, y ninguno usa .solo-pc.
-    assert 'class="vd-nueva" href="/venta/nueva"' in r.text
+    # BLOQUE 54, G1: la píldora negra de la cabecera ya no es `.vd-nueva`
+    # (una clase propia de Vender) sino `.cab-boton`, la del encabezado
+    # único — el botón principal de CADA pestaña se ve igual y cae en el
+    # mismo sitio. La sustancia es la misma: sigue ahí y sigue llevando
+    # a /venta/nueva.
+    assert 'class="cab-boton" href="/venta/nueva"' in r.text
     assert 'class="vd-btn" href="/venta/nueva"' in r.text
     assert "Nueva venta" in r.text and "NUEVA VENTA" in r.text
     assert "solo-pc" not in r.text
