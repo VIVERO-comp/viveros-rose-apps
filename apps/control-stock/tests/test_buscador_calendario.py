@@ -54,6 +54,27 @@ def linear_simulado(monkeypatch, db_limpia):
     assert linear_leads.modo() == "muestra"
 
 
+# Los leads de la semilla con los que se prueba, por su REF y nunca por su
+# nombre ni su teléfono. No es un detalle de estilo: esos datos son de
+# clientas REALES que quedaron dentro de la semilla de `linear_leads`, y
+# limpiarlos del repo público es un pendiente abierto (plantaspanama/
+# CLAUDE.md, «Lo que sigue», punto 4). Un archivo de pruebas nuevo no
+# tiene por qué volver a copiarlos — y leerlos de la muestra es además lo
+# correcto: si mañana la semilla cambia de nombres, estas pruebas siguen.
+REF_CON_PAGO = "LEAD-91"       # «Por agendar»: el que mueve el embudo
+REF_SIN_RESP = "LEAD-90"       # «Por agendar» sin etiqueta Resp:
+REF_HABLANDO = "LEAD-86"       # para el tipo que NO agenda
+REF_GANADO = "LEAD-84"         # cerrado: no recibe trabajo nuevo
+REF_PERDIDO = "LEAD-83"        # cerrado
+
+
+def _lead(ref=REF_CON_PAGO):
+    """El lead de muestra leído de la semilla, no transcrito."""
+    lead = linear_leads.uno(ref)
+    assert lead is not None, f"la semilla ya no trae {ref}"
+    return lead
+
+
 def _venta_local(cliente, celular, n_orden="S00999"):
     """Un cliente que existe SOLO del lado de Vender: no es lead ninguno.
 
@@ -134,21 +155,22 @@ def test_lo_elegido_en_el_buscador_llega_al_guardado(cliente):
         porque el buscador no cambió el guardado: solo le dice a quién.
     """
     dia = calendario.hoy().isoformat()
+    quien = _lead()
 
     # 1 · buscar. El pedazo se pide como lo pide el navegador.
     pedazo = cliente.get("/calendario/buscar",
-                         params={"nueva": "1", "qp": "Tamara",
+                         params={"nueva": "1", "qp": quien["nombre"],
                                  "tipo": "entrega", "fecha": dia}).text
     filas = _filas_del_buscador(pedazo)
-    assert filas, "el buscador no encontró a nadie con «Tamara»"
-    liga, texto = next(f for f in filas if "LEAD-91" in f[1])
-    assert "Tamara" in texto
+    assert filas, "el buscador no encontró a nadie con ese nombre"
+    liga, texto = next(f for f in filas if REF_CON_PAGO in f[1])
+    assert quien["nombre"] in texto
 
     # 2 · elegir. El href de la fila, tal cual se pintó.
     formulario = cliente.get(liga).text
     campos = _campos_del_form(formulario)
-    assert campos["lead"] == "LEAD-91"
-    assert campos["cliente"] == "Tamara"
+    assert campos["lead"] == REF_CON_PAGO
+    assert campos["cliente"] == quien["nombre"]
     # Y lo que ya estaba escrito en el formulario no se perdió al elegir.
     assert campos["fecha"] == dia
     assert campos["tipo"] == "entrega"
@@ -161,11 +183,11 @@ def test_lo_elegido_en_el_buscador_llega_al_guardado(cliente):
 
     # Qué nació: la actividad amarrada, con el nombre del lead.
     creada = next(a for a in calendario.listar(dia, dia)
-                  if a.get("lead") == "LEAD-91")
-    assert creada["cliente"] == "Tamara"
+                  if a.get("lead") == REF_CON_PAGO)
+    assert creada["cliente"] == quien["nombre"]
     assert creada["tipo"] == "entrega"
     # Y el embudo se movió, como con el selector de antes.
-    assert linear_leads.uno("LEAD-91")["estado"] == "AGENDADO"
+    assert linear_leads.uno(REF_CON_PAGO)["estado"] == "AGENDADO"
 
 
 def test_un_contacto_que_no_es_lead_tambien_llega_al_guardado(cliente):
@@ -210,7 +232,7 @@ def test_el_pedazo_es_EL_MISMO_que_pinta_la_pantalla(cliente):
     `main._buscador_persona_contexto`. Si alguien agregara una decisión en
     uno solo de los dos caminos, los HTML dejarían de coincidir.
     """
-    params = {"nueva": "1", "qp": "Tamara", "tipo": "entrega",
+    params = {"nueva": "1", "qp": _lead()["nombre"], "tipo": "entrega",
               "fecha": calendario.hoy().isoformat()}
     pedazo = cliente.get("/calendario/buscar", params=params).text.strip()
     pagina = cliente.get("/calendario", params=params).text
@@ -222,31 +244,44 @@ def test_el_pedazo_es_EL_MISMO_que_pinta_la_pantalla(cliente):
 # Casar: nombre o teléfono, con el MISMO criterio de la pestaña Contactos
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("escrito", [
-    "Tamara", "tamara", "TAMARA",          # el nombre, como se escriba
-    "6552-0966", "65520966", "+507 6552-0966", "0050765520966",
+@pytest.mark.parametrize("como", [
+    "nombre", "nombre-minusculas", "nombre-mayusculas",
+    "tel-como-esta", "tel-solo-digitos", "tel-con-507", "tel-con-00507",
 ])
-def test_el_mismo_lead_se_encuentra_por_nombre_y_por_telefono(escrito):
+def test_el_mismo_lead_se_encuentra_por_nombre_y_por_telefono(como):
+    # El nombre y el número salen de la semilla, no escritos acá (ver
+    # arriba). Las siete formas son las que una persona escribe de verdad.
+    quien = _lead()
+    digitos = re.sub(r"\D", "", quien["celular"])
+    escrito = {
+        "nombre": quien["nombre"],
+        "nombre-minusculas": quien["nombre"].lower(),
+        "nombre-mayusculas": quien["nombre"].upper(),
+        "tel-como-esta": quien["celular"],
+        "tel-solo-digitos": digitos,
+        "tel-con-507": "+507 " + quien["celular"],
+        "tel-con-00507": "00507" + digitos,
+    }[como]
     hallado = agenda.buscar_personas(escrito)
-    assert [f["lead"] for f in hallado["filas"]] == ["LEAD-91"]
+    assert [f["lead"] for f in hallado["filas"]] == [REF_CON_PAGO]
 
 
 def test_casa_con_el_mismo_criterio_que_contactos():
     # No es una copia del criterio: es LA función de contactos.
-    assert contactos.casa_busqueda is not None
-    ficha = {"nombre": "Tamara", "telefono": "6552-0966",
-             "tel_norm": "65520966"}
-    assert contactos.casa_busqueda(ficha, "+507 6552 0966")
-    assert not contactos.casa_busqueda(ficha, "6552-0967")
+    ficha = {"nombre": "Persona QA", "telefono": "6000-0001",
+             "tel_norm": "60000001"}
+    assert contactos.casa_busqueda(ficha, "+507 6000 0001")
+    assert contactos.casa_busqueda(ficha, "persona")
+    assert not contactos.casa_busqueda(ficha, "6000-0002")
 
 
 def test_sin_escribir_nada_salen_los_vivos_y_lo_dice(cliente):
     hallado = agenda.buscar_personas("")
     refs = {f["lead"] for f in hallado["filas"]}
     # Los vivos del embudo, que es lo que enseñaba el selector de antes.
-    assert "LEAD-91" in refs
-    assert "LEAD-84" not in refs         # Ganado: cerrado
-    assert "LEAD-83" not in refs         # Perdido: cerrado
+    assert REF_CON_PAGO in refs
+    assert REF_GANADO not in refs        # Ganado: cerrado
+    assert REF_PERDIDO not in refs       # Perdido: cerrado
     # Y se DICE que los contactos entran al escribir, en vez de dejar
     # creer que esto es toda la gente que hay.
     assert hallado["pista"] == agenda.PISTA_SIN_BUSCAR
@@ -260,18 +295,20 @@ def test_una_persona_con_lead_sale_UNA_vez_y_con_su_lead(cliente):
     saliera dos veces, elegir la equivocada dejaría la actividad suelta
     sin que nada avisara.
     """
-    _venta_local("Tamara", "6552-0966", n_orden="S00998")
+    quien = _lead()
+    _venta_local(quien["nombre"], quien["celular"], n_orden="S00998")
     contactos.reiniciar_cache()
-    filas = agenda.buscar_personas("Tamara")["filas"]
-    assert [f["lead"] for f in filas] == ["LEAD-91"]
+    filas = agenda.buscar_personas(quien["nombre"])["filas"]
+    assert [f["lead"] for f in filas] == [REF_CON_PAGO]
     # Y la fila dice de dónde sale la persona (Vender), sin perder el lead.
     assert "Local" in filas[0]["fuente"]
 
 
 def test_el_lead_va_con_su_estado_y_su_responsable():
-    fila = next(f for f in agenda.buscar_personas("Tamara")["filas"]
-                if f["lead"] == "LEAD-91")
-    lead = linear_leads.uno("LEAD-91")
+    quien = _lead()
+    fila = next(f for f in agenda.buscar_personas(quien["nombre"])["filas"]
+                if f["lead"] == REF_CON_PAGO)
+    lead = linear_leads.uno(REF_CON_PAGO)
     assert lead["estado_nombre"] in fila["detalle"]
 
 
@@ -293,7 +330,7 @@ def test_si_linear_no_contesta_el_buscador_lo_dice(monkeypatch):
     def revienta(*_a, **_k):
         raise linear_leads.ErrorLeads("Linear no contestó (503)")
     monkeypatch.setattr(linear_leads, "listar", revienta)
-    hallado = agenda.buscar_personas("Tamara")
+    hallado = agenda.buscar_personas("quien sea")
     # Ni una fila inventada, y el hueco escrito con su motivo.
     assert hallado["filas"] == []
     assert any(agenda.AVISO_LEADS_HUECO in a for a in hallado["avisos"])
@@ -310,9 +347,10 @@ def test_el_hueco_de_linear_se_ve_en_el_pedazo(cliente, monkeypatch):
     """
     def revienta(*_a, **_k):
         raise linear_leads.ErrorLeads("Linear no contestó (503)")
+    quien = _lead()["nombre"]
     monkeypatch.setattr(linear_leads, "listar", revienta)
     pedazo = cliente.get("/calendario/buscar",
-                         params={"nueva": "1", "qp": "Tamara"}).text
+                         params={"nueva": "1", "qp": quien}).text
     assert agenda.AVISO_LEADS_HUECO in pedazo
     assert "bus-nota-hueco" in pedazo
     assert "bus-it" not in pedazo          # ni una fila inventada
@@ -325,8 +363,8 @@ def test_el_hueco_de_linear_de_contactos_no_se_repite(cliente):
     `linear_leads` directo y están a la vista, así que decir «los leads no
     se pueden leer» mientras se ven sería el aviso al revés.
     """
-    hallado = agenda.buscar_personas("Tamara")
-    assert any(f["lead"] == "LEAD-91" for f in hallado["filas"])
+    hallado = agenda.buscar_personas(_lead()["nombre"])
+    assert any(f["lead"] == REF_CON_PAGO for f in hallado["filas"])
     assert not any(contactos.AVISO_LINEAR_PRUEBAS in a
                    for a in hallado["avisos"])
 
@@ -350,10 +388,10 @@ def test_el_tope_dice_cuantas_quedaron_fuera():
 
 def test_la_pastilla_sale_de_los_mismos_campos_que_se_guardan(cliente):
     cuerpo = cliente.get("/calendario", params={
-        "nueva": "1", "lead": "LEAD-91", "cliente": "Tamara",
+        "nueva": "1", "lead": REF_CON_PAGO, "cliente": _lead()["nombre"],
         "tipo": "entrega"}).text
-    assert 'name="lead" value="LEAD-91"' in cuerpo
-    assert '<b class="bus-ref">LEAD-91</b>' in cuerpo
+    assert f'name="lead" value="{REF_CON_PAGO}"' in cuerpo
+    assert f'<b class="bus-ref">{REF_CON_PAGO}</b>' in cuerpo
     assert "el lead pasa a «Agendado»" in cuerpo
 
 
@@ -361,7 +399,7 @@ def test_con_un_tipo_que_no_agenda_la_pastilla_dice_la_verdad(cliente):
     # Un Alquiler amarra la actividad pero NO mueve el embudo: la regla ya
     # vivía en el POST, y la pastilla la dice antes de guardar.
     cuerpo = cliente.get("/calendario", params={
-        "nueva": "1", "lead": "LEAD-86", "tipo": "alquiler"}).text
+        "nueva": "1", "lead": REF_HABLANDO, "tipo": "alquiler"}).text
     assert "sin mover" in cuerpo
 
 
@@ -381,11 +419,11 @@ def test_un_cliente_suelto_dice_que_no_se_amarra(cliente):
 def test_quitar_al_elegido_deja_el_resto_del_formulario(cliente):
     dia = calendario.hoy().isoformat()
     cuerpo = cliente.get("/calendario", params={
-        "nueva": "1", "lead": "LEAD-91", "cliente": "Tamara",
+        "nueva": "1", "lead": REF_CON_PAGO, "cliente": _lead()["nombre"],
         "tipo": "entrega", "fecha": dia, "nota": "cuidado con el portón"}).text
     liga = html.unescape(
         re.search(r'href="([^"]+)">Quitar</a>', cuerpo).group(1))
-    assert "lead=LEAD-91" not in liga
+    assert f"lead={REF_CON_PAGO}" not in liga
     campos = _campos_del_form(cliente.get(liga).text)
     assert campos["lead"] == ""
     assert campos["cliente"] == ""
@@ -402,8 +440,8 @@ def test_quitar_al_elegido_deja_el_resto_del_formulario(cliente):
 def test_el_campo_del_buscador_no_viaja_en_el_guardado(cliente):
     # `qp` pertenece al form GET (atributo `form=`), no al POST: si viajara
     # al guardado sería un campo que `calendario_crear` no sabe leer.
-    cuerpo = cliente.get("/calendario", params={"nueva": "1",
-                                                "qp": "Tamara"}).text
+    cuerpo = cliente.get("/calendario", params={
+        "nueva": "1", "qp": _lead()["nombre"]}).text
     assert 'name="qp"' in cuerpo and 'form="f-buscar-persona"' in cuerpo
     campos = _campos_del_form(cuerpo)
     assert "qp" not in campos
@@ -417,15 +455,18 @@ def test_buscar_una_persona_no_filtra_el_calendario(cliente):
                  data={"tipo": "entrega", "cliente": "Casa Testigo",
                        "fecha": dia}, follow_redirects=False)
     cuerpo = cliente.get("/calendario", params={
-        "nueva": "1", "qp": "Tamara", "dia": dia, "vista": "lista"}).text
+        "nueva": "1", "qp": _lead()["nombre"], "dia": dia,
+        "vista": "lista"}).text
     assert "Casa Testigo" in cuerpo
 
 
 def test_los_campos_escondidos_devuelven_el_mismo_formulario(cliente):
     dia = calendario.hoy().isoformat()
+    quien = _lead()
     cuerpo = cliente.get("/calendario", params={
-        "nueva": "1", "qp": "Tamara", "lead": "LEAD-91", "cliente": "Tamara",
-        "tipo": "entrega", "fecha": dia, "nota": "traer escalera"}).text
+        "nueva": "1", "qp": quien["nombre"], "lead": REF_CON_PAGO,
+        "cliente": quien["nombre"], "tipo": "entrega", "fecha": dia,
+        "nota": "traer escalera"}).text
     form = cuerpo[cuerpo.index('id="f-buscar-persona"'):]
     form = form[:form.index("</form>")]
     ocultos = dict(re.findall(r'name="([^"]+)" value="([^"]*)"', form))
@@ -434,8 +475,8 @@ def test_los_campos_escondidos_devuelven_el_mismo_formulario(cliente):
     assert ocultos["tipo"] == "entrega"
     assert html.unescape(ocultos["nota"]) == "traer escalera"
     # …ni des-elegir a quien ya se eligió.
-    assert ocultos["lead"] == "LEAD-91"
-    assert ocultos["cliente"] == "Tamara"
+    assert ocultos["lead"] == REF_CON_PAGO
+    assert ocultos["cliente"] == quien["nombre"]
     assert ocultos["nueva"] == "1"
 
 
@@ -493,15 +534,16 @@ def como_el_8095(monkeypatch):
 def test_en_el_8095_el_buscador_funciona_completo(cliente, como_el_8095):
     # Condición 1 de Abraham: buscar es LECTURA, no hace falta llave de
     # escritura. El formulario se abre y el buscador encuentra.
+    quien = _lead()["nombre"]
     cuerpo = cliente.get("/calendario", params={"nueva": "1",
-                                                "qp": "Tamara"}).text
+                                                "qp": quien}).text
     assert '<div class="bus"' in cuerpo
     filas = _filas_del_buscador(cuerpo)
-    assert any("LEAD-91" in texto for _liga, texto in filas)
+    assert any(REF_CON_PAGO in texto for _liga, texto in filas)
     # Y el pedazo también, que es el camino del navegador.
     pedazo = cliente.get("/calendario/buscar",
-                         params={"nueva": "1", "qp": "Tamara"}).text
-    assert any("LEAD-91" in texto for _liga, texto in
+                         params={"nueva": "1", "qp": quien}).text
+    assert any(REF_CON_PAGO in texto for _liga, texto in
                _filas_del_buscador(pedazo))
 
 
@@ -522,7 +564,7 @@ def test_en_el_8095_un_POST_forzado_no_escribe_nada(cliente, como_el_8095):
     dia = calendario.hoy().isoformat()
     respuesta = cliente.post("/calendario/actividad",
                              data={"tipo": "entrega", "cliente": "Forzado",
-                                   "fecha": dia, "lead": "LEAD-91"},
+                                   "fecha": dia, "lead": REF_CON_PAGO},
                              follow_redirects=False)
     assert respuesta.status_code == 303
     assert "error=" in respuesta.headers["location"]
@@ -547,15 +589,16 @@ def test_el_guardado_sigue_leyendo_los_mismos_dos_campos(cliente):
     recibiendo `lead` y `cliente` y decidiendo igual.
     """
     dia = calendario.hoy().isoformat()
+    quien = _lead(REF_SIN_RESP)
     cliente.post("/calendario/actividad",
                  data={"tipo": "entrega", "cliente": "", "fecha": dia,
-                       "lead": "LEAD-90", "resp_nombre": "Mary"},
+                       "lead": REF_SIN_RESP, "resp_nombre": "Mary"},
                  follow_redirects=False)
     creada = next(a for a in calendario.listar(dia, dia)
-                  if a.get("lead") == "LEAD-90")
-    assert creada["cliente"] == "Juan Carlos Lopez"   # el nombre del lead
+                  if a.get("lead") == REF_SIN_RESP)
+    assert creada["cliente"] == quien["nombre"]   # el nombre lo pone el lead
     assert creada["resp_lead"] == "Mary"
-    assert linear_leads.uno("LEAD-90")["estado"] == "AGENDADO"
+    assert linear_leads.uno(REF_SIN_RESP)["estado"] == "AGENDADO"
 
 
 def test_la_lista_de_leads_vivos_tiene_UN_solo_dueno():
@@ -566,8 +609,8 @@ def test_la_lista_de_leads_vivos_tiene_UN_solo_dueno():
     vivos, aviso = agenda.leads_para_buscar()
     assert aviso == ""
     refs = {l["ref"] for l in vivos}
-    assert "LEAD-91" in refs
-    assert "LEAD-84" not in refs and "LEAD-83" not in refs
+    assert REF_CON_PAGO in refs
+    assert REF_GANADO not in refs and REF_PERDIDO not in refs
     # Y es la misma que alimenta el buscador con la caja vacía.
     assert refs == {f["lead"] for f in agenda.buscar_personas("", tope=0)["filas"]}
 

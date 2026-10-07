@@ -667,9 +667,15 @@ def test_el_buscador_abre_con_los_leads_vivos_y_sin_los_cerrados(cliente):
     cuerpo = _abrir(cliente, nueva="1").text
     bus = cuerpo[cuerpo.index('<div class="bus"'):]
     bus = bus[:bus.index("</div>\n</div>") if "</div>\n</div>" in bus else len(bus)]
-    assert "LEAD-91" in bus and "Tamara" in bus
-    assert "Soledad" not in bus          # LEAD-84, Ganado
-    assert "Monica Gama" not in bus      # LEAD-83, Perdido
+    # Los leads se nombran por su REF, nunca por el nombre de la clienta:
+    # los de la semilla son datos REALES y limpiarlos del repo público es
+    # un pendiente abierto. El nombre se lee de la muestra.
+    assert linear_leads.uno("LEAD-91")["nombre"] in bus
+    assert "LEAD-91" in bus
+    assert "LEAD-84" not in bus          # Ganado: cerrado
+    assert linear_leads.uno("LEAD-84")["nombre"] not in bus
+    assert "LEAD-83" not in bus          # Perdido: cerrado
+    assert linear_leads.uno("LEAD-83")["nombre"] not in bus
     # Y el campo que el POST lee sigue siendo `lead`, ahora escondido y
     # vacío porque nadie eligió todavía.
     assert 'name="lead" value=""' in cuerpo
