@@ -123,6 +123,52 @@ def sumas_confirmadas():
     return {int(f["orden_id"]): round(float(f["suma"]), 2) for f in filas}
 
 
+# ---------------------------------------------------------------------------
+# Las tres palabras de contexto de una fila de la cola (7/10/2026)
+#
+# «Falta la fecha de la venta» era el reclamo; el método y el quién vinieron
+# con él. La regla de la casa manda sobre las ganas de llenar la fila: lo
+# que no se sabe SE DICE. Por eso cada una de estas tres tiene su frase de
+# «todavía no» y ninguna devuelve un guion mudo ni una fecha de hoy.
+# ---------------------------------------------------------------------------
+
+SIN_FECHA = "sin fecha en Odoo"
+SIN_METODO = "todavía sin método: se elige al confirmar"
+SIN_MARCA = "nadie la ha marcado todavía"
+
+
+def fecha_de_venta(crudo):
+    """`2026-10-02 15:04:33` → `02/10/2026`. Lo que no se entienda sale
+    como «sin fecha en Odoo»: una fecha a medias se lee como un dato."""
+    texto = str(crudo or "").strip()[:10]
+    partes = texto.split("-")
+    if len(partes) != 3 or not all(p.isdigit() for p in partes):
+        return SIN_FECHA
+    return f"{partes[2]}/{partes[1]}/{partes[0]}"
+
+
+def metodo_de(confirmacion):
+    """Cómo llegó la plata, en palabras: la evidencia que vio quien
+    confirmó. Sin confirmación todavía no hay método que contar."""
+    if not confirmacion:
+        return SIN_METODO
+    return EVIDENCIAS.get(confirmacion.get("evidencia"), SIN_METODO)
+
+
+def marco_de(confirmacion):
+    """Quién marcó esta plata y cuándo, del libro de confirmaciones. Una
+    fila que nadie tocó lo dice con todas las letras: la plata está en
+    Odoo y ninguna persona la ha revisado."""
+    if not confirmacion:
+        return SIN_MARCA
+    quien = (confirmacion.get("por") or "").strip()
+    cuando = fecha_de_venta(confirmacion.get("en"))
+    if not quien:
+        return f"marcada el {cuando}, sin nombre de quién"
+    return (f"{quien}" if cuando == SIN_FECHA
+            else f"{quien}, el {cuando}")
+
+
 def cola():
     """(pendientes, huecos): las ventas del informe con plata que nadie
     confirmó que llegó — pagado real en Odoo sin confirmación humana, o
@@ -137,9 +183,25 @@ def cola():
     re-entra cuando lo pagado según Odoo SUPERA la suma de montos ya
     confirmados; la fila lo dice (`aviso_reentrada`) y trae en
     `monto_nuevo` solo la plata nueva — confirmar registra OTRO hecho,
-    nunca pisa el anterior."""
+    nunca pisa el anterior.
+
+    **Cada fila dice DE CUÁNDO es, CÓMO llegó la plata y QUIÉN la marcó**
+    (7/10/2026). Los tres se arman acá, en palabras, y los tres saben
+    callarse: lo que la casa no sabe se DICE («todavía sin método»), no se
+    rellena. De dónde sale cada uno:
+
+    - **cuándo** → `fecha` de la venta en Odoo (`date_order`, que el
+      informe ahora trae). Sin ella: «sin fecha en Odoo».
+    - **cómo** → la evidencia de la ÚLTIMA confirmación de esa orden
+      (`pago_confirmado.evidencia`: tarjeta, Yappy, transferencia o el
+      reporte de operaciones). Una fila que nadie confirmó todavía no
+      tiene método: se elige AL confirmar, y hasta entonces se dice.
+    - **quién** → `pago_confirmado.por` de esa misma confirmación. Una
+      fila nueva no la marcó nadie: la plata está en Odoo y nadie la ha
+      revisado, y eso es lo que se escribe."""
     informe = _informe()
     ya = sumas_confirmadas()
+    ultimas = confirmados()
     pendientes = []
     for venta in informe.get("ventas") or []:
         clase = (venta.get("clase") or "").strip().upper()
@@ -159,10 +221,17 @@ def cola():
                      f"llegó plata nueva "
                      f"({calculos.dinero(nuevo)} por confirmar)")
         debe = float(venta.get("debe") or 0)
+        ultima = ultimas.get(venta.get("orden_id"))
         pendientes.append({
             "orden_id": venta.get("orden_id"),
             "orden": venta.get("nombre") or "",
             "cliente": venta.get("cliente") or "",
+            # Los tres renglones de contexto de la fila, ya en palabras
+            # (regla 10: la plantilla no decide ni traduce nada).
+            "fecha": venta.get("fecha") or "",
+            "fecha_texto": fecha_de_venta(venta.get("fecha")),
+            "metodo_texto": metodo_de(ultima),
+            "marco_texto": marco_de(ultima),
             "pagado": round(pagado, 2),
             "debe": round(debe, 2),
             "total": round(float(venta.get("total") or 0), 2),

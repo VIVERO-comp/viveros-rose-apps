@@ -730,6 +730,9 @@ def informe_datos():
 
     - `contadores`: {"A"…"H": n, "rojo": F+G+H}.
     - `ventas`: lista de dicts con orden_id, nombre, cliente, telefono,
+      fecha (`date_order` de Odoo tal cual, "AAAA-MM-DD HH:MM:SS", o "" si
+      la orden no la trae — NUNCA la de hoy: una fecha inventada es peor
+      que ninguna),
       total, pagado, debe, clase, motivo, marca_prueba, entregado_odoo,
       entregado_calendario (True/False/None = sin datos), historica
       (True solo para la tanda cerrada `ORDENES_HISTORICAS`: ventas
@@ -920,6 +923,11 @@ def informe_datos():
             "nombre": orden.get("name") or "",
             "cliente": cliente,
             "telefono": p["telefono"],
+            # La fecha de la venta, cruda de Odoo. Ya se leía (`date_order`
+            # está en CAMPOS_VENTA, es lo que ordena el universo) pero se
+            # quedaba adentro: la cola de pagos no tenía cómo decir DE
+            # CUÁNDO es cada fila (7/10/2026).
+            "fecha": orden.get("date_order") or "",
             "total": total,
             "pagado": pagado,
             "debe": debe,

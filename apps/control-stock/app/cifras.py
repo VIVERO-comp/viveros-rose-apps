@@ -33,7 +33,13 @@ las consumirá. Leen el SQLite local y nada más — ni Odoo, ni Linear.
 
 from .datos import _db
 
-ETIQUETA = "provisional — hechos locales desde el 5/10/2026, montos sin ITBMS"
+# El rótulo que acompaña a las dos cifras EN PANTALLA, así que va en
+# palabras de negocio (item 7 del lote, 7/10/2026 — antes decía «hechos
+# locales», que no significa nada fuera de este archivo). Las dos cosas que
+# tiene que advertir siguen enteras: la cuenta no incluye lo de antes del
+# 5/10/2026, y los montos no llevan impuesto.
+ETIQUETA = ("provisional: solo cuenta lo que la app registró desde el "
+            "5/10/2026, y los montos van sin ITBMS")
 
 
 def _como_fecha(valor):

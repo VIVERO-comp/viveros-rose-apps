@@ -16,13 +16,20 @@ Qué es — y qué no:
   los números cuadran con /revisar y con la cola por construcción. Si
   aún así no cierran entre sí, el descuadre SE DICE — nunca se esconde.
 - **La cola de «Pagos por confirmar» es LA MISMA** de
-  /pagos-por-confirmar, listada en solo lectura: el botón «Confirmar»
-  va APAGADO con «Todavía no — falta el sí de Jay» (BLOQUE 22.1).
-  Confirmar de verdad sigue viviendo en /pagos-por-confirmar (system
-  manager).
+  /pagos-por-confirmar, listada en solo lectura, y cada fila dice ahora
+  DE CUÁNDO es la venta, CÓMO llegó la plata y QUIÉN la marcó (item 4,
+  7/10/2026; los tres los arma `pagos_confirmar.cola` y los tres saben
+  decir «todavía no se sabe» en vez de rellenar). El botón «Confirmar»
+  va APAGADO con **«Todavía no»** a secas (item 5): confirmar es del
+  asiento **system manager** y vive en /pagos-por-confirmar — no es un
+  permiso pendiente, y decir que lo era mandaba a preguntarle a quien no
+  decide.
 - **«Cifras a revisar»** son las dos cifras a propósito de cifras.py
   (pending_revenue / delivered_revenue), con su rótulo provisional tal
   cual — nada se re-etiqueta ni se redondea distinto.
+- **Las palabras son de negocio** (item 7): ni el nombre de una ruta, ni
+  el de un archivo, ni el de un sistema que el lector no administra. Lo
+  que el número significa, sí.
 - **Nada se inventa**: si el informe trae huecos (Odoo caído o sin
   configurar), los números dependientes salen «sin dato» y el hueco se
   dice — jamás un $0 fingido (la regla del resumen de las 7 p.m.).
@@ -50,7 +57,12 @@ _CENTAVO = 0.009
 REPORTES = ("Ventas del mes", "Cobros por método", "Ventas por persona",
             "Cuentas por cobrar")
 
-TEXTO_BOTON_CONFIRMAR = "Todavía no — falta el sí de Jay"
+# Item 5 (7/10/2026): el botón decía «Todavía no — falta el sí de Jay», y
+# ese permiso ya no es el motivo. Confirmar un pago es del asiento SYSTEM
+# MANAGER y se hace en /pagos-por-confirmar: acá, que es solo lectura, el
+# botón queda apagado y nada más. Decir un motivo que ya no aplica es peor
+# que no decir ninguno — manda a preguntarle a quien no decide.
+TEXTO_BOTON_CONFIRMAR = "Todavía no"
 
 
 def _tarjeta(titulo, monto, hint, n=None, rojo=False):
@@ -106,18 +118,23 @@ def resumen():
                               for p in pendientes), 2) if con_datos else None
 
     tarjetas = [
+        # Item 7 (7/10/2026): las ayudas decían «informe de /revisar
+        # (canceladas fuera)» y «confirmaciones humanas». Quien lee esta
+        # pantalla no sabe qué es /revisar ni por qué una confirmación
+        # sería «humana»: se dice qué hay adentro del número, no de qué
+        # archivo salió.
         _tarjeta("Vendido", vendido,
-                 "Total de las ventas del informe de /revisar "
-                 "(canceladas fuera)."),
+                 "Todo lo vendido y lo cotizado que sigue vivo. Lo "
+                 "cancelado no cuenta."),
         _tarjeta("Cobrado y confirmado", confirmado,
-                 "Confirmaciones humanas registradas en la cola "
-                 "(quién revisó, cuándo y qué vio)."),
+                 "Plata que alguien del equipo ya revisó y dio por "
+                 "buena, con su nombre y la fecha."),
         _tarjeta("Pagos por confirmar", por_confirmar,
-                 (f"{len(pendientes)} en la cola: plata que alguien marcó "
-                  "y nadie revisó.") if con_datos else
-                 "La cola no se pudo leer.", n=len(pendientes)),
+                 (f"{len(pendientes)} esperando: entró plata y todavía "
+                  "nadie la revisó.") if con_datos else
+                 "La lista no se pudo leer.", n=len(pendientes)),
         _tarjeta("Por cobrar", por_cobrar,
-                 f"{n_deben} ventas que todavía deben, según el informe.",
+                 f"{n_deben} ventas que todavía deben algo.",
                  n=n_deben, rojo=True),
     ]
 
@@ -133,7 +150,7 @@ def resumen():
     entregado_mes = cifras.delivered_revenue(hoy.replace(day=1), hoy)
     pendiente = cifras.pending_revenue()
     cifras_revisar = [
-        {"texto": (f"Plata confirmada sin entregar: "
+        {"texto": (f"Plata cobrada de trabajos sin entregar: "
                    f"${pendiente['monto']:,.2f} en {pendiente['n']} ventas"
                    + (f" ({pendiente['sin_monto']} sin monto conocido)"
                       if pendiente["sin_monto"] else "")),
