@@ -296,16 +296,33 @@ def test_el_candado_del_rol_inventario_sigue_donde_estaba():
     assert "len(mios) == 1 and mios[0][\"slug\"] == SLUG_INVENTARIO" in predicado
 
 
-def test_la_vista_plana_recupera_sus_tres_tokens():
-    """Los `var(--tinta/--borde/--suave)` de la vista plana del rol
-    Inventario viven en calendario.css, que esa pantalla no carga. Un
-    var() sin valor no da error: invalida la propiedad y calla — el campo
-    de la cantidad se quedaba sin borde (parecía texto) y el botón
-    «Guardar» salía blanco sobre blanco. Van acotados a esa pantalla."""
+def test_los_tokens_de_color_estan_definidos_para_TODA_la_hoja():
+    """Un `var()` sin valor no da error: invalida la propiedad y CALLA.
+
+    Esta prueba nació acotando tres tokens a `main.plano`, porque el
+    defecto se vio ahí: el campo de la cantidad de la vista plana del rol
+    Inventario se quedaba sin borde (parecía texto) y «Guardar» salía
+    blanco sobre blanco, ya que `--tinta/--borde/--suave` viven en
+    `calendario.css` y esa pantalla no la carga.
+
+    **Medido después, el agujero era MUCHO más grande**: son CUATRO
+    tokens (`--fondo` también) usados en **34 lugares de esta hoja** —los
+    selectores de cliente y de lead de Vender, el marco de vista previa y
+    los campos de Ajustes (roles, dispositivos, chips)— y todos salían sin
+    borde o transparentes. Acotarlos a `main.plano` arreglaba una pantalla
+    y dejaba las otras rotas en silencio, así que ahora viven en `:root`,
+    con los mismos valores de la otra piel para que las dos pinten el
+    mismo gris. El parche acotado se retiró: era redundante, con valores
+    idénticos.
+
+    Lo que esta prueba cuida, entonces, es lo que de verdad importa:
+    **ningún `var()` de esta hoja se queda sin valor.**
+    """
     css = open(CSS).read()
-    assert "main.plano{--tinta:" in css
-    regla = css.split("main.plano{", 1)[1].split("}", 1)[0]
-    for token in ("--tinta:", "--borde:", "--suave:"):
-        assert token in regla, token
-    # Acotado: nadie más hereda estos tres.
-    assert not re.search(r"^:root\{[^}]*--tinta:", css, re.M)
+    raiz = re.search(r"^:root\{(.*?)\}", css, re.S | re.M)
+    assert raiz, "styles.css tiene que definir sus tokens en :root"
+    for token in ("--fondo:", "--borde:", "--suave:", "--tinta:"):
+        assert token in raiz.group(1), token
+    # Y el parche viejo no vuelve: definir el mismo token en dos lugares
+    # es la puerta para que mañana difieran sin que nada avise.
+    assert "main.plano{--tinta:" not in css

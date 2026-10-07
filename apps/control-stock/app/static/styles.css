@@ -1885,14 +1885,22 @@ nav .marca{display:none}
    La pantalla única del rol: lista plana con buscador, conteo por fila y
    la bitácora de admins (/stock/cambios). Propuesta: la captura la toma
    la coordinadora. Solo presentación; toda decisión viene de Python. */
-/* Los tres tokens que este bloque usa y NADIE definía (BLOQUE 53): viven
-   en calendario.css, que estas dos pantallas no cargan. Un var() sin
-   valor no da ningún error — invalida la propiedad entera y calla: el
-   campo de la cantidad se quedaba SIN BORDE (parecía texto, no un campo
-   donde se puede escribir) y el botón «Guardar» salía con fondo
-   transparente y letra blanca, o sea invisible sobre el blanco. Van
-   acotados a esta pantalla para no moverle un pixel a nadie más. */
-main.plano{--tinta:#18181b; --borde:#e4e4e7; --suave:#52525b}
+/* Acá vivía un parche que definía `--tinta/--borde/--suave` SOLO para
+   esta pantalla, porque el defecto se vio acá: el campo de la cantidad
+   salía SIN BORDE (parecía texto, no un campo donde escribir) y el botón
+   «Guardar» salía transparente con letra blanca, invisible sobre el
+   blanco. Un var() sin valor no da ningún error: invalida la propiedad
+   entera y calla.
+
+   El parche se RETIRÓ porque el agujero era mucho más grande: son CUATRO
+   tokens usados en 34 lugares de esta hoja —los selectores de cliente y
+   de lead de Vender, el marco de vista previa, los campos de Ajustes—, y
+   acotarlos arreglaba una pantalla dejando las otras rotas en silencio.
+   Ahora están en el `:root` de arriba, con los valores de la otra piel
+   para que las dos pinten el mismo gris. Los dos juegos tenían valores
+   idénticos, así que esto era pura redundancia — y dos definiciones del
+   mismo token son la puerta para que mañana difieran sin que nada
+   avise. */
 .plano{max-width:720px;margin:0 auto;padding:14px 14px 40px;display:flex;flex-direction:column;gap:12px}
 .plano-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .plano-marca{display:flex;align-items:center;gap:10px}
