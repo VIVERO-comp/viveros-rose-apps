@@ -80,7 +80,7 @@ body{font-family:var(--d-fuente);background:#fff}
      (sin query)  ANGOSTO   todo en una columna
      ≥  560px     MEDIO     dos columnas de fichas; tablas enteras
      ≥  940px     ANCHO     el panel lateral CABE al lado del contenido
-     ≥ 1180px     HOLGADO   el tablero y su resumen, al lado
+     ≥ 1120px     HOLGADO   el tablero y su resumen, al lado
 
    Estos cuatro números son la escala: ninguna hoja inventa los suyos. Si
    una pestaña necesita otro valor, va con el porqué escrito al lado.

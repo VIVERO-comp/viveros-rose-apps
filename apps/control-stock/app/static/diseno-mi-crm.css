@@ -63,9 +63,9 @@
 }
 /* Las cuatro del lienzo recién en HOLGADO, no en ANCHO: este tablero no
    vive en el lienzo entero sino en la columna derecha de .mc-work, que se
-   lleva 288px menos. Con 1180 de lienzo esa columna mide ~836 y cada
+   lleva 288px menos. Con 1120 de lienzo esa columna mide ~836 y cada
    tarjeta queda en los ~200px del lienzo de Korto. */
-@container lienzo (min-width:1180px){
+@container lienzo (min-width:1120px){
   .mc-board{grid-template-columns:repeat(4,minmax(0,1fr))}
 }
 .mc-col{background:var(--d-col);border-radius:var(--d-radio-col);padding:10px;display:flex;flex-direction:column;gap:8px;min-width:0}

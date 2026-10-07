@@ -220,13 +220,16 @@
 @container lienzo (min-width: 860px){
   .vd-col{flex:0 0 276px}
 }
-@container lienzo (min-width: 1180px){
-  /* Con 1180px de LIENZO el resumen vuelve al costado: 852 del tablero +
-     12 de hueco + 236 de los tiles + 56 del padding = 1156. El tablero
+@container lienzo (min-width: 1120px){
+  /* Con 1120px de LIENZO el resumen vuelve al costado: 852 del tablero +
+     12 de hueco + 236 de los tiles = 1100, y el lienzo que mide el
+     @container es el de ADENTRO del padding de .vd-main (la ventana menos
+     el menú menos los 56 de respiro): a 1440px de ventana son 1144, que
+     entran justos. A 1280 son 984 y el resumen baja. El tablero
      dimensiona por su CONTENIDO (flex-basis auto) y el resumen toma el
      resto — con flex:1 en los dos hermanos, el resumen se llevaba la
      mitad del lienzo y la tercera columna quedaba clipeada debajo
-     (visto en vivo a 1500px). 1180 es el escalón HOLGADO de la escala
+     (visto en vivo a 1500px). 1120 es el escalón HOLGADO de la escala
      compartida (diseno-base.css). */
   .vd-tablero{flex:0 1 auto}
   .vd-res{flex:1 1 236px;min-width:236px;flex-direction:column;flex-wrap:nowrap}
