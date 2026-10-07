@@ -71,6 +71,49 @@ class OdooFalso:
         manejador = getattr(self, (modelo + "_" + metodo).replace(".", "_"))
         return manejador(args, kw)
 
+    # El evaluador de dominios del fake, en notación polaca de Odoo (con
+    # "|", "&", "!"). Lo pide F2: el buscador de Vender se diferencia del
+    # de antes SOLO por el dominio (PL-/MC-/IN- contra PL-), y un fake que
+    # ignorara las condiciones daría por probado lo que no probó.
+    @staticmethod
+    def _evaluar_dominio(dominio, fila):
+        def condicion(c):
+            campo, op, valor = c
+            val, v = str(fila.get(campo) or ""), str(valor)
+            if op in ("=", "=="):
+                return val == v
+            if op == "=ilike":
+                return val.lower() == v.lower()
+            if op == "ilike":
+                return v.lower() in val.lower()
+            if op == "like":
+                return v in val
+            if op == "not like":
+                # Como en Odoo: el que no tiene el campo también pasa.
+                return v not in val
+            return False
+
+        def parcial(i):
+            token = dominio[i]
+            if token == "|":
+                a, i = parcial(i + 1)
+                b, i = parcial(i)
+                return a or b, i
+            if token == "&":
+                a, i = parcial(i + 1)
+                b, i = parcial(i)
+                return a and b, i
+            if token == "!":
+                a, i = parcial(i + 1)
+                return not a, i
+            return condicion(token), i + 1
+
+        i, resultado = 0, True
+        while i < len(dominio):
+            r, i = parcial(i)
+            resultado = resultado and r
+        return resultado
+
     # ---- productos ----
     def product_product_search_read(self, args, kw):
         # Desde F2 (6/10/2026) el fake evalúa el dominio DE VERDAD
