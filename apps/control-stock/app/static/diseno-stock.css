@@ -249,8 +249,26 @@
     border-radius:var(--d-radio-boton);background:#fff;color:var(--d-tinta);
     font-size:16px;
   }
-  #tab-stock .pie-valor{font-variant-numeric:tabular-nums}
-  #tab-stock .pie-acciones{margin-left:10px}
+  /* El campo que se teclea (A3 del BLOQUE 53), con la piel de los demás
+     campos del diseño y la misma altura que los cuadrados de − y +: la
+     fila no cambia de alto al escribir. */
+  #tab-stock .pie-valor{
+    width:56px;height:32px;border:1px solid var(--d-borde-campo);
+    border-radius:var(--d-radio-boton);background:#fff;color:var(--d-tinta);
+    font-variant-numeric:tabular-nums;
+  }
+  /* El avisito de "Guardado · Deshacer" y el error del servidor (A4):
+     colgados bajo el campo, fuera del flujo. */
+  #tab-stock .pie-estado{
+    border:1px solid var(--d-borde);border-radius:var(--d-radio-pil);
+    box-shadow:var(--d-sombra);color:var(--d-suave);
+  }
+  #tab-stock .pie-estado.ok{color:var(--d-verde);border-color:var(--d-borde)}
+  #tab-stock .pie-estado.mal{
+    color:var(--d-rojo);background:var(--d-rojo-fondo);border-color:var(--d-rojo-fondo);
+  }
+  #tab-stock .pie-deshacer{color:var(--d-tinta)}
+  #tab-stock .pie-valor.con-error{border-color:var(--d-rojo)}
 }
 
 /* ==================== el teléfono (pantallas 19 y 20) ================== */

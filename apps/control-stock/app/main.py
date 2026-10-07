@@ -832,14 +832,35 @@ def _destino_tras_crear_planta(volver=""):
 
 @app.post("/ajustar")
 async def ajustar(request: Request):
-    """El ajuste rápido del modal. El guardado real pasa por el punto
-    único de escritura (stock_escritura.escribir_stock → order-api), que
-    compara `esperada` contra Odoo: si alguien movió el stock en el
-    medio, vuelve `conflicto` con el valor fresco y nada se escribe."""
+    """El ajuste rápido del modal y el − cantidad + de la lista (A3/A4 del
+    BLOQUE 53). El guardado real pasa por el punto único de escritura
+    (stock_escritura.escribir_stock → order-api), que compara `esperada`
+    contra Odoo: si alguien movió el stock en el medio, vuelve `conflicto`
+    con el valor fresco y nada se escribe.
+
+    Dos formas de mandar la cantidad, y las dos las juzga PYTHON:
+
+    - `cantidad`: un entero ≥ 0, el contrato de siempre del modal. Lo que
+      no sea exactamente eso es `peticion_invalida` (400).
+    - `cantidadTexto`: lo TECLEADO tal cual en el campo de la lista, sin
+      tocar. Lo valida `stock_escritura.cantidad_contada()` —el mismo
+      juez y el mismo texto que la vista plana del rol Inventario— y lo
+      ilegible vuelve como {"error": "cantidad", "mensaje": …} para que
+      la pantalla lo pinte DEBAJO del campo, conservando lo tecleado
+      (regla del lote de formularios: nunca se vuelve 0 en silencio).
+
+    El navegador no decide nada: manda el texto y pinta la respuesta."""
     cuerpo = await request.json()
     sku = cuerpo.get("sku")
     cantidad = cuerpo.get("cantidad")
     esperada = cuerpo.get("esperada")
+    if "cantidadTexto" in cuerpo:
+        cantidad, mensaje = stock_escritura.cantidad_contada(
+            cuerpo.get("cantidadTexto"))
+        if mensaje:
+            return Response(
+                json.dumps({"error": "cantidad", "mensaje": mensaje}),
+                status_code=400, media_type="application/json")
     if (not isinstance(sku, str) or not isinstance(cantidad, int) or cantidad < 0
             or not isinstance(esperada, int)):
         return Response(json.dumps({"error": "peticion_invalida"}), status_code=400,
