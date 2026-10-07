@@ -656,12 +656,12 @@ def test_un_empleado_sin_etiqueta_no_mueve_ni_las_sin_asignar():
 # La pantalla
 # ---------------------------------------------------------------------------
 
-def test_la_pantalla_pinta_las_7_columnas_y_sus_compras(cliente):
+def test_la_pantalla_pinta_sus_columnas_y_sus_compras(cliente):
     respuesta = cliente.get("/compras")
     assert respuesta.status_code == 200
     texto = respuesta.text
-    for estado in compras.ESTADOS:
-        assert estado["titulo"] in texto
+    for clave in compras.ORDEN_PANTALLA:
+        assert compras.POR_CLAVE[clave]["titulo"] in texto
     assert "50 sacos de tierra negra" in texto
     assert "Agroservicios del Istmo" in texto
     assert "P00016" in texto

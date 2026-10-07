@@ -828,8 +828,11 @@ def test_ningun_redirect_de_compras_se_va_sin_ancla(cliente, de_dueno):
 def test_el_tablero_la_columna_y_la_tarjeta_tienen_su_ancla(cliente):
     texto = cliente.get("/compras").text
     assert 'id="cp-tablero"' in texto
-    for estado in compras.ESTADOS:
-        assert f'id="col-{estado["clave"]}"' in texto
+    # Las columnas de PANTALLA (item 8): «Abonado» sigue en Linear pero ya
+    # no tiene columna, así que tampoco tiene ancla.
+    for clave in compras.ORDEN_PANTALLA:
+        assert f'id="col-{clave}"' in texto
+    assert 'id="col-ABONADO"' not in texto
     assert 'id="c-VIV-201"' in texto
 
 
