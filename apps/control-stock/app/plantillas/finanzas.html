@@ -34,7 +34,7 @@
   <div class="fz-alerta">Esta foto tiene huecos: {{ f.huecos | join(' · ') }}</div>
   {% endif %}
   {% if f.descuadre is not none %}
-  <div class="fz-alerta">Los cuatro números no cierran entre sí por ${{ '%.2f' | format(f.descuadre | abs) }} — la foto fina está en /revisar. Acá se dice, no se esconde.</div>
+  <div class="fz-alerta">Los cuatro números no cierran entre sí por {{ f.descuadre | abs | dinero }} — la foto fina está en /revisar. Acá se dice, no se esconde.</div>
   {% endif %}
 
   <div class="fz-g4">
@@ -53,7 +53,7 @@
       {% for p in f.pendientes %}
       <div class="fz-r">
         <span class="fz-quien"><b>{{ p.orden or '—' }}</b><span class="fz-hint">{{ p.cliente or 'Sin cliente' }}{% if p.fuera_de_odoo %} · pago informado FUERA de Odoo{% endif %}{% if p.aviso_reentrada %} · {{ p.aviso_reentrada }}{% endif %}</span></span>
-        <b class="num">${{ '%.2f' | format(p.monto_nuevo) }}</b>
+        <b class="num">{{ p.monto_nuevo | dinero }}</b>
         <button class="fz-apagado chico" type="button" disabled>Confirmar — {{ f.boton_confirmar }}</button>
       </div>
       {% else %}

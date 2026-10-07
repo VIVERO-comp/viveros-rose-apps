@@ -68,7 +68,7 @@ import time
 from datetime import datetime
 
 from .datos import ZONA_PANAMA, _db, ahora_iso
-from . import datos_roles
+from . import calculos, datos_roles
 from .datos_roles import LARGO_TERMINO, _plano
 
 
@@ -359,7 +359,7 @@ def registrar_pago(origen, venta, por, monto=None, completo=None,
                 (nuevo, origen, int(venta)))
         texto = detalle or ("pago completo" if completo else "depósito")
         if monto is not None:
-            texto = f"{texto} · ${round(float(monto), 2):,.2f} este hecho"
+            texto = f"{texto} · {calculos.dinero(round(float(monto), 2))} este hecho"
         con.execute(
             "INSERT INTO venta_estado_cambio (origen, venta, de, a, hecho,"
             " detalle, puesto_por, puesto_en) VALUES (?,?,?,?,'pago',?,?,?)",

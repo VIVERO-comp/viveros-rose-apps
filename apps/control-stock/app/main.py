@@ -93,12 +93,11 @@ def fecha_bonita(iso):
 plantillas.env.filters["fecha_bonita"] = fecha_bonita
 
 
-def dinero_venta(monto):
-    """Mismo formato de moneda del resto de la app: $3.50."""
-    return f"${monto:.2f}"
-
-
-plantillas.env.filters["dinero"] = dinero_venta
+# El filtro `dinero` de las plantillas ES el formateador único de la casa
+# (`calculos.dinero`): coma de miles y dos decimales, igual en Jinja que en
+# Python. Hasta el 7/10/2026 esta función tenía su propio `:.2f` sin coma,
+# y por eso la misma pantalla mezclaba «$50,403.00» con «$1522.50».
+plantillas.env.filters["dinero"] = calculos.dinero
 
 # El Inicio pinta el calendario con el color y el nombre que decide
 # app/calendario.py; la plantilla no conoce los tipos.
@@ -2392,7 +2391,7 @@ def venta_buscar(request: Request, q: str = "", solo_plantas: str = ""):
     # la fila de la planta en el navegador (no hay a dónde hacer un POST
     # con carrito, esa pantalla edita una orden ya existente) y necesita el
     # número crudo, no el "$3.50" ya formateado para mostrar.
-    return {"resultados": [{**p, "precio": dinero_venta(p["precio"]),
+    return {"resultados": [{**p, "precio": calculos.dinero(p["precio"]),
                             "precio_num": p["precio"]} for p in resultados]}
 
 
@@ -2772,7 +2771,7 @@ async def venta_cotizar(request: Request):
         # salió igual, pero si venía de una ficha y Linear no contestó, acá
         # se dice — antes nadie se enteraba.
         "aviso": registro.get("aviso_lead") or "",
-        "filas": [("Total", dinero_venta(registro["total"]), None),
+        "filas": [("Total", calculos.dinero(registro["total"]), None),
                   ("Estado", "Cotización (borrador en Odoo)", "dorado")],
         "pdf_href": f"/venta/{registro['n']}/cotizacion.pdf",
         "pdf_texto": "Descargar / Compartir (PDF)",
@@ -2817,7 +2816,7 @@ async def venta_vender(request: Request):
         "titulo": "Venta confirmada",
         "sub": f"{registro['orden']} · {registro['cliente']}",
         "aviso": registro.get("aviso_lead") or "",
-        "filas": [("Total", dinero_venta(registro["total"]), None),
+        "filas": [("Total", calculos.dinero(registro["total"]), None),
                   ("Estado", "Confirmada · el cobro se registra en Odoo", "dorado")],
         "pdf_href": f"/venta/{registro['n']}/cotizacion.pdf",
         "pdf_texto": "Descargar / Compartir (PDF)",
@@ -2985,7 +2984,7 @@ async def venta_servicio_crear(request: Request, tipo: str):
                              venta_estado.TIPO_DE_SERVICIO.get(tipo, "other"),
                              form, request.state.empleada)
     filas = [("Tipo", cotizaciones.etiqueta_de(tipo), None),
-             ("Total", dinero_venta(registro["total"]), None),
+             ("Total", calculos.dinero(registro["total"]), None),
              ("Estado", "Cotización (borrador en Odoo)", "dorado")]
     return plantillas.TemplateResponse(request, "venta_exito.html", {
         "titulo": "Cotización de servicio creada",
@@ -3109,7 +3108,7 @@ async def venta_personalizada_crear(request: Request):
         "titulo": "Cotización creada",
         "sub": f"{registro['orden']} · {registro['cliente']}",
         "filas": [("Tipo", "Personalizado", None),
-                  ("Total", dinero_venta(registro["total"]), None),
+                  ("Total", calculos.dinero(registro["total"]), None),
                   ("Estado", "Cotización (borrador en Odoo)", "dorado")],
         "pdf_href": f"/venta/servicio/{registro['n']}/propuesta.pdf",
         "pdf_texto": "Descargar / Compartir (PDF)",
@@ -3410,7 +3409,7 @@ async def _registrar_pago_venta(request: Request, n: int):
                  "deber de system manager, desde «Estado / Entrega» de "
                  "la venta.",
         "filas": [("Factura", registro["factura"], None),
-                  ("Total", dinero_venta(registro["total"]), "ok"),
+                  ("Total", calculos.dinero(registro["total"]), "ok"),
                   ("Método", metodo_texto, None),
                   ("Entrega", "Pendiente de marcar", "dorado")],
         "pdf_href": f"/venta/{n}/factura.pdf",

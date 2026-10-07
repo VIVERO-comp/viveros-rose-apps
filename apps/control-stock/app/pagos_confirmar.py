@@ -27,7 +27,7 @@ Qué es esta pantalla — y qué no:
 import logging
 
 from .datos import _db, ahora_iso
-from . import venta_estado
+from . import calculos, venta_estado
 
 # La evidencia que se vio, con su texto de pantalla. "reporte_operaciones"
 # es el reporte de quien carga el deber de operaciones y banco.
@@ -155,8 +155,9 @@ def cola():
             if pagado <= previo + _CENTAVO:
                 continue  # nada nuevo que confirmar
             nuevo = pagado - previo
-            aviso = (f"abono previo confirmado: ${previo:,.2f} — llegó "
-                     f"plata nueva (${nuevo:,.2f} por confirmar)")
+            aviso = (f"abono previo confirmado: {calculos.dinero(previo)} — "
+                     f"llegó plata nueva "
+                     f"({calculos.dinero(nuevo)} por confirmar)")
         debe = float(venta.get("debe") or 0)
         pendientes.append({
             "orden_id": venta.get("orden_id"),

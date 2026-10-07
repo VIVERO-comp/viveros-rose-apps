@@ -45,7 +45,7 @@ import re
 import time
 import unicodedata
 
-from . import calendario, linear_leads, mantenimiento, ventas
+from . import calculos, calendario, linear_leads, mantenimiento, ventas
 
 TTL_SALDOS = 60
 
@@ -178,9 +178,15 @@ def refrescar():
 
 
 def plata(monto):
-    """$1 525.00 — el formato de la app, con el espacio de los miles."""
-    texto = f"{float(monto or 0):,.2f}".replace(",", " ")
-    return f"${texto}"
+    """$1,525.00 — EL formato de dinero de la app (`calculos.dinero`).
+
+    Hasta el 7/10/2026 esta función ponía un ESPACIO donde va la coma, y
+    era la tercera cara del mismo dinero: el tablero decía «$1,150.00», la
+    ficha «$1522.50» y la agenda «$1 525.00». Un monto no puede tener tres
+    caras en la misma app. El `or 0` se queda: acá un saldo ausente ya
+    viene filtrado antes y sí significa cero.
+    """
+    return calculos.dinero(float(monto or 0))
 
 
 def _con_saldo(lead, fichas, error):

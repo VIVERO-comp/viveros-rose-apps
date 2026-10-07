@@ -407,8 +407,11 @@
 
     <details class="ajuste-d">
       <summary><span class="que"><b>Mi cuenta</b><span>Tu email de Google y tu usuario</span></span><span class="flecha">›</span></summary>
+      {# El nombre de la sección lo dice el <summary> de arriba: acá NO se
+         repite (7/10/2026 — decía «Mi cuenta» dos veces seguidas). Las
+         secciones con VARIAS partes sí llevan un `seccion-titulo` por
+         parte, y eso está bien: ahí cada título nombra algo distinto. #}
       <div class="ajuste-cuerpo">
-<div class="seccion-titulo">Mi cuenta</div>
     <div class="historial-item acceso-item">
       <div><b>{{ empleada.nombre }}</b><small>usuario: {{ empleada.id }}{% if empleada.email and empleada.email_verificado %} · Google conectado{% endif %}</small></div>
     </div>
@@ -432,7 +435,6 @@
     <details class="ajuste-d">
       <summary><span class="que"><b>Avisos en este celular</b><span>{% if avisos_celulares %}{{ avisos_celulares }} celular{{ 's' if avisos_celulares > 1 }} activado{{ 's' if avisos_celulares > 1 }}{% else %}Apagados{% endif %}</span></span><span class="flecha">›</span></summary>
       <div class="ajuste-cuerpo">
-<div class="seccion-titulo">Avisos en este celular</div>
     {% if aviso_ajustes == 'avisos-activados' %}<div class="aviso-ok">Avisos activados en este celular.</div>
     {% elif aviso_ajustes == 'avisos-prueba' %}<div class="aviso-ok">Aviso de prueba mandado. Debe salirte en unos segundos.</div>
     {% elif aviso_ajustes == 'avisos-sin-celular' %}<div class="aviso-error">Primero activa los avisos en este celular.</div>
@@ -460,8 +462,10 @@
       (Compartir → Añadir a pantalla de inicio) y activar los avisos desde
       ahí: Apple no los deja llegar a una pestaña suelta de Safari.</p>
       {% else %}
-      <p>Los avisos están apagados en el servidor: faltan las claves VAPID
-      (VAPID_CLAVE_PUBLICA y VAPID_CLAVE_PRIVADA en el .env del droplet).</p>
+      {# El motivo técnico (faltan las claves VAPID en el servidor) vive en
+         el log y en app/avisos.py, no en la cara de quien usa la app: acá
+         no hay nada que pueda hacer con ese dato. #}
+      <p>Los avisos todavía no están activados.</p>
       {% endif %}
     </div>
 
@@ -474,7 +478,6 @@
     <details class="ajuste-d">
       <summary><span class="que"><b>Hoja de inventario</b><span>Imprimir la hoja de conteo (PDF)</span></span><span class="flecha">›</span></summary>
       <div class="ajuste-cuerpo">
-<div class="seccion-titulo">Hoja de inventario</div>
     <div class="inv-card">
       <h3>Imprimir hoja de conteo</h3>
       <p>PDF con todas las plantas y su stock del sistema, con columna vacía para anotar el conteo caminando el vivero. Solo revisión, no ajusta nada.</p>
@@ -1117,7 +1120,11 @@
   </div>
 </div>
 
-<a class="fab" id="fab-agregar" href="/productos/crear">
+{# Nace ESCONDIDO (7/10/2026): la página abre en Inicio, y a Stock se llega
+   con `tab('stock')`, que es quien lo muestra. Sin este `hidden` el botón
+   negro aparecía un instante en Inicio —y se quedaba, porque `tab()` solo
+   corre al cambiar de pestaña— en una pantalla que no crea productos. #}
+<a class="fab" id="fab-agregar" href="/productos/crear" hidden>
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
   Crear producto
 </a>

@@ -55,6 +55,39 @@ def emoji_de(nombre):
     return EMOJI_DEFECTO
 
 
+# ---------------------------------------------------------------------------
+# EL formateador de dinero de la app. UNO SOLO (7/10/2026)
+#
+# Hasta hoy convivían dos: el filtro `dinero` de las plantillas
+# (main.dinero_venta, SIN coma de miles) y media docena de f-strings con
+# `:,.2f` sueltas por los módulos. La misma pantalla llegó a pintar
+# «$50,403.00» arriba y «$1522.50» tres renglones abajo — el mismo dinero
+# con dos caras, que es justo lo que hace dudar de una cifra.
+#
+# Regla, para toda la app: **coma de miles y dos decimales, siempre.**
+# Quien tenga que pintar un monto lo pasa por aquí: las plantillas con el
+# filtro `dinero` (que es esta misma función, registrada en main.py) y
+# Python llamándola directo. Nadie vuelve a escribir el formato a mano —
+# hay una prueba que recorre el código y las pantallas y falla si aparece
+# un monto sin coma (`tests/test_dinero_formato.py`).
+#
+# Vive en `calculos` porque es el único módulo sin un solo import de la
+# casa: lo puede llamar cualquiera (control, finanzas, revisar, pedidos…)
+# sin armar un ciclo.
+# ---------------------------------------------------------------------------
+
+def dinero(monto):
+    """El ÚNICO formato de dinero de la app: `$1,522.50`.
+
+    `None` sale como cadena vacía a propósito: «no se sabe» no es cero, y
+    quien llama decide qué palabra poner en su lugar («sin dato»,
+    «Todavía no»). Nunca inventa un $0.00.
+    """
+    if monto is None:
+        return ""
+    return f"${float(monto):,.2f}"
+
+
 # Misma regla del catálogo: un precio menor a $1.00 es un marcador de
 # "todavía sin precio real" en Odoo, no un precio.
 _PRECIO_MINIMO_CENTAVOS = 100
@@ -65,7 +98,7 @@ def precio_online(centavos):
     producto aún no tiene precio real (0 o marcador menor a $1.00)."""
     if not centavos or centavos < _PRECIO_MINIMO_CENTAVOS:
         return None
-    return f"${centavos / 100:.2f}"
+    return dinero(centavos / 100)
 
 
 def estado(disponible, umbral):

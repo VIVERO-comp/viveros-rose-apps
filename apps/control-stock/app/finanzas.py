@@ -39,7 +39,7 @@ caché en reconciliacion.informe_datos, no una copia de la cola aquí.
 
 from datetime import datetime
 
-from . import cifras, pagos_confirmar
+from . import calculos, cifras, pagos_confirmar
 from .datos import ZONA_PANAMA
 
 # La misma frontera de centavos de la cola y de Pedidos.
@@ -59,7 +59,7 @@ def _tarjeta(titulo, monto, hint, n=None, rojo=False):
     return {
         "titulo": titulo,
         "monto": monto,
-        "texto": (f"${monto:,.2f}" if monto is not None else "sin dato"),
+        "texto": (calculos.dinero(monto) if monto is not None else "sin dato"),
         "hint": hint,
         "n": n,
         "rojo": bool(rojo) and monto is not None and monto > _CENTAVO,
