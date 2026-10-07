@@ -574,6 +574,38 @@ def _resumen_categorias(inventario, umbral):
     return sorted(porcategoria.values(), key=lambda c: c["nombre"])
 
 
+# EL TÍTULO DEL ENCABEZADO DE ESTA PANTALLA (BLOQUE 54, G1 — defecto
+# encontrado el 7/10/2026 sobre la captura de 1440px).
+#
+# `/` es UNA sola página con cuatro secciones que se encienden con JS, así
+# que su encabezado nacía con el literal «Inicio» y lo corregía el
+# navegador. Con eso, ENTRAR POR URL —/?tab=ajustes, un favorito, el guion
+# de capturas— dejaba «Inicio» arriba y el contenido de Ajustes debajo:
+# el encabezado le mentía a quien mira.
+#
+# Ahora lo decide Python y llega pintado (regla 10: la decisión se calcula
+# en el servidor y llega lista a la plantilla). El JS solo lo refresca al
+# cambiar de pestaña sin recargar. De paso el defecto queda MEDIBLE desde
+# el servidor, que es lo que lo había dejado pasar: la prueba del marco
+# miraba el HTML, y en el HTML el título lo ponía el navegador.
+TITULO_PESTANA = {
+    "home": "Inicio", "stock": "Stock", "inv": "Inventario",
+    "ajustes": "Ajustes",
+}
+
+
+def _titulo_pestana(parametros) -> str:
+    """El título que corresponde a la pestaña con la que se ENTRA."""
+    pedida = parametros.get("tab") or ""
+    if pedida in TITULO_PESTANA:
+        return TITULO_PESTANA[pedida]
+    # /?producto=SKU abre la ficha de una planta, que vive DENTRO de Stock
+    # (la recarga tras "Guardar en Odoo" viaja así, sin tab).
+    if parametros.get("producto"):
+        return TITULO_PESTANA["stock"]
+    return TITULO_PESTANA["home"]
+
+
 @app.get("/")
 def inicio(request: Request, refrescar: int = 0, crear: str = "",
            volver: str = ""):
@@ -710,6 +742,9 @@ def inicio(request: Request, refrescar: int = 0, crear: str = "",
             coworkers_error = True
         dispositivos = wa_autor.vistos()
     return plantillas.TemplateResponse(request, "app.html", {
+        # El título del encabezado, decidido por la pestaña con la que se
+        # entra (ver _titulo_pestana): entrar por URL ya llega bien.
+        "titulo_pestana": _titulo_pestana(request.query_params),
         "empleada": request.state.empleada,
         "puede_fichas": puede_fichas,
         "es_admin": es_admin,

@@ -189,6 +189,89 @@ def test_la_escala_de_anchos_es_una_sola():
         f"escalones fuera de la escala compartida: {sueltos}")
 
 
+# ---------------------------------------------------------------------------
+# 3. El encabezado no solo EXISTE: DICE la pestaña en la que estás
+# ---------------------------------------------------------------------------
+#
+# EL AGUJERO QUE ESTO TAPA (7/10/2026): las pruebas de arriba comprueban
+# que el encabezado existe, que es el mismo macro y que mide lo mismo — y
+# pasaban en VERDE con el título equivocado. `/` es una sola página con
+# cuatro secciones, así que su encabezado llevaba el literal «Inicio» y lo
+# corregía el navegador; entrar por URL (/?tab=ajustes, un favorito, el
+# guion de capturas) dejaba «Inicio» encima del contenido de Ajustes y
+# ninguna prueba lo veía, porque el título lo ponía el JS.
+#
+# Es el mismo tipo de agujero que ya mordió dos veces: un marcador que no
+# cubre todas las variantes vivas. Acá se mide lo que de verdad llega en
+# el HTML del servidor.
+
+TITULOS_ESPERADOS = [
+    ("/?tab=stock", "Stock"),
+    ("/?tab=inv", "Inventario"),
+    ("/?tab=ajustes", "Ajustes"),
+    # la ficha de una planta vive DENTRO de Stock (recarga tras guardar)
+    ("/?producto=PL-ROMERO", "Stock"),
+]
+
+
+def _titulo_del_encabezado(html):
+    """El texto del <h1 class="cab-titulo"> tal como llega del servidor."""
+    m = re.search(r'<h1 class="cab-titulo">(.*?)</h1>', html, flags=re.S)
+    assert m, "la pantalla no trae el título del encabezado compartido"
+    return m.group(1).strip()
+
+
+@pytest.mark.parametrize("ruta,titulo", TITULOS_ESPERADOS)
+def test_el_titulo_que_llega_es_el_de_la_pestana(cliente, con_inventario,
+                                                 monkeypatch, ruta, titulo):
+    monkeypatch.setenv("AJUSTES_ADMINS", "genesis")
+    html = cliente.get(ruta).text
+    assert _titulo_del_encabezado(html) == titulo, (
+        f"{ruta} llega con el título equivocado")
+    # y la barra del teléfono dice lo mismo: son el mismo título en dos
+    # tamaños de pantalla, no dos textos que se pueden separar
+    m = re.search(r'id="bm-titulo">(.*?)</b>', html, flags=re.S)
+    assert m and m.group(1).strip() == titulo, (
+        f"{ruta}: la barra del teléfono no dice lo mismo que el encabezado")
+
+
+def test_el_titulo_no_se_queda_escrito_a_mano_en_la_plantilla():
+    """El literal de antes («Inicio» a mano) es justo lo que causó el bug:
+    el encabezado decía siempre lo mismo pasara lo que pasara."""
+    app_html = re.sub(r"\{#.*?#\}", "", _texto("app.html"), flags=re.S)
+    assert "cab.cabecera(titulo_pestana)" in app_html, (
+        "app.html vuelve a escribir su título a mano en vez de pedírselo "
+        "a Python (main._titulo_pestana)")
+
+
+def test_el_js_y_python_nombran_las_pestanas_igual():
+    """Dos listas de nombres son dos verdades.
+
+    Python pinta el título al ENTRAR y el JS lo refresca al cambiar de
+    pestaña sin recargar: si los dos mapas se separan, el título cambia
+    al navegar y nadie se entera.
+    """
+    from app.main import TITULO_PESTANA
+
+    js = (ESTATICOS / "app.js").read_text()
+    bloque = re.search(r"const NOMBRE = \{(.*?)\};", js, flags=re.S)
+    assert bloque, "app.js ya no arma el mapa de nombres de pestaña"
+    del_js = dict(re.findall(r'(\w+):\s*"([^"]*)"', bloque.group(1)))
+    assert del_js == TITULO_PESTANA, (
+        "el mapa de nombres del JS y el de Python no dicen lo mismo: "
+        f"js={del_js} python={TITULO_PESTANA}")
+
+
+def test_el_js_busca_el_titulo_por_la_clase_que_el_macro_pinta():
+    """La causa raíz, pineada: el macro pinta `class="cab-titulo"` y NO le
+    pone id. Buscarlo por id devuelve null, no da error, y el título se
+    queda congelado al cambiar de pestaña."""
+    js = (ESTATICOS / "app.js").read_text()
+    assert 'getElementById("cab-titulo")' not in js, (
+        "app.js busca el título por un id que el encabezado no tiene")
+    assert '.cab-titulo' in js, "app.js ya no refresca el título"
+
+
 def test_los_colores_de_contacto_son_tokens():
     """Los tintes de llamar / WhatsApp / mapa estaban copiados a mano en
     cuatro hojas. Ahora son tokens de `diseno-base.css`."""

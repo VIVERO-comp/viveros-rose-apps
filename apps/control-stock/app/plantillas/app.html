@@ -24,7 +24,7 @@
   <button class="hamb-movil" type="button" aria-label="Abrir el menú" aria-expanded="false">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
   </button>
-  <b class="bm-titulo" id="bm-titulo">Inicio</b>
+  <b class="bm-titulo" id="bm-titulo">{{ titulo_pestana }}</b>
   {# "Crear producto" (dueño, 30/09/2026): ya no abre el formulario de planta
      de una, lleva a elegir el tipo —Planta · Maceta · Insumo— en su propia
      pantalla. Es un enlace, no un botón: el paso de elegir no usa JS. #}
@@ -35,11 +35,21 @@
    en las otras diez pestañas. Antes esta pantalla no tenía encabezado y la
    hamburguesa quedaba suelta EN MEDIO del contenido (Ajustes 1); y en
    Ajustes se colaba el «+ Crear producto» de Stock (Ajustes 2).
-   Esta página cambia de pestaña con JS, así que el título y el botón los
-   reparte tab() en app.js, el mismo reparto que ya hace con la barra del
-   teléfono. Arranca en Inicio, que es la pestaña que nace activa. #}
-{% call cab.cabecera('Inicio') %}
+   El TÍTULO lo decide Python (`titulo_pestana`, main._titulo_pestana) a
+   partir de la pestaña con la que se entra: hasta el 7/10 acá iba el
+   literal 'Inicio' y lo corregía el navegador, así que entrar por URL
+   —/?tab=ajustes, un favorito, el guion de capturas— dejaba «Inicio»
+   encima del contenido de Ajustes. El JS solo lo refresca al cambiar de
+   pestaña sin recargar. #}
+{% call cab.cabecera(titulo_pestana) %}
   <span class="cab-crece"></span>
+  {# PENDIENTE MEDIDO (7/10/2026): este botón NUNCA se ha visto. Lo
+     encendía `tab()` dentro del mismo `getElementById("cab-titulo")` que
+     devolvía null, así que la rama entera jamás corrió. Encenderlo deja
+     DOS botones negros en Stock —este y el `.fab` de abajo, que es el que
+     hoy se ve— y eso es una decisión de G1/Ajustes 2, no de este arreglo
+     del título: Stock no está en la queja de Abraham y no se mueve. Queda
+     anotado en el informe del BLOQUE 59. #}
   <a class="cab-boton" id="cab-crear" href="/productos/crear" hidden>+ Crear producto</a>
 {% endcall %}
 <main>

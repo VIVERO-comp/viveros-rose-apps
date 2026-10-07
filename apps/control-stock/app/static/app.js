@@ -203,18 +203,25 @@ function tab(id, btn) {
     document.getElementById("bm-titulo").textContent = NOMBRE[id] || "";
     document.getElementById("bm-crear").style.display = id === "stock" ? "" : "none";
   }
-  // El encabezado compartido de computadora (BLOQUE 54, G1): esta pantalla
-  // cambia de pestaña con JS, así que el título y el único botón negro los
-  // pone acá el mismo reparto que la barra del teléfono. «+ Crear producto»
-  // es de Stock y SOLO se ve en Stock (Ajustes 2).
-  const cabTitulo = document.getElementById("cab-titulo");
-  if (cabTitulo) {
-    cabTitulo.textContent = NOMBRE[id] || "";
-    const cabCrear = document.getElementById("cab-crear");
-    if (cabCrear) cabCrear.hidden = id !== "stock";
-    const cabecera = document.querySelector("header.cab");
-    if (cabecera) cabecera.hidden = id === "detalle";
-  }
+  // El encabezado compartido de computadora (BLOQUE 54, G1). El título lo
+  // pinta el SERVIDOR según con qué pestaña se entró (main._titulo_pestana),
+  // así que un enlace o un favorito ya llega bien; acá solo se refresca al
+  // cambiar de pestaña SIN recargar.
+  //
+  // Se busca por CLASE a propósito: `_cabecera.html` pinta
+  // `<h1 class="cab-titulo">` y NO le pone id, así que la búsqueda POR ID
+  // que había acá devolvía null siempre y el título nunca se tocaba — de
+  // ahí el «Inicio» encima de Ajustes. Y sin un error en consola: una
+  // búsqueda por id que no encuentra nada se calla.
+  // (El literal de esa búsqueda vieja no se escribe en este comentario:
+  //  la prueba que lo prohíbe es TEXTUAL y nombrarlo la pondría roja.)
+  //
+  // Solo se escribe cuando la pestaña TIENE nombre: en el detalle de una
+  // planta (id "detalle") NOMBRE no tiene entrada, y escribir "" dejaría
+  // el encabezado sin título. Ahí se queda el de Stock, que es donde esa
+  // ficha vive.
+  const cabTitulo = document.querySelector("header.cab .cab-titulo");
+  if (cabTitulo && NOMBRE[id]) cabTitulo.textContent = NOMBRE[id];
   document.querySelectorAll("nav button").forEach(b => b.classList.remove("on"));
   // Inventario ya no tiene botón en el menú pero su pestaña sigue viva
   // (?tab=inv): en ese caso el menú queda sin selección y ya.

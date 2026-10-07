@@ -184,10 +184,15 @@ CANDADO_SIN_SESION = ("Sin sesión no se muestran ni el dinero ni el chat de "
 TODAVIA_NO = "Todavía no"
 APAGADOS_ACCION = ("Mandar petición", "Reasignar",
                    "Poner o cambiar seguimiento")
-APAGADOS_PLATA = ("Gastado", "Ganancia")
-# «Gastos y compras / Total gastado» SALIÓ de la página el 7/10/2026
-# (BLOQUE 53, A14: lo pidió Abraham). No volver a ponerlo sin su palabra:
-# los dos apagados de plata que quedan son los del lienzo, arriba.
+# VACÍA a propósito: «Gastado» y «Ganancia» SALIERON el 7/10/2026 por la
+# guía de Jay del 6/10, punto 6 — «Remove the Profit / Spent tiles
+# (margins are out)». El lienzo todavía las tiene porque es ANTERIOR a esa
+# orden: este es el único punto de la ficha en que el lienzo no manda.
+# Quedan las dos cifras reales, Cotizado y Vendido.
+# («Gastos y compras / Total gastado» ya había salido antes, el 7/10 por
+# el BLOQUE 53 A14, a pedido de Abraham.) No volver a poner ninguna de las
+# tres sin su palabra; la plantilla las pintaría sola con solo nombrarlas.
+APAGADOS_PLATA = ()
 
 # Las dos pestañas del panel derecho, en su orden: abre la primera.
 PANELES = (("leads", "Historial de leads"), ("whatsapp", "WhatsApp"))

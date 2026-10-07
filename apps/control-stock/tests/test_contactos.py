@@ -644,8 +644,7 @@ def test_el_chat_se_arma_con_el_hilo_de_control_y_es_solo_lectura(
 # (C) Los apagados del lienzo: en su lugar, disabled, sin números
 # ---------------------------------------------------------------------------
 
-def test_los_cinco_apagados_estan_en_su_lugar_y_sin_numero(cliente,
-                                                           con_odoo_qa):
+def test_los_apagados_estan_en_su_lugar_y_sin_numero(cliente, con_odoo_qa):
     texto = cliente.get("/contactos/t60000030").text
     for nombre in contactos.APAGADOS_ACCION + contactos.APAGADOS_PLATA:
         assert nombre in texto, nombre
@@ -657,6 +656,42 @@ def test_los_cinco_apagados_estan_en_su_lugar_y_sin_numero(cliente,
     # Y ningún «$» pegado a un apagado: no se inventa plata.
     for nombre in contactos.APAGADOS_PLATA:
         assert f"{nombre}</span>" in texto or nombre in texto
+
+
+def test_gastado_y_ganancia_ya_no_estan(cliente, con_odoo_qa):
+    """Orden de Jay (guía del 6/10, punto 6): «Remove the Profit / Spent
+    tiles (margins are out)».
+
+    El lienzo todavía las tiene —es anterior a esa orden— así que sin esta
+    prueba volverían solas la próxima vez que alguien compare la pantalla
+    contra el lienzo y «arregle la diferencia». Quedan las DOS cifras
+    reales.
+    """
+    texto = cliente.get("/contactos/t60000030").text
+    assert "Gastado" not in texto and "Ganancia" not in texto
+    assert contactos.APAGADOS_PLATA == ()
+    for real in ("Cotizado", "Vendido"):
+        assert f'<span class="ct-kl">{real}</span>' in texto, real
+
+
+def test_la_ficha_arma_la_rejilla_del_lienzo(cliente, con_odoo_qa):
+    """Las tres tablas AL COSTADO y las dos cajas en la columna angosta.
+
+    EL AGUJERO QUE ESTO TAPA: las tres tablas existían con el contenido
+    correcto —y hasta con el comentario que las nombraba— pero sueltas,
+    apiladas a todo lo ancho: la rejilla del lienzo nunca se construyó y
+    ninguna prueba lo notaba, porque todas miraban el CONTENIDO. Acá se
+    mira la estructura que reparte el ancho.
+    """
+    texto = cliente.get("/contactos/t60000030").text
+    assert 'class="ct-g2"' in texto, "falta la rejilla de dos columnas"
+    assert 'class="ct-g3"' in texto, "falta la rejilla de las tres tablas"
+    # las tres tablas viven DENTRO de la rejilla de tres, no sueltas
+    g3 = texto[texto.index('class="ct-g3"'):]
+    assert g3.count('class="ct-tabla"') == 3
+    # y las dos cajas, dentro de la columna angosta que abre la rejilla
+    entre = texto[texto.index('class="ct-g2"'):texto.index('class="ct-g3"')]
+    assert entre.count('class="ct-caja"') == 2
 
 
 # ---------------------------------------------------------------------------
