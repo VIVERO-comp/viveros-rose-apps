@@ -271,12 +271,15 @@ def clientes_para_sugerir(actividades):
     ya trae, deduplicados sin distinguir mayúsculas y en orden
     alfabético.
 
-    Los leads del embudo NO van aquí a propósito: viven en el selector
-    «Lead» de al lado (`leads_para_conectar`), que además AMARRA la
-    actividad — esto sugiere los clientes que no son leads (los que ya
-    aparecen en el calendario). La lista viaja RENDERIZADA: cero
-    consultas al vuelo mientras se escribe, y el campo sigue siendo texto
-    libre (un cliente nuevo se escribe igual).
+    Los leads del embudo NO van aquí a propósito: los trae el buscador
+    único de al lado (`buscar_personas`), que además AMARRA la actividad.
+    Esto cubre la CUARTA fuente, la que el buscador no mira: el cliente
+    que solo existe como texto en una actividad vieja del calendario — no
+    es partner de Odoo, no es cliente de Vender y no es lead de nadie.
+
+    La lista viaja RENDERIZADA: cero consultas al vuelo mientras se
+    escribe, y el campo sigue siendo texto libre (un cliente nuevo se
+    escribe igual).
     """
     nombres = {}
     for actividad in actividades or []:
@@ -306,16 +309,10 @@ def leads_para_buscar():
             for l in leads if not l.get("cerrado")], ""
 
 
-def leads_para_conectar():
-    """[{ref, nombre}] de los leads VIVOS del embudo (29/09/2026): elegir
-    uno crea la actividad AMARRADA por el mismo camino que la Fase 4.
-
-    Sale de `leads_para_buscar()` desde el BLOQUE 59, para que el buscador
-    y esta lista no puedan discrepar sobre qué lead está vivo. Vacío si
-    Linear no contesta — quien necesite DECIR ese hueco usa la otra, que
-    devuelve el aviso."""
-    filas, _aviso = leads_para_buscar()
-    return [{"ref": f["ref"], "nombre": f["nombre"]} for f in filas]
+# `leads_para_conectar()` se fue con el selector que la pedía (BLOQUE 59):
+# su única llamada era el `<select name="lead">` que el buscador único
+# reemplazó, y la lista de leads vivos la sirve ahora `leads_para_buscar()`
+# —la misma, pero con el aviso de cuando Linear no contesta—.
 
 
 # ---------------------------------------------------------------------------
@@ -399,6 +396,10 @@ def buscar_personas(q="", tope=TOPE_BUSCADOR):
     avisos = [aviso_leads] if aviso_leads else []
     filas = []
     usados = set()
+    # Los que `contactos.buscar` encontró y NO devolvió por su propio tope.
+    # Se cuentan aparte porque si no, el «hay N más» de abajo mentiría por
+    # lo bajo: diría solo los que este módulo recortó.
+    sobrantes = 0
 
     if q:
         # Con algo escrito: la unión entera (Odoo + Vender + CRM). Se pide
@@ -411,6 +412,7 @@ def buscar_personas(q="", tope=TOPE_BUSCADOR):
         # los leads» mientras los leads están a la vista.
         if hallado["aviso_odoo"]:
             avisos.append(hallado["aviso_odoo"])
+        sobrantes = max(0, hallado["cuenta"] - len(hallado["filas"]))
         for fila in hallado["filas"]:
             ref = next((r for r in fila["leads"] if r in por_ref), "")
             if not ref:
@@ -451,10 +453,10 @@ def buscar_personas(q="", tope=TOPE_BUSCADOR):
     # primero.
     filas.sort(key=lambda f: (0 if f["es_lead"] else 1,
                               (f["nombre"] or "").lower()))
-    cuenta = len(filas)
-    mas = 0
-    if tope and cuenta > tope:
-        mas = cuenta - tope
+    cuenta = len(filas) + sobrantes
+    mas = sobrantes
+    if tope and len(filas) > tope:
+        mas += len(filas) - tope
         filas = filas[:tope]
 
     return {"q": q, "filas": filas, "cuenta": cuenta, "mas": mas,

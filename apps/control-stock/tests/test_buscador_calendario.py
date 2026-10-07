@@ -538,11 +538,35 @@ def test_el_guardado_sigue_leyendo_los_mismos_dos_campos(cliente):
     assert linear_leads.uno("LEAD-90")["estado"] == "AGENDADO"
 
 
-def test_leads_para_conectar_sigue_dando_lo_mismo():
-    # La función vieja no se borró: ahora sale de `leads_para_buscar`, para
-    # que el buscador y ella no puedan discrepar sobre qué lead está vivo.
-    refs = {l["ref"] for l in agenda.leads_para_conectar()}
+def test_la_lista_de_leads_vivos_tiene_UN_solo_dueno():
+    # `leads_para_conectar()` se fue con el selector que la pedía: la lista
+    # de leads vivos la sirve ahora `leads_para_buscar()` y nada más, así
+    # que no hay dos sitios que puedan discrepar sobre qué lead está vivo.
+    assert not hasattr(agenda, "leads_para_conectar")
     vivos, aviso = agenda.leads_para_buscar()
     assert aviso == ""
-    assert refs == {l["ref"] for l in vivos}
+    refs = {l["ref"] for l in vivos}
+    assert "LEAD-91" in refs
     assert "LEAD-84" not in refs and "LEAD-83" not in refs
+    # Y es la misma que alimenta el buscador con la caja vacía.
+    assert refs == {f["lead"] for f in agenda.buscar_personas("", tope=0)["filas"]}
+
+
+def test_el_tope_de_contactos_no_esconde_la_cuenta(monkeypatch):
+    """«Hay N más» cuenta también los que `contactos` recortó.
+
+    Sin esto el número mentía por lo bajo: decía solo los que este módulo
+    cortó, y los que la otra puerta ya había dejado fuera desaparecían sin
+    que nada avisara.
+    """
+    monkeypatch.setattr(contactos, "buscar", lambda q, tope=0: {
+        "filas": [{"id": f"c{i}", "nombre": f"Cliente {i}", "telefono": "",
+                   "tel_norm": "", "tipo": "Persona", "leads": [],
+                   "fuente_texto": "Odoo"} for i in range(tope or 1)],
+        "cuenta": 40, "mas": 40 - (tope or 1),
+        "aviso_odoo": "", "aviso_crm": ""})
+    hallado = agenda.buscar_personas("Cliente", tope=5)
+    assert len(hallado["filas"]) == 5
+    # 40 personas encontradas del lado de contactos + los leads que casen.
+    assert hallado["cuenta"] >= 40
+    assert hallado["mas"] == hallado["cuenta"] - 5
