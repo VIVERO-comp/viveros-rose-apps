@@ -149,13 +149,18 @@ def test_las_dos_excepciones_siguen_siendo_lo_que_dicen_ser():
 
 # Ventas QA con montos GRANDES a propósito: con cifras de tres dígitos esta
 # prueba pasaría sin probar nada.
+# `confirmada` (BLOQUE 59.2): Finanzas suma SOLO ventas confirmadas, así
+# que sin la marca estas dos QA no entrarían en ninguna tarjeta y la
+# prueba del formato se quedaría sin montos que mirar. Ponerla es FIEL, no
+# un parche: las clases C y D solo existen en órdenes confirmadas — el
+# motor las asigna dentro de `if confirmada:` (reconciliacion._clasificar).
 VENTAS_GRANDES = [
     {"orden_id": 7001, "nombre": "S07001", "cliente": "Cliente QA Grande",
      "total": 50403.0, "pagado": 9335.0, "debe": 41068.0, "clase": "C",
-     "motivo": "", "entregado_odoo": True},
+     "confirmada": True, "motivo": "", "entregado_odoo": True},
     {"orden_id": 7002, "nombre": "S07002", "cliente": "Cliente QA Dos",
      "total": 1522.5, "pagado": 1522.5, "debe": 0.0, "clase": "D",
-     "motivo": ""},
+     "confirmada": True, "motivo": ""},
 ]
 
 # Las pantallas que esta prueba alcanza sin red. No es «todas»: es el

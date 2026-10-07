@@ -305,6 +305,45 @@ def test_una_cotizacion_no_cuenta_en_ninguno_de_los_cuatro(mundo):
     assert datos["sin_confirmar"] == 2        # la de $9000 y la F cotizada
 
 
+def test_la_vista_lee_el_motor_UNA_sola_vez(db_limpia, monkeypatch):
+    """Medido el 7/10 con la puerta a Odoo instrumentada: /finanzas hacía
+    24 viajes a Odoo y 2 lecturas de Linear por pintada, el DOBLE que
+    /revisar (12 y 1), con el mismo motor y sin ningún N+1 — era pedir
+    dos veces lo mismo. Esta prueba es la que impide que vuelva."""
+    veces = []
+
+    def informe_contado():
+        veces.append(1)
+        return {"ventas": [dict(v) for v in MUNDO], "huecos": []}
+
+    monkeypatch.setattr(pagos_confirmar, "_informe", informe_contado)
+    datos = finanzas.resumen()
+    assert len(veces) == 1, f"el motor se leyó {len(veces)} veces"
+    # Y con una sola lectura la pantalla sigue entera: tarjetas y lista.
+    assert _tarjeta(datos, "Vendido")["monto"] == 1450.0
+    assert [p["orden"] for p in datos["pendientes"]] == ["S00002", "S00003",
+                                                         "S00005"]
+
+
+def test_las_dos_mitades_salen_de_la_MISMA_foto(db_limpia, monkeypatch):
+    """Gana consistencia, no solo tiempo: antes las tarjetas y la lista
+    podían salir de dos lecturas distintas de Odoo. Si cada llamada
+    devolviera algo diferente, con dos lecturas la pantalla se
+    contradiría; con una no puede."""
+    fotos = [
+        {"ventas": [dict(v) for v in MUNDO], "huecos": []},
+        {"ventas": [], "huecos": ["segunda lectura distinta (QA)"]},
+    ]
+    monkeypatch.setattr(pagos_confirmar, "_informe",
+                        lambda: fotos.pop(0) if fotos else {"ventas": [],
+                                                            "huecos": []})
+    datos = finanzas.resumen()
+    # La segunda foto (vacía, con hueco) NUNCA se pide: queda sin consumir.
+    assert len(fotos) == 1
+    assert datos["huecos"] == []
+    assert _cuadra(datos) == (1450.0, 1450.0)
+
+
 def test_la_linea_de_diferencia_nunca_desaparece(admin, mundo):
     """Condición de Abraham: con la lista vacía la línea dice «$0.00 en 0
     casos», no se esconde. Una línea que a veces está y a veces no es peor
@@ -329,8 +368,8 @@ def test_no_se_puede_meter_plata_en_diferencia_sin_poder_enumerarla(
     ventas tienen: un descuadre que ningún caso explica."""
     real = pagos_confirmar.cola
 
-    def cola_inflada():
-        filas, huecos = real()
+    def cola_inflada(informe=None):
+        filas, huecos = real(informe)
         for f in filas:
             if f["orden"] == "S00003":
                 f["monto_nuevo"] = f["monto_nuevo"] + 33.0

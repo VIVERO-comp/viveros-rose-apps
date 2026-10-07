@@ -210,12 +210,23 @@ def marco_de(confirmacion):
             else f"{quien}, el {cuando}")
 
 
-def cola():
+def cola(informe=None):
     """(pendientes, huecos): las ventas del informe con plata que nadie
     confirmó que llegó — pagado real en Odoo sin confirmación humana, o
     clase F (pago informado fuera de Odoo, a verificar). Nada se
     inventa: si el informe trae huecos, viajan tal cual y la pantalla
     los dice.
+
+    **`informe` deja PASARLE la foto ya leída** (7/10/2026). Sin él la
+    cola sigue siendo dueña de su propia lectura, exactamente como
+    siempre — /pagos-por-confirmar no cambia en nada. Lo pide Finanzas,
+    que necesita la MISMA foto para las tarjetas: medido en el 8095,
+    leía el motor DOS VECES por pintada (24 viajes a Odoo y 2 lecturas
+    de Linear, el doble que /revisar), y pasarle la foto lo baja a 12 y
+    1. No es una caché: es no pedir dos veces lo mismo en la misma
+    pintada, así que no hay dato viejo posible y las dos mitades de la
+    pantalla quedan además CONSISTENTES entre sí — antes podían salir de
+    dos lecturas distintas de Odoo.
 
     **Una orden ya confirmada RE-ENTRA cuando llega plata nueva** (fix
     del review, 5/10): el `orden_id in ya` viejo la excluía para
@@ -240,7 +251,8 @@ def cola():
     - **quién** → `pago_confirmado.por` de esa misma confirmación. Una
       fila nueva no la marcó nadie: la plata está en Odoo y nadie la ha
       revisado, y eso es lo que se escribe."""
-    informe = _informe()
+    if informe is None:
+        informe = _informe()
     ya = sumas_confirmadas()
     ultimas = confirmados()
     pendientes = []

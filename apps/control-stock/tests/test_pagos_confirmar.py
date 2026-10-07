@@ -56,6 +56,30 @@ def test_la_cola_lista_lo_que_nadie_confirmo(equipo, monkeypatch):
     assert huecos == []
 
 
+def test_la_cola_sigue_siendo_duena_de_su_lectura(equipo, monkeypatch):
+    """`cola(informe)` es aditivo: /pagos-por-confirmar la llama SIN
+    argumento y tiene que leer el motor ella misma, como siempre. Solo
+    Finanzas le pasa la foto, para no pedir dos veces lo mismo en la
+    misma pintada (7/10/2026)."""
+    veces = []
+
+    def informe_contado():
+        veces.append(1)
+        return _informe_falso([_fila(1, "S00001", 100.0, 0.0, clase="D")])
+
+    monkeypatch.setattr(pagos_confirmar, "_informe", informe_contado)
+    # Sin argumento: lee.
+    pendientes, _ = pagos_confirmar.cola()
+    assert len(veces) == 1
+    assert [p["orden"] for p in pendientes] == ["S00001"]
+    # Con la foto puesta: NO lee, y da el mismo resultado.
+    foto = _informe_falso([_fila(2, "S00002", 55.0, 0.0, clase="D")])
+    pendientes2, huecos2 = pagos_confirmar.cola(foto)
+    assert len(veces) == 1, "con la foto puesta no debe volver a leer"
+    assert [p["orden"] for p in pendientes2] == ["S00002"]
+    assert huecos2 == []
+
+
 def test_los_huecos_del_informe_viajan_tal_cual(equipo, monkeypatch):
     monkeypatch.setattr(pagos_confirmar, "_informe",
                         lambda: _informe_falso([], ["Odoo no contestó: x"]))

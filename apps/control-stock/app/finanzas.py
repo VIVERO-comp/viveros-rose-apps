@@ -77,11 +77,20 @@ Qué es — y qué no:
   van (faltan costos confiables, BLOQUE 20).
 - SOLO LECTURA hacia Odoo/Linear/Twenty y hacia lo local.
 
-Nota de costo: resumen() llama el informe UNA vez para las tarjetas y
-otra DENTRO de cola() (que es dueña de su propia lectura) — dos lecturas
-del mismo motor por pintada, el precio de no duplicar ni un renglón de
-la lógica de la cola. Si algún día pesa, el lugar del arreglo es un
-caché en reconciliacion.informe_datos, no una copia de la cola aquí.
+Nota de costo — YA PESÓ, y está arreglado (7/10/2026). Esta función
+llamaba al informe UNA vez para las tarjetas y otra DENTRO de cola(), y
+el precio no era teórico: medido con la puerta a Odoo instrumentada,
+`/finanzas` hacía **24 viajes a Odoo y 2 lecturas de Linear** por
+pintada, exactamente el doble que `/revisar` (12 y 1), con el mismo
+motor. **No había ningún N+1**: ningún modelo se pide por fila, cada
+viaje trae su lote (60 órdenes, 38 clientes, 29 facturas, 42
+oportunidades). Era, literalmente, pedir dos veces lo mismo.
+
+El arreglo es `cola(informe)`: se lee una vez y se le pasa la foto. No es
+una caché —no hay dato viejo posible— y de paso las tarjetas y la lista
+quedan CONSISTENTES, que antes no estaba garantizado. La caché de
+`pedidos.plata()` sigue siendo la otra herramienta, para cuando lo que
+haya que evitar sea leer en pintadas DISTINTAS; acá sobraba.
 """
 
 from datetime import datetime
@@ -176,21 +185,24 @@ def _tarjeta(titulo, monto, hint, n=None, rojo=False):
 
 def resumen():
     """Todo lo que la plantilla pinta, ya decidido (regla 10)."""
-    # LA cola real (mismo motor y mismas reglas que /pagos-por-confirmar).
-    try:
-        pendientes, huecos = pagos_confirmar.cola()
-    except Exception as fallo:
-        pendientes, huecos = [], [f"La cola de pagos no contestó: {fallo}"]
-
-    # El informe de /revisar para los totales (vendido / por cobrar).
+    # UNA SOLA lectura del motor por pintada (7/10/2026). Antes esta
+    # función pedía la foto dos veces —una para las tarjetas y otra
+    # adentro de cola()— y eso eran 24 viajes a Odoo y 2 lecturas de
+    # Linear, el doble que /revisar, medido en el 8095. Ahora se lee una
+    # vez y se le PASA a la cola. Además de la mitad del tiempo, gana
+    # consistencia: las tarjetas y la lista salen de la MISMA foto, no de
+    # dos lecturas de Odoo que podían diferir.
     try:
         informe = pagos_confirmar._informe()
     except Exception as fallo:
         informe = {"ventas": [],
                    "huecos": [f"El informe de plata no contestó: {fallo}"]}
-    for hueco in informe.get("huecos") or []:
-        if hueco not in huecos:
-            huecos.append(hueco)
+    huecos = list(informe.get("huecos") or [])
+    try:
+        pendientes, _huecos_cola = pagos_confirmar.cola(informe)
+    except Exception as fallo:
+        pendientes = []
+        huecos.append(f"La cola de pagos no contestó: {fallo}")
 
     # LA FRONTERA (BLOQUE 59.2): solo ventas CONFIRMADAS. El sí/no llega
     # decidido en el contrato del informe — acá no se adivina por clase —
