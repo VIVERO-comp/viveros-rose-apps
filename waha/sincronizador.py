@@ -302,7 +302,7 @@ def twenty(ruta):
 CONSULTA = """
 query($equipo: ID!) {
   issues(first: 250, filter: { team: { id: { eq: $equipo } } }) {
-    nodes { identifier title description
+    nodes { identifier title description createdAt
             state { name type }
             labels { nodes { name parent { name } } } } }
 }
@@ -398,6 +398,12 @@ def leads_del_crm():
             "nombre_primero": n_primero,
             "nombre_segundo": n_segundo,
             "cerrado": cerrado,
+            # Para decidir quien manda cuando varios issues comparten un
+            # chat (ver `lead_que_manda`): la fecha de creacion, con el
+            # numero del issue como desempate -y como respaldo, si algun
+            # dia Linear no trajera la fecha-.
+            "creado": n.get("createdAt") or "",
+            "numero": _numero_de_ref(n["identifier"]),
         })
     return leads
 
@@ -1022,6 +1028,75 @@ def sincronizar_uno(ref, aplicar=False):
             "motivo": "aplicado" if aplicar else "en seco"}
 
 
+def _numero_de_ref(ref):
+    """El numero del issue dentro de su equipo ("LEAD-128" -> 128).
+
+    Se guarda aparte porque el `ref` es TEXTO, y ordenado como texto pone
+    "LEAD-110" ANTES de "LEAD-62": con ese orden, en un chat compartido el
+    que escribia ultimo -y por lo tanto el que ganaba- era el issue mas
+    VIEJO. Por numero no pasa.
+    """
+    m = re.search(r"(\d+)$", ref or "")
+    return int(m.group(1)) if m else 0
+
+
+def _mas_nuevo_primero(lead):
+    """Clave de orden «el mas nuevo primero» (con `reverse=True`)."""
+    return (lead.get("creado") or "", lead.get("numero") or 0)
+
+
+def lead_que_manda(candidatos):
+    """De los issues que comparten un chat, el que gobierna sus etiquetas.
+
+    Regla del dueno (7/10/2026): manda el issue VIVO mas nuevo; si no hay
+    ninguno vivo, el mas reciente de todos. Devuelve `(manda, callados)`:
+    los callados se imprimen para que se vea que existen, pero NO se
+    escriben.
+
+    Por que hace falta: `PUT /labels/chats/{chat}` REEMPLAZA la lista
+    completa del chat. Mientras esto se planeaba por ISSUE, dos issues de
+    la misma persona se borraban las etiquetas el uno al otro en cada
+    vuelta. Medido el 7/10/2026: 113 horas seguidas, ~3.400 escrituras
+    inutiles por chat, y el chat clavado en el issue viejo -un Ganado
+    cerrado tapando a un LEAD Agendado y pagado-. Dos caminos llevan al
+    mismo chat compartido: un Ganado que vuelve a escribir estrena issue
+    con el MISMO PP (regla del 1/10/2026), y el receptor que abrio un
+    segundo lead con PP nuevo para alguien que ya tenia uno vivo.
+    """
+    if len(candidatos) == 1:
+        return candidatos[0], []
+    vivos = [l for l in candidatos if not l.get("cerrado")]
+    manda = sorted(vivos or candidatos, key=_mas_nuevo_primero,
+                   reverse=True)[0]
+    return manda, [l for l in candidatos if l is not manda]
+
+
+def agrupar_por_chat(leads, lista_interna, resolver_chat=None):
+    """`({chat_id: [leads]}, sin_telefono, saltados, sin_whatsapp)`.
+
+    Resuelve el `@lid` UNA vez por lead y agrupa, para que despues se
+    planee y se escriba UNA sola vez por chat. El orden es por numero de
+    issue -no por el texto del `ref`-, asi la salida es estable.
+    """
+    resolver_chat = resolver_chat or chat_id_real
+    por_chat, sin_telefono, saltados, sin_whatsapp = {}, [], [], []
+    for lead in sorted(leads, key=lambda l: (l.get("numero") or 0, l["ref"])):
+        if not lead["telefono"]:
+            sin_telefono.append(lead)
+            continue
+        if lista_interna and solo_digitos(lead["telefono"])[-8:] in lista_interna:
+            saltados.append(lead)
+            continue
+        # El chatId que usa el TELEFONO (@lid), no el @c.us: ahi es donde
+        # WhatsApp lee las etiquetas.
+        chat = resolver_chat(lead["telefono"])
+        if not chat:
+            sin_whatsapp.append(lead)
+            continue
+        por_chat.setdefault(chat, []).append(lead)
+    return por_chat, sin_telefono, saltados, sin_whatsapp
+
+
 def main():
     aplicar = "--aplicar" in sys.argv
     # Los nombres de contacto llevan SU PROPIA bandera, separada de
@@ -1060,21 +1135,19 @@ def main():
 
     estado_previo = cargar_estado()
 
-    faltantes, sin_telefono, saltados, planes, devoluciones = set(), [], [], [], []
-    sin_whatsapp = []
-    for lead in sorted(leads, key=lambda l: l["ref"]):
-        if not lead["telefono"]:
-            sin_telefono.append(lead)
-            continue
-        if lista_interna and solo_digitos(lead["telefono"])[-8:] in lista_interna:
-            saltados.append(lead)
-            continue
-        # El chatId que usa el TELEFONO (@lid), no el @c.us: ahi es donde
-        # WhatsApp lee las etiquetas.
-        chat = chat_id_real(lead["telefono"])
-        if not chat:
-            sin_whatsapp.append(lead)
-            continue
+    faltantes, planes, devoluciones = set(), [], []
+    # Se agrupa por CHAT antes de planear. Un chat puede tener varios
+    # issues de la misma persona, y como el PUT reemplaza la lista
+    # completa, planear por issue hacia que se pisaran entre ellos en
+    # cada vuelta (ver `lead_que_manda`). Una vuelta = como maximo UNA
+    # escritura por chat, asi las etiquetas no parpadean.
+    por_chat, sin_telefono, saltados, sin_whatsapp = agrupar_por_chat(
+        leads, lista_interna)
+    compartidos = []
+    for chat, candidatos in por_chat.items():
+        lead, callados = lead_que_manda(candidatos)
+        if callados:
+            compartidos.append((chat, lead, callados))
         tiene = etiquetas_del_chat(chat)
         quiere, faltan = quiere_para(lead, tiene, nuestras)
         faltantes.update(faltan)
@@ -1113,10 +1186,20 @@ def main():
         if poner or quitar:
             planes.append((lead, chat, sorted(tiene), poner, quitar))
 
+    if compartidos:
+        print("-" * 76)
+        print("CHATS CON VARIOS ISSUES: %d   ·   manda el vivo mas nuevo"
+              " y se escribe UNA sola vez" % len(compartidos))
+        for chat, manda, callados in compartidos:
+            print("   %s" % chat)
+            print("      manda:   %-9s %s" % (manda["ref"], manda["estado"]))
+            for l in callados:
+                print("      callado: %-9s %s" % (l["ref"], l["estado"]))
+        print()
     print("-" * 76)
-    print("%s  (%d de %d leads necesitan cambio)" % (
+    print("%s  (%d de %d chats necesitan cambio)" % (
         "APLICANDO EN CADA CHAT" if aplicar else "QUE HARIA EN CADA CHAT",
-        len(planes), len(leads)))
+        len(planes), len(por_chat)))
     print("-" * 76)
     hechos, errores = 0, []
     for lead, chat, tiene, poner, quitar in planes:
@@ -1230,8 +1313,9 @@ def main():
     if aplicar:
         guardar_estado(leads)
     print("APLICADO · %d chats de leads · %d internos · %d nombres puestos"
-          " · %d leads sin cambio · %d errores"
-          % (hechos, hechos_eq, hechos_n, len(leads) - len(planes), len(errores)))
+          " · %d leads sin cambio · %d chats compartidos · %d errores"
+          % (hechos, hechos_eq, hechos_n, len(leads) - len(planes),
+             len(compartidos), len(errores)))
     for ref, motivo in errores:
         print("   ERROR %s: %s" % (ref, motivo))
     # Un error pesa mas que un cambio: si hubo de los dos, se anota como
