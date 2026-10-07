@@ -137,13 +137,111 @@ body.cpd .cpd-ob:hover{background:var(--d-gris-activo)}
 /* Los avisos, con los radios del diseño. */
 body.cpd .solo-lectura,body.cpd .aviso-ok,body.cpd .franja{border-radius:var(--d-radio-pil)}
 
-/* El `.wrap` de la pantalla 12: tablero + resumen lado a lado. El tablero
-   sigue scrolleando de lado ÉL SOLO (flex:1 + min-width:0, el overflow ya
-   lo trae calendario.css); el resumen es la columna fija de la derecha. */
-body.cpd .cpd-envuelve{display:flex;gap:12px;align-items:flex-start;flex:1;min-height:0}
-body.cpd .cpd-envuelve .ret-tablero{flex:1;min-width:0}
+/* El `.wrap` de la pantalla 12: el tablero y el resumen.
+   ─────────────────────────────────────────────────────────────────────────
+   BLOQUE 59 (7/10/2026) — EL DEFECTO, MEDIDO ANTES DE TOCAR NADA:
+   a 1024px de ventana el lienzo son 728px y al carril del tablero le
+   quedaban 436, porque el resumen se llevaba 280 fijos + 12 de hueco. Seis
+   columnas de 276 con 12 de hueco piden 1716px, así que de las SEIS se veía
+   UNA entera y la segunda quedaba cortada a mitad de palabra («esperando
+   precio del pro…»). Las otras cuatro no asomaban, y abajo sobraban 325px
+   de pantalla vacía.
+
+   LA CURA, con el mecanismo de la casa (`.ct-cols` de diseno-contactos.css,
+   que ya pasó de media query de ventana a container query de lienzo): el
+   resumen BAJA mientras no quepa, y ahí el tablero se lleva el ancho entero.
+   El corte es el escalón HOLGADO de la escala compartida —1120px de
+   LIENZO— que diseno-base.css define justo para esto («el tablero y su
+   resumen, al lado»): ninguna hoja inventa su propio número.
+
+   Y OJO con lo que mide ese 1120, que se midió y no se dedujo: `@container`
+   ve el ancho del CONTENIDO del `.tablero`, o sea la ventana menos el menú
+   (240) menos los dos márgenes (28+28). Medido en este archivo: ventana
+   1024 → 728 de lienzo · 1280 → 984 · 1366 → 1070 · 1440 → 1144 · 1600 →
+   1304. Por eso el resumen baja hasta 1366 inclusive y vuelve al costado
+   desde ~1420 de ventana.
+
+   DÓNDE SE VOLTEA ESTA DECISIÓN: en el único `@container` de abajo. Si el
+   dueño elige la otra opción (resumen fijo siempre + tablero de lado), se
+   mueven esas dos declaraciones al bloque base y se borra la consulta: no
+   hay una tercera regla que acompañarla. */
+body.cpd .cpd-envuelve{
+  display:grid;gap:12px;flex:1;min-height:0;
+  grid-template-columns:minmax(0,1fr);
+  /* El carril NO puede encogerse a 0 (la trampa que se pagó en el
+     calendario, donde el mes desaparecía entero): el `minmax` le pone piso
+     y si no cabe se desplaza el cuerpo, que es lo que ya hacía. */
+  grid-template-rows:minmax(260px,1fr) auto;
+  overflow-y:auto;overscroll-behavior-y:contain;
+}
+body.cpd .cpd-envuelve .ret-tablero{min-width:0}
+/* Con el resumen DEBAJO, sus cuatro tiles van en fila y no en pila: así el
+   ancho que acaba de ganarse no se paga con 364px de alto (una pila de
+   cuatro) sino con ~90 (una fila). Es la misma reja, con otra cuenta de
+   columnas; no hay un segundo mecanismo. */
 body.cpd .cpd-res{
-  flex:0 0 280px;display:flex;flex-direction:column;gap:10px;min-width:0;
+  display:grid;gap:10px;align-content:start;min-width:0;
+  grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+}
+
+/* ── LA ÚNICA REGLA QUE DECIDE «el resumen va al costado» ─────────────── */
+@container lienzo (min-width:1120px){
+  body.cpd .cpd-envuelve{grid-template-columns:minmax(0,1fr) 280px;
+    grid-template-rows:minmax(0,1fr);overflow-y:hidden}
+  body.cpd .cpd-res{grid-template-columns:minmax(0,1fr)}
+}
+
+/* ── QUE SE VEA QUE LAS COLUMNAS SIGUEN AL COSTADO ────────────────────────
+   Esta mitad del defecto no depende de la decisión de arriba: con el
+   resumen al costado o debajo, seis columnas de 276 no caben en ninguna
+   pantalla real (harían falta 1716px de lienzo, o sea ~2010 de ventana), y
+   hoy no había NI UNA señal de que hubiera más.
+
+   La señal es la barra de desplazamiento del carril, hecha visible a
+   propósito: `overflow-x:scroll` en vez de `auto` y la barra pintada —en
+   macOS la barra flotante se esconde hasta que alguien arrastra, y por eso
+   un carril que sí se desplazaba se veía como un tablero cortado. Es la
+   única señal que NO puede mentir: su carrito mide exactamente la parte que
+   se está viendo (2 de 6 columnas = un tercio del carril).
+
+   Y el `scroll-snap` hace que un empujón caiga en el borde de una columna
+   en vez de a mitad de palabra.
+
+   Por qué esto va en `@media` y no en `@container`: lo que se pregunta no
+   es cuánto ancho hay, es si el tablero es una FILA o una PILA — y eso lo
+   decide la PIEL, que calendario.css parte en 767.98px de ventana. Pedirle
+   la respuesta al lienzo pondría una barra de desplazamiento en una pila de
+   secciones del teléfono, donde no hay nada que desplazar. Misma lógica que
+   el cromo en diseno-base.css. */
+@media (min-width:768px){
+  body.cpd .cpd-envuelve .ret-tablero{
+    overflow-x:scroll;padding-bottom:9px;
+    scrollbar-width:thin;scrollbar-color:#BFBFBF transparent;
+    scroll-snap-type:x proximity;overscroll-behavior-x:contain;
+  }
+  body.cpd .cpd-envuelve .ret-tablero::-webkit-scrollbar{height:10px}
+  body.cpd .cpd-envuelve .ret-tablero::-webkit-scrollbar-track{
+    background:var(--d-col);border-radius:5px;
+  }
+  body.cpd .cpd-envuelve .ret-tablero::-webkit-scrollbar-thumb{
+    background:#BFBFBF;border-radius:5px;
+  }
+  body.cpd .cpd-envuelve .ret-tablero::-webkit-scrollbar-thumb:hover{background:#A6A6A6}
+  body.cpd .ret-col{scroll-snap-align:start}
+
+  /* La ORILLA: el degradado que dice «sigue al costado» sin depender de que
+     el sistema operativo pinte su barra. Se queda pegada al borde derecho
+     del carril mientras haya columnas más allá, y al llegar al final cae en
+     su sitio natural —que es blanco— y se apaga sola: por eso nunca miente.
+     Los 44px que agrega al final del carril son el respiro del último
+     renglón, no un hueco de más. */
+  body.cpd .cpd-orilla{
+    position:sticky;right:0;flex:0 0 40px;align-self:stretch;
+    pointer-events:none;
+    /* Casi todo el degradado es transparente: la orilla tiene que decir
+       «sigue», no borrar el renglón que tapa. */
+    background:linear-gradient(to left,#fff 12%,rgba(255,255,255,0));
+  }
 }
 /* Los tiles del resumen van APAGADOS a propósito (sus números todavía no
    se calculan): borde gris de tarjeta, no el acento del lienzo — un
@@ -302,6 +400,10 @@ body.cpd .modal .btn.oro{
      las secciones apiladas ocupan todo el ancho. */
   body.cpd .cpd-res{display:none}
   body.cpd .cpd-envuelve{display:block}
+  /* …y con el resumen fuera, el tablero es una PILA de secciones: no hay
+     costado al que mirar, así que la orilla tampoco se pinta — un degradado
+     de 40px de alto en medio de la pila sería basura. (BLOQUE 59.) */
+  body.cpd .cpd-orilla{display:none}
 
   /* Las secciones apiladas: el título de columna en mayúscula chica con
      su conteo, como «PEDIDAS, POR LLEGAR · 2». */

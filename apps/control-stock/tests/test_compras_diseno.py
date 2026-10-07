@@ -292,3 +292,72 @@ def test_los_campos_escriben_a_16px_en_el_telefono():
     movil = css.split("@media (max-width:767.98px)", 1)[1]
     assert "font-size:16px" in movil
     assert "input.campo" in movil and "select.sel" in movil
+
+
+# ---------------------------------------------------------------------------
+# BLOQUE 59 · el ancho del tablero (7/10/2026)
+# ---------------------------------------------------------------------------
+#
+# Medido antes de tocar nada, con el elemento renderizado: a 1024px de
+# ventana el carril medía 436px —el resumen se llevaba 280 fijos— y de las
+# SEIS columnas de 276px se veía UNA entera, con la segunda cortada a mitad
+# de palabra y ninguna señal de que hubiera más al costado.
+# ---------------------------------------------------------------------------
+
+def test_la_decision_del_resumen_vive_en_un_solo_lugar():
+    """«El resumen baja mientras no quepa» tiene que poder voltearse en un
+    sitio, no en cinco: el dueño todavía no eligió entre esto y «resumen
+    fijo + tablero de lado», y la opción que no se construyó tiene que
+    costar tres renglones, no una tanda."""
+    css = open(CSS).read()
+    consultas = re.findall(r"@container\s+lienzo\s*\([^)]*\)", css)
+    assert len(consultas) == 1, (
+        f"la decisión está repartida en {len(consultas)} consultas: {consultas}")
+    # Y el número es el escalón HOLGADO de la escala compartida, no uno nuevo.
+    assert "min-width:1120px" in consultas[0].replace(" ", "")
+
+
+def test_el_resumen_baja_por_lienzo_y_no_por_ventana():
+    """La trampa que esto evita: un `@media` mide la VENTANA, y el sitio del
+    contenido es la ventana menos el menú y los márgenes. Medido en este
+    mismo archivo: ventana 1024 → 728px de lienzo."""
+    css = open(CSS).read()
+    bloque = css.split("@container lienzo", 1)[1].split("\n}", 1)[0]
+    assert "cpd-envuelve" in bloque and "280px" in bloque
+
+
+def test_el_carril_no_puede_encogerse_a_cero():
+    """Con el resumen debajo, el tablero y el resumen se reparten el alto.
+    Si al tablero se le deja llegar a 0 desaparece entero — es el defecto
+    que ya se pagó en el calendario. La reja le pone piso."""
+    css = _sin_blancos(open(CSS).read())
+    assert "grid-template-rows:minmax(260px,1fr)auto" in css
+
+
+def test_se_ve_que_las_columnas_siguen_al_costado():
+    """La mitad del defecto que NO depende de la decisión de arriba: seis
+    columnas de 276px piden 1716px de lienzo (~2010 de ventana), así que en
+    una pantalla real siempre quedan columnas afuera.
+
+    Dos señales, y ninguna puede mentir: la barra de desplazamiento del
+    carril hecha visible a propósito (`scroll`, no `auto`, que en macOS se
+    esconde) y la orilla en degradado, que al llegar al final cae sobre
+    blanco y se apaga sola."""
+    css = _sin_blancos(open(CSS).read())
+    assert "overflow-x:scroll" in css
+    assert "scroll-snap-type:xproximity" in css
+    assert "scroll-snap-align:start" in css
+    assert "position:sticky;right:0" in css
+    assert '<b class="cpd-orilla" aria-hidden="true"></b>' in open(PLANTILLA).read()
+
+
+def test_la_orilla_no_se_pinta_en_el_telefono():
+    """Ahí el tablero es una PILA de secciones: no hay costado al que
+    mirar, y un degradado de 40px en medio de la pila sería basura."""
+    css = _sin_blancos(open(CSS).read())
+    movil = css.split("@media(max-width:767.98px)")[-1]
+    assert ".cpd-orilla{display:none}" in movil
+
+
+def _sin_blancos(texto):
+    return re.sub(r"\s+", "", texto)
