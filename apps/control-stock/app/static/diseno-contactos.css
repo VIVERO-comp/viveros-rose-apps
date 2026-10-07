@@ -30,13 +30,19 @@
 .ct-pista{font-size:12.5px;color:var(--d-suave)}
 
 /* ---------- filtros como enlaces GET (los .fc del lienzo) ---------- */
-.ct-filtros{display:flex;gap:8px;padding:0 0 14px;flex-wrap:wrap}
+/* G2: los filtros se quedan pegados arriba y lo que se mueve es la
+   lista. El respiro de arriba lo pone ESTA fila, no `main`: un sticky
+   se ancla contra el borde del CONTENIDO del contenedor que scrollea, y
+   con los 10px de padding en `main` quedaba anclado 10px abajo del ras,
+   justo el hueco por donde se colaban las filas (la misma trampa del
+   buscador del Stock, 24/09/2026). */
+.ct-filtros{display:flex;gap:8px;padding:10px 0 14px;flex-wrap:wrap}
 .ct-fc{display:inline-flex;align-items:center;height:34px;padding:0 13px;border:1px solid var(--d-borde-campo);border-radius:17px;background:#fff;font:inherit;font-size:13.5px;color:var(--d-tinta);text-decoration:none;box-sizing:border-box}
 .ct-fc.on{border:2px solid var(--d-tinta);font-weight:700}
 .ct-fc-apagado{border-style:dashed;color:var(--d-suave);background:var(--d-col);cursor:not-allowed}
 
 /* ---------- la lista (grilla del lienzo) ---------- */
-.ct-main{padding:10px 28px 28px}
+.ct-main{padding:0 28px 28px}
 .ct-lista{border:1px solid var(--d-borde-pil);border-radius:var(--d-radio-tarjeta);overflow:hidden;overflow-x:auto}
 .ct-hr,.ct-r{display:grid;grid-template-columns:minmax(180px,1fr) 84px 110px 110px 70px 84px;align-items:center;column-gap:12px;padding:0 16px;min-width:640px}
 .ct-hr{height:38px;background:var(--d-col);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--d-suave);font-weight:600}
