@@ -194,4 +194,10 @@
     </section>
   </div>
 </main>
+
+{# El menú compartido de la app (A6 del BLOQUE 53): el mismo <nav> que
+   todas las demás pestañas, marcado en Contactos. Ver la nota de
+   contactos.html: sin él, la hamburguesa de esta cabecera guardaba la
+   cookie `menu=0` y colapsaba el menú de TODO el programa. #}
+{% set activa = 'contactos' %}{% include '_nav.html' %}
 {% endblock %}

@@ -736,7 +736,13 @@ def test_el_mismo_menu_en_todas_las_caras_del_nav(db_limpia, con_inventario):
     (_lado.html), el cajón/sidebar de base.html (_nav.html) y el nav
     propio de Inicio (app.html) recorren la MISMA lista de Python."""
     c = _con_roles("opera3", "operaciones")
-    for pagina in ("/venta", "/control", "/calendario", "/compras", "/mi-crm"):
+    # A6 del BLOQUE 53: /contactos y /pedidos entran a la lista. Las dos
+    # PANTALLAS de Contactos (la lista y la página de un contacto) no
+    # incluían `_nav.html` y eran las únicas del menú sin menú — medido en
+    # el 8095 el 7/10/2026: cero elementos <nav> ahí, mientras /pedidos y
+    # /venta mostraban su costado de 240px con su pestaña marcada.
+    for pagina in ("/venta", "/control", "/calendario", "/compras", "/mi-crm",
+                   "/contactos", "/contactos/lv1", "/pedidos"):
         cuerpo = c.get(pagina).text
         assert 'href="/contactos"' in cuerpo, pagina
         # Y ninguna cara ofrece lo que su rol no puede abrir.

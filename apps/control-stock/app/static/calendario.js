@@ -55,12 +55,40 @@
 
   // Cancelar una actividad no tiene marcha atrás cómoda: se pregunta con el
   // riesgo escrito en el propio formulario (lo redacta la plantilla).
-  document.querySelectorAll('form[data-confirmar]').forEach(function (form) {
-    form.addEventListener('submit', function (evento) {
-      if (!window.confirm(form.getAttribute('data-confirmar') + '\n\n¿Seguimos?')) {
-        evento.preventDefault();
-      }
-    });
+  //
+  // DELEGADO en el document (A5 del BLOQUE 53, y `submit` burbujea): el
+  // panel del lead ahora puede llegar como pedazo del servidor, así que
+  // estos dos guardias —el confirm y el anti-doble-toque de abajo— tienen
+  // que valer también para los formularios que entran DESPUÉS de cargar
+  // la página. Un listener por nodo solo ataba los que había al cargar, y
+  // los botones del panel pedido se habrían quedado sin «Guardando…» y
+  // sin candado contra el toque doble, sin que nada avisara.
+  document.addEventListener('submit', function (evento) {
+    var form = evento.target;
+    if (!form || form.tagName !== 'FORM') return;
+    var aviso = form.getAttribute('data-confirmar');
+    if (aviso && !window.confirm(aviso + '\n\n¿Seguimos?')) {
+      evento.preventDefault();
+      return;
+    }
+    // Al mandar un formulario, el botón avisa "Guardando…" y se apaga: un
+    // toque doble (fácil en el teléfono) no crea la actividad dos veces.
+    // `submitter` dice qué botón lo mandó; si el navegador no lo trae, el
+    // del propio formulario.
+    var boton = evento.submitter;
+    if (!boton || !boton.hasAttribute || !boton.hasAttribute('data-guardando')) {
+      boton = form.querySelector('button[data-guardando]');
+    }
+    if (!boton) return;
+    if (evento.defaultPrevented) return;
+    if (form.dataset.mandado) { evento.preventDefault(); return; }
+    form.dataset.mandado = '1';
+    boton.dataset.texto = boton.textContent;
+    boton.textContent = boton.getAttribute('data-guardando');
+    boton.classList.add('guardando');
+    // disabled recién después de que el envío salga: un botón apagado
+    // en el mismo evento haría que el navegador no mande el submit.
+    setTimeout(function () { boton.disabled = true; }, 0);
   });
 
   // Al volver con Atrás, el navegador puede restaurar la página con un
@@ -75,21 +103,4 @@
     });
   });
 
-  // Al mandar un formulario, el botón avisa "Guardando…" y se apaga: un
-  // toque doble (fácil en el teléfono) no crea la actividad dos veces.
-  document.querySelectorAll('button[data-guardando]').forEach(function (boton) {
-    var form = boton.closest('form');
-    if (!form) return;
-    form.addEventListener('submit', function (evento) {
-      if (evento.defaultPrevented) return;
-      if (form.dataset.mandado) { evento.preventDefault(); return; }
-      form.dataset.mandado = '1';
-      boton.dataset.texto = boton.textContent;
-      boton.textContent = boton.getAttribute('data-guardando');
-      boton.classList.add('guardando');
-      // disabled recién después de que el envío salga: un botón apagado
-      // en el mismo evento haría que el navegador no mande el submit.
-      setTimeout(function () { boton.disabled = true; }, 0);
-    });
-  });
 })();

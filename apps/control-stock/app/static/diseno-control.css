@@ -454,3 +454,8 @@
   .dc-asignar-dos{grid-template-columns:minmax(0,1fr)}
   .dc-asignar .campo{font-size:16px}
 }
+
+/* ---------- A5: el panel se pide al servidor ----------
+   La única señal del momento mientras llega el pedazo: el cursor de «ya
+   va». panel.js pone el atributo; nada más cambia en la página. */
+html[data-panel-pidiendo]{cursor:progress}

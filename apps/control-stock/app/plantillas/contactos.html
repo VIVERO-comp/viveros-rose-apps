@@ -91,4 +91,12 @@
     <div class="ct-r ct-pie"><span class="ct-pista">Un contacto puede existir sin venta. Toca uno para abrir su página con el chat y su dinero.</span><span></span><span></span><span></span><span></span><span></span></div>
   </div>
 </main>
+
+{# El menú compartido de la app (A6 del BLOQUE 53). Faltaba: esta
+   pantalla pintaba su hamburguesa pero NUNCA incluía el <nav>, así que
+   el menú no es que se escondiera — es que no existía acá; y apretar las
+   tres rayas (el gesto natural de «¿dónde está el menú?») escribía la
+   cookie `menu=0`, que el servidor lee en TODAS las demás pantallas y
+   las pintaba colapsadas. La cura es el menú, no la cookie. #}
+{% set activa = 'contactos' %}{% include '_nav.html' %}
 {% endblock %}

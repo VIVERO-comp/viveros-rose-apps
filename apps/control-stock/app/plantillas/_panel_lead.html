@@ -1,0 +1,467 @@
+{# EL PANEL DEL LEAD, en su propio archivo (A5 del BLOQUE 53).
+
+   Lo pinta el MISMO Python de siempre (main._panel_lead_contexto): la
+   pantalla entera (/control) lo incluye, y el pedazo que abre una
+   tarjeta sin recargar (/control/panel) lo renderiza solo. Una sola
+   plantilla para los dos caminos, así que lo que se ve es idéntico y
+   los candados —la plata por lead (`abierta.ve_plata`) y el chat ajeno
+   del modo lectura— los decide el servidor en los dos.
+
+   Nada de esto viaja «por si acaso»: el panel de un lead solo existe en
+   el HTML cuando el servidor decidió mandarlo. #}
+{% if abierta %}
+{# `data-panel-liga` (A5): panel.js intercepta ESTE enlace para cerrar sin
+   recargar. Sigue siendo un <a> de verdad — sin JS cierra navegando. #}
+<a class="telon" href="/control?vista={{ vista }}{{ ver_query }}" data-panel-liga aria-label="Cerrar"></a>
+{# El borde de arriba de la ficha lleva el color del interés (pantalla 06),
+   con la misma variable CSS de la tarjeta — desde paleta.json, vía Python. #}
+<aside class="panel-der" role="dialog" aria-label="Ficha del lead"{% if abierta.interes_color %} style="--dc-interes:{{ abierta.interes_color }}"{% endif %}>
+  {# La cabecera del lienzo (06/22): el nombre primero, y debajo la línea
+     con el chip del interés y «LEAD-NN · llegó por Origen» — el origen
+     dejó de ser fila de Datos, ahora vive aquí. #}
+  <div class="cab-panel">
+    <div class="dc-cab-tit">
+      <h4>{{ abierta.nombre }}</h4>
+      <div class="dc-cab-sub">
+        {% if abierta.interes %}<span class="dc-chip-interes" style="{{ abierta.interes_chip }}">{{ abierta.interes }}</span>{% endif %}
+        <span>{{ abierta.ref }}{% if abierta.origen %} · llegó por {{ abierta.origen }}{% endif %}</span>
+      </div>
+    </div>
+    {# Cerrar según la pantalla (diseño Orquesta): en computadora la X
+       cuadrada (pantalla 06), en el teléfono «← Atrás» arriba (pantalla
+       22). Es UN solo enlace; el CSS muestra una cara u otra. #}
+    <a class="btn chico dc-cerrar" href="/control?vista={{ vista }}{{ ver_query }}" data-panel-liga aria-label="Cerrar la ficha"><span class="dc-cerrar-x" aria-hidden="true">✕</span><span class="dc-cerrar-atras">← Atrás</span></a>
+  </div>
+  <div class="etiquetas">
+    <span class="chip on" style="{{ abierta.estado_chip }}">{{ abierta.estado_titulo }}</span>
+    {% if abierta.te_toca %}<span class="etq at">Te toca</span>{% endif %}
+    {% if abierta.pago %}<span class="etq">{{ abierta.pago }}</span>{% endif %}
+    {% if abierta.motivo %}<span class="etq at">{{ abierta.motivo }}</span>{% endif %}
+  </div>
+
+  {# Los atajos del lienzo (06/22): llamar y abrir el chat como íconos
+     pastel de 44px. El chat dejó de ser el botón negro: el negro del
+     lienzo es «Cobrar saldo», una acción que todavía no existe aquí. #}
+  {% if abierta.celular or abierta.wa %}
+  <div class="dc-ics">
+    {% if abierta.celular %}
+    <a class="dc-ic dc-tel" href="tel:{{ abierta.celular | replace('-', '') | replace(' ', '') }}" aria-label="Llamar"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a12 12 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2"/></svg></a>
+    {% endif %}
+    {% if abierta.wa %}
+    <a class="dc-ic dc-wa" href="{{ abierta.wa }}" target="_blank" rel="noopener" aria-label="Abrir el chat de WhatsApp"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-4-7.5L21 3l-1 4.5A9 9 0 0121 12z"/><path d="M8.5 10.5c.5 2 2.5 4 4.5 4.5l1.5-1.5 2 1-.5 2c-3.5.5-7.5-3-8.5-6.5l1-1.5 1.5 1z" fill="currentColor" stroke="none"/></svg></a>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# --- El MONTO grande (BLOQUE 43, lienzo de Roles «crm-lead-abierto»).
+         El número es el total de la ORDEN REAL conectada (cot_lead), y
+         debajo su renglón: qué orden es y cómo va el cobro. Sin orden
+         real, sin Odoo, o sin permiso de ver la plata, no hay número y
+         el renglón DICE por qué — nunca un $0.00 de relleno. Todo lo
+         decide control._monto_del_panel. --- #}
+  <div class="dc-monto">
+    {% if abierta.monto_panel.texto %}
+    <span class="dc-monto-amt num">{{ abierta.monto_panel.texto }}</span>
+    {% endif %}
+    <span class="dc-monto-nota">{{ abierta.monto_panel.nota }}</span>
+  </div>
+
+  {# --- Las CINCO filas del lienzo: Lo atiende · Seguimiento · Último
+         mensaje · Cotización · Historial. SE TOCA LA FILA ENTERA (el
+         <a> es la fila, no un enlacito al final), y cada una viaja con
+         su destino ya decidido en Python (control._fila_*). La que
+         todavía no tiene acción no es un enlace: es una fila apagada
+         con su «Todavía no» a la derecha, en el mismo lugar donde
+         estaría la flecha. --- #}
+  <div class="dc-filas">
+    {% for f in abierta.filas %}
+    {% if f.href %}
+    <a class="dc-fila" href="{{ f.href }}">
+      <span class="dc-fila-l">{{ f.etiqueta }}</span>
+      <span class="dc-fila-v">
+        <span class="dc-fila-dato{{ ' dc-fila-ojo' if f.alerta }}">
+          {% if f.inicial %}<span class="dc-fila-av" aria-hidden="true">{{ f.inicial }}</span>{% endif %}{{ f.valor }}</span>
+        {% if f.detalle %}<span class="dc-fila-det">{{ f.detalle }}</span>{% endif %}
+      </span>
+      <svg class="dc-fila-go" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+    </a>
+    {% else %}
+    <div class="dc-fila dc-fila-off">
+      <span class="dc-fila-l">{{ f.etiqueta }}</span>
+      <span class="dc-fila-v">
+        <span class="dc-fila-dato{{ ' dc-fila-ojo' if f.alerta }}">
+          {% if f.inicial %}<span class="dc-fila-av" aria-hidden="true">{{ f.inicial }}</span>{% endif %}{{ f.valor }}</span>
+        {% if f.detalle %}<span class="dc-fila-det">{{ f.detalle }}</span>{% endif %}
+      </span>
+      <span class="dc-fila-no">{{ f.todavia_no }}</span>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+
+  {# Los datos que las cinco filas no cuentan. El responsable salió de
+     aquí: lo dice la fila «Lo atiende», que además abre el cuadro de
+     asignar — repetirlo dos veces en la misma pantalla era ruido. #}
+  <div>
+    {% if abierta.estado == 'RECORDATORIO' %}
+    <div class="dato"><b>Espera</b><span>{{ abierta.recordatorio_motivo or 'sin motivo anotado' }}</span></div>
+    {% endif %}
+    {% if abierta.celular %}<div class="dato"><b>Teléfono</b><span class="mono">{{ abierta.celular }}</span></div>{% endif %}
+    <div class="dato"><b>Llegó</b><span>{{ abierta.hace }}</span></div>
+    <div class="dato"><b>Issue</b><span class="mono">{{ abierta.ref }}{% if abierta.pp %} · {{ abierta.pp }}{% endif %}</span></div>
+  </div>
+
+  {# --- Qué hago, en DOS grupos con titulito (F3, 29/09/2026, maqueta
+         «Control más simple» elegida por Abraham): los MISMOS botones,
+         cero lógica nueva — solo se separa lo que HACE algo (Acciones) de
+         las banderas internas (Señales), que ahora van chicas y fantasma
+         cuando están apagadas. Lo negro sigue siendo solo abrir el chat:
+         el resto son interruptores grises, incluido Cotizar (es un
+         enlace, no toca el lead). --- #}
+  <div class="grupo-tit">Acciones</div>
+  <div class="acciones">
+    {# El chat vive en el ícono verde de arriba (lienzo 06/22); aquí
+       quedan los interruptores. #}
+    {% if puede_tocar_abierta %}
+    {# `prender` viaja con lo que ESTE botón pinta ahora mismo (28/09/2026):
+       nunca se recalcula en el servidor a partir de una lectura, que puede
+       venir de una caché vieja — esa negación era el bug de "hay que
+       apretar dos veces". #}
+    <form method="post" action="/control/responder?vista={{ vista }}">
+      <input type="hidden" name="ref" value="{{ abierta.ref }}">
+      <input type="hidden" name="prender" value="{{ '0' if abierta.te_toca else '1' }}">
+      <button class="btn{{ ' peligro' if abierta.te_toca }}" type="submit"
+              data-guardando="…">
+        {% if abierta.te_toca %}🔴 Responder · apagalo{% else %}Prender 🔴 Responder{% endif %}
+      </button>
+    </form>
+    {% else %}
+    <button class="btn{{ ' peligro' if abierta.te_toca }}" type="button" disabled>
+      {{ '🔴 Responder · prendido' if abierta.te_toca else 'Responder · apagado' }}
+    </button>
+    {% endif %}
+    {# Disponible siempre (pedido de Abraham, 28/09/2026): no toca el
+       lead de Linear, solo abre Vender con el cliente puesto. Deja el
+       lead pendiente y el borrador y redirige a /venta/nueva. Era un
+       enlace GET (/venta?lead=...), pero ESCRIBE en la base: desde el
+       punto 1 de roles es POST (precisión 2 — un GET no muta). #}
+    <form method="post" action="/venta/lead">
+      <input type="hidden" name="lead" value="{{ abierta.ref }}">
+      <input type="hidden" name="cliente" value="{{ abierta.nombre }}">
+      <input type="hidden" name="cel" value="{{ abierta.celular }}">
+      <button class="btn" type="submit">Cotizar</button>
+    </form>
+    {# Recordar (29/09/2026): parquear el lead porque el cliente espera
+       que LLEGUE un producto. Es un enlace al MISMO modal del arrastre a
+       mano (mover=…&a=RECORDATORIO), que pide qué espera. Solo en un lead
+       vivo NO cerrado — un Ganado/Perdido no se parquea, y en Recordatorio
+       ya está. #}
+    {% if puede_tocar_abierta and not abierta.cerrado and abierta.estado != 'RECORDATORIO' %}
+    <a class="btn" href="/control?vista={{ vista }}&mover={{ abierta.ref | urlencode }}&a=RECORDATORIO">Recordar</a>
+    {% endif %}
+    {# Ya llegó (29/09/2026): a Hablando con «Te toca», para escribirle hoy. #}
+    {% if puede_tocar_abierta and abierta.estado == 'RECORDATORIO' %}
+    <form method="post" action="/control/ya-llego?vista={{ vista }}">
+      <input type="hidden" name="ref" value="{{ abierta.ref }}">
+      <button class="btn" type="submit" data-guardando="…">Ya llegó</button>
+    </form>
+    {% endif %}
+  </div>
+
+  {# Las señales, en su propio grupo. Los botones solo existen si Abraham
+     ya creó su etiqueta en Linear (mecanismo de `senales_disponibles`,
+     intacto): sin señales no hay grupo ni titulito. #}
+  {% if abierta.senales %}
+  <div class="grupo-tit">Señales</div>
+  <div class="acciones">
+    {% if puede_tocar_abierta %}
+    {% for s in abierta.senales %}
+    <form method="post" action="/control/senal?vista={{ vista }}">
+      <input type="hidden" name="ref" value="{{ abierta.ref }}">
+      <input type="hidden" name="nombre" value="{{ s.nombre }}">
+      <input type="hidden" name="prender" value="{{ '0' if s.prendida else '1' }}">
+      <button class="btn chico{{ ' peligro' if s.prendida else ' fantasma' }}" type="submit"
+              data-guardando="…">{{ s.nombre }}{{ ' ✓' if s.prendida }}</button>
+    </form>
+    {% endfor %}
+    {% else %}
+    {% for s in abierta.senales %}
+    <button class="btn chico{{ ' peligro' if s.prendida else ' fantasma' }}" type="button" disabled>
+      {{ s.nombre }}{{ ' ✓' if s.prendida }}</button>
+    {% endfor %}
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# --- Cuánto es: la cotización conectada (28/09/2026). Todo el dato sale
+         de cot_lead.py; acá solo se pinta lo que control.ficha() compuso
+         (abierta.cot). "No se pudo leer Odoo" nunca se confunde con "sin
+         cotización conectada": son cosas distintas. --- #}
+  {# `display:contents`, así que el ancla de la fila «Cotización» no
+     cambia ni un píxel del layout de la columna. #}
+  <div id="dc-cotizacion" class="dc-seccion">
+  {% set cot = abierta.cot %}
+  {% if not cot.ok %}
+  <div class="ficha-cot-vacia">No se pudo leer Odoo: {{ cot.error }}</div>
+  {% else %}
+
+    {# La plata de la real solo para quien la puede ver (BLOQUE 43): el
+       que lo atiende, el Director y Finanzas. A los demás se les dice
+       quién la ve, en vez de dejar el hueco sin explicación. #}
+    {% if cot.plata and not abierta.ve_plata %}
+    <div class="ficha-cot-vacia">{{ leyenda_sin_plata }}</div>
+    {% endif %}
+    {% if cot.plata and abierta.ve_plata %}
+    <div class="ret-cotizs">
+      <div class="tenue ret-cotiz-titulo">La real · {{ cot.plata.orden }}</div>
+      <div class="dato"><b>Total</b><span>{{ cot.plata.total | dinero }}</span></div>
+      {% if cot.plata.pide_abono %}
+      <div class="dato"><b>Abono 50%</b><span>{{ cot.plata.abono_50 | dinero }}</span></div>
+      {% else %}
+      {# La casilla del 50/50 está apagada en la orden: no se pide abono. #}
+      <div class="dato"><b>Pago</b><span>Completo al confirmar</span></div>
+      {% endif %}
+      <div class="dato"><b>Pagado</b><span>{{ cot.plata.pagado | dinero }}</span></div>
+      <div class="dato"><b>Saldo</b><span>{{ cot.plata.saldo | dinero }}</span></div>
+    </div>
+    {% endif %}
+
+    {% if cot.ordenes %}
+    <div class="ret-cotizs">
+      <div class="tenue ret-cotiz-titulo">Conectadas</div>
+      {# El mismo patrón de "Ventas y cotizaciones locales" de Vender
+         (venta-item/fila1/badge en venta.html), más chico — con sus
+         propias clases acá porque control.html no carga styles.css.
+         28/09/2026, pedido de Abraham: "que se vea como en Ventas pero
+         más chico, y editar también". #}
+      {% for o in cot.ordenes %}
+      <div class="ficha-cot-item {{ o.badge.clase }}{{ ' real' if o.es_real }}">
+        <div class="fila1">
+          <div>
+            <b class="titulo">{{ o.nombre }}</b>
+            {% if o.es_real %}<span class="badge b-real">La real</span>{% endif %}
+            <small>{{ o.fecha | fecha_bonita if o.fecha else '' }}</small>
+          </div>
+          <span class="badge {{ o.badge.clase }}">{{ o.badge.texto }}</span>
+        </div>
+        {% if abierta.ve_plata %}
+        <div class="ficha-cot-monto">{{ o.total | dinero }}{% if o.pagado %} · pagó {{ o.pagado | dinero }}{% endif %}</div>
+        {% endif %}
+        <div class="ficha-cot-acciones">
+          {# UN solo control (Abraham, 30/09/2026): «Descargar / Compartir»
+             reemplaza el par PDF + Compartir. El nombre lo calcula Python
+             (control._con_edicion) y viaja en `download`; en iPhone el
+             intercept de `data-pdf` (compartir.js) abre la hoja nativa. #}
+          <a href="/control/cotizacion/{{ o.orden_id }}.pdf?nombre={{ o.nombre | urlencode }}&cliente={{ abierta.nombre | urlencode }}"
+             target="_blank" rel="noopener" download="{{ o.nombre_pdf }}" data-pdf>Descargar / Compartir (PDF)</a>
+          {% if puede_tocar_abierta %}
+          {% if o.editar_n %}<span class="sep">·</span><a href="/venta/servicio/{{ o.editar_n }}/editar">Editar</a>{% endif %}
+          {% if not o.es_real %}
+          <span class="sep">·</span>
+          <form method="post" action="/control/cotizacion/marcar-real?vista={{ vista }}">
+            <input type="hidden" name="ref" value="{{ abierta.ref }}">
+            <input type="hidden" name="orden_id" value="{{ o.orden_id }}">
+            <button type="submit" class="enlace-sub">Marcar la real</button>
+          </form>
+          {% else %}
+          <span class="sep">·</span>
+          <form method="post" action="/control/cotizacion/quitar-real?vista={{ vista }}">
+            <input type="hidden" name="ref" value="{{ abierta.ref }}">
+            <input type="hidden" name="orden_id" value="{{ o.orden_id }}">
+            <button type="submit" class="enlace-sub">Quitar real</button>
+          </form>
+          {% endif %}
+          <span class="sep">·</span>
+          <form method="post" action="/control/cotizacion/desconectar?vista={{ vista }}">
+            <input type="hidden" name="ref" value="{{ abierta.ref }}">
+            <input type="hidden" name="orden_id" value="{{ o.orden_id }}">
+            <button type="submit" class="enlace-sub">Desconectar</button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="ficha-cot-vacia">Sin cotización conectada.</div>
+    {% endif %}
+
+    {% if puede_tocar_abierta %}
+    <div class="ret-cotizs">
+      <div class="tenue ret-cotiz-titulo">Conectar cotización</div>
+      <form method="get" action="/control" class="campo-caja" style="flex-direction:row;gap:6px">
+        <input type="hidden" name="vista" value="{{ vista }}">
+        <input type="hidden" name="abrir" value="{{ abierta.ref }}">
+        <input class="campo" type="text" name="buscar" value="{{ cot.buscar }}"
+               placeholder="Buscar por número, ej. S00089" maxlength="40" autocomplete="off">
+        <button class="btn chico" type="submit">Buscar</button>
+      </form>
+      {% for c in cot.candidatas %}
+      <div class="crm-nota">
+        <small>{{ c.nombre }} · {{ c.cliente }}{% if c.fecha %} · {{ c.fecha | fecha_bonita }}{% endif %}
+          · {{ c.total | dinero }}</small>
+        {# La marca de ambigüedad la decide Python (cot_lead): un teléfono
+           que también es de otro lead vivo. Avisa, no bloquea. #}
+        {% if c.ambigua %}
+        <small style="display:block;color:var(--critico);font-weight:600">⚠ {{ c.aviso_ambigua }}</small>
+        {% endif %}
+        <form method="post" action="/control/cotizacion/conectar?vista={{ vista }}">
+          <input type="hidden" name="ref" value="{{ abierta.ref }}">
+          <input type="hidden" name="orden_id" value="{{ c.orden_id }}">
+          <button class="btn chico" type="submit">Conectar</button>
+        </form>
+      </div>
+      {% else %}
+      <p class="pie-nota" style="margin:4px 0 0">Sin candidatas por ahora.</p>
+      {% endfor %}
+    </div>
+    {% endif %}
+  {% endif %}
+  </div>
+
+  {# --- Qué se dijo: el hilo. Cliente a la izquierda, equipo a la derecha
+         con el nombre de quien respondió; los sucesos del sistema en lila,
+         en medio; las notas internas, abajo y aparte. --- #}
+  <div class="ficha-hilo-cab" id="dc-conversacion">
+    <span>Conversación</span>
+    {% if abierta.twenty_url %}
+    <a class="tenue" href="{{ abierta.twenty_url }}" target="_blank" rel="noopener">ver en Twenty ↗</a>
+    {% endif %}
+  </div>
+  {# Twenty caído no es «sin chat»: se dice la verdad (Nº12, 2/10/2026).
+     El hilo igual pinta lo que sí hay (los sucesos vienen de Linear). #}
+  {% if abierta.hilo_error %}
+  <p class="pie-nota" style="margin:0 0 6px;color:var(--critico)">{{ abierta.hilo_error }}</p>
+  {% endif %}
+  {% if abierta.hilo %}
+  {# El pintado vive en _hilo.html, compartido con /conversaciones
+     (ITEM 11 de Jay): mismo armado, misma piel. #}
+  {% with hilo = abierta.hilo %}{% include '_hilo.html' %}{% endwith %}
+  {% elif not abierta.hilo_error %}
+  <p class="pie-nota" style="margin:0">Sin chat disponible.</p>
+  {% endif %}
+
+  {# --- Las notas internas, aparte: nunca dentro del hilo, porque el
+         cliente no las vio. --- #}
+  <div class="ret-cotizs" id="dc-notas">
+    <div class="tenue ret-cotiz-titulo">Notas internas · solo el equipo</div>
+    {% for n in abierta.notas %}
+    <div class="crm-nota"><small>{{ n.quien }} · {{ n.cuando }}</small>{{ n.texto }}</div>
+    {% else %}
+    <p class="pie-nota" style="margin:4px 0 0">Sin notas todavía.</p>
+    {% endfor %}
+    {% if puede_tocar_abierta %}
+    <form method="post" action="/control/nota?vista={{ vista }}" class="crm-forma-nota">
+      <input type="hidden" name="ref" value="{{ abierta.ref }}">
+      <textarea class="campo" name="texto" rows="2" maxlength="2000"
+                placeholder="Escribe una nota…" required></textarea>
+      <button class="btn" type="submit" data-guardando="Guardando…">Guardar nota</button>
+    </form>
+    {% endif %}
+  </div>
+
+  {# El pie de la ficha de los DOS lienzos (06/22 y «crm-lead-abierto»):
+     el botón grande de cobrar y, debajo, el enlace chico «Ver contacto».
+     Cobrar NO es una acción de Control —el pago se registra en Odoo y de
+     ahí baja el estado— así que va APAGADO con su «Todavía no», pero se
+     pinta SIEMPRE: el lugar es del diseño, y esconderlo cuando no hay
+     plata dejaba el pie del panel vacío.
+
+     El monto, en cambio, solo aparece cuando se sabe: es el SALDO REAL
+     de la orden real (cot_lead) y solo para quien puede ver la plata de
+     este lead. Sin saldo conocido el botón dice «Cobrar» a secas —
+     jamás un $0.00 de ejemplo. #}
+  <div class="dc-pie">
+    {% if cot.ok and cot.plata and cot.plata.saldo and abierta.ve_plata %}
+    <button class="btn dc-apagado" type="button" disabled
+            title="El cobro se registra en Odoo">Cobrar saldo {{ cot.plata.saldo | dinero }} — Todavía no</button>
+    {% else %}
+    <button class="btn dc-apagado" type="button" disabled
+            title="El cobro se registra en Odoo">Cobrar — Todavía no</button>
+    {% endif %}
+    {# «Ver contacto» del lienzo: la ficha de Contactos casa por teléfono
+       EN LECTURA, así que el camino honesto es su buscador con el celular
+       puesto — siempre resuelve, y cae en el contacto si existe. Sin
+       teléfono no hay por dónde buscar: entonces va apagado. #}
+    {% if abierta.celular %}
+    <a class="dc-lk" href="/contactos?q={{ abierta.celular | urlencode }}">Ver contacto</a>
+    {% else %}
+    <span class="dc-lk dc-lk-off" title="Este lead no tiene teléfono: no hay por dónde buscarlo">Ver contacto — Todavía no</span>
+    {% endif %}
+  </div>
+  {% if abierta.url %}
+  <div class="acciones">
+    <a class="btn" href="{{ abierta.url }}" target="_blank" rel="noopener">Linear ↗</a>
+  </div>
+  {% endif %}
+
+  {% if puede_tocar_abierta %}
+  {# «Más opciones» (diseño Orquesta, pantallas 06/22): lo raro y lo
+     delicado — repartir, corregir el estado a mano, parar la serie de
+     mantenimiento — plegado en un <details> (HTML, cero JS; el mismo
+     patrón del tipo-lead del CRM). Todo lo de adentro queda idéntico en
+     función: mismos formularios, mismos POST. #}
+  <details class="dc-mas">
+  <summary>Más opciones</summary>
+  {# El mantenimiento mensual (28/09/2026): el botón solo aparece si el
+     lead tiene una serie activa — arrancarla no es cosa de un botón,
+     nace sola al ganar un lead con interés Mantenimiento. Es delicado
+     (apaga una serie recurrente): vive en «Más opciones». #}
+  {% if abierta.mantenimiento_activo %}
+  <div class="ret-mover">
+    <div class="tenue" style="text-transform:uppercase;letter-spacing:.05em">Mantenimiento mensual</div>
+    <div class="acciones" style="margin-top:8px">
+      <form method="post" action="/control/mantenimiento/parar?vista={{ vista }}">
+        <input type="hidden" name="ref" value="{{ abierta.ref }}">
+        <button class="btn" type="submit" data-guardando="…">Parar mantenimiento</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+  {# Repartir: el mismo cambio de etiqueta que hace el arrastre. #}
+  <div class="ret-mover">
+    <div class="tenue" style="text-transform:uppercase;letter-spacing:.05em">Se lo doy a</div>
+    <div class="acciones" style="margin-top:8px;flex-wrap:wrap">
+      {% for r in responsables %}{% if r != abierta.resp %}
+      <form method="post" action="/control/responsable?vista={{ vista }}">
+        <input type="hidden" name="ref" value="{{ abierta.ref }}">
+        <input type="hidden" name="resp" value="{{ r }}">
+        <button class="btn" type="submit">→ {{ r }}</button>
+      </form>
+      {% endif %}{% endfor %}
+      {% if abierta.resp %}
+      <form method="post" action="/control/responsable?vista={{ vista }}">
+        <input type="hidden" name="ref" value="{{ abierta.ref }}">
+        <input type="hidden" name="resp" value="">
+        <button class="btn" type="submit">→ Sin asignar</button>
+      </form>
+      {% endif %}
+    </div>
+    <p class="pie-nota">El responsable es la etiqueta <b>Resp:</b> del issue, no
+      el asignado: los empleados no tienen asiento de Linear.</p>
+  </div>
+
+  {# Corregir el estado a mano: pasa por el modal del motivo. #}
+  <div class="ret-mover">
+    <div class="tenue" style="text-transform:uppercase;letter-spacing:.05em">Corregir el estado</div>
+    <div class="acciones" style="margin-top:8px;flex-wrap:wrap">
+      {% for e in estados %}{% if e.clave != abierta.estado %}
+      <a class="btn" href="/control?vista={{ vista }}&mover={{ abierta.ref | urlencode }}&a={{ e.clave }}">→ {{ e.nombre }}</a>
+      {% endif %}{% endfor %}
+    </div>
+    <p class="pie-nota">Solo para arreglar un error: el embudo se mueve solo.
+      Pide el motivo y queda anotado en el issue, con tu nombre.</p>
+  </div>
+  </details>
+  {% else %}
+  <div class="solo-lectura">
+    {% if modo == 'lectura' %}
+      <b>Solo lectura.</b> Esta instancia mira el tablero real pero no escribe.
+    {% else %}
+      <b>No es tuyo.</b> Este lead es de {{ abierta.resp_titulo }}: lo ves para
+      coordinarte, pero lo mueve {{ abierta.resp_titulo }} o el dueño.
+    {% endif %}
+  </div>
+  {% endif %}
+</aside>
+{% endif %}

@@ -1,0 +1,105 @@
+{# EL PANEL DE LA TARJETA DE VENDER, en su propio archivo (A5 del
+   BLOQUE 53).
+
+   Lo arma el MISMO Python de siempre (main._vender_abierta +
+   _panel_vender): la pantalla entera (/venta) lo incluye y el pedazo
+   que abre una tarjeta sin recargar (/venta/panel) lo renderiza solo.
+   Una plantilla para los dos caminos. #}
+{% if abierta %}
+{# La tarjeta abierta (pantallas 10/11 en Mac, 26/27 en celular): panel a
+   la derecha encima del tablero / pantalla completa con ← Atrás. Se
+   cierra con la X, con ← Atrás o tocando afuera — todos enlaces que
+   vuelven al ancla de la tarjeta (no perder el lugar en la lista). #}
+{# `data-panel-liga` (A5): panel.js intercepta los tres enlaces de cerrar
+   para que el tablero no se recargue. Siguen siendo <a> de verdad: sin
+   JS cierran navegando, como siempre. #}
+<a class="vd-telon" href="{{ volver_url }}#{{ abierta.ancla }}" data-panel-liga aria-label="Cerrar el panel"></a>
+<aside class="vd-panel" style="border-top-color:{{ abierta.acento }}" aria-label="{{ 'Venta' if abierta.tipo == 'venta' and abierta.estado != 'cotizacion' else 'Cotización' }}">
+  <div class="vd-p-cab">
+    <a class="vd-p-volver" href="{{ volver_url }}#{{ abierta.ancla }}" data-panel-liga aria-label="Atrás">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    </a>
+    <div class="vd-p-tt">
+      <b>{{ abierta.cliente }}</b>
+      <span class="vd-hint vd-p-sub">
+        <span class="vd-chip-tipo" style="{{ abierta.chip_estilo }}">{{ abierta.chip_texto }}</span>
+        {% if abierta.tipo == "venta" %}{{ abierta.orden or "Sin número" }} · {{ abierta.etiqueta_estado }}
+        {% else %}{{ abierta.orden }} · {{ "Facturado" if abierta.facturada else "Cotización" }}{% endif %}
+      </span>
+    </div>
+    <a class="vd-p-x" href="{{ volver_url }}#{{ abierta.ancla }}" data-panel-liga aria-label="Cerrar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </a>
+  </div>
+  {% if abierta.contacto %}
+  <div class="vd-p-ics">
+    <a class="vd-ic vd-c-tel" href="{{ abierta.contacto.tel }}" aria-label="Llamar"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a12 12 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2"/></svg></a>
+    <a class="vd-ic vd-c-wa" href="{{ abierta.contacto.wa }}" target="_blank" rel="noopener" aria-label="WhatsApp"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-4-7.5L21 3l-1 4.5A9 9 0 0121 12z"/><path d="M8.5 10.5c.5 2 2.5 4 4.5 4.5l1.5-1.5 2 1-.5 2c-3.5.5-7.5-3-8.5-6.5l1-1.5 1.5 1z" fill="currentColor" stroke="none"/></svg></a>
+    <span class="vd-hint num">{{ abierta.celular }}</span>
+  </div>
+  {% endif %}
+  <div class="vd-p-cuerpo">
+    <div class="vd-sec vd-sec-1">{{ "Qué se vendió" if abierta.tipo == "venta" and abierta.estado not in ("cotizacion", "vendida") else "Qué se cotizó" }}</div>
+    {% if abierta.tipo == "venta" and abierta.resumen %}<span>{{ abierta.resumen }}</span>{% endif %}
+    <div class="vd-ln"><b>Total</b><b class="num">{{ abierta.total | dinero }}</b></div>
+    <div class="vd-sec">Estado</div>
+    {# Los chips que la tarjeta vieja mostraba, ahora aquí: el de estado
+       (lo arma Python en _panel_vender) y el de los 3 estados
+       (1 Acordada · 2 Plata confirmada · 3 Cerrada), con su enlace a la
+       ficha /venta/estado. #}
+    <span class="vd-p-chips">
+      {% if abierta.panel.chip %}<span class="vd-chip{% if abierta.panel.chip.css %} {{ abierta.panel.chip.css }}{% endif %}">{{ abierta.panel.chip.texto }}</span>{% endif %}
+      {% if abierta.estado3 %}<a class="vd-chip" href="{{ abierta.estado3.href }}" style="text-decoration:none">{{ abierta.estado3.texto }}</a>{% endif %}
+    </span>
+    {% if abierta.tipo == "venta" %}
+    <span>{{ abierta.etiqueta_estado }}</span>
+    {% if abierta.factura %}<span class="vd-hint">Factura {{ abierta.factura }}</span>{% endif %}
+    {% if abierta.metodo %}<span class="vd-hint">{{ "Yappy" if abierta.metodo == "yappy" else "Efectivo" }}</span>{% endif %}
+    {% if abierta.estado == "cotizacion" %}<span class="vd-hint">No aparta plantas. El pedido nace cuando el cliente paga o abona.</span>{% endif %}
+    {% if abierta.ultimo_error %}<span class="vd-error">Último intento: {{ abierta.ultimo_error }}</span>{% endif %}
+    {% else %}
+    <span>{{ "Facturado · el cobro vive en el kanban de Odoo" if abierta.facturada else "Cotización · sin facturar" }}</span>
+    {% endif %}
+    <div class="vd-sec">Fecha</div>
+    <span>{{ abierta.fecha_texto }}</span>
+    {# A12 del BLOQUE 53: el panel decía QUÉ se vendió y cuánto, pero no
+       DE QUIÉN era ni de qué lead salió. Las dos filas las arma Python
+       (main._quien_vender, regla 10) y se pintan SIEMPRE: cuando no hay
+       lead —o la venta no tiene teléfono— la fila lo dice en su lugar, sin
+       enlace. Un hueco callado dejaba al vendedor sin saber si no hay lead
+       o si la pantalla se lo comió. #}
+    <div class="vd-sec">De quién es</div>
+    {% for q in abierta.quien %}
+    <div class="vd-ln">
+      <b>{{ q.etiqueta }}</b>
+      <span class="vd-qn">
+        {% if q.href %}<a href="{{ q.href }}">{{ q.valor }}</a>
+        {% else %}<span>{{ q.valor }}</span>{% endif %}
+        {% if q.nota %}<span class="vd-hint">{{ q.nota }}</span>{% endif %}
+      </span>
+    </div>
+    {% endfor %}
+  </div>
+  {# El pie: UN solo botón negro —el paso que toca— y las acciones
+     secundarias. CUÁL botón lo decide Python (main._panel_vender,
+     regla 10): la plantilla solo pinta la estructura que llega. El
+     CSS pone el botón en mayúsculas (pantallas 10/11/26/27). #}
+  <div class="vd-p-pie">
+    <a class="vd-btn" href="{{ abierta.panel.boton.href }}"{% if abierta.panel.boton.pdf %} target="_blank" rel="noopener" download="{{ abierta.panel.boton.descarga }}" data-pdf{% endif %}>{{ abierta.panel.boton.texto }}</a>
+    {% if abierta.panel.acciones %}
+    <div class="vd-p-acts">
+      {% for a in abierta.panel.acciones %}
+        {% if a.cancelar %}
+          {% with form_action=a.action, form_confirm=a.confirm,
+                  form_boton=a.boton %}{% include "_vender_cancelar.html" %}{% endwith %}
+        {% else %}
+          <a class="vd-x{% if a.ancha %} vd-x2{% endif %}" href="{{ a.href }}"{% if a.pdf %} target="_blank" rel="noopener" download="{{ a.descarga }}" data-pdf{% elif a.externo %} target="_blank" rel="noopener"{% endif %}>{{ a.texto }}</a>
+        {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% with mover_a=abierta.panel.mover_a %}{% include "_mover_a.html" %}{% endwith %}
+    <span class="vd-hint vd-p-nota">Se cierra con la X, con ← Atrás o tocando afuera.</span>
+  </div>
+</aside>
+{% endif %}

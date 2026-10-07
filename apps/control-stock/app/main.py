@@ -1727,6 +1727,30 @@ def venta(request: Request, error: str = "", abrir: str = "", vista: str = ""):
     })
 
 
+@app.get("/venta/panel")
+def venta_panel(request: Request, abrir: str = "", vista: str = ""):
+    """El PEDAZO del panel de una tarjeta de Vender, ya armado (A5).
+
+    Lo pide panel.js al tocar una tarjeta, con la MISMA query del enlace
+    de siempre (`?vista=…&abrir=v3`), y lo mete en su caja sin recargar el
+    tablero — así no se pierde el lugar en la lista. Sin `abrir`, o con
+    uno que no apunta a nada, la plantilla sale vacía: eso es exactamente
+    lo que pide el enlace de CERRAR.
+
+    Mismo armado que la pantalla entera (_lista_vender + _vender_abierta):
+    acá no se decide nada nuevo, y la puerta por rol es la misma (el
+    prefijo «/venta» del alcance cubre esta ruta).
+    """
+    if vista not in VISTAS_VENDER_MOVIL:
+        vista = "pendientes"
+    filas, _aviso = _lista_vender(request, vista)
+    return plantillas.TemplateResponse(request, "_panel_venta.html", {
+        "abierta": _vender_abierta(filas, abrir),
+        "volver_url": ("/venta" if vista == "pendientes"
+                       else f"/venta?vista={vista}"),
+    })
+
+
 # ---------------------------------------------------------------------------
 # La lista única de "Vender": ventas de plantas y cotizaciones de
 # servicio mezcladas (dueño, 30/09/2026: "ponlo en orden de número, y no,
@@ -1884,6 +1908,60 @@ def _contacto_de(celular):
     if len(digitos) == 8:
         digitos = "507" + digitos
     return {"tel": f"tel:+{digitos}", "wa": f"https://wa.me/{digitos}"}
+
+
+def _cid_de_contacto(f):
+    """El id del contacto de ESTA venta o cotización en la pestaña
+    Contactos (A12 del BLOQUE 53).
+
+    La clave es la de `contactos._unir()`, que casa EN LECTURA: con
+    teléfono, «t<normalizado>»; sin teléfono, su propia aparición local
+    («lv<n>» una venta, «ls<n>» una cotización). Siempre resuelve — la
+    venta misma es una de las apariciones que esa pantalla une —, así que
+    la fila «Contacto» del panel abre SU PÁGINA y no un buscador.
+
+    La normalización es la de `contactos.normalizar_telefono`, nunca una
+    copia: lo que decide quién es la misma persona vive allá. Y el enlace
+    está pineado con prueba (test_paneles_b53): si Contactos cambiara su
+    clave, la suite se pone roja en vez de dejar un enlace muerto en
+    silencio."""
+    tel = contactos.normalizar_telefono(f.get("celular"))
+    if tel:
+        return "t" + tel
+    return ("lv" if f["tipo"] == "venta" else "ls") + str(f["n"])
+
+
+def _quien_vender(f):
+    """Las DOS filas «Contacto» y «Lead» del panel de Vender (A12): de
+    quién es esta venta o cotización, y de qué lead salió.
+
+    Las dos se pintan SIEMPRE. Cuando el dato no existe la fila lo DICE en
+    su lugar, sin enlace, en vez de desaparecer: un hueco callado deja al
+    vendedor sin saber si esta venta no tiene lead o si la pantalla se lo
+    comió. Y nada se adivina — el lead es el `lead_issue` (LEAD-NN) que el
+    espejo del CRM grabó al crear la venta, no una búsqueda por nombre."""
+    que = "venta" if f["tipo"] == "venta" else "cotización"
+    issue = (f.get("lead_issue") or "").strip()
+    pp = (f.get("lead_ref") or "").strip()
+    contacto = {
+        "etiqueta": "Contacto",
+        "valor": (f.get("cliente") or "").strip() or "Sin nombre guardado",
+        "href": "/contactos/" + quote(_cid_de_contacto(f)),
+        "nota": ("" if (f.get("celular") or "").strip() else
+                 f"Sin teléfono: su página junta solo esta {que}"),
+    }
+    if issue:
+        lead = {"etiqueta": "Lead", "valor": issue,
+                "href": "/control?abrir=" + quote(issue),
+                "nota": pp}
+    elif pp:
+        lead = {"etiqueta": "Lead", "valor": pp, "href": "",
+                "nota": ("Sin su número LEAD-NN guardado: no hay por dónde "
+                         "abrirlo en el CRM")}
+    else:
+        lead = {"etiqueta": "Lead", "valor": "Sin lead", "href": "",
+                "nota": f"Esta {que} no salió de un lead del CRM"}
+    return [contacto, lead]
 
 
 # Las tres columnas del tablero de Vender (diseño Orquesta). Son los
@@ -2090,6 +2168,8 @@ def _vender_abierta(filas, abrir):
             # para el celular. Lo decide Python, no la plantilla — y
             # mirando el panel, para no repetir el botón negro.
             f["panel"]["mover_a"] = _mover_a_vender(f, f["panel"])
+            # A12 del BLOQUE 53: de quién es y de qué lead salió.
+            f["quien"] = _quien_vender(f)
             return f
     return None
 
@@ -4439,6 +4519,84 @@ def calendario_pantalla(request: Request):
     })
 
 
+def _panel_lead_contexto(request, empleada, alc, vista, ver_query):
+    """TODO lo que el panel del lead necesita, decidido en UN solo lugar.
+
+    Lo llaman los DOS caminos que pintan ese panel (A5 del BLOQUE 53): la
+    pantalla entera (`/control`, que lo incluye) y el pedazo que abre una
+    tarjeta sin recargar (`/control/panel`, que renderiza la misma
+    plantilla `_panel_lead.html` y nada más). Vive acá, y no copiado en
+    cada ruta, porque es donde viven los CANDADOS DE LECTURA: la plata por
+    lead (`control.puede_ver_plata`) y el chat ajeno del modo lectura de
+    Atención. Una sola función = el panel pedido es, por construcción, el
+    mismo panel de la página — no hay una segunda puerta que se olvide de
+    tapar algo.
+    """
+    # El ref del ?abrir= se resuelve una vez y se le dice a la ficha si
+    # esta sesión ve la plata de ESE lead (el candado de lectura vive en
+    # control.puede_ver_plata, no en la plantilla).
+    ref_abierta = request.query_params.get("abrir", "")
+    lead_abierto = linear_leads.uno(ref_abierta) if ref_abierta else None
+    abierta = control.ficha(
+        ref_abierta, request.query_params.get("buscar", ""), vista=vista,
+        ve_plata=control.puede_ver_plata(lead_abierto, alc))
+    # BLOQUE 39.2: en el modo lectura de Atención la ficha ajena se abre
+    # (ver todos es ver), pero su CHAT no se muestra — es conversación de
+    # otro responsable. Va DESPUÉS de armar la ficha: el candado de la
+    # PLATA (ve_plata) y el del CHAT son dos cosas distintas y cada una
+    # tapa lo suyo. Decidido aquí, en Python; la plantilla solo pinta
+    # hilo_error como siempre.
+    if abierta and _crm_lectura(empleada) and not control.puede_tocar(abierta, alc):
+        abierta["hilo"] = []
+        abierta["hilo_error"] = ("El chat de este lead es de otro "
+                                 "responsable: en tu vista de solo "
+                                 "lectura no se muestra.")
+    puede_escribir = (linear_leads.escritura_activa()
+                      or not linear_leads.configurado())
+    return {
+        "empleada": empleada,
+        "modo": linear_leads.modo(),
+        "alc": alc,
+        "vista": vista,
+        "ver_query": ver_query,
+        "abierta": abierta,
+        # Quién ve la plata, escrito UNA vez (control.LEYENDA_SIN_PLATA):
+        # la misma frase en la fila «Cotización» y donde iría el detalle
+        # de la orden real.
+        "leyenda_sin_plata": control.LEYENDA_SIN_PLATA,
+        "estados": linear_leads.ESTADOS,
+        "responsables": linear_leads.responsables(),
+        "puede_mover": puede_escribir,
+        "puede_tocar_abierta": (
+            puede_escribir and control.puede_tocar(abierta, alc)
+            if abierta else False),
+    }
+
+
+@app.get("/control/panel")
+def control_panel(request: Request):
+    """El PEDAZO del panel de un lead, ya armado por el servidor (A5).
+
+    Lo pide panel.js al tocar una tarjeta, con la MISMA query del enlace
+    de siempre (`?vista=…&ver=…&abrir=LEAD-NN`), para meterlo en su caja
+    sin recargar el tablero. Sin `abrir` la plantilla sale vacía, y eso es
+    justo lo que necesita el enlace de CERRAR: abrir y cerrar son la misma
+    operación por el mismo camino.
+
+    No hay nada nuevo que decidir acá: el contexto es el de la pantalla
+    entera (_panel_lead_contexto), candados incluidos, y la puerta por rol
+    es la misma (el prefijo «/control» del alcance cubre esta ruta).
+    """
+    empleada = request.state.empleada
+    alc = control.alcance(empleada, _es_admin(empleada))
+    vista = control.vista_pedida(request.query_params.get("vista", ""), alc)
+    ver = request.query_params.get("ver", "")
+    return plantillas.TemplateResponse(
+        request, "_panel_lead.html",
+        _panel_lead_contexto(request, empleada, alc, vista,
+                             ("&ver=" + quote(ver)) if ver else ""))
+
+
 @app.get("/control")
 def control_pantalla(request: Request):
     """La pestaña Control (Fase 5, 24/09/2026): reparte el trabajo.
@@ -4482,26 +4640,14 @@ def control_pantalla(request: Request):
     # que ya estaba guardado.
     control.refrescar_espera_en_fondo(leads)
 
-    # El panel del lead: el ref del ?abrir= se resuelve una vez y se le
-    # dice a la ficha si esta sesión ve la plata de ESE lead (el candado
-    # de lectura vive en control.puede_ver_plata, no en la plantilla).
-    ref_abierta = request.query_params.get("abrir", "")
-    lead_abierto = linear_leads.uno(ref_abierta) if ref_abierta else None
-    abierta = control.ficha(
-        ref_abierta, request.query_params.get("buscar", ""), vista=vista,
-        ve_plata=control.puede_ver_plata(lead_abierto, alc))
-    # BLOQUE 39.2: en el modo lectura de Atención la ficha ajena se abre
-    # (ver todos es ver), pero su CHAT no se muestra — es conversación de
-    # otro responsable. Va DESPUÉS de armar la ficha: el candado de la
-    # PLATA (ve_plata) y el del CHAT son dos cosas distintas y cada una
-    # tapa lo suyo. Decidido aquí, en Python; la plantilla solo pinta
-    # hilo_error como siempre.
+    # El panel del lead, armado por la MISMA función que usa el pedazo de
+    # /control/panel (A5 del BLOQUE 53): candados de la plata y del chat
+    # ajeno incluidos, para que el panel pedido sin recargar sea idéntico
+    # al de la página.
     lectura_crm = _crm_lectura(empleada)
-    if abierta and lectura_crm and not control.puede_tocar(abierta, alc):
-        abierta["hilo"] = []
-        abierta["hilo_error"] = ("El chat de este lead es de otro "
-                                 "responsable: en tu vista de solo "
-                                 "lectura no se muestra.")
+    panel = _panel_lead_contexto(request, empleada, alc, vista,
+                                 ("&ver=" + quote(ver)) if ver else "")
+    abierta = panel["abierta"]
     # El cuadro de asignar/reasignar (BLOQUE 43): una capa más sobre el
     # mismo panel, abierta por enlace GET (?asignar=1) como el modal del
     # motivo. Repartir sigue siendo cosa del dueño.
@@ -4518,32 +4664,18 @@ def control_pantalla(request: Request):
         if lead and control.puede_tocar(lead, alc):
             moviendo = {"lead": lead, "destino": destino}
 
-    puede_escribir = linear_leads.escritura_activa() or not linear_leads.configurado()
     return plantillas.TemplateResponse(request, "control.html", {
-        "empleada": empleada,
-        "modo": linear_leads.modo(),
-        "alc": alc,
-        "vista": vista,
-        # La tira «Ver a:» y el pedacito de query que la mantiene puesta
-        # al abrir una tarjeta o cerrar el panel (lo arma Python: la
-        # plantilla no concatena URLs).
+        # Todo lo del panel (abierta, los candados, puede_tocar_abierta,
+        # los estados, la leyenda de la plata, vista y ver_query) llega de
+        # _panel_lead_contexto: UNA fuente para la página y para el pedazo.
+        **panel,
+        # La tira «Ver a:» (el pedacito de query que la mantiene puesta al
+        # abrir o cerrar el panel ya viene en `panel`).
         "filtros_ver": filtros_ver,
-        "ver_query": ("&ver=" + quote(ver)) if ver else "",
         "columnas": columnas,
-        "abierta": abierta,
         "asignando": asignando,
         "moviendo": moviendo,
-        # Quién ve la plata, escrito UNA vez (control.LEYENDA_SIN_PLATA):
-        # la misma frase en la fila «Cotización» y donde iría el detalle
-        # de la orden real.
-        "leyenda_sin_plata": control.LEYENDA_SIN_PLATA,
-        "estados": linear_leads.ESTADOS,
-        "responsables": linear_leads.responsables(),
         "motivos": linear_leads.MOTIVOS_PERDIDA,
-        "puede_mover": puede_escribir,
-        "puede_tocar_abierta": (
-            puede_escribir and control.puede_tocar(abierta, alc)
-            if abierta else False),
         "aviso": request.query_params.get("aviso"),
         "error": request.query_params.get("error"),
         # El rebote honesto (BLOQUE 39.3): cuando esta pantalla es la casa

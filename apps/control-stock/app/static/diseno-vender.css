@@ -297,3 +297,17 @@
   .vd-x{min-height:44px}
   .vd-p-acts .enlace-sub{min-height:44px}
 }
+
+/* ---------- A12: «De quién es» (Contacto · Lead) ----------
+   La fila es el .vd-ln de siempre; esto solo apila el valor y su nota
+   honesta a la derecha, alineados al borde. */
+.vd-qn{
+  display:flex;flex-direction:column;align-items:flex-end;gap:2px;
+  min-width:0;text-align:right;
+}
+.vd-qn a{color:var(--d-tinta)}
+
+/* ---------- A5: el panel se pide al servidor ----------
+   La única señal del momento mientras llega el pedazo: el cursor de «ya
+   va». panel.js pone el atributo; nada más cambia en la página. */
+html[data-panel-pidiendo]{cursor:progress}
