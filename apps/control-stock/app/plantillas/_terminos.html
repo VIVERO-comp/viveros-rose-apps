@@ -9,30 +9,32 @@
    Variables (con {% with %} antes del include):
    - form_terminos  id del <form> al que pertenece el campo
    - terminos       {"tipo", "default", "valor", "editable"} ya resuelto
-                    en Python (main._contexto_terminos) #}
+                    en Python (main._contexto_terminos). `tipo` llega en
+                    palabras de la casa: el catálogo guarda «plant
+                    retail» y la pantalla no habla ese idioma (BLOQUE 53
+                    · A10). Por lo mismo salieron de acá «default» y
+                    «override». #}
 <div class="seccion-titulo" style="margin-top:16px">Términos de pago</div>
 {% if terminos.default %}
-<p class="nota-cliente">Default de este tipo ({{ terminos.tipo }}):
+<p class="nota-cliente">Lo de siempre en {{ terminos.tipo }}:
   «{{ terminos.default }}».</p>
 {% else %}
-<p class="nota-cliente">Este tipo ({{ terminos.tipo }}) no tiene término
-  por defecto en Ajustes: lo que escribas acá queda como el término del
-  trato.</p>
+<p class="nota-cliente">{{ terminos.tipo }} no tiene un término fijado en
+  Ajustes: lo que escribas acá queda como el término del trato.</p>
 {% endif %}
 {% if terminos.editable %}
 <input class="dato-cliente" type="text" name="termino" maxlength="120"
        form="{{ form_terminos }}" value="{{ terminos.valor }}"
        placeholder="{{ terminos.default }}">
-<p class="nota-cliente">Déjalo igual para usar el default. Un término
-  distinto queda registrado con tu nombre (quién lo cambió y qué decía
-  el default).</p>
+<p class="nota-cliente">Déjalo igual para cobrar como siempre. Si lo
+  cambiás, queda anotado con tu nombre: qué pusiste y qué decía
+  antes.</p>
 {% else %}
 <details>
-  <summary>Cambiar el término de este trato (queda registrado)</summary>
+  <summary>Cambiar el término de este trato (queda anotado)</summary>
   <input class="dato-cliente" type="text" name="termino" maxlength="120"
          form="{{ form_terminos }}" value="{{ terminos.valor }}">
-  <p class="nota-cliente">El default de plantas es pagar completo; un
-    término distinto es raro a propósito y queda registrado con tu
-    nombre.</p>
+  <p class="nota-cliente">En plantas se paga completo; cambiarlo es raro
+    a propósito y queda anotado con tu nombre.</p>
 </details>
 {% endif %}

@@ -107,6 +107,14 @@ plantillas.env.globals["colores"] = colores  # la paleta unica en las plantillas
 plantillas.env.globals["cal_tipo"] = calendario.nombre_de_tipo
 plantillas.env.filters["fecha_dmy"] = calendario.dmy
 
+# Cómo se ESCRIBE el nombre de una persona en pantalla (BLOQUE 53 · A15):
+# «Mary» se lee «Mari». Es un filtro de formato, como `dinero` — la tabla
+# y la decisión viven en Python (linear_leads.NOMBRE_VISIBLE); el dato de
+# Linear, su usuario y su correo no se tocan. Se usa SOLO en lo que se
+# pinta: el `value` de un campo y la clave de un filtro siguen llevando
+# el nombre crudo, que es con el que casa la etiqueta `Resp:`.
+plantillas.env.filters["nombre_visible"] = linear_leads.nombre_visible
+
 # ---------------------------------------------------------------------------
 # El logger de la app, enganchado a stdout (Nº17 del lote, 2/10/2026).
 #
@@ -1893,7 +1901,7 @@ COLUMNAS_VENDER = (
     ("cotizado", "Cotizado",
      "No aparta plantas. El pedido nace cuando el cliente paga o abona."),
     ("confirmado", "Confirmado · falta cobrar",
-     "El cobro vive en el kanban de Odoo."),
+     "El cobro se registra en Odoo."),
     ("pagado", "Pagado", "Cobradas por completo."),
 )
 
@@ -2839,11 +2847,17 @@ def _contexto_terminos(tipo_venta, borrador):
     default del TIPO DE VENTA (Settings · datos_roles), lo que el
     borrador traiga escrito, y si el cambio se ofrece a la vista
     (override_visible — plantas lo lleva plegado: su default es pagar
-    completo y el override es raro, pero nunca imposible)."""
+    completo y el override es raro, pero nunca imposible).
+
+    `tipo` sale en palabras de la casa (BLOQUE 53 · A10): el catálogo
+    guarda «plant retail» y la pantalla decía «Default de este tipo
+    (plant retail)». El dato no se toca; la traducción la hace
+    colores.nombre_tipo_venta."""
     info = venta_estado.tipo_info(tipo_venta) or {}
     default = info.get("termino_default") or ""
     valor = (borrador.get("termino") or "").strip() or default
-    return {"tipo": info.get("nombre") or tipo_venta, "default": default,
+    crudo = info.get("nombre") or tipo_venta
+    return {"tipo": colores.nombre_tipo_venta(crudo), "default": default,
             "valor": valor, "editable": bool(info.get("override_visible", 1))}
 
 
@@ -3464,19 +3478,23 @@ def _url_estado(origen, n, error="", aviso=""):
     return url + ("?" + "&".join(partes) if partes else "")
 
 
+# Los avisos de la ficha, en palabras de la casa (BLOQUE 53 · A10): los
+# números de estado («pasar a 2», «El 3 exige») son de adentro y no le
+# dicen nada a quien trabaja. Cada texto dice QUÉ FALTA.
 _TEXTO_ERROR_ESTADO = {
-    "falta_pago": "Para pasar a 2 falta el pago registrado: el chip no "
-                  "escribe plata.",
-    "faltan_hechos": "El 3 exige los DOS hechos: pago confirmado Y "
-                     "entrega marcada — nunca uno solo.",
-    "falta_saldo": "El 3 exige los términos satisfechos: falta cobrar el "
-                   "saldo (un depósito no cierra).",
+    "falta_pago": "Falta registrar el pago: el chip del estado no "
+                  "registra plata.",
+    "faltan_hechos": "Para cerrar la venta hacen falta las DOS cosas: el "
+                     "pago confirmado Y la entrega marcada — nunca una "
+                     "sola.",
+    "falta_saldo": "Para cerrar la venta falta cobrar el saldo (un abono "
+                   "no la cierra).",
     "solo_system_manager": "Eso lo hace quien carga el deber de system "
                            "manager (Ajustes → Roles).",
     "falta_asignado": "Ponle un asignado a la entrega antes de marcarla: "
                       "la entrega es una obligación con nombre.",
-    "cerrada": "La venta ya cerró (estado 3): la obligación queda como "
-               "historia y no se edita.",
+    "cerrada": "La venta ya cerró: la entrega queda como historia y no "
+               "se edita.",
     "estado_invalido": "Ese estado no existe.",
 }
 
@@ -3520,6 +3538,10 @@ def _contexto_ficha_estado(request, origen, n, error="", aviso=""):
         "manager_nombres": ", ".join(
             p["nombre"] for p in (manager or {}).get("personas", [])) or "—",
         "termino": termino,
+        # El tipo del trato en palabras de la casa (BLOQUE 53 · A10): la
+        # ficha decía «· tipo plant retail». El dato guardado no cambia.
+        "termino_tipo": colores.nombre_tipo_venta(
+            (termino or {}).get("tipo_venta") or ""),
         "overrides": venta_estado.overrides_de(origen, n),
         "obligacion": entregas.obligacion_de(origen, n),
         "historial_entrega": entregas.historial_de(origen, n),
@@ -4529,6 +4551,11 @@ def control_pantalla(request: Request):
         # plantilla no concatena URLs).
         "filtros_ver": filtros_ver,
         "ver_query": ("&ver=" + quote(ver)) if ver else "",
+        # El «Ver más» del panel (BLOQUE 53 · A16): una capa GET, como el
+        # resto de esta pantalla. Llega abierto cuando una fila del panel
+        # lleva a una sección de adentro; si no, el <details> se abre a
+        # mano y sin recargar nada.
+        "ver_mas": request.query_params.get(control.CLAVE_VER_MAS) == "1",
         "columnas": columnas,
         "abierta": abierta,
         "asignando": asignando,

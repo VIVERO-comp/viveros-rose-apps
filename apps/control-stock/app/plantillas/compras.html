@@ -54,7 +54,7 @@
       <span class="crece"></span>
       <span class="tenue" style="font-size:12px">
         {% if alc.admin %}Arrastra para corregir la columna
-        {% elif alc.resp_propio %}Todo el tablero · movés solo lo tuyo, {{ alc.resp_propio }}
+        {% elif alc.resp_propio %}Todo el tablero · movés solo lo tuyo, {{ alc.resp_propio | nombre_visible }}
         {% else %}Todo el tablero · todavía no te toca ninguna compra{% endif %}
       </span>
       {# El único botón negro de la pantalla. #}
@@ -75,8 +75,8 @@
     {% if aviso %}<div class="aviso-ok">{{ aviso }}
       <a class="cierra-banner" href="{{ sin_banner }}" aria-label="Cerrar el aviso">×</a></div>{% endif %}
     {% if modo == 'lectura' %}
-    <div class="solo-lectura"><b>Solo lectura.</b> Esta instancia mira el
-      tablero real pero no escribe en Linear.</div>
+    <div class="solo-lectura"><b>Solo lectura.</b> Acá se mira el tablero real, pero no se
+      escribe nada.</div>
     {% endif %}
     {# Si a Linear le falta el proyecto COMPRAS o alguna de las 7 columnas,
        el tablero sale vacío y este renglón lo dice en palabras simples: no
@@ -156,7 +156,7 @@
                  href="/compras?abrir={{ c.ref | urlencode }}#c-{{ c.ref }}"
                  aria-label="Falta la orden de compra de {{ c.ref }} en Odoo">falta la orden en Odoo</a>{% endif %}
               <span class="{{ 'hace-alerta' if c.hace_alerta }}">{{ c.hace }}</span>
-              {% if c.resp %}<span class="chip-est">{{ c.resp }}</span>
+              {% if c.resp %}<span class="chip-est">{{ c.resp | nombre_visible }}</span>
               {% else %}<span class="chip-est chip-nadie">Sin asignar</span>{% endif %}
               {# La barra SOLO si hay plata conocida: sin dato no se pinta
                  nada, nunca un 0 inventado (lo decide compras.plata_de). #}
@@ -216,8 +216,7 @@
     <p class="pie-nota" style="padding:0 4px">
       El estado de la compra vive en el proyecto <b>COMPRAS</b> del equipo VIV
       de Linear; la orden <b>P000xx</b>, la factura del proveedor y los pagos,
-      en Odoo. El responsable es la etiqueta <b>Resp:</b> del issue, no el
-      asignado. Los proveedores son contactos de Odoo: no tocan WhatsApp.
+      en Odoo. El responsable es la etiqueta <b>Resp:</b> de la tarjeta de Linear, no el asignado. Los proveedores son contactos de Odoo: no tocan WhatsApp.
     </p>
   </div>
 </div>
@@ -263,7 +262,7 @@
      lee como si no hiciera falta. En la tarjeta sí se omite, que es donde
      el espacio manda. #}
   <div class="dato"><b>Cómo llega</b><span>{{ abierta.llegada or 'Todavía no se dijo' }}</span></div>
-  <div class="dato"><b>Responsable</b><span>{{ abierta.resp or 'Sin asignar' }}</span></div>
+  <div class="dato"><b>Responsable</b><span>{{ (abierta.resp | nombre_visible) or 'Sin asignar' }}</span></div>
   {% if abierta.orden_compra %}
   <div class="dato"><b>Orden</b><span>{{ abierta.orden_compra }}</span></div>
   {% endif %}
@@ -652,7 +651,7 @@
             {% if campo_error == 'resp' %}autofocus aria-invalid="true"{% endif %}>
       <option value="">Sin asignar</option>
       {% for r in responsables %}
-      <option value="{{ r }}" {{ 'selected' if r == (borrador.resp or resp_sugerido) }}>{{ r }}</option>
+      <option value="{{ r }}" {{ 'selected' if r == (borrador.resp or resp_sugerido) }}>{{ r | nombre_visible }}</option>
       {% endfor %}
     </select>
     {% with campo = 'resp' %}{% include '_error_campo.html' %}{% endwith %}

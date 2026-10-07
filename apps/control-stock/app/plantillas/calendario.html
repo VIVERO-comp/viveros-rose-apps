@@ -43,7 +43,7 @@
     <span class="tit">{{ cal.nombre_de_tipo(a.tipo) }} — {{ a.cliente }}</span>
     <span class="sub">
       <span>{{ a.lugar or '—' }}</span>
-      <span><span class="avatar">{{ a.resp[:1]|upper }}</span> {{ a.resp }}</span>
+      <span><span class="avatar">{{ (a.resp | nombre_visible)[:1]|upper }}</span> {{ a.resp | nombre_visible }}</span>
       {% if mostrar_fecha %}<span class="mono">{{ cal.dmy(a.fecha) }}</span>{% endif %}
       <span class="mono tenue">{{ a.ref }}</span>
     </span>
@@ -299,7 +299,7 @@
            href="{{ ligas.cerrar }}&abrir={{ a.id }}">
           <span class="mov-tt" style="color:{{ a.color }}">{{ a.rango }} · {{ cal.nombre_de_tipo(a.tipo) }}</span>
           <span class="mov-cli">{{ a.cliente }}</span>
-          <span class="mov-det">{% if a.lugar %}{{ a.lugar }} · {% endif %}{{ a.resp }}</span>
+          <span class="mov-det">{% if a.lugar %}{{ a.lugar }} · {% endif %}{{ a.resp | nombre_visible }}</span>
           <span class="etiquetas">
             {% if a.atrasada %}<span class="etq at">atrasada</span>{% endif %}
             {% if a.estado == 'hecha' %}<span class="etq ok">terminada</span>{% endif %}
@@ -354,14 +354,14 @@
                   {% for b in carril.bloques %}
                   <a class="bloque {{ 'partido' if b.partido }} {{ 'hecha' if b.a.estado == 'hecha' }} {{ 'cancel' if b.a.estado == 'cancel' }}"
                      style="{{ b.estilo }}" href="{{ ligas.cerrar }}&abrir={{ b.a.id }}"
-                     title="{{ cal.nombre_de_tipo(b.a.tipo) }} — {{ b.a.cliente }} · {{ cal.hora_bonita(b.a.hora) }} · {{ b.a.resp }}"
-                     data-busca="{{ (b.a.cliente ~ ' ' ~ b.a.lugar ~ ' ' ~ b.a.resp ~ ' ' ~ cal.nombre_de_tipo(b.a.tipo))|lower }}">
+                     title="{{ cal.nombre_de_tipo(b.a.tipo) }} — {{ b.a.cliente }} · {{ cal.hora_bonita(b.a.hora) }} · {{ b.a.resp | nombre_visible }}"
+                     data-busca="{{ (b.a.cliente ~ ' ' ~ b.a.lugar ~ ' ' ~ b.a.resp ~ ' ' ~ (b.a.resp | nombre_visible) ~ ' ' ~ cal.nombre_de_tipo(b.a.tipo))|lower }}">
                     <span class="tt" style="color:{{ b.color }}">{{ cal.nombre_de_tipo(b.a.tipo) }}</span>
                     {% if b.ver_cliente %}<small>{{ b.a.cliente }}</small>{% endif %}
                     {# En un bloque partido el cliente viaja escondido (CSS
                        .exp): el hover que expande la tira lo deja leer. #}
                     {% if b.ver_cliente_expandido %}<small class="exp">{{ b.a.cliente }}</small>{% endif %}
-                    {% if b.ver_pie %}<small>{{ b.a.hora }} · {{ b.a.resp }}</small>{% endif %}
+                    {% if b.ver_pie %}<small>{{ b.a.hora }} · {{ b.a.resp | nombre_visible }}</small>{% endif %}
                     {% if b.atrasada %}<span class="marca-at"></span>{% endif %}
                   </a>
                   {% endfor %}
@@ -385,7 +385,7 @@
             <a class="barrita {{ 'hecha' if barra.a.estado == 'hecha' }} {{ 'cancel' if barra.a.estado == 'cancel' }}"
                style="background:{{ barra.fondo }};border-left-color:{{ barra.color }};color:{{ barra.color }}"
                href="{{ ligas.cerrar }}&abrir={{ barra.a.id }}"
-               data-busca="{{ (barra.a.cliente ~ ' ' ~ barra.a.resp)|lower }}">{{ barra.a.hora }} {{ barra.a.cliente }}</a>
+               data-busca="{{ (barra.a.cliente ~ ' ' ~ barra.a.resp ~ ' ' ~ (barra.a.resp | nombre_visible))|lower }}">{{ barra.a.hora }} {{ barra.a.cliente }}</a>
             {% endfor %}
             {% if celda.resto %}<a class="mas" href="{{ celda.liga_dia }}">+{{ celda.resto }} más</a>{% endif %}
           </div>
@@ -497,9 +497,9 @@
   <div class="solo-lectura">
     <b>Solo lectura.</b>
     {% if modo == 'lectura' %}
-      Esta instancia mira el calendario real pero no escribe en Linear.
+      Acá se mira el calendario real, pero no se escribe nada.
     {% else %}
-      Esta actividad es de <b>{{ abierta.resp }}</b>: la ves para coordinarte, pero la cambia {{ abierta.resp }} o el dueño.
+      Esta actividad es de <b>{{ abierta.resp | nombre_visible }}</b>: la ves para coordinarte, pero la cambia {{ abierta.resp | nombre_visible }} o el dueño.
     {% endif %}
   </div>
   {% endif %}
@@ -563,7 +563,7 @@
     </div>
     <div class="cobro-pie">
       Lead {{ lead_abierta.ref }} · {{ lead_abierta.estado_nombre }}
-      {% if lead_abierta.resp %} · {{ lead_abierta.resp }}{% endif %}
+      {% if lead_abierta.resp %} · {{ lead_abierta.resp | nombre_visible }}{% endif %}
       {% if lead_abierta.url %} · <a href="{{ lead_abierta.url }}" target="_blank" rel="noopener">abrir en Linear</a>{% endif %}
     </div>
     {% if not cierra_entrega %}
@@ -692,7 +692,7 @@ No se borra nada: el issue {{ abierta.ref }} queda en Linear marcado como Cancel
       <select class="sel ancho" id="ag-resp" name="resp">
         <option value="">Sin asignar</option>
         {% for r in responsables_lead %}
-        <option value="{{ r }}" {{ 'selected' if r == agendando.resp_sugerido }}>{{ r }}</option>
+        <option value="{{ r }}" {{ 'selected' if r == agendando.resp_sugerido }}>{{ r | nombre_visible }}</option>
         {% endfor %}
       </select>
     </div>
@@ -811,7 +811,7 @@ No se borra nada: el issue {{ abierta.ref }} queda en Linear marcado como Cancel
       <select class="sel ancho" id="resp-nombre" name="resp_nombre">
         <option value="">Sin asignar</option>
         {% for r in responsables_lead %}
-        <option value="{{ r }}" {{ 'selected' if r == pre.resp_nombre }}>{{ r }}</option>
+        <option value="{{ r }}" {{ 'selected' if r == pre.resp_nombre }}>{{ r | nombre_visible }}</option>
         {% endfor %}
       </select>
     </div>

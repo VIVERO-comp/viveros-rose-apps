@@ -33,7 +33,7 @@
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
     </button>
     <h1 class="mc-titulo">Mi CRM</h1>
-    <span class="mc-tag">Solo lo tuyo{% if v.resp %} · {{ v.resp }}{% endif %}</span>
+    <span class="mc-tag">Solo lo tuyo{% if v.resp %} · {{ v.resp | nombre_visible }}{% endif %}</span>
   </div>
   <div class="mc-acciones">
     {# «Ver todos» (BLOQUE 39.2): el tablero completo desde el CRM chico.

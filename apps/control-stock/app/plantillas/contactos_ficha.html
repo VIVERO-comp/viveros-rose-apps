@@ -159,7 +159,7 @@
             <span class="ct-st {{ 'a' if l.activo else 'g' }}">{{ l.chip }}</span>
             <span class="ct-meta">{{ l.interes or 'Sin interés' }} · {{ l.estado_nombre }}</span>
           </div>
-          <span class="ct-meta">{{ l.hace }}{% if l.resp %} · lo atiende {{ l.resp }}{% else %} · nadie lo tomó{% endif %}</span>
+          <span class="ct-meta">{{ l.hace }}{% if l.resp %} · lo atiende {{ l.resp | nombre_visible }}{% else %} · nadie lo tomó{% endif %}</span>
         {% if l.url %}</a>{% else %}</div>{% endif %}
         {% endfor %}
         {% endif %}

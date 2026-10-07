@@ -234,7 +234,9 @@ def test_conectar_rechaza_orden_de_otro_lead(odoo):
 def test_conectar_sin_pp_avisa(odoo):
     partner = odoo.agregar_partner("Sin PP")
     orden = odoo.agregar_orden(partner, "S00060", amount_total=10.0)
-    with pytest.raises(ValueError, match="PP-XXXXX"):
+    # El aviso dice el código que falta en palabras (A10: «PP-XXXXX» era
+    # notación de código), pero sigue nombrando el PP-.
+    with pytest.raises(ValueError, match="PP-"):
         cot_lead.conectar(orden, {"ref": "LEAD-9", "pp": "", "nombre": "x"})
 
 

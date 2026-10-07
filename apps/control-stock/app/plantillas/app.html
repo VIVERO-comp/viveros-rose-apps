@@ -494,7 +494,7 @@
     <details class="ajuste-d">
       <summary><span class="que"><b>Tu calendario en el teléfono</b><span>iPhone, Mac o Google Calendar</span></span><span class="flecha">›</span></summary>
       <div class="ajuste-cuerpo">
-<div class="seccion-titulo">Sync con iPhone o Google Calendar</div>
+<div class="seccion-titulo">Conectarlo con iPhone o Google Calendar</div>
     {% if aviso_ajustes == 'enlace-nuevo' %}<div class="aviso-ok">Enlace nuevo. El anterior dejó de funcionar: vuelve a suscribir el teléfono con este.</div>{% endif %}
     <div class="inv-card">
       <h3>Tu calendario en el teléfono</h3>
@@ -685,7 +685,7 @@
         <input type="hidden" name="dispositivo" value="{{ d.dispositivo }}">
         <input name="nombre" type="text" maxlength="40" value="{{ d.nombre }}"
                list="nombres-equipo" autocomplete="off"
-               placeholder="{{ 'Teléfono' if d.es_telefono else 'Ej: Mary' }}">
+               placeholder="{{ 'Teléfono' if d.es_telefono else 'Ej: Mari' }}">
         <button class="btn btn-linea btn-chico" type="submit">Guardar</button>
       </form>
     </div>
@@ -840,10 +840,13 @@
     </form>
 
     <div class="seccion-titulo">Tipos de venta y términos por defecto</div>
+    {# A10: salieron «el consumo llega con el item 5» (número del plan),
+       «Override visible» y «el default manda». #}
     <p class="pie-ajuste">El término es lo que la cotización de ese tipo va a
-      mostrar por defecto (el consumo llega con el item 5). <b>Override
-      visible</b>: al cotizar se ofrece cambiarlo a la vista; sin la casilla,
-      el default manda (plantas: 100% antes, sin crédito por accidente).</p>
+      mostrar por defecto. <b>Se puede cambiar al cotizar</b>: con la casilla
+      puesta, el campo aparece a la vista en el formulario; sin ella, el
+      término por defecto manda y cambiarlo queda plegado (plantas: 100%
+      antes, sin crédito por accidente).</p>
     {% for t in tipos_ajustes %}
     <div class="rol-card{% if not t.activo %} fila-apagada{% endif %}">
       <div class="rol-cab">
@@ -864,7 +867,7 @@
       <form method="post" action="/ajustes/tipos/termino" class="form-rol form-termino">
         <input type="hidden" name="n" value="{{ t.n }}">
         <input name="termino" type="text" maxlength="120" value="{{ t.termino_default }}" placeholder="Término por defecto (ej: 100% antes de proceder)">
-        <label class="casilla-override"><input type="checkbox" name="override" value="1" {% if t.override_visible %}checked{% endif %}> Override visible</label>
+        <label class="casilla-override"><input type="checkbox" name="override" value="1" {% if t.override_visible %}checked{% endif %}> Se puede cambiar al cotizar</label>
         <button class="btn btn-linea btn-chico" type="submit">Guardar término</button>
       </form>
       {% endif %}
@@ -879,8 +882,9 @@
     </form>
 
     <div class="seccion-titulo">Cómo llegan los leads</div>
+    {# A10: «(item 3)» era el número de la tanda del plan. #}
     <p class="pie-ajuste">WhatsApp crea el lead solo; cualquier otra llegada
-      se anotará a mano al crear el lead (item 3). La marca no es una llegada.</p>
+      se anotará a mano al crear el lead. La marca no es una llegada.</p>
     {% for l in llegadas_ajustes %}
     <div class="historial-item acceso-item rol-item{% if not l.activo %} fila-apagada{% endif %}">
       <form method="post" action="/ajustes/catalogo/renombrar" class="form-rol">

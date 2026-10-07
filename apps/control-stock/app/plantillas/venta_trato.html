@@ -84,8 +84,10 @@
   <div class="seccion-titulo" style="margin-top:16px">Términos del trato</div>
   <div class="inv-card">
     {% if termino %}
+    {# A10: el tipo llega traducido de Python (termino_tipo) — el catálogo
+       guarda «plant retail» y la ficha decía eso mismo. #}
     <p style="margin:0"><b>{{ termino.termino or "—" }}</b>
-      <span class="vt-motivo">· tipo {{ termino.tipo_venta or "—" }}</span></p>
+      <span class="vt-motivo">· tipo {{ termino_tipo or "—" }}</span></p>
     {% else %}
     <p style="margin:0" class="vt-motivo">Esta venta no tiene término guardado
       (es de antes del cambio, o se creó por fuera).</p>
@@ -93,7 +95,7 @@
     {% if overrides %}
     <ul class="vt-hist">
       {% for o in overrides %}
-      <li>Override: «{{ o.texto }}» — el default decía «{{ o.default_que_habia or "—" }}» · {{ o.por }} · {{ o.en[:16] }}</li>
+      <li>Cambiado a «{{ o.texto }}» — antes decía «{{ o.default_que_habia or "—" }}» · {{ o.por }} · {{ o.en[:16] }}</li>
       {% endfor %}
     </ul>
     {% endif %}
@@ -169,13 +171,18 @@
     {% endif %}
     {% elif soy_manager %}
     <form method="post" action="/venta/estado/{{ origen }}/{{ n }}/entregada">
-      <label for="vt-fecha">Fecha real de entrega (la que usa delivered revenue)</label>
+      {# A10: «delivered revenue» es el nombre de la función de cifras.py,
+         no algo que la persona pueda entender. Lo que necesita saber es
+         para qué sirve la fecha. #}
+      <label for="vt-fecha">Fecha real de entrega (es la que cuenta para las cifras del mes)</label>
       <input type="date" id="vt-fecha" name="fecha" value="{{ hoy }}">
       <div style="margin-top:10px">
         <button class="btn btn-dorado" type="submit">MARCAR ENTREGADA</button>
       </div>
-      <p class="edit-nota">Esto valida la salida en Odoo (y no antes) y fija
-        la fecha real. No toca el pago: si falta plata, la venta queda en 2.</p>
+      {# A10: «valida la salida» y «queda en 2» eran de adentro. #}
+      <p class="edit-nota">Esto da de baja el stock en Odoo (y no antes) y
+        fija la fecha real. No toca el pago: si falta plata, la venta no
+        se cierra.</p>
     </form>
     {% if not obligacion.asignado %}
     <div class="aviso-error" style="margin-top:8px">Falta el asignado de la

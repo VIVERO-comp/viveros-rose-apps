@@ -47,7 +47,8 @@ Qué es — y qué no:
 import time
 from datetime import datetime, timedelta
 
-from . import cotizaciones, datos, datos_roles, entregas, venta_estado, ventas
+from . import (colores, cotizaciones, datos, datos_roles, entregas,
+               venta_estado, ventas)
 from .datos import ZONA_PANAMA
 from .datos_roles import _plano
 
@@ -61,13 +62,15 @@ VENTANA_DEFAULT = 7
 # que usa la cola de pagos).
 _CENTAVO = 0.009
 
+# Las pistas hablan en palabras de la casa, no en números de estado
+# (BLOQUE 53 · A10): dicen qué hacer o qué pasó, nunca cómo está hecho.
 COLUMNAS = (
     ("por_programar", "Por programar",
-     "Plata confirmada, sin fecha. La fecha se pone en la ficha."),
+     "Ya pagaron y falta ponerle día. El día se pone al abrir el pedido."),
     ("programado", "Programado",
-     "Con fecha programada de entrega."),
+     "Ya tienen día de entrega."),
     ("entregado", "Entregado reciente",
-     "Cerradas (estado 3). Solo lectura."),
+     "Entregadas y cobradas. Solo para mirar."),
 )
 
 
@@ -252,13 +255,26 @@ def tarjetas(hoy=None):
         # El gesto de navegación del arrastre (BLOQUE 40) y su versión
         # de celular («Mover a», enlaces): decididos acá, regla 10.
         gesto = gesto_arrastre(columna, href)
+        # El tipo de venta tiene DOS caras a propósito (BLOQUE 53 · A9):
+        # `tipo_venta` es el dato crudo del catálogo —con él filtran las
+        # capas— y `tipo_titulo` es la palabra de la casa que se LEE. El
+        # chip y la raya de la izquierda salen de la paleta compartida
+        # (colores.py), nunca de un hex escrito acá; un tipo que no cae
+        # en un Interés deja la tarjeta neutra en vez de inventarle un
+        # color.
+        tipo_crudo = fila.get("tipo_venta") or ""
         columnas[columna].append({
             "origen": origen, "n": n,
             "cliente": registro.get("cliente") or "—",
             "orden": orden or "—",            # el S00xxx visible
             "orden_id": registro.get("orden_id"),
             "total": registro.get("total"),
-            "tipo_venta": fila.get("tipo_venta") or "",
+            "tipo_venta": tipo_crudo,
+            "tipo_titulo": colores.nombre_tipo_venta(tipo_crudo),
+            "chip_estilo": (colores.chip_tipo_venta(tipo_crudo)
+                            if tipo_crudo else ""),
+            "acento": (colores.acento_tipo_venta(tipo_crudo)
+                       if tipo_crudo else ""),
             "direccion": obligacion.get("direccion") or "",
             "asignado": obligacion.get("asignado") or "",
             "fecha_programada": fecha_programada,
@@ -276,9 +292,13 @@ def tarjetas(hoy=None):
 
 
 def _filtros(columnas, tipo_activo):
-    """Las capas por tipo de venta (los del item 1 — el catálogo vivo de
+    """Los filtros por tipo de venta (los del item 1 — el catálogo vivo de
     datos_roles.tipos_venta_activos), con su cuenta sobre el tablero SIN
-    filtrar. Solo salen los tipos con al menos una tarjeta."""
+    filtrar. Solo salen los tipos con al menos una tarjeta.
+
+    `nombre` es el DATO del catálogo (con él viaja el filtro en la URL) y
+    `titulo` la palabra de la casa que se lee en el chip: son dos cosas
+    distintas a propósito (BLOQUE 53 · A10)."""
     cuentas = {}
     for lista in columnas.values():
         for t in lista:
@@ -289,7 +309,9 @@ def _filtros(columnas, tipo_activo):
         clave = _plano(tipo["nombre"])
         if not cuentas.get(clave):
             continue
-        filtros.append({"nombre": tipo["nombre"], "cuenta": cuentas[clave],
+        filtros.append({"nombre": tipo["nombre"],
+                        "titulo": colores.nombre_tipo_venta(tipo["nombre"]),
+                        "cuenta": cuentas[clave],
                         "activo": clave == _plano(tipo_activo or "")})
     return filtros
 

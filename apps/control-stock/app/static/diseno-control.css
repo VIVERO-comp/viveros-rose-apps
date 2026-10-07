@@ -363,9 +363,31 @@
      cambiar ni el layout ni los espacios de la columna del panel. */
   .dc-seccion{display:contents}
 
+  /* «Ver más» (BLOQUE 53 · A16): el panel muestra lo del lienzo —monto,
+     las cinco filas y el pie— y el resto vive plegado acá. Mismo traje
+     que «Más opciones» (el enlace subrayado del canon, cero JS), con su
+     raya arriba para que se lea como separador de la lista de filas.
+     Abierto, lo de adentro recupera el apilado con huecos de la columna
+     del panel (el <details> es un bloque, no el flex del aside). */
+  .dc-vermas{border-top:1px solid var(--d-borde);padding-top:12px}
+  .dc-vermas>summary{
+    list-style:none;cursor:pointer;user-select:none;
+    font-size:13px;font-weight:600;color:var(--d-tinta);
+    text-decoration:underline;text-underline-offset:2px;width:fit-content;
+  }
+  .dc-vermas>summary::-webkit-details-marker{display:none}
+  .dc-vermas>summary::after{content:' ▾'}
+  .dc-vermas[open]>summary::after{content:' ▴'}
+  .dc-vermas[open]{display:flex;flex-direction:column;gap:12px}
+  .dc-vermas[open]>summary{margin-bottom:0}
+  /* Adentro, «Más opciones» ya no tiene que empujarse al fondo: el que
+     se queda pegado abajo es el pie. */
+  .dc-vermas .dc-mas{margin-top:0}
+
   /* El pie de la ficha del lienzo: el botón grande y, centrado debajo,
-     el enlace chico «Ver contacto» (el `.lk` del canon). */
-  .dc-pie{display:flex;flex-direction:column;gap:12px;align-items:stretch}
+     el enlace chico «Ver contacto» (el `.lk` del canon). Pegado al fondo
+     del panel, que es donde el lienzo lo pone. */
+  .dc-pie{display:flex;flex-direction:column;gap:12px;align-items:stretch;margin-top:auto}
   .dc-lk{
     align-self:center;height:28px;display:inline-flex;align-items:center;
     font-size:14px;color:var(--d-tinta);text-decoration:underline;

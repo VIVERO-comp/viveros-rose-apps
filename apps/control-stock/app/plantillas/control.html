@@ -72,7 +72,7 @@
            todos lo puedan ver», Abraham), así que el título ya no puede
            decir «Lo tuyo»: mentiría. Mover sigue siendo solo lo suyo. #}
         {% if vista == 'empleado' %}Arrastra para repartir · cambia la etiqueta Resp: en Linear
-        {% elif not alc.admin and alc.resp_propio %}Todo el tablero · movés solo lo tuyo, {{ alc.resp_propio }}
+        {% elif not alc.admin and alc.resp_propio %}Todo el tablero · movés solo lo tuyo, {{ alc.resp_propio | nombre_visible }}
         {% elif not alc.admin %}Todo el tablero · todavía no te toca ningún lead
         {% else %}Arrastrar entre estados es una corrección: pide el motivo{% endif %}
       </span>
@@ -116,8 +116,8 @@
     {% if aviso %}<div class="aviso-ok">{{ aviso }}
       <a class="cierra-banner" href="/control?vista={{ vista }}{{ ver_query }}" aria-label="Cerrar el aviso">×</a></div>{% endif %}
     {% if modo == 'lectura' %}
-    <div class="solo-lectura"><b>Solo lectura.</b> Esta instancia mira el
-      tablero real pero no escribe en Linear.</div>
+    <div class="solo-lectura"><b>Solo lectura.</b> Acá se mira el tablero real, pero no se
+      escribe nada.</div>
     {% endif %}
     {% if not alc.admin and not alc.resp_propio %}
     <div class="solo-lectura"><b>Sin etiqueta.</b> Tu cuenta todavía no tiene
@@ -148,7 +148,7 @@
           <span class="tenue">Al reasignar, la petición le llega a la otra
             persona. Queda guardado quién dijo que no y por qué.</span>
           <button class="btn dc-apagado chico" type="button" disabled
-                  title="Las peticiones llegan en el punto 2 del plan de roles">Reasignar — Todavía no</button>
+                  title="Pedirle el lead a alguien todavía no se puede">Reasignar — Todavía no</button>
         </div>
       </section>
     </div>
@@ -260,7 +260,9 @@
                  columnas vivas de «Por estado» — en «Por empleado» la
                  columna YA es el responsable, y un cerrado no se reparte. #}
               {% if vista == 'estado' and not l.cerrado and l.resp %}
-              <span class="ctl-av" role="img" aria-label="Responsable: {{ l.resp }}" title="Responsable: {{ l.resp }}">{{ l.resp[:1] }}</span>
+              {# A15: la inicial y el título se escriben como se lee el
+                 nombre; el dato `l.resp` sigue siendo el de Linear. #}
+              <span class="ctl-av" role="img" aria-label="Responsable: {{ l.resp | nombre_visible }}" title="Responsable: {{ l.resp | nombre_visible }}">{{ (l.resp | nombre_visible)[:1] }}</span>
               {% endif %}
               {# «Asignar» (lienzo de Roles): la puerta al cuadro de
                  asignar desde la tarjeta sin dueño. Repartir es cosa del
@@ -294,8 +296,8 @@
         Los Ganado y Perdido no se reparten.
       {% else %}
         El embudo se mueve solo (el mensaje del cliente, la cotización, el pago
-        y el calendario). Arrastrar aquí es una corrección a mano, y por eso
-        pide el motivo y queda anotada en el issue.
+        y el calendario). Arrastrar aquí es una corrección a mano, y por eso pide el motivo
+      y queda anotada en la tarjeta de Linear.
       {% endif %}
     </p>
   </div>
@@ -313,6 +315,9 @@
 {# El borde de arriba de la ficha lleva el color del interés (pantalla 06),
    con la misma variable CSS de la tarjeta — desde paleta.json, vía Python. #}
 <aside class="panel-der" role="dialog" aria-label="Ficha del lead"{% if abierta.interes_color %} style="--dc-interes:{{ abierta.interes_color }}"{% endif %}>
+{# La cotización conectada se lee arriba (y no dentro del «Ver más»):
+   el pie del panel la necesita para el monto del botón negro. #}
+{% set cot = abierta.cot %}
   {# La cabecera del lienzo (06/22): el nombre primero, y debajo la línea
      con el chip del interés y «LEAD-NN · llegó por Origen» — el origen
      dejó de ser fila de Datos, ahora vive aquí. #}
@@ -396,6 +401,22 @@
     {% endfor %}
   </div>
 
+  {# --- «Ver más» (BLOQUE 53 · A16): el panel se queda con lo del lienzo
+         —cabecera, monto, las CINCO filas y el botón negro del pie— y
+         TODO lo demás se pliega acá. No se borró nada: Espera, Teléfono,
+         Llegó, Issue, Acciones, Señales, la cotización, la Conversación,
+         las notas internas, Linear y «Más opciones» siguen vivos y en el
+         mismo orden, un toque más abajo.
+
+         Es un <details> nativo, cero JS: abrirlo a mano no recarga nada.
+         Llega ABIERTO (`ver_mas`) cuando se entra por una de las tres
+         filas que apuntan adentro (Último mensaje, Cotización,
+         Historial): esas filas viajan con ?ver_mas=1 y su ancla, porque
+         un ancla sola no abre un <details> cerrado en todos los
+         navegadores. --- #}
+  <details class="dc-vermas"{% if ver_mas %} open{% endif %}>
+  <summary>Ver más</summary>
+
   {# Los datos que las cinco filas no cuentan. El responsable salió de
      aquí: lo dice la fila «Lo atiende», que además abre el cuadro de
      asignar — repetirlo dos veces en la misma pantalla era ruido. #}
@@ -405,7 +426,10 @@
     {% endif %}
     {% if abierta.celular %}<div class="dato"><b>Teléfono</b><span class="mono">{{ abierta.celular }}</span></div>{% endif %}
     <div class="dato"><b>Llegó</b><span>{{ abierta.hace }}</span></div>
-    <div class="dato"><b>Issue</b><span class="mono">{{ abierta.ref }}{% if abierta.pp %} · {{ abierta.pp }}{% endif %}</span></div>
+    {# A10: la etiqueta decía «Issue» (jerga de Linear). Los CÓDIGOS se
+       quedan: LEAD-NN y PP-NNNNN son con lo que el equipo encuentra a la
+       misma persona entre sistemas. #}
+    <div class="dato"><b>Códigos</b><span class="mono">{{ abierta.ref }}{% if abierta.pp %} · {{ abierta.pp }}{% endif %}</span></div>
   </div>
 
   {# --- Qué hago, en DOS grupos con titulito (F3, 29/09/2026, maqueta
@@ -497,7 +521,6 @@
   {# `display:contents`, así que el ancla de la fila «Cotización» no
      cambia ni un píxel del layout de la columna. #}
   <div id="dc-cotizacion" class="dc-seccion">
-  {% set cot = abierta.cot %}
   {% if not cot.ok %}
   <div class="ficha-cot-vacia">No se pudo leer Odoo: {{ cot.error }}</div>
   {% else %}
@@ -589,6 +612,9 @@
       <form method="get" action="/control" class="campo-caja" style="flex-direction:row;gap:6px">
         <input type="hidden" name="vista" value="{{ vista }}">
         <input type="hidden" name="abrir" value="{{ abierta.ref }}">
+        {# Buscar no cierra el «Ver más»: la búsqueda pasa por el servidor
+           y sin esto la capa volvería plegada, con el resultado adentro. #}
+        <input type="hidden" name="ver_mas" value="1">
         <input class="campo" type="text" name="buscar" value="{{ cot.buscar }}"
                placeholder="Buscar por número, ej. S00089" maxlength="40" autocomplete="off">
         <button class="btn chico" type="submit">Buscar</button>
@@ -657,35 +683,6 @@
     {% endif %}
   </div>
 
-  {# El pie de la ficha de los DOS lienzos (06/22 y «crm-lead-abierto»):
-     el botón grande de cobrar y, debajo, el enlace chico «Ver contacto».
-     Cobrar NO es una acción de Control —el pago se registra en Odoo y de
-     ahí baja el estado— así que va APAGADO con su «Todavía no», pero se
-     pinta SIEMPRE: el lugar es del diseño, y esconderlo cuando no hay
-     plata dejaba el pie del panel vacío.
-
-     El monto, en cambio, solo aparece cuando se sabe: es el SALDO REAL
-     de la orden real (cot_lead) y solo para quien puede ver la plata de
-     este lead. Sin saldo conocido el botón dice «Cobrar» a secas —
-     jamás un $0.00 de ejemplo. #}
-  <div class="dc-pie">
-    {% if cot.ok and cot.plata and cot.plata.saldo and abierta.ve_plata %}
-    <button class="btn dc-apagado" type="button" disabled
-            title="El cobro se registra en Odoo">Cobrar saldo {{ cot.plata.saldo | dinero }} — Todavía no</button>
-    {% else %}
-    <button class="btn dc-apagado" type="button" disabled
-            title="El cobro se registra en Odoo">Cobrar — Todavía no</button>
-    {% endif %}
-    {# «Ver contacto» del lienzo: la ficha de Contactos casa por teléfono
-       EN LECTURA, así que el camino honesto es su buscador con el celular
-       puesto — siempre resuelve, y cae en el contacto si existe. Sin
-       teléfono no hay por dónde buscar: entonces va apagado. #}
-    {% if abierta.celular %}
-    <a class="dc-lk" href="/contactos?q={{ abierta.celular | urlencode }}">Ver contacto</a>
-    {% else %}
-    <span class="dc-lk dc-lk-off" title="Este lead no tiene teléfono: no hay por dónde buscarlo">Ver contacto — Todavía no</span>
-    {% endif %}
-  </div>
   {% if abierta.url %}
   <div class="acciones">
     <a class="btn" href="{{ abierta.url }}" target="_blank" rel="noopener">Linear ↗</a>
@@ -722,8 +719,10 @@
       {% for r in responsables %}{% if r != abierta.resp %}
       <form method="post" action="/control/responsable?vista={{ vista }}">
         <input type="hidden" name="ref" value="{{ abierta.ref }}">
+        {# El `value` va con el nombre de la etiqueta `Resp:` de Linear;
+           el botón se LEE como se escribe el nombre (A15). #}
         <input type="hidden" name="resp" value="{{ r }}">
-        <button class="btn" type="submit">→ {{ r }}</button>
+        <button class="btn" type="submit">→ {{ r | nombre_visible }}</button>
       </form>
       {% endif %}{% endfor %}
       {% if abierta.resp %}
@@ -734,8 +733,8 @@
       </form>
       {% endif %}
     </div>
-    <p class="pie-nota">El responsable es la etiqueta <b>Resp:</b> del issue, no
-      el asignado: los empleados no tienen asiento de Linear.</p>
+    <p class="pie-nota">El responsable es la etiqueta <b>Resp:</b> de la tarjeta
+      de Linear, no el asignado: los empleados no tienen asiento de Linear.</p>
   </div>
 
   {# Corregir el estado a mano: pasa por el modal del motivo. #}
@@ -747,19 +746,52 @@
       {% endif %}{% endfor %}
     </div>
     <p class="pie-nota">Solo para arreglar un error: el embudo se mueve solo.
-      Pide el motivo y queda anotado en el issue, con tu nombre.</p>
+      Pide el motivo y queda anotado en la tarjeta de Linear, con tu nombre.</p>
   </div>
   </details>
   {% else %}
   <div class="solo-lectura">
     {% if modo == 'lectura' %}
-      <b>Solo lectura.</b> Esta instancia mira el tablero real pero no escribe.
+      <b>Solo lectura.</b> Acá se mira el tablero real, pero no se escribe nada.
     {% else %}
       <b>No es tuyo.</b> Este lead es de {{ abierta.resp_titulo }}: lo ves para
       coordinarte, pero lo mueve {{ abierta.resp_titulo }} o el dueño.
     {% endif %}
   </div>
   {% endif %}
+  </details>
+  {# --- Fin del «Ver más». De aquí abajo, el PIE del panel: lo del
+         lienzo, y siempre a la vista. --- #}
+
+  {# El pie de la ficha de los DOS lienzos (06/22 y «crm-lead-abierto»):
+     el botón grande de cobrar y, debajo, el enlace chico «Ver contacto».
+     Cobrar NO es una acción de Control —el pago se registra en Odoo y de
+     ahí baja el estado— así que va APAGADO con su «Todavía no», pero se
+     pinta SIEMPRE: el lugar es del diseño, y esconderlo cuando no hay
+     plata dejaba el pie del panel vacío.
+
+     El monto, en cambio, solo aparece cuando se sabe: es el SALDO REAL
+     de la orden real (cot_lead) y solo para quien puede ver la plata de
+     este lead. Sin saldo conocido el botón dice «Cobrar» a secas —
+     jamás un $0.00 de ejemplo. #}
+  <div class="dc-pie">
+    {% if cot.ok and cot.plata and cot.plata.saldo and abierta.ve_plata %}
+    <button class="btn dc-apagado" type="button" disabled
+            title="El cobro se registra en Odoo">Cobrar saldo {{ cot.plata.saldo | dinero }} — Todavía no</button>
+    {% else %}
+    <button class="btn dc-apagado" type="button" disabled
+            title="El cobro se registra en Odoo">Cobrar — Todavía no</button>
+    {% endif %}
+    {# «Ver contacto» del lienzo: la ficha de Contactos casa por teléfono
+       EN LECTURA, así que el camino honesto es su buscador con el celular
+       puesto — siempre resuelve, y cae en el contacto si existe. Sin
+       teléfono no hay por dónde buscar: entonces va apagado. #}
+    {% if abierta.celular %}
+    <a class="dc-lk" href="/contactos?q={{ abierta.celular | urlencode }}">Ver contacto</a>
+    {% else %}
+    <span class="dc-lk dc-lk-off" title="Este lead no tiene teléfono: no hay por dónde buscarlo">Ver contacto — Todavía no</span>
+    {% endif %}
+  </div>
 </aside>
 {% endif %}
 
@@ -804,7 +836,9 @@
        número inventado ahí sería el peor de todos. #}
     {% for p in asignando.gente %}
     <label class="dc-opt">
-      <input type="radio" name="quien" value="{{ p.nombre }}">
+      {# El valor es la CLAVE (el nombre de la etiqueta `Resp:` de
+         Linear); lo que se lee al lado es cómo se escribe (A15). #}
+      <input type="radio" name="quien" value="{{ p.clave }}">
       <span class="dc-opt-av" aria-hidden="true">{{ p.inicial }}</span>
       <span class="dc-opt-quien"><b>{{ p.nombre }}</b>
         <span class="tenue">{{ p.detalle }}{% if p.actual %} · lo tiene hoy{% endif %}</span></span>
@@ -829,7 +863,7 @@
 
   <div class="acciones">
     <button class="btn dc-apagado" type="button" disabled
-            title="Las peticiones llegan en el punto 2 del plan de roles">{{ asignando.accion }} — Todavía no</button>
+            title="Pedirle el lead a alguien todavía no se puede">{{ asignando.accion }} — Todavía no</button>
   </div>
   {# El pie del lienzo, palabra por palabra, más la verdad de hoy: el
      cuadro todavía no manda nada. #}

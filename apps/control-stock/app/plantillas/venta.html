@@ -249,7 +249,9 @@
     {% if abierta.estado == "cotizacion" %}<span class="vd-hint">No aparta plantas. El pedido nace cuando el cliente paga o abona.</span>{% endif %}
     {% if abierta.ultimo_error %}<span class="vd-error">Último intento: {{ abierta.ultimo_error }}</span>{% endif %}
     {% else %}
-    <span>{{ "Facturado · el cobro vive en el kanban de Odoo" if abierta.facturada else "Cotización · sin facturar" }}</span>
+    {# A10: «el kanban de Odoo» era jerga; lo que la persona necesita
+       saber es DÓNDE se registra el cobro. #}
+    <span>{{ "Facturado · el cobro se registra en Odoo" if abierta.facturada else "Cotización · sin facturar" }}</span>
     {% endif %}
     <div class="vd-sec">Fecha</div>
     <span>{{ abierta.fecha_texto }}</span>

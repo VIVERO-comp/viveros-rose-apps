@@ -319,6 +319,34 @@ def responsables():
         return []
 
 
+# ---------------------------------------------------------------------------
+# Cómo se ESCRIBE en pantalla el nombre de una persona (BLOQUE 53 · A15,
+# docs/DECISIONES-PENDIENTES.md «Mari, no Mary»).
+#
+# Mari y Mary son LA MISMA PERSONA y se escribe **Mari**. Lo que NO se
+# toca, porque es dato de otro sistema y el casamiento se rompería en
+# silencio:
+#   · la etiqueta `Resp: Mary` del equipo LEAD de Linear,
+#   · la etiqueta «Mary» de WhatsApp (el sincronizador traduce entre las
+#     dos),
+#   · su usuario y su correo (`mary@viverorose.com`), y la pista de la
+#     semilla de roles, que casa contra el usuario.
+# Las tres las creó Abraham a mano. Así que la traducción vive ACÁ, del
+# lado de la pantalla: el dato sigue diciendo «Mary» y la persona lee
+# «Mari». Si algún día él renombra la etiqueta en Linear, esta tabla
+# sobra y no estorba (un nombre que no esté sale tal cual).
+# ---------------------------------------------------------------------------
+
+NOMBRE_VISIBLE = {"mary": "Mari"}
+
+
+def nombre_visible(nombre):
+    """El nombre de una persona tal como se escribe en pantalla. Lo que no
+    tenga otra grafía vuelve TAL CUAL (nunca None: sin nombre, "")."""
+    crudo = (nombre or "").strip()
+    return NOMBRE_VISIBLE.get(crudo.lower(), crudo)
+
+
 def responder_a_mano_disponible():
     """¿Ya existe «Responder a mano» en Linear (o en la muestra)? Mismo
     candado que `senales_disponibles()`: si Abraham no la creó todavía,

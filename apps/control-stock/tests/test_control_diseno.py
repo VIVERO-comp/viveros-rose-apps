@@ -241,9 +241,13 @@ def test_la_ficha_conserva_todas_sus_acciones(cliente, de_dueno, monkeypatch):
     assert 'action="/control/nota' in panel and "Guardar nota" in panel
     # Datos. El origen dejó de ser renglón: la fidelidad P37 lo subió a la
     # cabecera, junto al LEAD-NN («LEAD-86 · llegó por …», pantallas
-    # 06/22). El dato sigue ahí, solo cambió de lugar.
-    for dato in ("Llegó", "Teléfono", "Issue"):
+    # 06/22). El dato sigue ahí, solo cambió de lugar. El renglón que
+    # decía «Issue» ahora dice «Códigos» (BLOQUE 53 · A10: «issue» es
+    # jerga de Linear) — y los códigos, que es lo que se usa, siguen.
+    for dato in ("Llegó", "Teléfono", "Códigos"):
         assert f"<b>{dato}</b>" in panel
+    assert "LEAD-86" in panel
+    assert "<b>Issue</b>" not in panel
     # El responsable tampoco se perdió: con el lienzo de Roles (BLOQUE 43)
     # dejó de ser renglón de datos y es la PRIMERA de las cinco filas, «Lo
     # atiende» — que además abre el cuadro de asignar.
@@ -393,6 +397,74 @@ def test_el_panel_lleva_las_cinco_filas_en_su_orden(cliente, de_dueno):
     donde = [panel.index(">%s</span>" % e) for e in etiquetas]
     assert donde == sorted(donde)   # en el orden del lienzo
     assert panel.count('class="dc-fila-l">') == 5
+
+
+# ---------------------------------------------------------------------------
+# BLOQUE 53 · A16 — el panel se queda con lo del lienzo (las cinco filas y
+# el botón negro) y TODO lo demás vive detrás de un «Ver más». Nada se
+# borró: lo de adentro sigue alcanzable.
+# ---------------------------------------------------------------------------
+
+def _ver_mas(panel):
+    """Lo que está DENTRO del «Ver más» del panel."""
+    desde = panel.index('<details class="dc-vermas"')
+    return panel[desde:panel.rindex("</details>")]
+
+
+def test_el_ver_mas_pliega_todo_lo_que_no_es_del_lienzo(cliente, de_dueno,
+                                                        monkeypatch):
+    monkeypatch.setattr(ventas, "_ejecutar", OdooCotLead().ejecutar)
+    panel = _panel(cliente.get("/control", params={"abrir": "LEAD-86",
+                                                   "vista": "estado"}).text)
+    assert '<details class="dc-vermas"' in panel
+    assert "<summary>Ver más</summary>" in panel
+    # Lo del lienzo, SIEMPRE a la vista: el monto, las cinco filas y el
+    # pie con el botón negro y «Ver contacto».
+    arriba = panel[:panel.index('<details class="dc-vermas"')]
+    assert 'class="dc-filas"' in arriba
+    assert arriba.count('class="dc-fila-l">') == 5
+    pie = panel[panel.rindex("</details>"):]
+    assert 'class="dc-pie"' in pie
+    assert "Cobrar" in pie and "Ver contacto" in pie
+    # Y lo demás, adentro: nada se perdió.
+    adentro = _ver_mas(panel)
+    for pieza in ("<b>Teléfono</b>", "<b>Códigos</b>", ">Acciones<",
+                  'action="/control/responder', 'action="/venta/lead"',
+                  ">Señales<", 'action="/control/senal',
+                  "Conectar cotización", "Conversación",
+                  "Notas internas · solo el equipo",
+                  "<summary>Más opciones</summary>", "Se lo doy a",
+                  "Corregir el estado"):
+        assert pieza in adentro, pieza
+
+
+def test_el_ver_mas_no_necesita_js_y_llega_abierto_desde_las_filas(
+        cliente, de_dueno, monkeypatch):
+    """Un <details> nativo: se abre a mano sin recargar. Y las tres filas
+    que apuntan ADENTRO viajan con ?ver_mas=1, porque un ancla sola no
+    abre un <details> cerrado en todos los navegadores."""
+    monkeypatch.setattr(ventas, "_ejecutar", OdooCotLead().ejecutar)
+    base = {"abrir": "LEAD-86", "vista": "estado"}
+    panel = _panel(cliente.get("/control", params=base).text)
+    assert "<details" in panel          # HTML, no JavaScript
+    for ancla in ("#dc-conversacion", "#dc-cotizacion", "#dc-notas"):
+        assert f"ver_mas=1{ancla}" in panel
+    # Cerrado por defecto; abierto cuando la URL lo pide.
+    assert '<details class="dc-vermas">' in panel
+    abierto = _panel(cliente.get("/control",
+                                 params={**base, "ver_mas": "1"}).text)
+    assert '<details class="dc-vermas" open>' in abierto
+
+
+def test_las_filas_del_panel_llevan_a_su_seccion_de_adentro(cliente,
+                                                            de_dueno):
+    """La fila «Último mensaje» abre el «Ver más» y baja al hilo: el
+    destino lo arma Python (control.liga_ver_mas), no la plantilla."""
+    assert control.liga_ver_mas("LEAD-86", "estado", "#dc-notas") == (
+        "/control?vista=estado&abrir=LEAD-86&ver_mas=1#dc-notas")
+    fila = control.ficha("LEAD-86", vista="estado")["filas"][2]
+    assert fila["href"].endswith("ver_mas=1#dc-conversacion")
+    assert "abrir=LEAD-86" in fila["href"]
 
 
 def test_se_toca_la_fila_entera_no_un_enlacito_al_final(cliente, de_dueno):
@@ -729,7 +801,11 @@ def test_la_tira_ver_a_trae_a_todos_y_el_hueco_con_su_cuenta(cliente, de_dueno):
     assert "Ver a:" in tira
     assert ">Todos</a>" in tira
     for nombre in linear_leads.responsables():
-        assert f">{nombre}</a>" in tira
+        # El chip se LEE con la grafía de la casa («Mary» → «Mari»,
+        # BLOQUE 53 · A15) y FILTRA con el nombre de la etiqueta `Resp:`
+        # de Linear, que es el dato y no se toca.
+        assert f">{linear_leads.nombre_visible(nombre)}</a>" in tira
+        assert "ver=" + nombre.replace(" ", "%20") in tira
     # El conteo de «Sin asignar» es real: los vivos sin `Resp:`.
     vivos = [c for c in control.tablero_por_estado() for c in c["leads"]]
     sin_dueno = len([l for l in control._vivos(vivos) if not l["resp"]])
@@ -819,3 +895,48 @@ def test_sin_telefono_ver_contacto_va_apagado(cliente, de_dueno):
                                                    "vista": "estado"}).text)
     assert "Ver contacto — Todavía no" in panel
     assert 'href="/contactos?q="' not in panel
+
+
+# ---------------------------------------------------------------------------
+# BLOQUE 53 · A15 — «Mary» se escribe «Mari» DONDE ES TEXTO. Lo que no se
+# toca: la etiqueta `Resp: Mary` de Linear (el dato con el que casa todo),
+# su usuario y su correo.
+# ---------------------------------------------------------------------------
+
+def test_el_nombre_visible_traduce_solo_la_grafia(cliente):
+    assert linear_leads.nombre_visible("Mary") == "Mari"
+    assert linear_leads.nombre_visible("mary") == "Mari"
+    # Lo que no está en la tabla vuelve TAL CUAL, y nunca devuelve None.
+    assert linear_leads.nombre_visible("Ruben") == "Ruben"
+    assert linear_leads.nombre_visible("") == ""
+    assert linear_leads.nombre_visible(None) == ""
+    # Y el DATO de Linear sigue diciendo «Mary»: la etiqueta es suya.
+    assert "Mary" in linear_leads.responsables()
+    assert linear_leads.uno("LEAD-89")["resp"] == "Mary"
+
+
+def test_el_filtro_del_crm_lee_mari_y_filtra_por_mary(cliente, de_dueno):
+    cuerpo = cliente.get("/control", params={"vista": "estado"}).text
+    tira = cuerpo[cuerpo.index('class="dc-fl"'):]
+    tira = tira[:tira.index("</div>")]
+    assert ">Mari</a>" in tira and ">Mary</a>" not in tira
+    assert "ver=Mary" in tira            # el filtro, con el dato
+    # Y filtrar sigue funcionando con el nombre de la etiqueta.
+    filtrado = cliente.get("/control", params={"vista": "estado",
+                                               "ver": "Mary"}).text
+    assert 'data-ref="LEAD-89"' in filtrado
+
+
+def test_la_ficha_y_el_reparto_escriben_mari(cliente, de_dueno):
+    panel = _panel(cliente.get("/control", params={"abrir": "LEAD-89",
+                                                   "vista": "estado"}).text)
+    # La fila «Lo atiende» y el botón de repartir se LEEN «Mari»…
+    fila = panel[panel.index(">Lo atiende</span>"):]
+    fila = fila[:fila.index("</a>")]
+    assert "Mari" in fila and "Mary" not in fila
+    # …y el POST sigue mandando el nombre de la etiqueta de Linear.
+    assert 'name="resp" value="Mary"' not in panel   # LEAD-89 ya es de Mary
+    otro = _panel(cliente.get("/control", params={"abrir": "LEAD-91",
+                                                  "vista": "estado"}).text)
+    assert 'name="resp" value="Mary"' in otro
+    assert "→ Mari</button>" in otro
