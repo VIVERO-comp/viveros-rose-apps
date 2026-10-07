@@ -463,8 +463,17 @@ def test_las_dos_listas_dicen_el_contexto_con_LAS_MISMAS_palabras(
     assert len(datos["pendientes"]) == 1 and len(datos["otros_pendientes"]) == 1
     texto = admin.get("/finanzas").text
     # El renglón de contexto aparece DOS veces, idéntico: una por lista.
+    #
+    # Los rótulos son los del item 4 del BLOQUE 54 («Cómo llegó:» y
+    # «Marcó:», con mayúscula). Esta prueba nació en la rama del cuadre,
+    # donde la macro todavía llevaba el rótulo viejo en minúscula; al
+    # fusionar, el rótulo nuevo es el que gana —así lo pidió el frente que
+    # la escribió— y lo que la prueba cuida no cambia: que la misma fila
+    # se lea IGUAL caiga en la lista que caiga, porque sale de una sola
+    # macro. Lo demás sigue armado con las constantes de Python, así que
+    # un cambio de vocabulario no la rompe por partida doble.
     renglon = (f"Venta del {pagos_confirmar.fecha_de_venta('2026-10-02')} · "
-               f"{pagos_confirmar.SIN_METODO} · marcó: "
+               f"Cómo llegó: {pagos_confirmar.SIN_METODO} · Marcó: "
                f"{pagos_confirmar.SIN_MARCA}")
     assert texto.count(renglon) == 2, "las dos listas ya no dicen lo mismo"
 
