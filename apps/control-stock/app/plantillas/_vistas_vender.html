@@ -25,9 +25,10 @@
                     teléfono); vacío para la de la cabecera #}
 {# El `aria-current` va en un {% if %} y NO como texto dentro de un {{ }}:
    con el autoescape prendido, `{{ 'aria-current="page"' }}` sale con sus
-   comillas convertidas en `&#34;` y el atributo no existe. (Le pasa hoy a
-   `_vistas_compras.html` y a `proveedores.html`, que son de otro frente:
-   queda reportado, no tocado.) #}
+   comillas convertidas en `&#34;` y el atributo no existe. Comprobado
+   contra el entorno Jinja de la app, no supuesto. Le pasa hoy a
+   `_vistas_compras.html` (sus dos enlaces, y por él a Compras y a
+   Proveedores), que es de otro frente: queda reportado, no tocado. #}
 <div class="vd-seg {{ vv_clase or '' }}" role="group" aria-label="Cómo ver las ventas">
   {% for v in vender_vistas %}<a class="{{ 'on' if v.activa }}" href="{{ v.href }}"{% if v.activa %} aria-current="page"{% endif %}>{{ v.texto }}</a>{% endfor %}
 </div>
