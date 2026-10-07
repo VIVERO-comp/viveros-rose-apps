@@ -5,8 +5,13 @@ Lo que se prueba, por regla:
 - Nace cerrada (BLOQUE 22.7): sin sesión al login; sin admin ni deber de
   la cola, 403 — por request directa.
 - Los números salen de los MISMOS motores (informe + cola + tabla de
-  confirmaciones): con datos cuadran, y si no cierran el descuadre SE
-  DICE en pantalla.
+  confirmaciones) y SOLO sobre ventas CONFIRMADAS (BLOQUE 59.2).
+- **El invariante de CINCO términos cuadra siempre** (Abraham, 7/10/2026):
+  Vendido = Cobrado y confirmado + Pagos por confirmar + Por cobrar +
+  Diferencia a revisar. La prueba falla en DOS casos: si la suma no da
+  «Vendido», y si un caso contado en «Diferencia a revisar» no está en su
+  lista — esa segunda condición es la que impide meter plata en
+  «Diferencia» sin poder enumerarla.
 - Con huecos (Odoo caído) los números dependientes salen «sin dato» —
   jamás un $0 fingido.
 - El botón «Confirmar» va DISABLED con «Todavía no» A SECAS (item 5,
@@ -93,21 +98,31 @@ def test_los_cuatro_numeros_salen_de_los_motores(admin, con_informe_qa):
     assert "$60.00" in texto       # por cobrar
     assert "S09001" in texto       # la fila de la cola, la MISMA cola
     assert "S09002" not in texto   # la cancelada no existe para nadie
-    # Con 100 = 0 + 40 + 60 no hay descuadre que avisar.
-    assert "no cierran entre sí" not in texto
+    # Con 100 = 0 + 40 + 60 + 0 la quinta línea está, y en cero.
+    assert "$0.00 · 0 casos" in texto
 
 
-def test_el_descuadre_se_dice_no_se_esconde(admin, con_informe_qa,
-                                            monkeypatch):
-    """BLOQUE 59.2: con el universo de ventas confirmadas el resto es 0 por
-    construcción, así que la ÚNICA forma de descuadrar es haber dado por
-    buena más plata de la que Odoo tiene en esa venta. Eso se dice."""
-    # S09001 tiene $40 pagados en Odoo y alguien dio por buenos $90:
-    # 100 ≠ 90 + 0 (la cola ya no la trae) + 60 → se va por -50.
+def test_la_diferencia_tiene_nombre_lista_y_cierra_la_igualdad(
+        admin, con_informe_qa, monkeypatch):
+    """La quinta línea (Abraham, 7/10/2026): lo anómalo no es un resto que
+    alguien tenga que explicar — es un término con nombre, con monto, con
+    cuenta de casos y con la lista de esos casos."""
+    # S09001 tiene $40 pagados en el sistema y alguien dio por buenos $90.
     monkeypatch.setattr(pagos_confirmar, "sumas_confirmadas",
                         lambda: {9001: 90.0})
+    datos = finanzas.resumen()
+    assert datos["diferencia"]["n"] == 1
+    assert datos["diferencia"]["monto"] == -50.0
+    caso = datos["diferencia"]["casos"][0]
+    assert caso["orden"] == "S09001"
+    assert "$90.00" in caso["motivo"] and "$40.00" in caso["motivo"]
+    # Y con la quinta adentro la igualdad cuadra: 100 = 90 + 0 + 60 − 50.
+    assert _cuadra(datos) == (100.0, 100.0)
     texto = admin.get("/finanzas").text
-    assert "se van por $50.00" in texto
+    assert "Diferencia a revisar" in texto
+    assert "$-50.00 · 1 caso" in texto
+    assert "Ver los casos" in texto
+    assert "S09001" in texto
 
 
 def test_lo_confirmado_fuera_del_universo_se_muestra_aparte(
@@ -119,7 +134,7 @@ def test_lo_confirmado_fuera_del_universo_se_muestra_aparte(
     monkeypatch.setattr(pagos_confirmar, "sumas_confirmadas",
                         lambda: {8888: 50.0})
     datos = finanzas.resumen()
-    assert datos["descuadre"] is None
+    assert datos["diferencia"]["monto"] == 0.0 and _casos_cuadran(datos)
     assert datos["confirmado_fuera"] == {"n": 1, "monto": 50.0}
     assert _tarjeta(datos, "Cobrado y confirmado")["monto"] == 0.0
     texto = admin.get("/finanzas").text
@@ -203,13 +218,32 @@ def mundo(db_limpia, monkeypatch):
 
 
 def _cuadra(datos):
-    """El invariante, leído de las TARJETAS (no de variables internas):
-    así la prueba falla si cambia la fórmula de cualquiera de las cuatro."""
+    """El invariante de CINCO términos, leído de las TARJETAS y de la
+    quinta línea (nunca de variables internas): así la prueba falla si
+    cambia la fórmula de cualquiera de los cinco."""
     vendido = _tarjeta(datos, "Vendido")["monto"]
     partes = sum(_tarjeta(datos, t)["monto"] or 0.0 for t in
                  ("Cobrado y confirmado", "Pagos por confirmar",
                   "Por cobrar"))
+    partes += datos["diferencia"]["monto"] or 0.0
     return vendido, round(partes, 2)
+
+
+def _casos_cuadran(datos):
+    """La SEGUNDA condición, la que impide la trampa fácil: cada caso
+    contado en «Diferencia a revisar» tiene que estar en la lista, y el
+    monto de la línea tiene que ser la suma de esa lista. Sin esto se
+    podría meter cualquier plata en «Diferencia» sin poder enumerarla."""
+    dif = datos["diferencia"]
+    if dif["monto"] is None:
+        return dif["n"] == 0 and dif["casos"] == []
+    if dif["n"] != len(dif["casos"]):
+        return False
+    if round(sum(c["monto"] for c in dif["casos"]), 2) != dif["monto"]:
+        return False
+    # Identificable: cada caso dice de qué venta sale, o dice con todas
+    # las letras que no se pudo identificar. Nunca un renglón mudo.
+    return all((c["orden"] or c["motivo"]) for c in dif["casos"])
 
 
 def test_el_invariante_cuadra_sin_ninguna_confirmacion(mundo):
@@ -219,7 +253,8 @@ def test_el_invariante_cuadra_sin_ninguna_confirmacion(mundo):
     # y la clase F sin confirmar NO entran.
     assert vendido == 1450.0
     assert partes == vendido, datos["tarjetas"]
-    assert datos["descuadre"] is None
+    assert datos["diferencia"]["monto"] == 0.0
+    assert _casos_cuadran(datos)
 
 
 def test_el_invariante_cuadra_con_confirmaciones_parciales_y_totales(mundo):
@@ -229,7 +264,8 @@ def test_el_invariante_cuadra_con_confirmaciones_parciales_y_totales(mundo):
     vendido, partes = _cuadra(datos)
     assert vendido == 1450.0
     assert partes == vendido, datos["tarjetas"]
-    assert datos["descuadre"] is None
+    assert datos["diferencia"]["monto"] == 0.0
+    assert _casos_cuadran(datos)
     assert _tarjeta(datos, "Cobrado y confirmado")["monto"] == 500.0
     # Lo que queda por confirmar es SOLO la plata nueva: los $150 que
     # faltan de la pagada completa. El abono ya confirmado no se repite.
@@ -251,7 +287,9 @@ def test_el_invariante_falla_si_una_tarjeta_cambia_de_universo(mundo,
     assert por_cobrar_viejo == 9870.0          # lo que mostraba antes
     assert _tarjeta(datos, "Por cobrar")["monto"] == 800.0   # lo que suma hoy
     # Con el universo viejo en una sola tarjeta el invariante se rompe:
-    assert round(confirmado + por_confirmar + por_cobrar_viejo, 2) != vendido
+    dif = datos["diferencia"]["monto"]
+    assert round(confirmado + por_confirmar + por_cobrar_viejo + dif, 2) \
+        != vendido
 
 
 def test_una_cotizacion_no_cuenta_en_ninguno_de_los_cuatro(mundo):
@@ -260,6 +298,67 @@ def test_una_cotizacion_no_cuenta_en_ninguno_de_los_cuatro(mundo):
                    "Por cobrar"):
         assert "9,000" not in _tarjeta(datos, titulo)["texto"]
     assert datos["sin_confirmar"] == 2        # la de $9000 y la F cotizada
+
+
+def test_la_linea_de_diferencia_nunca_desaparece(admin, mundo):
+    """Condición de Abraham: con la lista vacía la línea dice «$0.00 en 0
+    casos», no se esconde. Una línea que a veces está y a veces no es peor
+    que una que siempre está en cero."""
+    datos = finanzas.resumen()
+    assert datos["diferencia"] == {
+        "monto": 0.0, "n": 0, "casos": [],
+        "hint": finanzas.TEXTO_DIF_VACIA}
+    texto = admin.get("/finanzas").text
+    assert "Diferencia a revisar" in texto
+    assert "$0.00 · 0 casos" in texto
+    assert finanzas.TEXTO_DIF_VACIA in texto
+
+
+def test_no_se_puede_meter_plata_en_diferencia_sin_poder_enumerarla(
+        admin, mundo, monkeypatch):
+    """LA TRAMPA QUE ESTO CIERRA: si el cierre de la igualdad no se agota
+    con los casos que la casa sabe nombrar, lo que sobra ENTRA A LA LISTA
+    como un caso más que lo dice. Nunca un monto sin casos.
+
+    Se fuerza con una cola que reporta más plata nueva de la que las
+    ventas tienen: un descuadre que ningún caso explica."""
+    real = pagos_confirmar.cola
+
+    def cola_inflada():
+        filas, huecos = real()
+        for f in filas:
+            if f["orden"] == "S00003":
+                f["monto_nuevo"] = f["monto_nuevo"] + 33.0
+        return filas, huecos
+
+    monkeypatch.setattr(pagos_confirmar, "cola", cola_inflada)
+    datos = finanzas.resumen()
+    dif = datos["diferencia"]
+    assert dif["monto"] == -33.0
+    assert dif["n"] == 1
+    assert dif["casos"][0]["motivo"] == finanzas.TEXTO_DIF_SIN_IDENTIFICAR
+    # Las DOS condiciones de la prueba del cuadre, juntas.
+    vendido, partes = _cuadra(datos)
+    assert partes == vendido
+    assert _casos_cuadran(datos)
+    assert finanzas.TEXTO_DIF_SIN_IDENTIFICAR in admin.get("/finanzas").text
+
+
+def test_el_universo_vive_en_un_solo_lugar_para_que_a18_lo_herede(mundo):
+    """Cruce obligatorio del encargo: A18 (abrir «Por cobrar» por
+    antigüedad) tiene que leer EXACTAMENTE esta lista. Si cada pantalla
+    filtra por su cuenta, el día que cambie la frontera una se queda
+    vieja sin que nada avise."""
+    informe = pagos_confirmar._informe()
+    confirmadas, sin_conf = finanzas.ventas_del_universo(informe)
+    assert [v["nombre"] for v in confirmadas] == ["S00002", "S00003",
+                                                  "S00004", "S00005"]
+    assert [v["nombre"] for v in sin_conf] == ["S00001", "S00006"]
+    # Y es la MISMA lista con la que se arma la tarjeta: el «Por cobrar»
+    # que A18 va a abrir en tramos sale de sumar el `debe` de ahí.
+    datos = finanzas.resumen()
+    assert round(sum(v["debe"] for v in confirmadas), 2) == \
+        _tarjeta(datos, "Por cobrar")["monto"]
 
 
 def test_cada_numero_dice_que_suma(mundo):

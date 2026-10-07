@@ -32,10 +32,7 @@
   {% if f.huecos %}
   <div class="fz-alerta">Faltan datos para completar esta foto: {{ f.huecos | join(' · ') }}</div>
   {% endif %}
-  {% if f.descuadre is not none %}
-  <div class="fz-alerta">Los cuatro números de arriba no suman entre sí: se van por {{ f.descuadre | abs | dinero }}. El detalle venta por venta está en Ventas a revisar. Se dice, no se esconde.</div>
-  {% endif %}
-  {# Lo que queda FUERA de los cuatro números se muestra, nunca se reparte
+  {# Lo que queda FUERA de los cinco términos se muestra, nunca se reparte
      (BLOQUE 59.2, misma filosofía que la sospecha de duplicado). #}
   {% if f.confirmado_fuera %}
   <div class="fz-alerta">Hay {{ f.confirmado_fuera.monto | dinero }} ya dados por buenos en {{ f.confirmado_fuera.n }} venta{{ 's' if f.confirmado_fuera.n != 1 }} que esta foto no cuenta (cotizaciones sin confirmar, canceladas o ya borradas): no entran en ninguno de los cuatro números.</div>
@@ -53,7 +50,31 @@
     </div>
     {% endfor %}
   </div>
-  <p class="fz-hint">{{ f.regla }} Solo cuenta lo que el cliente ya confirmó{% if f.sin_confirmar %} — las {{ f.sin_confirmar }} cotizaciones vivas quedan fuera de los cuatro{% endif %}.</p>
+  {# LA QUINTA LÍNEA (decisión de Abraham, 7/10/2026). Siempre está, aunque
+     sea en cero: una línea que a veces aparece y a veces no es peor que una
+     que siempre está en $0.00 — nadie sabría si falta o si está bien. El
+     enlace baja a la lista de esos mismos casos, acá en la pantalla: el
+     número y la lista son el MISMO dato, y la prueba lo afirma. #}
+  <div class="fz-c fz-dif">
+    <span class="fz-ct">Diferencia a revisar</span>
+    <span class="fz-kv num {{ 'rojo' if f.diferencia.n }} {{ 'sin-dato' if f.diferencia.monto is none }}">{% if f.diferencia.monto is none %}sin dato{% else %}{{ f.diferencia.monto | dinero }}{% endif %} · {{ f.diferencia.n }} caso{{ 's' if f.diferencia.n != 1 }}</span>
+    <span class="fz-hint">{{ f.diferencia.hint }} <a href="#casos-diferencia">Ver los casos</a></span>
+  </div>
+
+  <p class="fz-hint">{{ f.regla }} Solo cuenta lo que el cliente ya confirmó{% if f.sin_confirmar %} — las {{ f.sin_confirmar }} cotizaciones vivas quedan fuera de los cinco{% endif %}.</p>
+
+  <section class="fz-c" id="casos-diferencia" aria-label="Casos de la diferencia a revisar">
+    <span class="fz-ct">Los casos de la diferencia</span>
+    {% for c in f.diferencia.casos %}
+    <div class="fz-r">
+      <span class="fz-quien"><b>{{ c.orden or 'Sin número de venta' }}</b><span class="fz-hint">{{ c.cliente or 'Sin cliente' }}</span>
+        <span class="fz-hint">{{ c.motivo }}</span></span>
+      <b class="num rojo">{{ c.monto | dinero }}</b>
+    </div>
+    {% else %}
+    <p class="fz-hueco">{{ f.diferencia.hint }}</p>
+    {% endfor %}
+  </section>
 
   <div class="fz-g2">
     <section class="fz-c" aria-label="Pagos por confirmar">

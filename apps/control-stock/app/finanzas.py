@@ -18,13 +18,24 @@ Qué es — y qué no:
   cada tarjeta, que ahora se calcula acá y dice la frontera con palabras.
   El sí/no de «confirmada» NO se deduce de la clase A–H (F, G y H caen de
   los dos lados): viaja en el contrato del informe.
-- **EL INVARIANTE: Vendido = Cobrado y confirmado + Pagos por confirmar +
-  Por cobrar.** No es una coincidencia, es la identidad `total = pagado +
-  debe` de cada venta confirmada, repartida en tres: lo pagado se parte
-  entre lo que alguien ya dio por bueno y lo que todavía nadie revisó. Si
-  no cuadra es un error, y el resto SE MUESTRA (`descuadre`), nunca se
-  reparte. La única manera de descuadrar dentro del universo es haber
-  dado por buena MÁS plata de la que Odoo tiene en esa venta.
+- **EL INVARIANTE, de CINCO términos: Vendido = Cobrado y confirmado +
+  Pagos por confirmar + Por cobrar + Diferencia a revisar.** Es la
+  identidad `total = pagado + debe` de cada venta confirmada, repartida:
+  lo pagado se parte entre lo que alguien ya dio por bueno y lo que
+  todavía nadie revisó. **Con la quinta adentro la igualdad cuadra
+  SIEMPRE, por construcción** (decisión de Abraham, 7/10/2026) — lo
+  anómalo queda con nombre, con cuenta de casos y con LISTA, en vez de
+  ser un resto que alguien tenga que explicar.
+  **La lista es parte del contrato, no un adorno**: el monto de la quinta
+  línea es la SUMA de sus casos (se enumera primero y se suma después), y
+  si el cierre de la identidad no se agota con los casos que la casa sabe
+  nombrar, lo que sobra entra a la lista como un caso que dice que no se
+  identificó. Así es imposible meter plata en «Diferencia» sin poder
+  enumerarla. La línea NUNCA desaparece: con la lista vacía dice $0.00 en
+  0 casos.
+  Hoy, con los datos del Odoo de pruebas, la única manera de producir una
+  diferencia es haber dado por buena MÁS plata de la que el sistema tiene
+  en esa venta — y no hay ninguna ($0.00 en 0 casos).
 - **Lo que queda fuera del universo también se dice, aparte**: la plata ya
   dada por buena sobre ventas que esta foto no cuenta (`confirmado_fuera`)
   y los pagos informados sobre cotizaciones sin confirmar (`cola_fuera`).
@@ -106,8 +117,42 @@ TEXTO_NADA_DE_ESTAS = ("Todavía nadie ha dado por buena plata de estas "
                        "ventas.")
 
 # La identidad que sostiene la pantalla, escrita para que se pueda leer.
+# Son CINCO términos, no cuatro (decisión de Abraham, 7/10/2026): con la
+# «Diferencia a revisar» adentro la igualdad cuadra SIEMPRE por
+# construcción, y lo anómalo queda con nombre y con lista en vez de ser un
+# resto que alguien tenga que explicar.
 TEXTO_REGLA = ("Vendido = cobrado y confirmado + pagos por confirmar + "
-               "por cobrar.")
+               "por cobrar + diferencia a revisar.")
+
+# La quinta línea. Dos textos, porque dicen cosas distintas: con 0 casos la
+# noticia es que todo calza; con casos hay que decir QUÉ es una diferencia.
+TEXTO_DIF_VACIA = ("Cada dólar de esas ventas está en uno de los tres "
+                   "números de la izquierda.")
+TEXTO_DIF_HAY = ("Plata dada por buena que no calza con lo que el sistema "
+                 "tiene anotado en esa venta.")
+
+# El caso de borde que impide que vuelva a existir un resto sin explicar:
+# si el cierre de la identidad no se agota con los casos enumerados, lo que
+# sobra ENTRA A LA LISTA como un caso más, diciendo que no se identificó.
+# Así las dos condiciones de la prueba (la suma cuadra, y cada caso contado
+# está en la lista) se cumplen por construcción y no por suerte.
+TEXTO_DIF_SIN_IDENTIFICAR = ("No se pudo identificar de qué venta sale "
+                             "esta diferencia.")
+
+
+def ventas_del_universo(informe):
+    """EL universo de los cuatro números, en UN SOLO lugar: las ventas
+    CONFIRMADAS del informe, sin canceladas.
+
+    Está suelta a propósito. **A18 (abrir «Por cobrar» por antigüedad)
+    tiene que leer exactamente esta lista**, no una copia: si cada
+    pantalla filtra por su cuenta, el día que cambie la frontera una de
+    las dos se queda vieja sin que nada avise — que es justo el bug que
+    este bloque vino a cerrar. Devuelve (confirmadas, sin_confirmar)."""
+    vivas = [v for v in (informe.get("ventas") or [])
+             if (v.get("clase") or "").strip().upper() != "CANCELADA"]
+    return ([v for v in vivas if v.get("confirmada")],
+            [v for v in vivas if not v.get("confirmada")])
 
 
 def _tarjeta(titulo, monto, hint, n=None, rojo=False):
@@ -141,12 +186,11 @@ def resumen():
         if hueco not in huecos:
             huecos.append(hueco)
 
-    vivas = [v for v in (informe.get("ventas") or [])
-             if (v.get("clase") or "").strip().upper() != "CANCELADA"]
     # LA FRONTERA (BLOQUE 59.2): solo ventas CONFIRMADAS. El sí/no llega
-    # decidido en el contrato del informe — acá no se adivina por clase.
-    ventas = [v for v in vivas if v.get("confirmada")]
-    sin_confirmar = [v for v in vivas if not v.get("confirmada")]
+    # decidido en el contrato del informe — acá no se adivina por clase —
+    # y el filtro vive en UNA función, para que A18 lo herede.
+    ventas, sin_confirmar = ventas_del_universo(informe)
+    vivas = ventas + sin_confirmar
     ids = {v.get("orden_id") for v in ventas}
     # Con huecos y sin ventas no hay foto: los números del informe salen
     # «sin dato», nunca $0 (un cero fingido se celebra o se cobra mal).
@@ -228,17 +272,52 @@ def resumen():
                  n=n_deben, rojo=True),
     ]
 
-    # La honestidad del cuadre: mismas fuentes, mismo universo, y si no
-    # cierran se dice. Con el universo de ventas confirmadas el resto es
-    # 0 por construcción (total = pagado + debe en cada venta), así que un
-    # descuadre es SIEMPRE una noticia: plata dada por buena por encima de
-    # lo que Odoo tiene en esa venta.
-    descuadre = None
+    # ---------------------------------------------------------------
+    # LA QUINTA LÍNEA: «Diferencia a revisar», con nombre y con LISTA.
+    #
+    # Se arma al revés de como estaba antes: primero se ENUMERAN los casos
+    # y después el monto es la suma de esa lista. Así «$X en N casos»
+    # nunca puede mentir — y si el cierre de la identidad no se agota con
+    # los casos que la casa sabe nombrar, lo que sobra entra a la lista
+    # como un caso más que dice que no se identificó. Meter plata en
+    # «Diferencia» sin poder enumerarla es justo la trampa que esto cierra.
+    # ---------------------------------------------------------------
+    casos = []
     if con_datos and vendido is not None:
-        resto = round(vendido - (confirmado + (por_confirmar or 0)
-                                 + (por_cobrar or 0)), 2)
-        if abs(resto) > _CENTAVO:
-            descuadre = resto
+        for v in ventas:
+            marcado = sumas.get(v.get("orden_id"), 0.0)
+            pagado_v = round(float(v.get("pagado") or 0), 2)
+            if marcado > pagado_v + _CENTAVO:
+                casos.append({
+                    "orden": v.get("nombre") or "",
+                    "cliente": v.get("cliente") or "",
+                    # Signo: negativo = se dio por buena MÁS plata de la
+                    # que el sistema tiene. Es el signo que cierra la
+                    # identidad, no una elección de estilo.
+                    "monto": round(pagado_v - marcado, 2),
+                    "motivo": (f"Se dieron por buenos "
+                               f"{calculos.dinero(marcado)} y en el "
+                               f"sistema hay {calculos.dinero(pagado_v)}."),
+                })
+        cierre = round(vendido - (confirmado + (por_confirmar or 0)
+                                  + (por_cobrar or 0)), 2)
+        sobra = round(cierre - sum(c["monto"] for c in casos), 2)
+        if abs(sobra) > _CENTAVO:
+            casos.append({"orden": "", "cliente": "", "monto": sobra,
+                          "motivo": TEXTO_DIF_SIN_IDENTIFICAR})
+    diferencia = {
+        # Con la foto incompleta el monto es «sin dato», como los otros
+        # números que dependen del informe: un $0.00 ahí diría «todo
+        # calza» cuando lo cierto es que no se sabe.
+        "monto": (round(sum(c["monto"] for c in casos), 2)
+                  if con_datos and vendido is not None else None),
+        "n": len(casos),
+        "casos": casos,
+        # La línea NUNCA desaparece: con la lista vacía dice $0.00 en 0
+        # casos. Una línea que a veces está y a veces no es peor que una
+        # que siempre está en cero — nadie sabe si falta o si está bien.
+        "hint": TEXTO_DIF_HAY if casos else TEXTO_DIF_VACIA,
+    }
 
     hoy = datetime.now(ZONA_PANAMA).date()
     entregado_mes = cifras.delivered_revenue(hoy.replace(day=1), hoy)
@@ -266,7 +345,7 @@ def resumen():
         "otros_pendientes": otros_pendientes,
         "huecos": huecos,
         "con_datos": con_datos,
-        "descuadre": descuadre,
+        "diferencia": diferencia,
         "regla": TEXTO_REGLA,
         "confirmado_fuera": confirmado_fuera,
         "cola_fuera": cola_fuera,
