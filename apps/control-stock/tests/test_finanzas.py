@@ -149,6 +149,11 @@ def test_con_odoo_caido_sin_dato_jamas_cero(admin, con_odoo_caido):
     datos = finanzas.resumen()
     assert datos["con_datos"] is False
     assert [t["monto"] for t in datos["tarjetas"]][0] is None
+    # La quinta línea tampoco finge: con la foto incompleta la lista sale
+    # vacía, pero eso NO es «todo calza» — es «no se sabe».
+    assert datos["diferencia"]["monto"] is None
+    assert datos["diferencia"]["hint"] == finanzas.TEXTO_DIF_SIN_FOTO
+    assert finanzas.TEXTO_DIF_VACIA not in texto
 
 
 # ---------------------------------------------------------------------------

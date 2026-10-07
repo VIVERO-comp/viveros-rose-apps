@@ -139,6 +139,12 @@ TEXTO_DIF_HAY = ("Plata dada por buena que no calza con lo que el sistema "
 TEXTO_DIF_SIN_IDENTIFICAR = ("No se pudo identificar de qué venta sale "
                              "esta diferencia.")
 
+# Con la foto incompleta la lista también sale vacía, pero eso NO significa
+# que todo calce: significa que no se sabe. Decir «cada dólar está en su
+# lugar» ahí sería la misma mentira que un $0 fingido.
+TEXTO_DIF_SIN_FOTO = ("No se pudo revisar si todo calza: arriba dice qué "
+                      "falta.")
+
 
 def ventas_del_universo(informe):
     """EL universo de los cuatro números, en UN SOLO lugar: las ventas
@@ -305,18 +311,22 @@ def resumen():
         if abs(sobra) > _CENTAVO:
             casos.append({"orden": "", "cliente": "", "monto": sobra,
                           "motivo": TEXTO_DIF_SIN_IDENTIFICAR})
+    hay_foto = con_datos and vendido is not None
     diferencia = {
         # Con la foto incompleta el monto es «sin dato», como los otros
         # números que dependen del informe: un $0.00 ahí diría «todo
         # calza» cuando lo cierto es que no se sabe.
         "monto": (round(sum(c["monto"] for c in casos), 2)
-                  if con_datos and vendido is not None else None),
+                  if hay_foto else None),
         "n": len(casos),
         "casos": casos,
         # La línea NUNCA desaparece: con la lista vacía dice $0.00 en 0
         # casos. Una línea que a veces está y a veces no es peor que una
         # que siempre está en cero — nadie sabe si falta o si está bien.
-        "hint": TEXTO_DIF_HAY if casos else TEXTO_DIF_VACIA,
+        # Tres textos, porque son tres noticias distintas: hay casos · no
+        # hay ninguno · no se pudo revisar.
+        "hint": (TEXTO_DIF_SIN_FOTO if not hay_foto else
+                 (TEXTO_DIF_HAY if casos else TEXTO_DIF_VACIA)),
     }
 
     hoy = datetime.now(ZONA_PANAMA).date()
