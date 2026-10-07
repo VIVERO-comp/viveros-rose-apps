@@ -269,6 +269,11 @@ main, .tablero{container-type:inline-size;container-name:lienzo}
     padding:18px var(--marco-margen) 10px;
     min-height:var(--marco-cab-alto);
   }
+  /* El margen del contenido de las pantallas de tablero, UNA vez: antes
+     lo escribía cada piel (y «Ventas a revisar», que no tiene piel
+     propia, se quedaba con los 20px viejos y su encabezado caía 8px a la
+     izquierda del de las otras). */
+  .tablero{padding:18px var(--marco-margen) 24px;gap:12px}
   /* Pantallas de tablero: el margen de arriba y de los lados ya lo puso
      `.tablero`, así que acá se descuenta — y la FILA de adentro queda de
      44px en las dos pieles, que es lo que hace que la hamburguesa y el
