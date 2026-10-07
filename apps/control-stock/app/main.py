@@ -1727,7 +1727,8 @@ def _enlace_whatsapp(request, venta):
 
 
 @app.get("/venta")
-def venta(request: Request, error: str = "", abrir: str = "", vista: str = ""):
+def venta(request: Request, error: str = "", abrir: str = "", vista: str = "",
+          ver: str = ""):
     # La pestaña: el botón grande "+ Venta" (arriba de los servicios,
     # dueño 28/09/2026) y el historial local.
     #
@@ -1751,8 +1752,17 @@ def venta(request: Request, error: str = "", abrir: str = "", vista: str = ""):
     # es de Python (regla 10); una vista manoseada cae en la de siempre.
     if vista not in VISTAS_VENDER_MOVIL:
         vista = "pendientes"
-    filas, aviso_lista = _lista_vender(request, vista)
+    # Las DOS vistas de la pestaña (punto 8 del BLOQUE 56): el tablero de
+    # siempre y la tabla. Cuál se mira lo decide PYTHON (regla 10) — la
+    # plantilla pinta una o la otra, no alterna nada con JS —, y una vista
+    # manoseada cae en el tablero, igual que `vista`.
+    if ver not in VISTAS_VENDER:
+        ver = "tablero"
+    filas, aviso_lista = _lista_vender(request, vista, ver)
     columnas = _vender_columnas(filas)
+    # Muta las columnas con su cara de sección (la necesita el tablero del
+    # teléfono) aunque las píldoras no se pinten en la vista de tabla.
+    pildoras = _vender_movil(columnas, vista)
     return plantillas.TemplateResponse(request, "venta.html", {
         # La cola de pagos (item 6) es de los tres deberes: el enlace
         # solo existe para quien la puede abrir.
@@ -1771,27 +1781,38 @@ def venta(request: Request, error: str = "", abrir: str = "", vista: str = ""):
         # columnas por su estado de HOY — la agrupación es presentación,
         # cada tarjeta conserva sus mismas acciones y rutas.
         "vender_columnas": columnas,
+        # Las dos vistas y el segmento que las cambia (punto 8 del BLOQUE
+        # 56): el control es el MISMO de la casa (_vistas_compras.html /
+        # Pedidos) y los dos enlaces los arma Python.
+        "vender_vista": ver,
+        "vender_vistas": _vender_vistas(ver, vista),
+        # Las filas de la vista de tabla: contacto · fecha · interés ·
+        # etapa · monto, todas de lo que la lista única YA trae — ni un
+        # viaje nuevo a Odoo.
+        "vender_tabla": _vender_tabla(filas) if ver == "tabla" else [],
         # La cara celular del cuerpo (pantalla 25): las píldoras con sus
         # conteos reales y las columnas vestidas de secciones (_vender_movil
         # les cuelga su título y su orden del lienzo); el aviso rojo de
         # atoradas solo si el dato REAL existe (_vender_alerta, nunca un
         # número inventado); y la URL de volver que no pierde la vista.
-        "vender_pildoras": _vender_movil(columnas, vista),
+        #
+        # Las píldoras son del TABLERO del teléfono: lo que esconden son
+        # sus secciones. En la tabla no esconden nada, así que no se
+        # pintan — un control que no hace nada es peor que no tenerlo (la
+        # misma razón por la que las tres rayas no salen en 768-899).
+        "vender_pildoras": pildoras if ver == "tablero" else [],
         "vender_alerta": _vender_alerta(filas),
-        "volver_url": ("/venta" if vista == "pendientes"
-                       else f"/venta?vista={vista}"),
+        "volver_url": _volver_vender(vista, ver),
         # La tarjeta abierta (?abrir=v3 | ?abrir=s3): panel a la derecha en
         # computadora, pantalla completa en el teléfono. Mismo patrón
         # servidor-y-enlaces que «Ventas a revisar» (revisar_ventas.html).
         "abierta": _vender_abierta(filas, abrir),
-        # Los tiles del resumen (pantalla 09): cómo pagaron las pagadas,
-        # por método — solo restata lo que la lista ya trae.
-        "vender_pagos": _vender_pagos(filas),
     })
 
 
 @app.get("/venta/panel")
-def venta_panel(request: Request, abrir: str = "", vista: str = ""):
+def venta_panel(request: Request, abrir: str = "", vista: str = "",
+                ver: str = ""):
     """El PEDAZO del panel de una tarjeta de Vender, ya armado (A5).
 
     Lo pide panel.js al tocar una tarjeta, con la MISMA query del enlace
@@ -1806,11 +1827,12 @@ def venta_panel(request: Request, abrir: str = "", vista: str = ""):
     """
     if vista not in VISTAS_VENDER_MOVIL:
         vista = "pendientes"
-    filas, _aviso = _lista_vender(request, vista)
+    if ver not in VISTAS_VENDER:
+        ver = "tablero"
+    filas, _aviso = _lista_vender(request, vista, ver)
     return plantillas.TemplateResponse(request, "_panel_venta.html", {
         "abierta": _vender_abierta(filas, abrir),
-        "volver_url": ("/venta" if vista == "pendientes"
-                       else f"/venta?vista={vista}"),
+        "volver_url": _volver_vender(vista, ver),
     })
 
 
@@ -1835,16 +1857,41 @@ def _numero_de_orden(orden):
     return int(coincidencia.group(1)) if coincidencia else None
 
 
-def _base_abrir(vista):
+def _query_vender(vista, ver="tablero"):
+    """Los parámetros que una URL de Vender tiene que ARRASTRAR para no
+    devolverte a otra vista de la que estabas: la del celular
+    (?vista=pagadas) y la de la pestaña (?ver=tabla).
+
+    Las dos por omisión no se escriben: en la vista de siempre las URLs
+    son las de toda la vida (`/venta?abrir=v3`), y eso está clavado con
+    pruebas."""
+    partes = []
+    if vista != "pendientes":
+        partes.append(f"vista={vista}")
+    if ver != "tablero":
+        partes.append(f"ver={ver}")
+    return "&".join(partes)
+
+
+def _base_abrir(vista, ver="tablero"):
     """El comienzo de la URL que abre el panel de una tarjeta. En la
     vista de siempre es el /venta? de toda la vida (las URLs no cambian);
-    en otra vista del celular (?vista=pagadas) la arrastra, para que
-    abrir y cerrar un panel no te devuelva a la vista equivocada (en
-    esta casa nunca se pierde el lugar en una lista)."""
-    return "/venta?" if vista == "pendientes" else f"/venta?vista={vista}&"
+    en otra vista —del celular (?vista=pagadas) o de la pestaña
+    (?ver=tabla)— la arrastra, para que abrir y cerrar un panel no te
+    devuelva a la vista equivocada (en esta casa nunca se pierde el lugar
+    en una lista)."""
+    query = _query_vender(vista, ver)
+    return f"/venta?{query}&" if query else "/venta?"
 
 
-def _fila_venta(request, v, vista="pendientes"):
+def _volver_vender(vista, ver="tablero"):
+    """La URL de CERRAR el panel: la misma pantalla, sin `?abrir=`, en la
+    misma vista. Es la pareja de `_base_abrir`."""
+    query = _query_vender(vista, ver)
+    return f"/venta?{query}" if query else "/venta"
+
+
+def _fila_venta(request, v, vista="pendientes", ver="tablero"):
     """Una venta de plantas, con "tipo" para que la plantilla sepa qué
     tarjeta pintar en la lista única."""
     return {
@@ -1867,11 +1914,11 @@ def _fila_venta(request, v, vista="pendientes"):
         # El ancla de la tarjeta (no perder el lugar en la lista) y la URL
         # que abre su panel (?abrir=, mismo patrón que Ventas a revisar).
         "ancla": f"v-{v['n']}",
-        "abrir_url": f"{_base_abrir(vista)}abrir=v{v['n']}#v-{v['n']}",
+        "abrir_url": f"{_base_abrir(vista, ver)}abrir=v{v['n']}#v-{v['n']}",
     }
 
 
-def _lista_vender(request, vista="pendientes"):
+def _lista_vender(request, vista="pendientes", ver="tablero"):
     """(filas, aviso): ventas locales + cotizaciones de servicio, en UNA
     sola lista, ordenada por número de orden de mayor a menor (la más
     nueva arriba) — y el aviso honesto si Odoo no contestó al armarla.
@@ -1883,9 +1930,9 @@ def _lista_vender(request, vista="pendientes"):
     orden lo trata como el más chico de todos, nunca intercalado."""
     servicios, aviso = _cotizaciones_con_estado()
     filas = (
-        [_fila_venta(request, v, vista) for v in ventas.ventas_todas()
+        [_fila_venta(request, v, vista, ver) for v in ventas.ventas_todas()
          if v["estado"] != "cancelada"]
-        + [_fila_servicio(c, vista) for c in servicios
+        + [_fila_servicio(c, vista, ver) for c in servicios
            if not c["cancelada"]]
     )
     filas.sort(key=lambda f: (_numero_de_orden(f["orden"]) is not None,
@@ -1943,7 +1990,7 @@ def _linea_tarjeta(f):
     return f["etiqueta_estado"], bool(f.get("ultimo_error"))
 
 
-def _fila_servicio(c, vista="pendientes"):
+def _fila_servicio(c, vista="pendientes", ver="tablero"):
     """Una cotización de servicio, vestida para la lista única. "tipo"
     pasa a ser el discriminador de la plantilla ("servicio") y el tipo de
     NEGOCIO (renta, boda, …) sobrevive en "tipo_servicio" — antes se
@@ -1955,7 +2002,7 @@ def _fila_servicio(c, vista="pendientes"):
         "chip_texto": c["etiqueta_tipo"],
         "contacto": _contacto_de(c.get("celular")),
         "ancla": f"cot-{c['n']}",
-        "abrir_url": f"{_base_abrir(vista)}abrir=s{c['n']}#cot-{c['n']}",
+        "abrir_url": f"{_base_abrir(vista, ver)}abrir=s{c['n']}#cot-{c['n']}",
     }
 
 
@@ -2130,21 +2177,92 @@ def _vender_columnas(filas):
     return columnas
 
 
-def _vender_pagos(filas):
-    """Cómo pagaron las ventas PAGADAS de la lista, agrupadas por método
-    (Yappy · Efectivo · Sin método), para el resumen lateral del tablero.
-    Nada se inventa: si no hay pagadas, la lista sale vacía y la
-    plantilla no pinta el bloque."""
-    grupos = {}
+# ---------------------------------------------------------------------------
+# LAS DOS VISTAS DE VENDER (punto 8 del BLOQUE 56, 7/10/2026)
+#
+# Abraham pidió dos cosas en el mismo gesto: «quitá el resumen de la
+# derecha, hacé una vista». El `<aside class="vd-res">` —Cotizado,
+# Confirmado, Pagado y «Cómo pagaron»— se fue entero, con su
+# `_vender_pagos` y su CSS; «Cómo pagaron» ya vive en Finanzas
+# (pagos_confirmar.confirmado_por_metodo, BLOQUE 59.4), así que acá solo
+# se SACA, no se muda.
+#
+# Lo que NO se fue, porque está compartido y medido con la regla 11:
+# `_NOMBRES_METODO` (lo usa `_linea_tarjeta` para el «Yappy · vie 3» de
+# cada tarjeta pagada), `col.total` y `col.cuenta` (los encabezados de
+# columna y las pastillas del teléfono, los dos bajo prueba) y
+# `_columna_vender` / `COLUMNAS_VENDER` (el arrastre y `_mover_a_vender`).
+#
+# Y sobre el ancho que el panel liberó van las dos vistas: el tablero de
+# siempre y la tabla. El segmento que las cambia es el de la casa
+# (_vistas_vender.html), y cuál está activa lo decide ESTA función.
+# ---------------------------------------------------------------------------
+
+VISTAS_VENDER = ("tablero", "tabla")
+
+_TEXTOS_VISTA_VENDER = {"tablero": "Tablero", "tabla": "Tabla"}
+
+
+def _vender_vistas(ver, vista="pendientes"):
+    """El segmento Tablero · Tabla, ya decidido acá (regla 10): qué dice
+    cada cara, a dónde va y cuál está puesta.
+
+    El enlace arrastra la vista del celular (?vista=pagadas) para no
+    cambiar DOS cosas de un toque: cambiar de cara no puede devolverte a
+    las pendientes si estabas mirando las pagadas."""
+    salida = []
+    for clave in VISTAS_VENDER:
+        query = _query_vender(vista, clave)
+        salida.append({
+            "clave": clave,
+            "texto": _TEXTOS_VISTA_VENDER[clave],
+            "href": f"/venta?{query}" if query else "/venta",
+            "activa": clave == ver,
+        })
+    return salida
+
+
+def _vender_tabla(filas):
+    """Las filas de la VISTA DE TABLA: contacto · fecha · interés · etapa ·
+    monto cobrado o por cobrar. Todo decidido acá (regla 10) — la
+    plantilla solo pinta celdas.
+
+    NI UN VIAJE NUEVO A ODOO: las cinco columnas salen de lo que la lista
+    única ya trae. `cliente` y `fecha_texto` son de la tabla local;
+    `chip_texto`/`chip_estilo` son el interés que ya decide `colores` para
+    la tarjeta; la etapa es LA MISMA `_columna_vender` que reparte el
+    kanban (una fila y una tarjeta no pueden decir cosas distintas de la
+    misma venta); y el monto es el `total` de siempre.
+
+    LO QUE EL MONTO ES Y LO QUE NO ES, dicho en voz alta: es el TOTAL de
+    la venta, no un residual de Odoo — eso no viaja en esta lista (ni
+    `ventas_locales` ni `cotizaciones_servicio` guardan lo pagado, y
+    `cotizaciones.estados_en_odoo` solo trae state/invoice_ids). Así que
+    cada fila dice CUÁL de las dos cosas es su total: en «Pagado» está
+    cobrado, en las otras dos está por cobrar. Es exactamente la verdad
+    que el tablero ya imprime en sus encabezados, y es el rótulo que le
+    faltaba al resumen que se fue (prometía un cobrable y entregaba una
+    facturación — medido en docs/MEDICION-linear-prueba-y-vender-kanban).
+    """
+    salida = []
     for f in filas:
-        if f["tipo"] != "venta" or f["estado"] != "pagado":
-            continue
-        nombre = _NOMBRES_METODO.get(f.get("metodo"), "Sin método")
-        grupo = grupos.setdefault(nombre, {"nombre": nombre, "cuenta": 0,
-                                           "monto": 0.0})
-        grupo["cuenta"] += 1
-        grupo["monto"] += f["total"] or 0
-    return sorted(grupos.values(), key=lambda g: -g["monto"])
+        clave = _columna_vender(f)
+        cobrado = clave == "pagado"
+        salida.append({
+            # El mismo nombre que la tarjeta, y el mismo relleno honesto
+            # que usa el panel cuando la venta no guardó ninguno.
+            "cliente": (f.get("cliente") or "").strip() or "Sin nombre guardado",
+            "abrir_url": f["abrir_url"],
+            "ancla": f["ancla"],
+            "fecha": f["fecha_texto"],
+            "interes": f["chip_texto"],
+            "chip_estilo": f["chip_estilo"],
+            "etapa": _TITULOS_VENDER[clave],
+            "total": f["total"] or 0,
+            "cobrado": cobrado,
+            "monto_rotulo": "cobrado" if cobrado else "por cobrar",
+        })
+    return salida
 
 
 # ---------------------------------------------------------------------------

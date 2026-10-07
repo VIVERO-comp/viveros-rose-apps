@@ -19,8 +19,12 @@ from app.datos import ZONA_PANAMA, _db
 class OdooMinimo:
     def __init__(self):
         self.ordenes = {}
+        # Cada llamada que la pantalla le hace a Odoo, para poder afirmar
+        # que una vista nueva no agrega NI UN viaje (BLOQUE 56, punto 8).
+        self.llamadas = []
 
     def ejecutar(self, modelo, metodo, args, kw=None):
+        self.llamadas.append((modelo, metodo))
         if modelo == "sale.order" and metodo == "search_read":
             ids = args[0][0][2]
             return [{"id": i, **self.ordenes[i]} for i in ids if i in self.ordenes]
@@ -445,19 +449,21 @@ def test_las_columnas_llenan_el_carril_cuando_el_resumen_esta_debajo():
     assert "max-width:340px" in bloque[0]
 
 
-def test_con_el_resumen_al_costado_las_columnas_vuelven_a_su_ancho_fijo():
-    """Si crecieran también ahí, el contenido del tablero pediría 1044 y el
-    resumen se iría abajo a 1440 — justo donde A11 consiguió que quepa.
+def test_el_bloque_de_1120_murio_con_el_panel():
+    """El bloque `@container lienzo (min-width:1120px)` existía SOLO para
+    devolverle a las columnas su ancho fijo (276) y hacerle sitio al
+    resumen al costado. Al irse el resumen (BLOQUE 56, punto 8) se borró
+    entero, y por eso las columnas crecen en TODOS los anchos: medido, el
+    tablero pasó de 852 a 1044 a 1440, 1600 y 1920 de ventana.
 
-    Este bloque es DEL PANEL y se va con él (punto 8 del BLOQUE 56):
-    borrarlo deja las columnas creciendo en todos los anchos, que es lo que
-    se quiere el día que el resumen no esté."""
+    Queda clavado para que nadie lo reponga sin darse cuenta: con ese
+    bloque de vuelta, el tablero volvería a quedarse en 852."""
     css = _apretado_vd()
-    bloque = css.split("@containerlienzo(min-width:1120px)", 1)[1]
-    assert ".vd-col{flex:00276px;max-width:none}" in bloque
-    # Y el tablero NO se tocó: el hueco de 1440 para arriba es del resumen
-    # estirándose, y se resuelve cuando el panel se quite.
-    assert ".vd-tablero{flex:01auto}" in bloque
+    assert "@containerlienzo(min-width:1120px)" not in css
+    assert "max-width:none" not in css
+    assert "flex:01auto" not in css
+    # Y las columnas crecen desde el ÚNICO escalón que queda.
+    assert css.count("@containerlienzo(min-width:860px)") == 1
 
 
 def test_la_tarjeta_sigue_midiendo_lo_mismo_en_las_tres_columnas():
@@ -468,3 +474,258 @@ def test_la_tarjeta_sigue_midiendo_lo_mismo_en_las_tres_columnas():
     assert "min-height:78px" in css
     # el visto vive en una fila de alto fijo, así que no empuja la tarjeta
     assert ".vd-pie{align-items:center;gap:4px6px;min-height:28px}" in css
+
+
+# ---------------------------------------------------------------------------
+# EL RESUMEN DE LA DERECHA SE FUE, Y EN SU ANCHO VIVEN DOS VISTAS
+# (punto 8 del BLOQUE 56, 7/10/2026)
+#
+# Abraham: «quitá el resumen de la derecha, hacé una vista». Lo que estas
+# pruebas cuidan es, en este orden:
+#   1. que el panel no esté — ni su HTML, ni su CSS, ni su función;
+#   2. que lo COMPARTIDO siga en pie (es lo que la regla 11 midió: borrar
+#      `col.total`, `col.cuenta` o `_NOMBRES_METODO` rompería el tablero,
+#      las pastillas del teléfono y la línea «Yappy · vie 3»);
+#   3. que las dos vistas existan, las decida Python y ninguna quede
+#      inalcanzable (ni en computadora ni en el teléfono);
+#   4. que la tabla no estrene NI UN viaje a Odoo ni una ruta.
+# ---------------------------------------------------------------------------
+
+def test_el_resumen_de_la_derecha_no_esta_en_ninguna_vista(cliente, odoo):
+    _tres_filas(odoo)
+    for ruta in ("/venta", "/venta?ver=tabla"):
+        pagina = cliente.get(ruta).text
+        for marca in ('class="vd-res"', "vd-tile", "vd-pvs", "vd-lienzo",
+                      "Cómo pagaron", "en el tablero"):
+            assert marca not in pagina, f"{marca} sigue en {ruta}"
+
+
+def test_el_css_del_resumen_tampoco_esta():
+    css = _apretado_vd()
+    for marca in (".vd-res", ".vd-tile", ".vd-pvs", ".vd-pv-n", ".vd-lienzo"):
+        assert marca + "{" not in css, f"{marca} sigue en la hoja"
+
+
+def test_la_funcion_del_resumen_se_fue_con_el():
+    """`_vender_pagos` y la clave `vender_pagos` eran exclusivas del panel
+    (medido con la regla 11 en los cinco repos: ningún test, ninguna otra
+    plantilla, ningún endpoint JSON)."""
+    from app import main
+    assert not hasattr(main, "_vender_pagos")
+
+
+def test_lo_compartido_sigue_en_pie(cliente, odoo):
+    """Las tres cosas que la regla 11 marcó como COMPARTIDAS y que un
+    borrado de más se habría llevado:
+
+    - `col.total` → el total en el encabezado de cada columna;
+    - `col.cuenta` → el globito del encabezado y las pastillas del teléfono;
+    - `_NOMBRES_METODO` → la línea «Efectivo · <fecha>» de una pagada,
+      que la pinta `_linea_tarjeta`, no el panel que se fue.
+    """
+    _tres_filas(odoo)
+    pagina = cliente.get("/venta").text
+    # el total de cada columna (los tres montos de _tres_filas)
+    assert pagina.count('class="vd-tot num') == 3
+    assert "$200.00" in pagina and "$50.00" in pagina and "$80.00" in pagina
+    # el conteo de cada columna
+    assert pagina.count('class="vd-cnt num"') == 3
+    # y el método, que es lo único que leía _NOMBRES_METODO fuera del panel
+    assert "Efectivo · " in pagina
+    from app import main
+    assert main._NOMBRES_METODO["efectivo"] == "Efectivo"
+
+
+# ---------------------------------------------------------------------------
+# El segmento de las dos vistas: el control de la casa, decidido en Python
+# ---------------------------------------------------------------------------
+
+def test_el_segmento_tiene_las_dos_caras_y_el_tablero_por_omision(cliente, odoo):
+    _tres_filas(odoo)
+    pagina = cliente.get("/venta").text
+    assert '<a class="on" href="/venta" aria-current="page">Tablero</a>' in pagina
+    assert '<a class="" href="/venta?ver=tabla">Tabla</a>' in pagina
+
+
+def test_el_segmento_marca_la_tabla_cuando_es_la_que_se_mira(cliente, odoo):
+    _tres_filas(odoo)
+    pagina = cliente.get("/venta?ver=tabla").text
+    assert '<a class="on" href="/venta?ver=tabla" aria-current="page">Tabla</a>' in pagina
+    assert '<a class="" href="/venta">Tablero</a>' in pagina
+
+
+def test_el_segmento_viene_dos_veces_para_que_el_telefono_lo_alcance(cliente, odoo):
+    """Bajo 900px la cabecera entera está `display:none`: sin la copia
+    `seg-movil` la tabla sería INALCANZABLE desde el celular — el defecto
+    que ya apareció una vez con «Respuestas» (A17)."""
+    _tres_filas(odoo)
+    pagina = cliente.get("/venta").text
+    assert pagina.count('class="vd-seg ') == 2
+    assert 'class="vd-seg seg-movil"' in pagina
+    css = _apretado_vd()
+    # escondida por defecto y prendida SOLO en el bloque del teléfono
+    assert ".vd-seg.seg-movil{display:none}" in css
+    movil = css.split("@media(max-width:899px)", 1)[1]
+    assert ".vd-seg.seg-movil{display:flex" in movil
+
+
+def test_el_segmento_arrastra_la_vista_del_telefono(cliente, odoo):
+    """Cambiar de cara no puede cambiar DOS cosas de un toque: si estabas
+    en las pagadas, seguís en las pagadas."""
+    _tres_filas(odoo)
+    pagina = cliente.get("/venta?vista=pagadas").text
+    assert 'href="/venta?vista=pagadas&amp;ver=tabla">Tabla</a>' in pagina
+    assert ('href="/venta?vista=pagadas" aria-current="page">Tablero</a>'
+            in pagina)
+    # …y al revés: desde la tabla de las pagadas, «Tablero» tampoco
+    # pierde la vista del teléfono.
+    tabla = cliente.get("/venta?vista=pagadas&ver=tabla").text
+    assert 'href="/venta?vista=pagadas">Tablero</a>' in tabla
+
+
+def test_una_vista_manoseada_cae_en_el_tablero(cliente, odoo):
+    _tres_filas(odoo)
+    for mala in ("excel", "TABLA", "tabla%20", "1", "tablero2"):
+        pagina = cliente.get(f"/venta?ver={mala}").text
+        assert '<a class="on" href="/venta" aria-current="page">Tablero</a>' in pagina
+        assert '<section class="vd-col' in pagina
+
+
+# ---------------------------------------------------------------------------
+# La vista de tabla
+# ---------------------------------------------------------------------------
+
+def test_la_tabla_tiene_las_cinco_columnas_que_pidio(cliente, odoo):
+    _tres_filas(odoo)
+    pagina = cliente.get("/venta?ver=tabla").text
+    for titulo in ("Contacto", "Fecha", "Interés", "Etapa", "Monto"):
+        assert f'<th scope="col"' in pagina and titulo in pagina
+    # y el tablero NO se pinta al mismo tiempo: son dos vistas, no dos capas
+    assert '<section class="vd-col' not in pagina
+
+
+def test_la_tabla_trae_una_fila_por_renglon_de_la_lista_unica(cliente, odoo):
+    """Las mismas filas del tablero —ventas de plantas y cotizaciones de
+    servicio juntas— y en el MISMO orden (número de orden descendente):
+    agrupar o tabular es presentación, nunca otro orden."""
+    _tres_filas(odoo)
+    n_serv = _insertar_servicio(610, "S00083", cliente="TablaServicio")
+    odoo.ordenes[610] = {"state": "sale", "invoice_ids": []}
+    pagina = cliente.get("/venta?ver=tabla").text
+    assert pagina.count('<tr class="vd-tr"') == 4
+    # S00083 > S00082 > S00081 > S00080
+    assert (pagina.index("TablaServicio") < pagina.index("MvPagada")
+            < pagina.index("MvConfirmada") < pagina.index("MvCotizada"))
+    assert n_serv
+
+
+def test_la_etapa_de_una_fila_es_la_columna_del_tablero(cliente, odoo):
+    """Una fila y una tarjeta no pueden decir cosas distintas de la misma
+    venta: la etapa sale de `_columna_vender`, la misma que reparte el
+    kanban."""
+    _tres_filas(odoo)
+    pagina = cliente.get("/venta?ver=tabla").text
+    from app import main
+    for clave, titulo, _pista in main.COLUMNAS_VENDER:
+        assert f'<td class="vd-td-etapa">{titulo}</td>' in pagina, clave
+
+
+def test_el_monto_dice_si_esta_cobrado_o_por_cobrar(cliente, odoo):
+    """El rótulo que le faltaba al resumen que se fue (prometía un
+    cobrable y entregaba una facturación). En «Pagado» el total está
+    cobrado; en las otras dos, por cobrar — y NO es un residual de Odoo,
+    que en esta lista no viaja."""
+    _tres_filas(odoo)
+    pagina = cliente.get("/venta?ver=tabla").text
+    assert pagina.count(">cobrado</span>") == 1       # la pagada
+    assert pagina.count(">por cobrar</span>") == 2    # cotizada y confirmada
+    # y la cifra por cobrar va en rojo, el mismo lenguaje del encabezado
+    assert pagina.count('class="num vd-rojo"') == 2
+
+
+def test_la_tabla_no_pinta_las_pildoras_del_telefono(cliente, odoo):
+    """Las píldoras esconden SECCIONES del tablero; en la tabla no
+    esconderían nada. Un control que no hace nada es peor que no tenerlo.
+
+    OJO, medido el 7/10 y NO es de este punto: hoy ese `<nav class="vd-fl">`
+    no se ve en el teléfono ni en el tablero, porque `@media (max-width:899px)
+    nav{position:fixed;transform:translateX(-105%)}` (styles.css) le pega al
+    ELEMENTO `nav` y se lleva también a este, que queda en x=-315. Pasa igual
+    en `2335f6c`, así que esta prueba cuida la DECISIÓN de Python (si las
+    píldoras se mandan o no), no que se vean. Queda reportado."""
+    _tres_filas(odoo)
+    assert 'class="vd-fl"' in cliente.get("/venta").text
+    assert 'class="vd-fl"' not in cliente.get("/venta?ver=tabla").text
+
+
+def test_desde_la_tabla_se_abre_el_MISMO_panel_y_cerrar_vuelve_a_la_tabla(
+        cliente, odoo):
+    """Ninguna acción se queda sin puerta por cambiar de vista: el nombre
+    de la fila abre el panel de siempre (misma ruta, `data-panel-liga`) y
+    cerrar devuelve a la TABLA, no al tablero."""
+    _, _, n = _tres_filas(odoo)
+    pagina = cliente.get("/venta?ver=tabla").text
+    assert f'href="/venta?ver=tabla&amp;abrir=v{n}#v-{n}"' in pagina
+    assert 'data-panel-liga' in pagina
+    panel = cliente.get(f"/venta?ver=tabla&abrir=v{n}").text
+    assert 'class="vd-panel"' in panel
+    assert f'href="/venta?ver=tabla#v-{n}"' in panel
+    # el pedazo que pide panel.js (A5) contesta lo mismo, con su vista
+    pedazo = cliente.get(f"/venta/panel?ver=tabla&abrir=v{n}").text
+    assert f'href="/venta?ver=tabla#v-{n}"' in pedazo
+
+
+def test_en_la_vista_de_siempre_las_urls_no_cambian(cliente, odoo):
+    """`ver=tablero` es el valor por omisión y NO se escribe: los enlaces
+    de toda la vida siguen idénticos (los otros tests de este archivo los
+    afirman letra por letra)."""
+    _, _, n = _tres_filas(odoo)
+    assert f'href="/venta?abrir=v{n}#v-{n}"' in cliente.get("/venta").text
+    assert "ver=tablero" not in cliente.get("/venta").text
+
+
+def test_la_tabla_no_cuesta_ni_un_viaje_nuevo_a_odoo(cliente, odoo):
+    """Las cinco columnas salen de lo que la lista única YA trae: el
+    cliente y la fecha de la tabla local, el interés de `colores`, la
+    etapa de `_columna_vender` y el monto del `total` de siempre."""
+    _tres_filas(odoo)
+    _insertar_servicio(611, "S00084", cliente="ViajeServicio")
+    odoo.ordenes[611] = {"state": "sale", "invoice_ids": []}
+    cliente.get("/venta")
+    del odoo.llamadas[:]
+    cliente.get("/venta")
+    tablero = list(odoo.llamadas)
+    del odoo.llamadas[:]
+    cliente.get("/venta?ver=tabla")
+    assert list(odoo.llamadas) == tablero
+
+
+def test_la_tabla_y_el_tablero_cuentan_LA_MISMA_plata(cliente, odoo):
+    """El pecado del resumen que se fue era decir una cosa donde el resto
+    de la casa decía otra. Las dos vistas tienen que cuadrar al centavo:
+    lo «cobrado» de la tabla ES el total de la columna «Pagado», y lo «por
+    cobrar» ES la suma de las otras dos."""
+    from app import main
+    _tres_filas(odoo)
+    _insertar_servicio(612, "S00085", cliente="CuadreServicio", total=333.0)
+    odoo.ordenes[612] = {"state": "sale", "invoice_ids": []}
+    # Se piden por la MISMA puerta que usa la pantalla, no por una copia.
+    pagina = cliente.get("/venta?ver=tabla")
+    assert pagina.status_code == 200
+    filas, _aviso = main._lista_vender(_PeticionFalsa(), "pendientes", "tabla")
+    columnas = {c["clave"]: c for c in main._vender_columnas(filas)}
+    tabla = main._vender_tabla(filas)
+    cobrado = sum(r["total"] for r in tabla if r["cobrado"])
+    por_cobrar = sum(r["total"] for r in tabla if not r["cobrado"])
+    assert cobrado == columnas["pagado"]["total"]
+    assert por_cobrar == (columnas["cotizado"]["total"]
+                          + columnas["confirmado"]["total"])
+    # y ninguna fila se queda afuera ni se cuenta dos veces
+    assert len(tabla) == len(filas) == sum(c["cuenta"] for c in columnas.values())
+
+
+class _PeticionFalsa:
+    """`_lista_vender` solo usa `request` para armar el wa.me de una venta
+    pagada con celular (_enlace_whatsapp); para el cuadre basta una base
+    de URL."""
+    base_url = "http://pruebas/"
