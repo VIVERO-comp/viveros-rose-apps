@@ -53,31 +53,48 @@
   {# A8: cuántas cuentas de sistema quedaron fuera (o el hueco de no haber
      podido comprobarlo, que es cuando no se saca a nadie). #}
   {% if v.aviso_sistema %}<div class="ct-hueco">{{ v.aviso_sistema }}</div>{% endif %}
+  {# BLOQUE 56: cuántos repetidos se unieron por su número de orden y
+     cuántos quedan — el dueño pidió verlo con números, no en un informe
+     aparte. Y lo que este AMBIENTE esconde, dicho con su variable: en
+     producción va vacía y esta línea no aparece nunca. #}
+  {% if v.aviso_union %}<div class="ct-hueco">{{ v.aviso_union }}</div>{% endif %}
+  {% if v.aviso_escondidos %}<div class="ct-hueco">{{ v.aviso_escondidos }}</div>{% endif %}
   {# El candado dicho, no escondido: si alguna fila va tapada, la pantalla
      explica por qué en vez de mostrar un «—» mudo. #}
   {% if v.aviso_tapados %}<div class="ct-hueco">{{ v.aviso_tapados }}</div>{% endif %}
 
-  {# Los filtros del lienzo, como enlaces GET. «Sin responsable» va
-     APAGADO: el responsable del contacto no existe como dato todavía. #}
+  {# Los filtros del lienzo, como enlaces GET. «Sin responsable» ya está
+     ENCENDIDO (BLOQUE 56): el responsable sale de los `Resp:` de los
+     leads. Se apaga SOLO si Linear no se pudo leer, y entonces dice por
+     qué — nunca «todos sin responsable», que sería mentira. #}
   <div class="ct-filtros">
     {% for f in v.filtros %}
+    {% if f.apagado %}
+    <button class="ct-fc ct-fc-apagado" type="button" disabled
+            title="{{ f.motivo }}">{{ f.nombre }} — no se puede ahora</button>
+    {% else %}
     <a class="ct-fc {{ 'on' if f.activo }}"
        href="/contactos?f={{ f.clave }}{% if v.q %}&amp;q={{ v.q | urlencode }}{% endif %}">{{ f.nombre }}</a>
+    {% endif %}
     {% endfor %}
-    <button class="ct-fc ct-fc-apagado" type="button" disabled
-            title="El responsable por contacto no existe como dato todavía">{{ v.filtro_apagado }} — Todavía no</button>
   </div>
 
   <div class="ct-lista">
+    {# Las SEIS columnas del lienzo. «Fuente» salió de aquí en el BLOQUE
+       56 para dejarle el lugar a «Responsable», que es lo que el lienzo
+       pide; el de dónde salió cada contacto sigue estando en su página,
+       en «Cómo contactarlos → De dónde llegó». #}
     <div class="ct-hr">
-      <span>Nombre</span><span>Tipo</span><span>Fuente</span>
+      <span>Nombre</span><span>Tipo</span><span>Responsable</span>
       <span>Último contacto</span><span>Ventas</span><span>Total</span>
     </div>
     {% for c in v.contactos %}
     <a class="ct-r" href="/contactos/{{ c.id }}">
       <b>{{ c.nombre }}{% if c.telefono %} <span class="ct-tel num">{{ c.telefono }}</span>{% endif %}</b>
       <span class="ct-pista">{{ c.tipo }}</span>
-      <span class="ct-pista">{{ c.fuente_texto or '—' }}</span>
+      {# Sale de los `Resp:` de sus leads. Sin leads legibles queda vacío
+         honesto: la franja de arriba ya dijo que falta esa fuente. #}
+      <span class="ct-pista">{{ c.resp_texto or '—' }}</span>
       {# El último contacto sale de Twenty, que hoy no se puede leer:
          vacío honesto en su lugar, nunca una fecha inventada. #}
       <span class="ct-pista">—</span>

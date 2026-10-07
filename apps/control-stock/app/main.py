@@ -6828,6 +6828,12 @@ def conversaciones_respuestas(request: Request):
 # zonas.
 from . import contactos  # noqa: E402
 
+# La única tabla propia de Contactos: las EXCEPCIONES a la unión de
+# repetidos (BLOQUE 56). La pantalla sigue siendo de solo lectura —esta
+# tabla se LEE al armar la lista—; quien la escribe será el «Deshacer»
+# del punto B2, cuando se apruebe.
+contactos.iniciar_tablas()
+
 
 def _sesion_contactos(request):
     """Quién mira, para el candado del dinero y del chat. Se arma una vez
