@@ -105,6 +105,36 @@
           busForm.submit();
         });
     });
+
+    /* Elegir una fila va por el MISMO form GET, para que se lleve lo
+       recién escrito. El <a> sigue siendo un enlace de verdad (sin JS
+       navega y el servidor pinta el formulario con esa persona puesta):
+       esto solo le suma lo que todavía no había llegado al servidor.
+
+       Delegado en el document porque la caja se reemplaza entera cuando
+       se busca sin recargar — un listener por fila solo ataría las que
+       había al cargar. */
+    document.addEventListener('click', function (evento) {
+      if (evento.defaultPrevented || evento.button !== 0) return;
+      // Abrir en otra pestaña o guardar sigue siendo cosa del navegador.
+      if (evento.metaKey || evento.ctrlKey || evento.shiftKey ||
+          evento.altKey) return;
+      var fila = evento.target && evento.target.closest
+        ? evento.target.closest('[data-buscador-elegir]') : null;
+      if (!fila) return;
+      var campoLead = busForm.elements.lead;
+      var campoCliente = busForm.elements.cliente;
+      // Sin esos dos campos no hay dónde escribir lo elegido: que
+      // navegue el enlace, que lleva lo mismo menos lo recién escrito.
+      if (!campoLead || !campoCliente) return;
+      evento.preventDefault();
+      busSincronizar();
+      // Después del sincronizado, nunca antes: estos dos los decide la
+      // fila, no lo que haya quedado en el formulario.
+      campoLead.value = fila.getAttribute('data-lead') || '';
+      campoCliente.value = fila.getAttribute('data-cliente') || '';
+      busForm.submit();
+    });
   }
 
   // Cancelar una actividad no tiene marcha atrás cómoda: se pregunta con el

@@ -439,6 +439,26 @@ def test_los_campos_escondidos_devuelven_el_mismo_formulario(cliente):
     assert ocultos["nueva"] == "1"
 
 
+def test_lead_y_cliente_existen_como_campos_aun_vacios(cliente):
+    """Son los dos únicos campos que se mandan vacíos, a propósito.
+
+    Es donde el buscador escribe a quién se eligió: sin el campo vacío no
+    habría dónde ponerlo, y elegir una fila dejaría de llevarse lo recién
+    escrito (caería al enlace pelado). Los demás se omiten vacíos, igual
+    que en `_liga`, para no ensuciar la dirección.
+    """
+    cuerpo = cliente.get("/calendario", params={"nueva": "1"}).text
+    form = cuerpo[cuerpo.index('id="f-buscar-persona"'):]
+    form = form[:form.index("</form>")]
+    assert 'name="lead" value=""' in form
+    assert 'name="cliente" value=""' in form
+    # Y la fila lleva los dos valores que el JS copia a esos campos: los
+    # MISMOS que el enlace, decididos en el servidor.
+    fila = re.search(r'<a class="bus-it"[^>]*>', cuerpo).group(0)
+    assert 'data-lead="LEAD-' in fila
+    assert "data-cliente=" in fila
+
+
 # ---------------------------------------------------------------------------
 # El 8095: buscar funciona completo, GUARDAR no (condiciones 1 y 2)
 # ---------------------------------------------------------------------------

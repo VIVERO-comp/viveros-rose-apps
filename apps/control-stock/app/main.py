@@ -4455,6 +4455,12 @@ def _ocultos_del_buscador(estado, puestos):
     Son los mismos datos que `_liga` mete en un enlace, puestos como
     campos: un form GET solo manda lo que lleva adentro, así que sin esto
     buscar a alguien perdería la fecha, el tipo y la nota ya escritos.
+
+    `lead` y `cliente` se mandan SIEMPRE, aunque vayan vacíos, y los demás
+    solo si traen valor (igual que `_liga`, para no ensuciar la
+    dirección). La razón es que esos dos son los campos donde el buscador
+    escribe a quién se eligió: si el vacío no existiera como campo, no
+    habría dónde ponerlo.
     """
     campos = {
         "nueva": "1", "dia": estado["dia"], "vista": estado["vista"],
@@ -4464,8 +4470,11 @@ def _ocultos_del_buscador(estado, puestos):
         "hechas": "1" if estado["hechas"] else "0", "mes": estado["mes"],
     }
     campos.update(puestos)
+    for campo in ("lead", "cliente"):
+        campos.setdefault(campo, "")
     return [{"nombre": nombre, "valor": valor}
-            for nombre, valor in campos.items() if valor not in ("", None)]
+            for nombre, valor in campos.items()
+            if nombre in ("lead", "cliente") or valor not in ("", None)]
 
 
 @app.get("/calendario/buscar")
