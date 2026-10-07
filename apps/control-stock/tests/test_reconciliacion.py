@@ -664,7 +664,7 @@ def test_contrato_exacto_de_informe_datos(odoo):
     venta = datos["ventas"][0]
     assert set(venta) == {
         "orden_id", "nombre", "cliente", "telefono", "fecha", "total",
-        "pagado", "debe", "clase", "motivo", "marca_prueba",
+        "pagado", "debe", "clase", "motivo", "marca_prueba", "confirmada",
         "entregado_odoo", "entregado_calendario", "historica",
         "fuentes_odoo", "fuentes_otras"}
     # `fecha` es el `date_order` crudo de Odoo (7/10/2026): la cola de
@@ -680,6 +680,29 @@ def test_contrato_exacto_de_informe_datos(odoo):
         "nombre", "cliente", "monto", "estado", "creado_por", "sospecha",
         "historica"}
     assert isinstance(hoy_creado["total_ordenes"], float)
+
+
+def test_confirmada_sale_del_state_no_de_la_clase(odoo):
+    """BLOQUE 59.2: Finanzas suma solo ventas CONFIRMADAS, y el sí/no NO
+    se puede deducir de la clase A–H. Medido el 7/10 en el Odoo de pruebas:
+    de 5 filas en clase F, 1 era `sale` y 4 `draft`. Por eso el contrato
+    lleva su propio campo."""
+    etapas = odoo.con_etapas_flujo()
+    p = odoo.agregar_partner("Frontera", "6199-1111")
+    odoo.agregar_orden(p, "S00301", state="draft", amount_total=100.0)
+    odoo.agregar_orden(p, "S00302", state="sale", amount_total=200.0)
+    # Dos clase F (etapa manual «pagado» y $0 en Odoo), una de cada lado:
+    # la clase es la MISMA y `confirmada` no.
+    odoo.agregar_orden(p, "S00303", state="draft", amount_total=50.0,
+                       oportunidad=odoo.agregar_oportunidad(etapas["pagado"]))
+    odoo.agregar_orden(p, "S00304", state="sale", amount_total=60.0,
+                       oportunidad=odoo.agregar_oportunidad(etapas["pagado"]))
+    filas = _ventas_por_nombre(reconciliacion.informe_datos())
+    assert filas["S00301"]["confirmada"] is False
+    assert filas["S00302"]["confirmada"] is True
+    assert filas["S00303"]["clase"] == filas["S00304"]["clase"] == "F"
+    assert filas["S00303"]["confirmada"] is False
+    assert filas["S00304"]["confirmada"] is True
 
 
 def test_rojo_suma_f_g_h(odoo, monkeypatch):

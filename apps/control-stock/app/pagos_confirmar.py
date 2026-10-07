@@ -38,6 +38,11 @@ EVIDENCIAS = {
     "reporte_operaciones": "Reporte de operaciones (llegó al banco)",
 }
 
+# Una evidencia que no está en EVIDENCIAS (una fila vieja, o una que
+# alguien agregue sin pasar por acá): se MUESTRA con su propio renglón,
+# nunca se reparte entre las conocidas ni se descuenta del total.
+TEXTO_EVIDENCIA_DESCONOCIDA = "Sin clasificar: la evidencia no se reconoce"
+
 # Centavos de tolerancia al decidir si el saldo quedó en 0.
 _CENTAVO = 0.009
 
@@ -121,6 +126,42 @@ def sumas_confirmadas():
             "SELECT orden_id, COALESCE(SUM(monto), 0) AS suma"
             " FROM pago_confirmado GROUP BY orden_id").fetchall()
     return {int(f["orden_id"]): round(float(f["suma"]), 2) for f in filas}
+
+
+def confirmado_por_metodo(ids=None):
+    """«Cómo pagaron»: lo ya dado por bueno, partido por la evidencia que
+    vio quien confirmó. Lista de dicts {clave, texto, n, monto}, de mayor
+    a menor.
+
+    `ids` acota a un conjunto de órdenes (Finanzas pasa las CONFIRMADAS,
+    para que la suma del desglose sea EXACTAMENTE su «Cobrado y
+    confirmado» — BLOQUE 59.4: si el desglose sumara otra cosa, sería una
+    verdad más justo cuando estamos matando otra). Sin `ids`, todo.
+
+    Una evidencia que la casa no conozca NO se reparte ni se esconde: sale
+    con su propia clave y el texto lo dice. Un monto NULL suma 0 (igual
+    que `sumas_confirmadas`) pero su fila SÍ se cuenta: el hecho existe
+    aunque el monto no se sepa."""
+    with _db() as con:
+        filas = con.execute(
+            "SELECT orden_id, evidencia, COALESCE(SUM(monto), 0) AS suma,"
+            " COUNT(*) AS n FROM pago_confirmado"
+            " GROUP BY orden_id, evidencia").fetchall()
+    acumulado = {}
+    for f in filas:
+        if ids is not None and int(f["orden_id"]) not in ids:
+            continue
+        clave = f["evidencia"] or ""
+        celda = acumulado.setdefault(clave, {"n": 0, "monto": 0.0})
+        celda["n"] += int(f["n"])
+        celda["monto"] += float(f["suma"])
+    salida = [{"clave": clave,
+               "texto": EVIDENCIAS.get(clave, TEXTO_EVIDENCIA_DESCONOCIDA),
+               "n": celda["n"],
+               "monto": round(celda["monto"], 2)}
+              for clave, celda in acumulado.items()]
+    salida.sort(key=lambda d: (-d["monto"], d["texto"]))
+    return salida
 
 
 # ---------------------------------------------------------------------------
@@ -237,6 +278,12 @@ def cola():
             "total": round(float(venta.get("total") or 0), 2),
             "clase": clase,
             "motivo": venta.get("motivo") or "",
+            # ¿La venta está confirmada en Odoo? Viaja tal cual desde el
+            # informe (BLOQUE 59.2): la cola sigue mostrando TODO lo que
+            # tiene plata o señal de plata — un pago sobre una cotización
+            # sin confirmar es justo lo que hay que ver — pero Finanzas
+            # necesita poder sumar solo las confirmadas.
+            "confirmada": bool(venta.get("confirmada")),
             # F = el dinero NO está en Odoo: la fila lo dice para que la
             # evidencia que se pida sea la de verdad.
             "fuera_de_odoo": clase == "F",

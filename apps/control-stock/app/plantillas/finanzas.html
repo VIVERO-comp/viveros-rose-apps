@@ -35,16 +35,25 @@
   {% if f.descuadre is not none %}
   <div class="fz-alerta">Los cuatro números de arriba no suman entre sí: se van por {{ f.descuadre | abs | dinero }}. El detalle venta por venta está en Ventas a revisar. Se dice, no se esconde.</div>
   {% endif %}
+  {# Lo que queda FUERA de los cuatro números se muestra, nunca se reparte
+     (BLOQUE 59.2, misma filosofía que la sospecha de duplicado). #}
+  {% if f.confirmado_fuera %}
+  <div class="fz-alerta">Hay {{ f.confirmado_fuera.monto | dinero }} ya dados por buenos en {{ f.confirmado_fuera.n }} venta{{ 's' if f.confirmado_fuera.n != 1 }} que esta foto no cuenta (cotizaciones sin confirmar, canceladas o ya borradas): no entran en ninguno de los cuatro números.</div>
+  {% endif %}
 
   <div class="fz-g4">
     {% for t in f.tarjetas %}
     <div class="fz-c">
       <span class="fz-ct">{{ t.titulo }}</span>
       <span class="fz-kv num {{ 'rojo' if t.rojo }} {{ 'sin-dato' if t.monto is none }}">{{ t.texto }}</span>
+      {# La línea que dice QUÉ SUMA este número. Era el problema de fondo:
+         los cuatro eran correctos y ninguno decía de qué universo hablaba
+         (BLOQUE 59.2). La decide Python, nunca un if de acá. #}
       <span class="fz-hint">{{ t.hint }}</span>
     </div>
     {% endfor %}
   </div>
+  <p class="fz-hint">{{ f.regla }} Solo cuenta lo que el cliente ya confirmó{% if f.sin_confirmar %} — las {{ f.sin_confirmar }} cotizaciones vivas quedan fuera de los cuatro{% endif %}.</p>
 
   <div class="fz-g2">
     <section class="fz-c" aria-label="Pagos por confirmar">
@@ -63,6 +72,21 @@
       {% else %}
       <p class="fz-hueco">{% if f.con_datos %}No hay nada esperando: toda la plata que entró ya se revisó.{% else %}La lista no se pudo leer — arriba dice por qué.{% endif %}</p>
       {% endfor %}
+      {# Los pagos informados sobre cotizaciones sin confirmar: se VEN, con
+         su aviso de que no cuentan en los cuatro números (BLOQUE 59.2). Si
+         se escondieran, la pantalla taparía justo la plata mal puesta. #}
+      {% if f.cola_fuera %}
+      <div class="fz-it">
+        <span>Además hay {{ f.cola_fuera.n }} pago{{ 's' if f.cola_fuera.n != 1 }} informado{{ 's' if f.cola_fuera.n != 1 }} sobre cotizaciones que el cliente todavía no confirmó, por {{ f.cola_fuera.monto | dinero }}<span class="fz-hint"> — no cuentan en los cuatro números de arriba; se trabajan en Pagos por confirmar</span></span>
+      </div>
+      {% for p in f.otros_pendientes %}
+      <div class="fz-r">
+        <span class="fz-quien"><b>{{ p.orden or '—' }}</b><span class="fz-hint">{{ p.cliente or 'Sin cliente' }} · todavía es una cotización</span>
+          <span class="fz-hint">Venta del {{ p.fecha_texto }} · {{ p.metodo_texto }} · marcó: {{ p.marco_texto }}</span></span>
+        <b class="num">{{ p.debe | dinero }}</b>
+      </div>
+      {% endfor %}
+      {% endif %}
       <span class="fz-hint">Es la misma lista de Pagos por confirmar, acá solo para mirar. Dar por buena una plata deja guardado quién la revisó, cuándo y qué vio, y no marca la entrega; eso se hace desde Pagos por confirmar.</span>
     </section>
     <section class="fz-c" aria-label="Cifras a revisar">
@@ -78,6 +102,23 @@
       <span class="fz-hint">Dos cifras para mirar de cerca. Acá se revisan: no se arreglan solas.</span>
     </section>
   </div>
+
+  {# «Cómo pagaron» (BLOQUE 59.4): se MUDA acá del resumen de Vender, y lee
+     el MISMO universo que «Cobrado y confirmado» — su suma ES esa tarjeta,
+     y la misma prueba de cuadre lo afirma. Mientras nadie haya confirmado
+     dice lo mismo que la tarjeta, no una tabla en blanco. #}
+  <section class="fz-c" aria-label="Cómo pagaron">
+    <span class="fz-ct">Cómo pagaron</span>
+    {% for d in f.desglose %}
+    <div class="fz-it">
+      <span>{{ d.texto }}<span class="fz-hint"> — {{ d.n }} pago{{ 's' if d.n != 1 }}</span></span>
+      <b class="num">{{ d.monto | dinero }}</b>
+    </div>
+    {% else %}
+    <p class="fz-hueco">{{ f.texto_nadie_confirmo }}</p>
+    {% endfor %}
+    <span class="fz-hint">Es el reparto de «Cobrado y confirmado», con la evidencia que vio quien dio por buena cada plata. Suma exactamente esa tarjeta: la plata que todavía nadie revisó no está acá.</span>
+  </section>
 
   <section class="fz-c" aria-label="Reportes">
     <span class="fz-ct">Reportes</span>

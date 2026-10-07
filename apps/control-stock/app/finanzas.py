@@ -7,14 +7,43 @@ acá no hay ni un POST.
 
 Qué es — y qué no:
 
-- **Los cuatro números de arriba** (vendido · cobrado y confirmado ·
-  pagos por confirmar · por cobrar) salen de los MOTORES de la casa, tal
+- **LA REGLA DEL BLOQUE 59.2 (7/10/2026): los cuatro números se calculan
+  SOLO sobre VENTAS CONFIRMADAS.** Una cotización o un borrador no cuenta
+  en ninguno de los cuatro. Hasta hoy «Vendido» y «Por cobrar» sumaban
+  TODAS las órdenes no canceladas, borradores incluidos: en el Odoo de
+  pruebas eso eran $38.809 de cotizaciones que nadie compró metidas en
+  «Por cobrar» (de $41.068 a $2.259 al aplicar la regla). Los cuatro eran
+  correctos para lo que cada uno sumaba; el problema era que **ninguno
+  decía de qué universo hablaba** — y eso es lo que arregla el `hint` de
+  cada tarjeta, que ahora se calcula acá y dice la frontera con palabras.
+  El sí/no de «confirmada» NO se deduce de la clase A–H (F, G y H caen de
+  los dos lados): viaja en el contrato del informe.
+- **EL INVARIANTE: Vendido = Cobrado y confirmado + Pagos por confirmar +
+  Por cobrar.** No es una coincidencia, es la identidad `total = pagado +
+  debe` de cada venta confirmada, repartida en tres: lo pagado se parte
+  entre lo que alguien ya dio por bueno y lo que todavía nadie revisó. Si
+  no cuadra es un error, y el resto SE MUESTRA (`descuadre`), nunca se
+  reparte. La única manera de descuadrar dentro del universo es haber
+  dado por buena MÁS plata de la que Odoo tiene en esa venta.
+- **Lo que queda fuera del universo también se dice, aparte**: la plata ya
+  dada por buena sobre ventas que esta foto no cuenta (`confirmado_fuera`)
+  y los pagos informados sobre cotizaciones sin confirmar (`cola_fuera`).
+  Ninguno de los dos entra en los cuatro números — se MUESTRAN, que es la
+  filosofía de `reconciliacion._sospecha_duplicado`.
+- **Los cuatro números de arriba** salen de los MOTORES de la casa, tal
   cual: el informe de /revisar (pagos_confirmar._informe →
   reconciliacion.informe_datos), la cola real (pagos_confirmar.cola) y
   las confirmaciones humanas (pagos_confirmar.sumas_confirmadas). CERO
-  cálculo paralelo: aquí solo se SUMA lo que esos motores ya dicen, así
-  los números cuadran con /revisar y con la cola por construcción. Si
-  aún así no cierran entre sí, el descuadre SE DICE — nunca se esconde.
+  cálculo paralelo: aquí solo se FILTRA y se SUMA lo que esos motores ya
+  dicen. `_leer_universo()` no se toca: el filtro vive acá, así que
+  /revisar y Pagos por confirmar siguen viendo TODO — un pago sobre una
+  cotización sin confirmar es justo lo que esas pantallas existen para
+  mostrar.
+- **«Cómo pagaron»** (BLOQUE 59.4) es el desglose de «Cobrado y
+  confirmado» por la evidencia que vio quien confirmó, sobre el MISMO
+  universo, y su suma es exactamente esa tarjeta — lo afirma la misma
+  prueba de cuadre. Mientras nadie haya confirmado, dice lo mismo que la
+  tarjeta: que nadie ha confirmado todavía.
 - **La cola de «Pagos por confirmar» es LA MISMA** de
   /pagos-por-confirmar, listada en solo lectura, y cada fila dice ahora
   DE CUÁNDO es la venta, CÓMO llegó la plata y QUIÉN la marcó (item 4,
@@ -64,6 +93,22 @@ REPORTES = ("Ventas del mes", "Cobros por método", "Ventas por persona",
 # que no decir ninguno — manda a preguntarle a quien no decide.
 TEXTO_BOTON_CONFIRMAR = "Todavía no"
 
+# BLOQUE 59.2, condición textual de Abraham: con el botón de confirmar
+# apagado el número es estructuralmente $0.00, y un $0.00 sin explicación
+# se lee como «no cobré nada». La línea tiene que decir la verdad: nadie
+# ha confirmado, no es que no haya entrado plata.
+TEXTO_NADIE_CONFIRMO = "Nadie ha confirmado pagos todavía."
+
+# Caso aparte: SÍ hay marcas, pero ninguna cae en estas ventas (están
+# sobre cotizaciones, canceladas u órdenes que ya no existen). Decir
+# «nadie ha confirmado» ahí sería falso; el aviso de arriba cuenta cuánto.
+TEXTO_NADA_DE_ESTAS = ("Todavía nadie ha dado por buena plata de estas "
+                       "ventas.")
+
+# La identidad que sostiene la pantalla, escrita para que se pueda leer.
+TEXTO_REGLA = ("Vendido = cobrado y confirmado + pagos por confirmar + "
+               "por cobrar.")
+
 
 def _tarjeta(titulo, monto, hint, n=None, rojo=False):
     """Una tarjeta de arriba, ya decidida: monto None = «sin dato» (el
@@ -96,11 +141,18 @@ def resumen():
         if hueco not in huecos:
             huecos.append(hueco)
 
-    ventas = [v for v in (informe.get("ventas") or [])
-              if (v.get("clase") or "").strip().upper() != "CANCELADA"]
+    vivas = [v for v in (informe.get("ventas") or [])
+             if (v.get("clase") or "").strip().upper() != "CANCELADA"]
+    # LA FRONTERA (BLOQUE 59.2): solo ventas CONFIRMADAS. El sí/no llega
+    # decidido en el contrato del informe — acá no se adivina por clase.
+    ventas = [v for v in vivas if v.get("confirmada")]
+    sin_confirmar = [v for v in vivas if not v.get("confirmada")]
+    ids = {v.get("orden_id") for v in ventas}
     # Con huecos y sin ventas no hay foto: los números del informe salen
     # «sin dato», nunca $0 (un cero fingido se celebra o se cobra mal).
-    con_datos = bool(ventas) or not huecos
+    # Ojo: la foto puede ser buena y no tener NI UNA venta confirmada —
+    # eso es un $0.00 verdadero, no un hueco. Por eso se mira `vivas`.
+    con_datos = bool(vivas) or not huecos
 
     vendido = round(sum(float(v.get("total") or 0) for v in ventas), 2) \
         if con_datos else None
@@ -109,36 +161,78 @@ def resumen():
     n_deben = sum(1 for v in ventas
                   if float(v.get("debe") or 0) > _CENTAVO)
 
-    # Lo confirmado por humanos: tabla local, siempre legible.
-    confirmado = round(sum(pagos_confirmar.sumas_confirmadas().values()), 2)
+    # Lo confirmado por humanos: tabla local, siempre legible. Se parte en
+    # dos — lo que cae DENTRO del universo (y es la tarjeta) y lo que cae
+    # fuera (una confirmación sobre una cotización sin confirmar, una
+    # cancelada o una orden que ya no está). Lo de fuera NO se suma a
+    # nada: se muestra aparte, porque repartirlo falsearía el invariante.
+    sumas = pagos_confirmar.sumas_confirmadas()
+    confirmado = round(sum(m for oid, m in sumas.items() if oid in ids), 2)
+    fuera_monto = round(sum(m for oid, m in sumas.items()
+                            if oid not in ids), 2)
+    confirmado_fuera = ({"n": sum(1 for oid in sumas if oid not in ids),
+                         "monto": fuera_monto}
+                        if abs(fuera_monto) > _CENTAVO else None)
 
     # Lo por confirmar: la suma de la plata NUEVA de cada fila de la cola
-    # (monto_nuevo — la misma cifra que confirma el system manager).
+    # (monto_nuevo — la misma cifra que confirma el system manager), SOLO
+    # de las ventas confirmadas. La lista de abajo sigue completa.
+    de_confirmadas = [p for p in pendientes if p.get("confirmada")]
+    otros_pendientes = [p for p in pendientes if not p.get("confirmada")]
     por_confirmar = round(sum(float(p.get("monto_nuevo") or 0)
-                              for p in pendientes), 2) if con_datos else None
+                              for p in de_confirmadas), 2) \
+        if con_datos else None
+    cola_fuera_monto = round(sum(float(p.get("debe") or 0)
+                                 for p in otros_pendientes), 2)
+    cola_fuera = ({"n": len(otros_pendientes), "monto": cola_fuera_monto}
+                  if otros_pendientes else None)
+
+    # «Cómo pagaron» (BLOQUE 59.4): el desglose de la tarjeta de arriba,
+    # mismo universo y misma suma — lo afirma la prueba de cuadre.
+    desglose = pagos_confirmar.confirmado_por_metodo(ids)
+    n_confirmaciones = sum(d["n"] for d in desglose)
+    # Tres estados, no dos: nadie confirmó nunca · hay marcas pero ninguna
+    # de estas ventas · hay marcas de estas ventas. Los tres dicen algo
+    # distinto y el de en medio no puede salir como el primero.
+    hay_marcas_dentro = any(oid in ids for oid in sumas)
+    if hay_marcas_dentro:
+        linea_confirmado = (f"Plata de esas ventas que alguien del equipo "
+                            f"ya dio por buena, con su nombre y la fecha "
+                            f"({n_confirmaciones} marcas).")
+    elif sumas:
+        linea_confirmado = TEXTO_NADA_DE_ESTAS
+    else:
+        linea_confirmado = TEXTO_NADIE_CONFIRMO
 
     tarjetas = [
         # Item 7 (7/10/2026): las ayudas decían «informe de /revisar
         # (canceladas fuera)» y «confirmaciones humanas». Quien lee esta
         # pantalla no sabe qué es /revisar ni por qué una confirmación
         # sería «humana»: se dice qué hay adentro del número, no de qué
-        # archivo salió.
+        # archivo salió. BLOQUE 59.2: y ahora dice también DE QUÉ UNIVERSO
+        # habla, que era el problema de fondo — los cuatro eran correctos
+        # y ninguno decía qué sumaba.
         _tarjeta("Vendido", vendido,
-                 "Todo lo vendido y lo cotizado que sigue vivo. Lo "
-                 "cancelado no cuenta."),
-        _tarjeta("Cobrado y confirmado", confirmado,
-                 "Plata que alguien del equipo ya revisó y dio por "
-                 "buena, con su nombre y la fecha."),
+                 f"Las {len(ventas)} ventas que el cliente ya confirmó. "
+                 "Lo cotizado y lo cancelado no cuenta.",
+                 n=len(ventas)),
+        _tarjeta("Cobrado y confirmado", confirmado, linea_confirmado,
+                 n=n_confirmaciones),
         _tarjeta("Pagos por confirmar", por_confirmar,
-                 (f"{len(pendientes)} esperando: entró plata y todavía "
-                  "nadie la revisó.") if con_datos else
-                 "La lista no se pudo leer.", n=len(pendientes)),
+                 (f"Plata que ya entró en {len(de_confirmadas)} de esas "
+                  "ventas y todavía nadie ha revisado.") if con_datos else
+                 "La lista no se pudo leer.", n=len(de_confirmadas)),
         _tarjeta("Por cobrar", por_cobrar,
-                 f"{n_deben} ventas que todavía deben algo.",
+                 f"Lo que falta cobrar en {n_deben} de esas ventas. "
+                 "Una cotización no debe nada: no cuenta acá.",
                  n=n_deben, rojo=True),
     ]
 
-    # La honestidad del cuadre: mismas fuentes, y si no cierran se dice.
+    # La honestidad del cuadre: mismas fuentes, mismo universo, y si no
+    # cierran se dice. Con el universo de ventas confirmadas el resto es
+    # 0 por construcción (total = pagado + debe en cada venta), así que un
+    # descuadre es SIEMPRE una noticia: plata dada por buena por encima de
+    # lo que Odoo tiene en esa venta.
     descuadre = None
     if con_datos and vendido is not None:
         resto = round(vendido - (confirmado + (por_confirmar or 0)
@@ -165,10 +259,24 @@ def resumen():
 
     return {
         "tarjetas": tarjetas,
-        "pendientes": pendientes,
+        # La cola de abajo sigue COMPLETA (es la misma de Pagos por
+        # confirmar), pero partida: las de ventas confirmadas, que son las
+        # que suman, y las otras, que se ven con su aviso de que no cuentan.
+        "pendientes": de_confirmadas,
+        "otros_pendientes": otros_pendientes,
         "huecos": huecos,
         "con_datos": con_datos,
         "descuadre": descuadre,
+        "regla": TEXTO_REGLA,
+        "confirmado_fuera": confirmado_fuera,
+        "cola_fuera": cola_fuera,
+        "desglose": desglose,
+        "sin_confirmar": len(sin_confirmar),
+        "nadie_confirmo": not hay_marcas_dentro,
+        # El texto del desglose vacío es el MISMO de la tarjeta: si no hay
+        # nada que repartir, las dos cosas dicen lo mismo y por el mismo
+        # motivo (condición 3 del BLOQUE 59.4).
+        "texto_nadie_confirmo": linea_confirmado,
         "cifras": cifras_revisar,
         "reportes": list(REPORTES),
         "boton_confirmar": TEXTO_BOTON_CONFIRMAR,
