@@ -23,9 +23,11 @@
 
 /* ==================== la barra de arriba ============================== */
 
-body.pvd .tablero{padding:18px 28px 24px;gap:12px}
-body.pvd .barra{border-bottom:0;padding-bottom:2px;gap:12px}
-body.pvd .barra h3{font-size:22px;font-weight:600;letter-spacing:-.01em}
+/* El margen del contenido es del MARCO (BLOQUE 54, G1) y solo vale en
+   computadora: sin la media query, en tablet esta pestaña quedaba 16px
+   corrida respecto de Calendario y del CRM. */
+@media (min-width:900px){body.pvd .tablero{padding:18px 28px 24px;gap:12px}}
+body.pvd .barra{gap:12px}
 body.pvd .barra .hamb{
   width:44px;height:44px;justify-content:center;padding:0;
   border:1px solid var(--d-borde-boton);border-radius:var(--d-radio-boton);
@@ -74,7 +76,7 @@ body.pvd .pvd-ic{
   border:1px solid var(--d-borde-campo);border-radius:10px;
   display:grid;place-items:center;text-decoration:none;
 }
-body.pvd .pvd-ic.c-tel{background:#EDF2FE;border-color:#EDF2FE;color:#3A5BC7}
+body.pvd .pvd-ic.c-tel{background:var(--d-tel-fondo);border-color:var(--d-tel-fondo);color:var(--d-tel-tinta)}
 
 /* ==================== las tarjetas de proveedor ======================= */
 

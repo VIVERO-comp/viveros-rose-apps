@@ -3,9 +3,16 @@
    DECIDIDO del middleware (datos_roles.acceso_de → request.state.menu_nav,
    regla 10: cero lógica aquí); `activa` marca la píldora encendida.
    La marca es el monograma VR del lienzo (B3) y el pie lleva nombre y
-   rol del usuario (B4: request.state.rol_rotulo, decidido en Python);
-   `lado_pie_extra` deja a cada pantalla sumar su renglón de contexto
-   (el modo de Linear, «solo lectura», etc.) sin perder el del rol.
+   rol del usuario (B4: request.state.rol_rotulo, decidido en Python) —
+   NADA MÁS (BLOQUE 54, G1).
+
+   Había un `lado_pie_extra` con el que cada pantalla le sumaba su propio
+   renglón («Linear · solo lectura», «Conversaciones · solo lectura»,
+   «Proveedores · calculado de Odoo»…). Se quitó: el pie del menú es parte
+   del MARCO y el marco es igual en las once pestañas; un aviso que cambia
+   por pantalla no es marco, es contenido, y va EN la pantalla. Los nueve
+   renglones que había se reubicaron en la propia pestaña (ver el
+   @container y los `.solo-lectura` de cada plantilla).
    Esconder una pestaña NO es el permiso: el permiso es _puerta_por_rol,
    en el servidor. #}
 {% import '_iconos.html' as ic %}
@@ -24,6 +31,5 @@
   <div class="pie">
     <b>{{ request.state.empleada.nombre or request.state.empleada.id }}</b>
     <span>{{ request.state.rol_rotulo }}</span>
-    {% if lado_pie_extra %}<span>{{ lado_pie_extra }}</span>{% endif %}
   </div>
 </aside>

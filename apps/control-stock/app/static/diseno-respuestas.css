@@ -27,9 +27,24 @@
 .rp-hueco{margin:0;font-size:13px;color:var(--d-suave);background:var(--d-col);border-radius:var(--d-radio-pil);padding:10px 12px}
 .rp-hint{font-size:12.5px;color:var(--d-suave)}
 
-/* ---------- las tarjetas y las dos columnas ---------- */
-.rp-g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:14px}
-.rp-g2{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:14px;align-items:start}
+/* El margen del contenido es del MARCO (BLOQUE 54, G1): sin esto, esta
+   pantalla se quedaba con los 20px de calendario.css y su encabezado
+   caía 8px a la izquierda del de las otras diez. */
+@media (min-width:900px){
+  .tablero{padding:18px 28px 24px;gap:12px}
+}
+
+/* ---------- las tarjetas y las dos columnas ----------
+   A1 (BLOQUE 53): el reparto lo decide el LIENZO (@container), no la
+   ventana — ver la escala en diseno-base.css. Escrito angosto primero. */
+.rp-g4{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:14px}
+.rp-g2{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-items:start}
+@container lienzo (min-width:560px){
+  .rp-g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+@container lienzo (min-width:940px){
+  .rp-g2{grid-template-columns:minmax(0,1fr) 360px}
+}
 .rp-stack{display:flex;flex-direction:column;gap:14px;min-width:0}
 .rp-c{background:#fff;border:1px solid var(--d-borde);border-radius:var(--d-radio-pil);padding:16px;display:flex;flex-direction:column;gap:8px;min-width:0;box-sizing:border-box}
 .rp-ct{font-size:14px;font-weight:600;color:#303030}
@@ -53,10 +68,9 @@
 .rp-huecos{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:13.5px}
 .num{font-variant-numeric:tabular-nums}
 
-/* ---------- teléfono ---------- */
-@media (max-width: 899px){
-  .rp-g4{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .rp-g2{grid-template-columns:1fr}
+/* ---------- la tabla por persona, con poco lienzo ----------
+   Sin cabecera (no caben seis rótulos) y de a tres columnas. */
+@container lienzo (max-width:699.98px){
   .rp-hr{display:none}
   .rp-r{grid-template-columns:repeat(3,minmax(0,1fr))}
 }

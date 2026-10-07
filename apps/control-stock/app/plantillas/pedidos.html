@@ -2,6 +2,7 @@
 {% block titulo %}Pedidos — Control Viverorose{% endblock %}
 
 {% block contenido %}
+{% import '_cabecera.html' as cab with context %}
 {# La pestaña PEDIDOS (punto 4 del BLOQUE 12; diseño Orquesta, pantallas
    07 en Mac y 23 en celular): una VISTA sobre el motor de los 3 estados.
    El pedido nace cuando el cliente paga o abona (modelo de Jay). TODO lo
@@ -26,14 +27,7 @@
 
 {% with bm_titulo='Pedidos', bm_sub='El pedido nace cuando el cliente paga o abona' %}{% include '_barra_movil.html' %}{% endwith %}
 
-<header class="pd-top">
-  <div class="cab-izq">
-    <button class="hamb" type="button" aria-label="Mostrar u ocultar el menú"
-            aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
-    </button>
-    <h1 class="pd-titulo">Pedidos</h1>
-  </div>
+{% call cab.cabecera('Pedidos') %}
   {# El selector de vista del lienzo: solo existe el Tablero. La Agenda
      queda apagada y lo dice — nada se finge clicable. #}
   <span class="pd-seg">
@@ -44,7 +38,7 @@
   <span class="pd-nace">Un pedido aparece aquí cuando el cliente paga o abona.</span>
   <span class="pd-leyenda"><span class="pd-pg" role="img" aria-label="Pagado" title="Pagado"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span> Pagado</span>
   <span class="pd-leyenda"><span class="pd-lej-debe">Cobrar</span> Falta cobrar</span>
-</header>
+{% endcall %}
 
 <main class="pd-main">
   {# El aviso honesto de la plata: con Odoo caído el tablero vive desde

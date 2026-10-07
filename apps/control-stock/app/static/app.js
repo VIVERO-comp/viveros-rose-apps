@@ -191,12 +191,25 @@ function tab(id, btn) {
   // La barra del teléfono: el título acompaña a la pestaña y Crear producto
   // (el único botón negro) solo se ve en Stock. En el detalle la barra se
   // esconde entera: ahí mandan ← Volver y Guardar ficha de .det-top.
+  const NOMBRE = { home: "Inicio", stock: "Stock", inv: "Inventario",
+                   ajustes: "Ajustes" };
   const barra = document.getElementById("barra-m");
   if (barra) {
     barra.classList.toggle("oculta", id === "detalle");
-    document.getElementById("bm-titulo").textContent =
-      ({ home: "Inicio", stock: "Stock", inv: "Inventario", ajustes: "Ajustes" })[id] || "";
+    document.getElementById("bm-titulo").textContent = NOMBRE[id] || "";
     document.getElementById("bm-crear").style.display = id === "stock" ? "" : "none";
+  }
+  // El encabezado compartido de computadora (BLOQUE 54, G1): esta pantalla
+  // cambia de pestaña con JS, así que el título y el único botón negro los
+  // pone acá el mismo reparto que la barra del teléfono. «+ Crear producto»
+  // es de Stock y SOLO se ve en Stock (Ajustes 2).
+  const cabTitulo = document.getElementById("cab-titulo");
+  if (cabTitulo) {
+    cabTitulo.textContent = NOMBRE[id] || "";
+    const cabCrear = document.getElementById("cab-crear");
+    if (cabCrear) cabCrear.hidden = id !== "stock";
+    const cabecera = document.querySelector("header.cab");
+    if (cabecera) cabecera.hidden = id === "detalle";
   }
   document.querySelectorAll("nav button").forEach(b => b.classList.remove("on"));
   // Inventario ya no tiene botón en el menú pero su pestaña sigue viva

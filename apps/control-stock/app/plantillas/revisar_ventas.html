@@ -56,26 +56,22 @@
 </style>
 </head>
 <body class="{{ 'menu-oculto' if request.cookies.get('menu') == '0' }}">
+{% import '_cabecera.html' as cab with context %}
 
 <div class="app">
   {# El costado es UNO solo para todas las pantallas y lo arma el rol
      (_lado.html + request.state.menu_nav, regla 10): el menú de cada
      persona es el mismo en todas partes. #}
-  {% with activa='', lado_pie_extra='Ventas a revisar · supervisión' %}{% include '_lado.html' %}{% endwith %}
+  {% with activa='' %}{% include '_lado.html' %}{% endwith %}
 
   <div class="tablero">
     {% with bm_titulo='Ventas a revisar',
             bm_sub='Lo que dice Odoo contra las otras fuentes' %}{% include '_barra_movil.html' %}{% endwith %}
-    <div class="barra">
-      <button class="btn icono hamb" type="button" aria-label="Mostrar u ocultar el menú"
-              aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-      </button>
-      <h3>Ventas a revisar</h3>
+    {% call cab.cabecera('Ventas a revisar', extra='barra') %}
       <span class="crece"></span>
       <span class="tenue" style="font-size:12px">Solo lectura — las notas son
         lo único que se guarda</span>
-    </div>
+    {% endcall %}
 
     {% if error_aviso %}<div class="franja"><b>Ups.</b> <span>{{ error_aviso }}</span>
       <a class="cierra-banner" href="/revisar" aria-label="Cerrar el aviso">×</a></div>{% endif %}

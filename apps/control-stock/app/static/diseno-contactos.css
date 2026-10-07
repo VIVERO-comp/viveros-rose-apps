@@ -3,10 +3,11 @@
    contactos.html y contactos_ficha.html. Los tokens compartidos vienen
    de diseno-base.css. */
 
+/* Los números del encabezado ya NO viven acá: el marco es una sola pieza
+   (`.cab` en diseno-base.css, BLOQUE 54 G1). Lo que había era la receta
+   propia de ESTA pestaña, y era por qué el encabezado de cada una medía
+   distinto. */
 /* ---------- cabecera ---------- */
-.ct-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 28px 4px;flex-wrap:wrap}
-.ct-top .cab-izq{display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:wrap}
-.ct-titulo{font-size:22px;font-weight:600;letter-spacing:0;margin:0}
 .ct-acciones{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .ct-volver{font-size:14px;font-weight:600;color:var(--d-tinta);text-decoration:none}
 .ct-volver:hover{text-decoration:underline;text-underline-offset:2px}
@@ -47,9 +48,21 @@ a.ct-r:hover b{text-decoration:underline;text-underline-offset:2px}
 
 /* ---------- la página del contacto abierto (BLOQUE 43) ----------
    Lienzo abraham-contacto-abierto.html: estilo ficha de Odoo, los datos a
-   la izquierda y el panel de pestañas a la derecha. Una sola columna en
-   celular (el panel baja debajo de los datos). */
-.ct-cols{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:20px;align-items:start}
+   la izquierda y el panel de pestañas a la derecha.
+
+   A13 (BLOQUE 53): EN UNA COLUMNA mientras el panel no quepa — primero
+   los datos, debajo el panel. Antes caía a una columna solo por debajo
+   de 768px DE VENTANA, y ahí estaba el bug que fotografió el dueño: en
+   una ventana de 900px el lienzo real son 660px, el panel se llevaba 340
+   y a los datos les quedaban 244 — demasiado poco, así que el contenido
+   se desbordaba y se veía por encima del panel. Ahora la pregunta la
+   contesta el LIENZO: el panel va al costado a partir de 940px de lienzo
+   (560 de datos + 20 de hueco + 340 del panel), el escalón ANCHO de la
+   escala compartida (diseno-base.css). */
+.ct-cols{display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:start}
+@container lienzo (min-width:940px){
+  .ct-cols{grid-template-columns:minmax(0,1fr) 340px}
+}
 .ct-det{display:flex;flex-direction:column;gap:12px;min-width:0}
 .ct-id{display:flex;flex-direction:column;gap:3px}
 .ct-idn{font-size:28px;font-weight:600;line-height:1.15;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -109,13 +122,19 @@ a.ct-r:hover b{text-decoration:underline;text-underline-offset:2px}
 .ct-m.v{align-self:flex-end;background:var(--d-verde-fondo);border:1px solid #CFE6D6}
 .ct-mt{font-size:11.5px;color:var(--d-suave)}
 
+/* Las cuatro cifras: de a dos mientras el lienzo sea angosto, de a cuatro
+   en cuanto cada una tenga ~130px — con 4 columnas en un lienzo de 300px
+   quedaban rótulos de una palabra por línea (A1). 560px es el escalón
+   MEDIO de la escala compartida. */
+.ct-g4{grid-template-columns:repeat(2,minmax(0,1fr))}
+@container lienzo (min-width:560px){
+  .ct-g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+
 /* ---------- celular ---------- */
 @media (max-width:767.98px){
-  .ct-top{padding:14px 14px 4px}
   .ct-main{padding:8px 14px 20px}
   .ct-q{max-width:100%;width:200px}
   .ct-hr,.ct-r{grid-template-columns:minmax(150px,1fr) 70px 90px 90px 56px 72px}
-  .ct-cols{grid-template-columns:minmax(0,1fr)}
-  .ct-g4{grid-template-columns:repeat(2,minmax(0,1fr))}
   .ct-idn{font-size:22px}
 }

@@ -3,11 +3,11 @@
    como diseno-pedidos.css: aquí solo viven clases mc-* de mi_crm.html.
    Los tokens compartidos vienen de diseno-base.css. */
 
+/* Los números del encabezado ya NO viven acá: el marco es una sola pieza
+   (`.cab` en diseno-base.css, BLOQUE 54 G1). Lo que había era la receta
+   propia de ESTA pestaña, y era por qué el encabezado de cada una medía
+   distinto. */
 /* ---------- cabecera ---------- */
-.mc-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 28px 4px;flex-wrap:wrap}
-.mc-top .cab-izq{display:flex;align-items:center;gap:10px;min-width:0}
-.mc-titulo{font-size:22px;font-weight:600;letter-spacing:0}
-.mc-tag{display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:13px;background:var(--d-gris-activo);color:#3F3F3F;font-size:12.5px;font-weight:600;white-space:nowrap}
 .mc-acciones{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .mc-sub{margin:0;padding:0 28px 14px;font-size:13px;color:var(--d-suave)}
 
@@ -25,8 +25,16 @@
 .mc-pista{font-size:12.5px;color:var(--d-suave)}
 .mc-pie{margin-top:auto}
 
-/* ---------- la zona de trabajo (computadora) ---------- */
-.mc-work{display:grid;grid-template-columns:272px minmax(0,1fr);gap:16px}
+/* ---------- la zona de trabajo (computadora) ----------
+   A1 (BLOQUE 53): la columna de Peticiones se pone al lado solo cuando
+   de verdad cabe, y eso se mide sobre el LIENZO (@container), no sobre
+   la ventana — ver la escala en diseno-base.css. En una ventana de 900px
+   el lienzo son 604: con 272 fijos a la izquierda, a la derecha le
+   quedaban 316 para un tablero de cuatro columnas. */
+.mc-work{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+@container lienzo (min-width:860px){
+  .mc-work{grid-template-columns:272px minmax(0,1fr)}
+}
 .mc-pet{border:1px solid var(--d-tinta);border-radius:var(--d-radio-col);padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0;box-sizing:border-box;align-self:start}
 .mc-ph{display:flex;align-items:center;justify-content:space-between;font-size:15px;font-weight:700}
 .mc-cnt{display:inline-grid;place-items:center;min-width:22px;height:22px;box-sizing:border-box;padding:0 6px;border-radius:11px;background:var(--d-tinta);color:#fff;font-size:12px;font-weight:600}
@@ -39,11 +47,27 @@
 .mc-fr{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:10px;min-height:48px;border-top:1px solid #EFEFEF;padding:4px 0}
 .mc-quien{display:flex;flex-direction:column;gap:1px;min-width:0}
 .mc-quien b,.mc-quien .mc-pista{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mc-hoy{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.mc-hoy{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+@container lienzo (min-width:560px){
+  .mc-hoy{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
 .mc-bx{border:1px solid var(--d-borde-pil);border-radius:var(--d-radio-col);padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0;box-sizing:border-box}
 
-/* ---------- el tablero chico ---------- */
-.mc-board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;min-width:0}
+/* ---------- el tablero chico ----------
+   Una columna, dos o las cuatro según el LIENZO: con las cuatro metidas
+   a la fuerza en 316px salían tarjetas de 70px con una palabra por
+   línea, que es justo lo que A1 prohíbe. */
+.mc-board{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;min-width:0}
+@container lienzo (min-width:560px){
+  .mc-board{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+/* Las cuatro del lienzo recién en HOLGADO, no en ANCHO: este tablero no
+   vive en el lienzo entero sino en la columna derecha de .mc-work, que se
+   lleva 288px menos. Con 1180 de lienzo esa columna mide ~836 y cada
+   tarjeta queda en los ~200px del lienzo de Korto. */
+@container lienzo (min-width:1180px){
+  .mc-board{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
 .mc-col{background:var(--d-col);border-radius:var(--d-radio-col);padding:10px;display:flex;flex-direction:column;gap:8px;min-width:0}
 .mc-ch{display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:700;padding:2px 2px 0}
 
@@ -83,7 +107,6 @@
   .mc-movil{display:none}
 }
 @media (max-width: 767.98px){
-  .mc-top{display:none}            /* manda la barra única de arriba */
   .mc-sub{display:none}
   .mc-pc{display:none}
   .mc-main{padding:12px 16px calc(24px + env(safe-area-inset-bottom))}

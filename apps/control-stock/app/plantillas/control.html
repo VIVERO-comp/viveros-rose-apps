@@ -32,29 +32,23 @@
 </script>
 </head>
 <body class="{{ 'menu-oculto' if request.cookies.get('menu') == '0' }}">
+{% import '_cabecera.html' as cab with context %}
 
 <div class="app">
   {# El costado es UNO solo para todas las pantallas y lo arma el rol
      (_lado.html + request.state.menu_nav, regla 10): el menú de cada
      persona es el mismo en todas partes. #}
-  {% with activa='crm', lado_pie_extra=("Leads de muestra (sin Linear)" if modo == 'muestra' else "Solo lectura del tablero real" if modo == 'lectura' else "Equipo LEAD · Linear") %}{% include '_lado.html' %}{% endwith %}
+  {% with activa='crm' %}{% include '_lado.html' %}{% endwith %}
 
   <div class="tablero">
     {# La barra única del teléfono (artefacto aprobado, 23/09/2026). #}
     {% with bm_titulo='CRM', bm_sub=crm_marca %}{% include '_barra_movil.html' %}{% endwith %}
-    <div class="barra">
-      <button class="btn icono hamb" type="button" aria-label="Mostrar u ocultar el menú"
-              aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-      </button>
-      {# La pestaña se llama CRM para todos (BLOQUE 35; la ruta /control
-         se queda), y al lado va la marca que dice DE QUIÉN es el tablero
-         que se mira: «Todos» para el Director, «Solo lo tuyo» para
-         Operaciones y Atención. La marca la decide PYTHON (crm_marca,
-         regla 10) — no un `if` de admin en la plantilla — y se pinta con
-         la clase del lienzo de Roles (BLOQUE 43). #}
-      <h3>CRM</h3>
-      {% if crm_marca %}<span class="dc-marca">{{ crm_marca }}</span>{% endif %}
+    {# La pestaña se llama CRM para todos (BLOQUE 35; la ruta /control se
+       queda), y al lado va la marca que dice DE QUIÉN es el tablero que
+       se mira: «Todos» para el Director, «Solo lo tuyo» para Operaciones
+       y Atención. La marca la decide PYTHON (crm_marca, regla 10) — no un
+       `if` de admin en la plantilla. #}
+    {% call cab.cabecera('CRM', chip=crm_marca or None, extra='barra') %}
       {# El segmento de vistas: el dueño tiene las dos, el empleado solo
          "Por estado" — y no es que se le esconda el botón, es que el
          servidor no le arma la otra. #}
@@ -90,7 +84,7 @@
          quede dicho. #}
       <button class="btn dc-apagado chico" type="button" disabled
               title="Los leads nacen del mensaje del cliente">+ Nuevo lead — Todavía no</button>
-    </div>
+    {% endcall %}
 
     {# --- «Ver a:» (lienzo de Roles): la tira de filtros de vista. No es
            un permiso — todos siguen VIENDO el tablero completo y moviendo
@@ -115,9 +109,17 @@
       <a class="cierra-banner" href="/control?vista={{ vista }}{{ ver_query }}" aria-label="Cerrar el aviso">×</a></div>{% endif %}
     {% if aviso %}<div class="aviso-ok">{{ aviso }}
       <a class="cierra-banner" href="/control?vista={{ vista }}{{ ver_query }}" aria-label="Cerrar el aviso">×</a></div>{% endif %}
+    {# BLOQUE 54, G1: estos dos avisos vivían en el PIE DEL MENÚ. El pie
+       es parte del marco —igual en las once pestañas— así que el aviso se
+       mudó acá, a la pantalla que lo dice. El de «muestra» no se decía en
+       ningún otro lado. #}
     {% if modo == 'lectura' %}
     <div class="solo-lectura"><b>Solo lectura.</b> Acá se mira el tablero real, pero no se
       escribe nada.</div>
+    {% elif modo == 'muestra' %}
+    <div class="solo-lectura"><b>Leads de muestra.</b> Este servidor no
+      está conectado a Linear: lo que ves son leads de ejemplo, no el
+      tablero del vivero.</div>
     {% endif %}
     {% if not alc.admin and not alc.resp_propio %}
     <div class="solo-lectura"><b>Sin etiqueta.</b> Tu cuenta todavía no tiene

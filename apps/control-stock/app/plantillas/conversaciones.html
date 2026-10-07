@@ -14,9 +14,21 @@
 {# Conversaciones de WhatsApp (ITEM 11 del plan de Jay, 5/10/2026): TODAS
    las conversaciones por chat, casadas o no con un lead — la puerta que
    faltaba para supervisar el tono. SOLO LECTURA (ni un formulario: acá no
-   hay un solo POST) y solo admin. Misma piel que /revisar: calendario.css
-   con las clases de siempre (.prov-tarjeta, .panel-der, .ficha-hilo). #}
+   hay un solo POST) y solo admin. Las clases son las de siempre
+   (.prov-tarjeta, .panel-der, .ficha-hilo).
+
+   A17 (BLOQUE 53): esta era la ÚNICA pestaña que no cargaba NI UNA hoja
+   del diseño — ni la base compartida ni una propia —, así que corría con
+   el CSS viejo: el menú salía más chico (212px en vez de 240) y la página
+   quedaba dentro del marco gris con borde y sombra que la capa base le
+   saca a todas las demás. Ahora trae las TRES hojas, en el mismo orden
+   que Compras y Proveedores: calendario.css (el armazón) → Geist +
+   diseno-base.css (los tokens, el menú y la escala de anchos) → su piel
+   propia. #}
 <link rel="stylesheet" href="/static/calendario.css?v={{ v_estaticos }}">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/diseno-base.css?v={{ v_estaticos }}">
+<link rel="stylesheet" href="/static/diseno-conversaciones.css?v={{ v_estaticos }}">
 <style>
 /* El renglón del último mensaje: la flecha dice quién habló de último
    (← el cliente, → el equipo con su nombre). Solo presentación. */
@@ -26,22 +38,31 @@
 .cv-cant{display:inline-flex;align-items:center;border:1px solid var(--borde);border-radius:999px;padding:2px 9px;font-size:10px;font-weight:700;color:var(--suave);background:var(--crema);white-space:nowrap}
 </style>
 </head>
-<body class="{{ 'menu-oculto' if request.cookies.get('menu') == '0' }}">
+{# `cvd` es el interruptor de la piel propia (diseno-conversaciones.css),
+   igual que `pvd` en Proveedores y `cpd` en Compras: así esta piel no le
+   toca nada a las otras pantallas que comparten calendario.css. #}
+<body class="cvd {{ 'menu-oculto' if request.cookies.get('menu') == '0' }}">
+{% import '_cabecera.html' as cab with context %}
 
 <div class="app">
   {# El costado es UNO solo para todas las pantallas y lo arma el rol
      (_lado.html + request.state.menu_nav, regla 10): el menú de cada
      persona es el mismo en todas partes. #}
-  {% with activa='conversaciones', lado_pie_extra='Conversaciones · solo lectura' %}{% include '_lado.html' %}{% endwith %}
+  {% with activa='conversaciones' %}{% include '_lado.html' %}{% endwith %}
 
   <div class="tablero">
     {% with bm_titulo='Conversaciones', bm_sub='Lo que se habla por WhatsApp' %}{% include '_barra_movil.html' %}{% endwith %}
-    <div class="barra">
-      <button class="btn icono hamb" type="button" aria-label="Mostrar u ocultar el menú"
-              aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-      </button>
-      <h3>Conversaciones</h3>
+    {# La copia del segmento para el teléfono (A17/A1): bajo 768px la
+       `.barra` entera está `display:none` —es el armazón de siempre— y
+       sin esta copia no había cómo pasar de «Todos los chats» a
+       «Respuestas» en el celular. Mismo patrón que Compras y Proveedores
+       (_vistas_compras.html con vc_clase='seg-movil'): el CSS decide cuál
+       de las dos se ve, el HTML no decide nada. #}
+    <div class="segmento seg-movil">
+      <a class="on" href="/conversaciones" aria-current="page">Todos los chats</a>
+      <a href="/conversaciones/respuestas">Respuestas</a>
+    </div>
+    {% call cab.cabecera('Conversaciones', extra='barra') %}
       {# La capa de adentro (BLOQUE 36.1): «Respuestas» ya no es pestaña
          del menú, es la otra vista de Conversaciones. Dos enlaces y el
          segmento de siempre (calendario.css) — ni CSS ni JS nuevos. #}
@@ -52,7 +73,7 @@
       <span class="crece"></span>
       <span class="tenue" style="font-size:12px">Solo lectura — acá no se
         escribe nada</span>
-    </div>
+    {% endcall %}
 
     {# Twenty caído o sin key no es «no hay chats»: se dice la verdad y
        la pantalla carga igual. #}

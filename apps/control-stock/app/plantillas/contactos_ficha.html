@@ -2,6 +2,7 @@
 {% block titulo %}{{ v.contacto.nombre }} — Contactos — Control Viverorose{% endblock %}
 
 {% block contenido %}
+{% import '_cabecera.html' as cab with context %}
 {# LA PÁGINA DEL CONTACTO ABIERTO (BLOQUE 43; lienzos
    abraham-contacto-abierto.html y contacto-whatsapp.html). Estilo ficha
    de Odoo: los datos a la izquierda y un panel derecho con DOS pestañas
@@ -18,22 +19,15 @@
 
 {% with bm_titulo='Contactos', bm_sub=v.contacto.nombre %}{% include '_barra_movil.html' %}{% endwith %}
 
-<header class="ct-top">
-  <div class="cab-izq">
-    <button class="hamb" type="button" aria-label="Mostrar u ocultar el menú"
-            aria-expanded="{{ 'false' if request.cookies.get('menu') == '0' else 'true' }}">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
-    </button>
-    <a class="ct-volver" href="/contactos">← Contactos</a>
-    <span class="ct-pista">Contactos</span><b>{{ v.contacto.nombre }}</b>
-  </div>
+{% call cab.cabecera(v.contacto.nombre, volver='/contactos', volver_texto='Contactos') %}
+  <span class="cab-crece"></span>
   <div class="ct-acciones">
     {# Los tres botones del lienzo que todavía no escriben nada. #}
     {% for nombre in v.apagados_accion %}
     <button class="ct-apagado" type="button" disabled>{{ nombre }} — {{ v.todavia_no }}</button>
     {% endfor %}
   </div>
-</header>
+{% endcall %}
 
 <main class="ct-main">
   {% if v.aviso_odoo %}<div class="ct-alerta">{{ v.aviso_odoo }}</div>{% endif %}
@@ -265,9 +259,9 @@
   </div>
 </main>
 
-{# El menú compartido de la app (A6 del BLOQUE 53): el mismo <nav> que
-   todas las demás pestañas, marcado en Contactos. Ver la nota de
-   contactos.html: sin él, la hamburguesa de esta cabecera guardaba la
-   cookie `menu=0` y colapsaba el menú de TODO el programa. #}
+{# El menú compartido de la app (A6 del BLOQUE 53 · G1 del 54): el mismo
+   <nav> que todas las demás pestañas, marcado en Contactos. Ver la nota
+   de contactos.html: sin él, la hamburguesa de esta cabecera guardaba
+   la cookie `menu=0` y colapsaba el menú de TODO el programa. #}
 {% set activa = 'contactos' %}{% include '_nav.html' %}
 {% endblock %}

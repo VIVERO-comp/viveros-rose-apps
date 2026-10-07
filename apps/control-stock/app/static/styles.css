@@ -16,6 +16,27 @@
   --bajo:#a16207;
   --critico:#dc2626;
   --radius:14px;
+  /* ---- Los cuatro que FALTABAN (BLOQUE 54, G1) ----
+     `styles.css` usa `var(--borde)`, `var(--fondo)`, `var(--suave)` y
+     `var(--tinta)` en 25 sitios, pero NUNCA los definió: viven en
+     `calendario.css`, que estas pantallas no cargan.
+
+     Y un `var()` sin valor NO DA ERROR: invalida la propiedad entera y se
+     calla. `border:1px solid var(--borde)` no queda con otro color — queda
+     con `border-style:none`, o sea SIN BORDE; `background:var(--fondo)`
+     queda transparente; `background:var(--tinta);color:#fff` queda en un
+     botón invisible. Ni un renglón en ningún log.
+     Lo que se veía mal por esto: los selectores del cliente y del lead en
+     Vender, el marco de la vista previa, los campos de Ajustes (roles,
+     dispositivos, chips de persona) y toda la vista plana del Stock.
+
+     Los valores son los MISMOS de calendario.css a propósito: así las dos
+     pieles de la app pintan el mismo gris, que es lo que pide G1.
+     --tinta no estaba definido en NINGUNA hoja (era el negro de acción). */
+  --fondo:#f4f4f5;        /* igual a --noche-2 / --crema */
+  --borde:#e4e4e7;        /* igual a --noche-3 */
+  --suave:#52525b;        /* el gris de texto medio de calendario.css */
+  --tinta:#18181b;        /* el negro de acción, igual a --texto */
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%}
@@ -953,7 +974,10 @@ button.enlace-sub{
     border:1px solid #e4e4e7;
     box-shadow:0 18px 50px rgba(0,0,0,.08);
     display:grid;
-    grid-template-columns:236px 1fr;
+    /* El ancho del costado sale del marco compartido (BLOQUE 54, G1):
+       acá decía 236px y en la otra piel 212 — tres anchos para un mismo
+       menú. */
+    grid-template-columns:var(--marco-menu,240px) 1fr;
     grid-template-rows:auto 1fr;
     grid-template-areas:"lado cabecera" "lado principal";
   }

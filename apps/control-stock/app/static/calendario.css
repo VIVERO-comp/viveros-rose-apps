@@ -32,7 +32,11 @@ html,body{height:100%}
 body{overflow:hidden}
 .app{
   background:var(--lienzo);border:1px solid var(--borde);border-radius:16px;
-  box-shadow:var(--sombra);overflow:hidden;display:grid;grid-template-columns:212px 1fr;
+  box-shadow:var(--sombra);overflow:hidden;display:grid;
+  /* El ancho del costado sale del marco compartido (BLOQUE 54, G1):
+     acá decía 212px y en la otra piel 240 — el menú «más chico» que
+     el dueño vio en Conversaciones era exactamente esto. */
+  grid-template-columns:var(--marco-menu,240px) 1fr;
   margin:14px;height:calc(100vh - 28px);
 }
 .lado{background:var(--crema);border-right:1px solid var(--borde);padding:16px 12px;display:flex;flex-direction:column;gap:7px;min-height:0;overflow:hidden}
@@ -88,14 +92,14 @@ body{overflow:hidden}
    Como en Google Calendar: el botón vive en la barra de arriba y el menú
    entero se guarda a un lado. El estado lo pinta el servidor (cookie
    `menu`) y menu.js solo voltea la clase al instante. */
-@media (min-width:861px){
+@media (min-width:900px){
   .app{transition:grid-template-columns .18s ease}
   body.menu-oculto .app{grid-template-columns:0px 1fr}
   body.menu-oculto .lado{padding-left:0;padding-right:0;border-right:0;opacity:0;pointer-events:none}
 }
 /* En tablet chico y teléfono la hamburguesa no aplica (el menú es la fila
    de arriba o el navbar de abajo). */
-@media (max-width:860.98px){.barra .hamb{display:none}}
+@media (max-width:899.98px){.barra .hamb{display:none}}
 /* La marca del _nav.html compartido (28/09/2026) no aplica aquí tampoco:
    Control y Calendario ya tienen su propia marca en el sidebar .lado, así
    que en el cajón móvil que reusa ese mismo nav se esconde para no
@@ -104,8 +108,11 @@ body>nav .marca{display:none}
 .tablero{padding:16px 20px 18px;min-width:0;min-height:0;display:flex;flex-direction:column;gap:12px;overflow:hidden}
 
 /* ---------- controles ---------- */
-.barra{display:flex;align-items:center;gap:8px;flex-wrap:wrap;row-gap:8px;
-  padding-bottom:12px;border-bottom:1px solid var(--borde)}
+/* El alto y el margen de la barra ya NO viven acá: la barra de estas
+   pantallas ES el encabezado único (`.cab` en diseno-base.css, BLOQUE 54
+   G1), y tener dos sitios donde se decide el mismo padding era por qué la
+   hamburguesa caía 11px más abajo en unas pestañas que en otras. */
+.barra{display:flex;align-items:center;gap:8px;flex-wrap:wrap;row-gap:8px}
 .barra .juntos{display:flex;align-items:center;gap:8px}
 .barra h3{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-right:2px}
 .btn.tenue{color:var(--muy-suave)}
@@ -201,9 +208,20 @@ input.campo:focus,textarea.campo:focus,select.sel:focus{border-color:var(--dorad
    La columna derecha (dueño, 22/09/2026) lleva los 4 filtros, los Leads
    de servicio y Por entregar: viven DENTRO del calendario, así se ven
    aunque la hamburguesa esconda el menú lateral. */
-.zona{display:grid;grid-template-columns:1fr 216px;gap:12px;min-width:0;flex:1;min-height:0}
+/* A1/A2 (BLOQUE 53): si la columna derecha cabe o no es una pregunta
+   sobre el LIENZO, no sobre la ventana — por eso la contesta un
+   @container y no un @media (ver la escala en diseno-base.css). Escrito
+   ANGOSTO PRIMERO: de entrada el calendario se lleva TODO el ancho y los
+   leads van debajo; la columna solo aparece cuando de verdad cabe. */
+/* Con los leads debajo, la zona del calendario NO puede ser `flex:1` con
+   `min-height:0`: dentro de un cuerpo que scrollea, una caja así se
+   encoge hasta 0 cuando lo de abajo es alto — y el calendario
+   desaparecía entero (visto a 1024px). Acá mide lo suyo, con un mínimo
+   de 60vh, y el cuerpo scrollea para llegar a los leads. */
+.zona{display:grid;grid-template-columns:1fr;gap:12px;min-width:0;
+      flex:0 0 auto;min-height:60vh}
 .cal-lado{
-  display:flex;flex-direction:column;gap:4px;min-height:0;overflow-y:auto;
+  display:none;flex-direction:column;gap:4px;min-height:0;overflow-y:auto;
   overscroll-behavior:contain;scrollbar-width:thin;padding-right:2px;
 }
 .cal-lado .leads-lado{flex:0 0 auto;overflow:visible;min-height:auto}
@@ -224,19 +242,23 @@ input.campo:focus,textarea.campo:focus,select.sel:focus{border-color:var(--dorad
    columna se esconde, para que "Leads de servicio" y "Por agendar" se vean
    SIEMPRE. Los filtros no viajan aquí: esos sí ceden el espacio (decisión
    del dueño del 22/09/2026, intacta). */
-.leads-abajo{display:none}
-/* En pantallas medianas la columna derecha cede el espacio al calendario;
-   los leads reaparecen DEBAJO (lado a lado si caben, una columna si no) y
-   la página scrollea para verlos — mejor un scroll que leads invisibles. */
-@media (max-width:1023.98px){
-  .zona{grid-template-columns:1fr;min-height:60vh}
-  .cal-lado{display:none}
-  .tablero{overflow-y:auto}
-  .leads-abajo{
-    display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
-    gap:12px;align-items:start;flex:0 0 auto;
-  }
-  .leads-abajo .leads-lado{flex:0 0 auto;overflow:visible;min-height:auto;margin-top:0}
+/* Mientras la columna derecha no quepa, los leads van DEBAJO del
+   calendario (lado a lado si caben, en una columna si no) y la pestaña
+   scrollea para verlos — mejor un scroll que leads invisibles. */
+.leads-abajo{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+  gap:12px;align-items:start;flex:0 0 auto;
+}
+.leads-abajo .leads-lado{flex:0 0 auto;overflow:visible;min-height:auto;margin-top:0}
+/* Con sitio de verdad (940px de LIENZO: ~600 de calendario + 24 de hueco
+   + la columna) la derecha vuelve a su lugar y la copia de abajo sobra.
+   940 es el escalón ANCHO de la escala compartida. */
+@container lienzo (min-width:940px){
+  /* Con la columna al lado, los leads de abajo sobran y la zona vuelve a
+     llenar el alto que quede (ahí sí: no hay nada debajo que la encoja). */
+  .zona{grid-template-columns:1fr 216px;flex:1;min-height:0}
+  .cal-lado{display:flex}
+  .leads-abajo{display:none}
 }
 #vista{min-width:0;min-height:0;height:100%;display:flex;flex-direction:column}
 #vista > *{max-height:100%}
@@ -418,7 +440,7 @@ input.campo:focus,textarea.campo:focus,select.sel:focus{border-color:var(--dorad
 }
 .aviso.malo{background:var(--critico)}
 
-@media (max-width:860px){
+@media (max-width:899.98px){
   /* grid-template-rows:auto 1fr es lo que evita las tarjetas gigantes
      (captura del dueño, 28/09/2026): con las dos filas en auto, el grid
      repartía el alto sobrante de min-height:100vh entre ellas y la fila
@@ -517,7 +539,7 @@ a{color:inherit}
 /* En pantallas altas el carril respira un poco más. */
 @media (min-height: 1000px){ .tablero{gap:14px;padding:18px 22px 20px} }
 /* En el teléfono vuelve el scroll normal de la página. */
-@media (max-width: 860px){
+@media (max-width: 899.98px){
   body{overflow:auto}
   /* Con una hoja abierta (telón presente) el fondo se queda quieto: el
      único scroll es el de la hoja. */

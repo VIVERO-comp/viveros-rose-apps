@@ -19,8 +19,7 @@ body{font-size:15px}
 
 /* ==================== la barra de arriba (pantalla 01) ================= */
 
-.barra{gap:10px;border-bottom:0;padding-bottom:6px}
-.barra h3{font-size:22px;font-weight:700;letter-spacing:-.01em}
+.barra{gap:10px}
 .barra .btn{
   height:40px;padding:0 14px;font-size:14px;font-weight:500;
   border:1px solid var(--d-borde-campo);border-radius:var(--d-radio-boton);
@@ -28,7 +27,7 @@ body{font-size:15px}
 }
 .barra .btn.icono{width:40px;justify-content:center;padding:0;font-size:16px}
 .barra .btn.chico{font-size:14px}
-@media (min-width:861px){
+@media (min-width:900px){
   .barra .hamb{
     width:44px;height:44px;border-color:var(--d-borde-boton);
     display:inline-flex;align-items:center;justify-content:center;
@@ -54,6 +53,22 @@ body{font-size:15px}
 .desple-caja{border-color:var(--d-borde);border-radius:var(--d-radio-pil)}
 .buscador{border-radius:var(--d-radio-boton)}
 .buscador input{font-size:14px}
+/* A2: la lupa, el «⋯» y «+ Nueva actividad», en un solo grupo que no se
+   parte (ver calendario.html). */
+.barra-der{display:flex;align-items:center;gap:10px;flex:0 0 auto}
+/* …y con el lienzo apretado el título se lleva su propia fila y los
+   controles caben todos en UNA: así la lupa y el «⋯» nunca quedan
+   huérfanos abajo. 940px es el escalón ANCHO de la escala compartida
+   (diseno-base.css). */
+@container lienzo (max-width:939.98px){
+  /* El bloque «tres rayas + fecha» se lleva su propia fila y los controles
+     caben todos en la de abajo. */
+  .barra .cab-izq{flex:1 0 100%}
+  .barra .btn{padding:0 10px}
+  .barra .btn.chico{padding:0 10px}
+  .segmento a{padding:0 10px}
+  .barra .btn.oro{padding:0 14px}
+}
 
 /* ==================== la fila de filtros (chips) ======================= */
 /* Los 4 filtros de tipos salen del sidebar y viven como chips redondos
@@ -77,9 +92,30 @@ body{font-size:15px}
 
 /* ==================== el lienzo y la columna derecha =================== */
 
-@media (min-width:861px){
+@media (min-width:900px){
   .tablero{padding:18px 28px 24px;gap:12px}
+}
+/* A2 (BLOQUE 53): el ancho de la columna derecha lo decide el LIENZO.
+   Con menos de 940px de lienzo —p. ej. una ventana de 1024 con el menú
+   abierto, que deja 784— el calendario se quedaba a media pantalla y las
+   actividades salían cortadas («0…»). Ahora ahí la columna BAJA (ver
+   calendario.css) y el calendario se lleva el ancho entero. */
+@container lienzo (min-width:940px){
   .zona{grid-template-columns:1fr 320px;gap:24px}
+}
+/* G2 (BLOQUE 54): la pestaña NO se desplaza entera. El menú y el
+   encabezado quedan quietos y lo que se mueve es el CUERPO — el
+   calendario y, cuando la columna derecha no cabe, los leads que bajan
+   debajo. `.tablero` se queda en `overflow:hidden` (así el encabezado no
+   se va de viaje) y el scroll vive en este envoltorio. */
+.cal-cuerpo{
+  flex:1;min-height:0;display:flex;flex-direction:column;
+  overflow-y:auto;overscroll-behavior:contain;
+}
+/* Y el panel «Hoy» de la derecha se queda quieto con su propio scroll
+   (ya lo tenía en calendario.css: .cal-lado{overflow-y:auto}). */
+@container lienzo (min-width:940px){
+  .cal-cuerpo{overflow:hidden}
 }
 
 /* Los bloques de la columna derecha como cajas del diseño (border 1px,
@@ -110,6 +146,11 @@ body{font-size:15px}
    calculando Python); cambia la piel: cabeceras de día a la izquierda con
    su raya abajo, hoy con raya negra, bloques con esquinas de tarjeta. */
 
+/* A1: el rótulo de la hora («10 am») se cortaba 4px contra el borde del
+   carril — `.hora-et` lleva overflow:hidden, así que no se veía como un
+   desborde: se veía como una hora mal escrita. Con 6px de respiro a cada
+   lado en vez de 9 cabe entero, y la rejilla no se mueve. */
+.hora-et{padding:4px 6px 0}
 .carril-caja{border-color:var(--d-borde);border-radius:var(--d-radio-tarjeta)}
 .carril-cab{background:#fff;border-bottom:0}
 .carril-cab div{
@@ -145,7 +186,7 @@ body{font-size:15px}
    «Tipo · Cliente», chip pastel + fecha, X cuadrada para cerrar. El clic
    afuera (.telon) y la tecla Esc del navegador siguen como estaban. */
 
-@media (min-width:861px){
+@media (min-width:900px){
   .panel-der{width:min(480px,94vw);padding:20px 24px}
   .panel-der .cab-panel{margin:-20px -24px 0;padding:20px 24px 0;top:-20px}
 }
@@ -183,9 +224,9 @@ body{font-size:15px}
   border:1px solid var(--d-borde-campo);border-radius:var(--d-radio-boton);
   background:#fff;color:var(--d-tinta);
 }
-.pan-ic.c-tel{background:#EDF2FE;border-color:#EDF2FE;color:#3A5BC7}
+.pan-ic.c-tel{background:var(--d-tel-fondo);border-color:var(--d-tel-fondo);color:var(--d-tel-tinta)}
 .pan-ic.c-wa{background:var(--d-verde-fondo);border-color:var(--d-verde-fondo);color:var(--d-verde)}
-.pan-ic.c-map{background:#F7EDFD;border-color:#F7EDFD;color:#8145B5}
+.pan-ic.c-map{background:var(--d-map-fondo);border-color:var(--d-map-fondo);color:var(--d-map-tinta)}
 .pan-ic:disabled{opacity:.45}
 /* Títulos de sección (QUÉ DEBE · NOTAS), como .d-sec del diseño. */
 .sec-tit{

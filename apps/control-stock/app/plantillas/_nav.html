@@ -26,8 +26,18 @@
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
   </div>
+  {# `tabs_locales` es para la pantalla de Inicio/Stock/Ajustes, donde esas
+     dos pestañas NO son otra página sino dos secciones de aquí mismo: esas
+     claves salen como <button data-tab> (lo que app.js ya sabe manejar) y
+     el resto como enlaces. Antes esa pantalla se escribía su propio <nav>
+     por esto; con una bandera alcanza y el menú vuelve a ser UNO solo
+     (BLOQUE 54, G1). #}
   {% for p in request.state.menu_nav %}
+  {% if tabs_locales and p.clave in tabs_locales %}
+  <button data-tab="{{ p.clave }}" onclick="tab('{{ p.clave }}',this)" class="{{ 'on' if activa == p.clave }}"><span class="ic">{{ ic.icono(p.clave) }}</span>{{ p.titulo }}</button>
+  {% else %}
   <a href="{{ p.href }}" class="{{ 'on' if activa == p.clave }}"><span class="ic">{{ ic.icono(p.clave) }}</span>{{ p.titulo }}</a>
+  {% endif %}
   {% endfor %}
   {# El pie del costado (diseño Roles v3): nombre y rol de quien mira. El
      rótulo lo decide Python (datos_roles.rotulo_de). #}

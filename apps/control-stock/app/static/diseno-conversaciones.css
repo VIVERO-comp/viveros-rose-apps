@@ -1,0 +1,141 @@
+/* Diseño Orquesta — la piel de la pestaña CONVERSACIONES (BLOQUE 53, A17).
+
+   POR QUÉ EXISTE ESTE ARCHIVO: /conversaciones era la ÚNICA pestaña que
+   no cargaba NI UNA hoja del diseño — ni `diseno-base.css` ni una propia.
+   Corría con el CSS viejo de `calendario.css` a secas, y por eso «el menú
+   sale más chico y la página va dentro de un marco gris»: sin la capa
+   base, el costado se queda en los 212px de antes y el `.app` sigue
+   siendo la tarjeta flotante con borde, radio y sombra sobre el fondo
+   gris, en vez del lienzo blanco a pantalla completa de las demás.
+
+   Solo el ASPECTO: ni una ruta, ni un permiso, ni un dato cambian. La
+   pantalla sigue siendo SOLO LECTURA y solo admin. El DOM es el de
+   conversaciones.html con la clase `cvd` en el <body> como interruptor,
+   igual que `pvd` en Proveedores y `cpd` en Compras — así esta piel no le
+   toca nada a Control, al Calendario ni a las otras que comparten
+   calendario.css.
+
+   Se carga DESPUÉS de calendario.css y de diseno-base.css. Los tokens
+   neutros vienen de ahí (--d-*). La pantalla reusa las clases de
+   Proveedores (.prov-grid, .prov-tarjeta) y el hilo de la ficha
+   (.ficha-hilo), así que la receta es la MISMA que la piel de
+   Proveedores: dos pantallas hermanas tienen que verse hermanas. */
+
+/* ==================== la barra de arriba ============================== */
+
+/* El margen del contenido es del MARCO (BLOQUE 54, G1) y solo vale en
+   computadora: sin la media query, en tablet esta pestaña quedaba 16px
+   corrida respecto de Calendario y del CRM. */
+@media (min-width:900px){body.cvd .tablero{padding:18px 28px 24px;gap:12px}}
+body.cvd .barra{gap:12px}
+body.cvd .barra .hamb{
+  width:44px;height:44px;justify-content:center;padding:0;
+  border:1px solid var(--d-borde-boton);border-radius:var(--d-radio-boton);
+  background:#fff;
+}
+/* El segmento Todos los chats · Respuestas: la píldora partida del
+   diseño, la misma de Compras y Proveedores. */
+body.cvd .segmento{
+  background:#fff;border:1px solid var(--d-borde-campo);
+  border-radius:18px;padding:0;gap:0;overflow:hidden;
+}
+body.cvd .segmento a{
+  height:36px;display:inline-flex;align-items:center;padding:0 16px;
+  font-size:14px;font-weight:400;color:var(--d-tinta);border-radius:0;
+}
+body.cvd .segmento a.on{
+  background:var(--d-gris-activo);color:var(--d-tinta);
+  font-weight:700;box-shadow:none;
+}
+body.cvd .barra .tenue{font-size:12.5px;color:var(--d-suave)}
+body.cvd .pie-nota{font-size:12.5px;color:var(--d-suave)}
+body.cvd .solo-lectura,body.cvd .franja{border-radius:var(--d-radio-pil)}
+body.cvd .solo-lectura{
+  background:var(--d-col);border:1px solid var(--d-borde);
+  font-size:13.5px;padding:12px 14px;color:var(--d-tinta);
+}
+body.cvd .btn{
+  background:#fff;border:1px solid var(--d-borde-campo);
+  border-radius:var(--d-radio-boton);color:var(--d-tinta);
+}
+
+/* ==================== las tarjetas de chat ============================
+   A1: la grilla se mide por tarjeta (auto-fill + minmax), así que no
+   necesita ningún corte: las columnas que caben en el LIENZO son las que
+   se pintan, de 1 a las que sean, y nada se recorta ni se desborda. */
+
+body.cvd .prov-grid{
+  grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;
+}
+body.cvd .prov-tarjeta{
+  background:#fff;border:1px solid #E4E4E4;
+  border-radius:var(--d-radio-tarjeta);padding:14px 16px;gap:7px;
+}
+body.cvd .prov-cab{align-items:center;gap:10px}
+body.cvd .prov-cab b{flex:1;min-width:0;font-size:15px;font-weight:700;line-height:1.3}
+body.cvd .prov-contacto{font-size:12.5px;color:var(--d-suave)}
+body.cvd .cv-cant{
+  border:0;border-radius:11px;height:22px;padding:0 8px;
+  background:var(--d-gris-activo);color:#3F3F3F;font-size:11.5px;
+}
+body.cvd .cv-ultimo{font-size:13px;color:var(--d-suave);line-height:1.4}
+body.cvd .cv-ultimo b{color:var(--d-tinta)}
+body.cvd .cv-cuando{font-size:12px;color:var(--d-suave)}
+/* «Ver la conversación →»: enlace subrayado en tinta, como en Proveedores. */
+body.cvd .prov-abrir{
+  font-size:13px;font-weight:600;color:var(--d-tinta);
+  text-decoration:underline;text-underline-offset:2px;
+}
+
+/* ==================== la conversación abierta ========================= */
+
+body.cvd .telon{background:rgba(17,17,17,.35)}
+body.cvd .panel-der{
+  width:min(560px,94vw);padding:20px 24px;gap:12px;
+  border-left:1px solid var(--d-borde);box-shadow:none;
+}
+body.cvd .panel-der .cab-panel{
+  align-items:center;gap:14px;
+  top:-20px;margin:-20px -24px 0;padding:20px 24px 12px;
+  box-shadow:0 8px 10px -10px rgba(17,17,17,.3);
+}
+body.cvd .panel-der h4{font-size:20px;font-weight:700;line-height:1.2}
+/* Los renglones «Lead»: la clave gris a la izquierda y el valor a la
+   derecha, el mismo lenguaje que el panel de Proveedores y Compras. */
+body.cvd .dato{
+  display:flex;justify-content:space-between;align-items:baseline;gap:16px;
+  border-bottom:0;padding:3px 0;font-size:13.5px;
+}
+body.cvd .dato b{
+  font-size:13px;font-weight:400;color:var(--d-suave);
+  text-transform:none;letter-spacing:0;flex-shrink:0;
+}
+body.cvd .dato span{text-align:right;min-width:0}
+body.cvd .ficha-hilo-cab{
+  font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--d-suave);border-top:1px solid var(--d-borde);padding-top:12px;
+}
+body.cvd .ficha-hilo-cab a{font-size:11.5px;letter-spacing:0;text-transform:none}
+
+/* ==================== el teléfono ===================================== */
+
+@media (max-width:767.98px){
+  body.cvd .tablero{padding:12px 14px calc(24px + env(safe-area-inset-bottom))}
+  body.cvd .panel-der{width:100%;padding:16px;gap:12px}
+  body.cvd .panel-der .cab-panel{top:-16px;margin:-16px -16px 0;padding:16px 16px 10px}
+  /* El segmento del teléfono: píldoras sueltas de 40px, la activa con el
+     borde negro de 2px — la misma receta que Compras y Proveedores. */
+  body.cvd .segmento.seg-movil{
+    background:none;border:0;border-radius:0;padding:0;gap:8px;
+    overflow:visible;justify-content:flex-start;
+  }
+  body.cvd .segmento.seg-movil a{
+    flex:0 1 auto;height:40px;display:inline-flex;align-items:center;
+    justify-content:center;padding:0 13px;font-size:14px;
+    border:1px solid var(--d-borde-campo);border-radius:20px;
+    background:#fff;color:var(--d-tinta);box-shadow:none;
+  }
+  body.cvd .segmento.seg-movil a.on{
+    border:2px solid var(--d-tinta);font-weight:700;background:#fff;
+  }
+}
