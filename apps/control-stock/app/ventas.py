@@ -1911,6 +1911,7 @@ def _facturar_orden(venta, valores_asistente=None, final=False):
         # publicar para siempre.
         if final and orden["invoice_status"] != "to invoice":
             return None
+        habia = set(orden["invoice_ids"])
         contexto = {"active_model": "sale.order", "active_ids": [venta["orden_id"]],
                     "active_id": venta["orden_id"]}
         asistente = _ejecutar("sale.advance.payment.inv", "create",
@@ -1923,9 +1924,17 @@ def _facturar_orden(venta, valores_asistente=None, final=False):
                                 [[asistente]], {"context": contexto})
         orden = _ejecutar("sale.order", "read", [[venta["orden_id"]]],
                           {"fields": ["invoice_ids"]})[0]
-        if not orden["invoice_ids"]:
+        # La recién creada es la que NO estaba, nunca "la última de la
+        # lista": `invoice_ids` NO viene en orden de id — el `_order` de
+        # account.move es `date desc, name desc, id desc`, y un borrador
+        # todavía sin número sale PRIMERO. Medido en odoo-pruebas el
+        # 6/10/2026: con el anticipo 77 ya asentado, crear la final 78
+        # devuelve `[78, 77]`, así que `[-1]` entregaba el anticipo —
+        # habría sellado como "factura de la entrega" la del cobro.
+        nuevas = set(orden["invoice_ids"]) - habia
+        if not nuevas:
             raise RuntimeError("Odoo no creó la factura de la orden")
-        factura_id = orden["invoice_ids"][-1]
+        factura_id = max(nuevas)
         estado_factura = "draft"
     if estado_factura == "draft":
         _ejecutar("account.move", "action_post", [[factura_id]])

@@ -251,20 +251,26 @@ class OdooFalso:
         return True
 
     def _invoice_status(self, orden_id):
-        """`invoice_status` como lo computa Odoo con política «delivery»:
-        nada por facturar mientras la salida no esté validada; una vez
-        validada, 'to invoice' hasta que los RENGLONES se facturen. El
-        anticipo ('fixed') NO factura renglones, así que los deja
-        pendientes — por eso una orden cobrada por anticipo sigue en 'to
-        invoice', que es lo que hace posible la factura de la entrega.
-        Un BORRADOR de la final ya cuenta como facturado (en Odoo
-        `qty_invoiced` incluye los borradores)."""
+        """`invoice_status`: ¿le queda a la orden algo por facturar?
+
+        No se modela por `invoice_policy` a propósito, porque en el Odoo
+        real las políticas están MEZCLADAS y atarlo a «delivery» sería
+        modelar un mundo que no existe (medido en producción el
+        6/10/2026: de 119 `PL-`, **97 delivery y 22 order**; las 3 `MC-`
+        y los 14 `SV-`, todas `order`). Lo que sí vale para cualquier
+        mezcla, y es de lo que depende la factura de la entrega:
+
+        - sin confirmar no hay nada que facturar ('no');
+        - el anticipo ('fixed') NO factura renglones, así que los deja
+          pendientes: una orden cobrada por anticipo sigue en 'to
+          invoice' — eso es lo que hace posible la factura de la entrega;
+        - un BORRADOR de la final ya cuenta como facturado ('invoiced'),
+          porque en Odoo `qty_invoiced` incluye los borradores. Medido en
+          vivo, y es por lo que se busca lo reutilizable ANTES de
+          preguntar esto.
+        """
         orden = self.ordenes[orden_id]
         if orden["state"] != "sale":
-            return "no"
-        entregado = any(p["sale_id"] == orden_id and p["state"] == "done"
-                        for p in self.pickings.values())
-        if not entregado:
             return "no"
         return "invoiced" if orden.get("renglones_facturados") else "to invoice"
 
@@ -272,6 +278,17 @@ class OdooFalso:
         def campo(orden_id, c):
             if c == "invoice_status":
                 return self._invoice_status(orden_id)
+            if c == "invoice_ids":
+                # Como en Odoo: `invoice_ids` NO viene en orden de id. El
+                # `_order` de account.move es `date desc, name desc, id
+                # desc`, asi que un BORRADOR todavia sin numero sale
+                # PRIMERO. Medido en odoo-pruebas el 6/10/2026: con el
+                # anticipo 77 asentado, crear la final 78 devuelve
+                # [78, 77]. Un fake que devolviera [77, 78] daria por
+                # buena la version que tomaba "la ultima de la lista".
+                return sorted(
+                    self.ordenes[orden_id]["invoice_ids"],
+                    key=lambda i: (self.facturas[i]["state"] != "draft", -i))
             return self.ordenes[orden_id][c]
         return [{"id": i, **{c: campo(i, c) for c in kw["fields"]}}
                 for i in args[0]]

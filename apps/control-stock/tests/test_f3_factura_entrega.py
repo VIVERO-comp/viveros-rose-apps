@@ -135,6 +135,34 @@ def test_el_asistente_va_en_delivered_y_deduciendo(jefa, odoo):  # noqa: F811
     assert final["deduct_down_payments"] is True
 
 
+def test_la_factura_nueva_se_identifica_por_ser_NUEVA_no_por_la_ultima(
+        jefa, odoo):  # noqa: F811
+    """La trampa que solo aparecio midiendo contra Odoo de verdad: el
+    `_order` de account.move es `date desc, name desc, id desc`, asi que
+    un BORRADOR todavia sin numero sale PRIMERO de `invoice_ids`. Medido
+    en odoo-pruebas el 6/10/2026: con el anticipo 77 ya asentado, crear la
+    final 78 devuelve `[78, 77]` — tomar "la ultima de la lista" habria
+    sellado el ANTICIPO como factura de la entrega, y publicado una
+    factura ya publicada. Por eso la nueva se identifica por ser la que
+    NO estaba."""
+    n = _cobrar(jefa)
+    _entregable(n)
+    venta = ventas.obtener_venta(n)
+    # El fake devuelve `invoice_ids` como Odoo: el borrador primero.
+    _marcar(n)
+    venta = ventas.obtener_venta(n)
+    orden_id = venta["orden_id"]
+    leidos = ventas._ejecutar("sale.order", "read", [[orden_id]],
+                              {"fields": ["invoice_ids"]})[0]["invoice_ids"]
+    assert leidos[-1] == venta["factura_id"]          # la ULTIMA es el cobro
+    assert venta["factura_final_id"] == leidos[0]     # la final es la primera
+    assert venta["factura_final_id"] != venta["factura_id"]
+    # Y lo que importa: la final trae los renglones, no «Anticipo».
+    assert [l["name"] for l in
+            odoo.facturas[venta["factura_final_id"]]["lineas"]] == [
+        "ROMERO", "Anticipo"]
+
+
 def test_el_total_de_la_venta_no_se_vuelve_cero(jefa, odoo):  # noqa: F811
     """El riesgo del punto 2, clavado: `_facturar_orden` escribe `total`
     desde la factura que leyó, y la final queda en $0. Si el sello de la
