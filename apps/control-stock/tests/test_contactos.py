@@ -117,7 +117,13 @@ def fuentes_de_pruebas(monkeypatch, db_limpia):
     corre la suite, la pestaña de leads saldría a la red de verdad."""
     monkeypatch.delenv("TWENTY_API_KEY", raising=False)
     monkeypatch.delenv("LINEAR_API_KEY", raising=False)
+    # Y sin lo que esconde el AMBIENTE: la variable del BLOQUE 56 va
+    # vacía, como en producción. Las pruebas que la necesitan la ponen.
+    monkeypatch.delenv(contactos.VAR_PREFIJOS_OCULTOS, raising=False)
     monkeypatch.setattr(ventas, "configurado", lambda: False)
+    # La tabla propia de Contactos (las excepciones a la unión) sobre la
+    # base recién creada de este caso.
+    contactos.iniciar_tablas()
     contactos.reiniciar_cache()
 
 
@@ -340,11 +346,14 @@ def test_filtro_invalido_cae_a_todos(con_odoo_qa):
     assert v["cuenta"] == 3
 
 
-def test_los_filtros_son_enlaces_get_y_sin_responsable_va_apagado(cliente):
+def test_los_filtros_son_enlaces_get(cliente):
     texto = cliente.get("/contactos").text
     for clave in ("todos", "con_venta", "sin_venta", "empresas"):
         assert f'href="/contactos?f={clave}"' in texto
-    assert "Sin responsable — Todavía no" in texto
+    # Sin Linear no se sabe de quién es nadie: «Sin responsable» se apaga
+    # SOLO y dice por qué (BLOQUE 56) — ya no es un «Todavía no» fijo.
+    assert "Sin responsable — no se puede ahora" in texto
+    assert contactos.MOTIVO_SIN_RESPONSABLE in texto
 
 
 def test_una_venta_cancelada_no_cuenta_como_venta(cliente):
@@ -1110,3 +1119,197 @@ def test_el_candado_tambien_tapa_las_facturas(con_odoo_qa,
     assert f["facturacion"]["facturas"] == []
     assert f["facturacion"]["pagadas"] == []
     assert f["nada_con_nosotros"] is False
+
+
+# ===========================================================================
+# BLOQUE 56 — ① lo que esconde el AMBIENTE · ② Responsable · ③ unir por
+# número de orden (con su «deshacer» y sus cuentas)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# ① Las filas de prueba se esconden por VARIABLE, no por código
+# ---------------------------------------------------------------------------
+
+def test_sin_la_variable_no_se_esconde_NADA(cliente, con_odoo_qa, monkeypatch):
+    """Lo que vale en PRODUCCIÓN: la variable ausente o vacía no quita ni
+    una fila. El fuente no sabe ni un número de prueba."""
+    monkeypatch.delenv(contactos.VAR_PREFIJOS_OCULTOS, raising=False)
+    assert contactos.prefijos_ocultos() == ()
+    v = contactos.lista(sesion=sesion_abierta())
+    assert v["escondidos"] == 0 and v["aviso_escondidos"] == ""
+    assert v["cuenta"] == 3
+    monkeypatch.setenv(contactos.VAR_PREFIJOS_OCULTOS, "   ")
+    assert contactos.prefijos_ocultos() == ()
+    assert contactos.lista(sesion=sesion_abierta())["cuenta"] == 3
+    assert contactos.VAR_PREFIJOS_OCULTOS not in cliente.get("/contactos").text
+
+
+def test_con_la_variable_se_esconden_y_la_pantalla_lo_dice(cliente,
+                                                           con_odoo_qa,
+                                                           monkeypatch):
+    monkeypatch.setenv(contactos.VAR_PREFIJOS_OCULTOS, "6000-00")
+    v = contactos.lista(sesion=sesion_abierta())
+    # Los tres QA tienen teléfono 6000-00xx; el que no tiene teléfono se
+    # queda, porque sin el dato no se juzga.
+    assert [c["nombre"] for c in v["contactos"]] == ["Cliente QA Sin Tel"]
+    assert v["escondidos"] == 2
+    texto = cliente.get("/contactos").text
+    assert contactos.VAR_PREFIJOS_OCULTOS in texto
+    assert "En producción va vacío" in texto
+    assert "Empresa QA Hotel" not in texto
+
+
+def test_el_prefijo_se_normaliza_igual_que_un_telefono(monkeypatch):
+    for escrito in ("6000-00", "600000", "+507 6000-00", " 6000 00 "):
+        monkeypatch.setenv(contactos.VAR_PREFIJOS_OCULTOS, escrito)
+        assert contactos.prefijos_ocultos() == ("600000",), escrito
+    monkeypatch.setenv(contactos.VAR_PREFIJOS_OCULTOS,
+                       "6000-00, 6999 , 6000-00")
+    assert contactos.prefijos_ocultos() == ("600000", "6999")
+
+
+def test_lo_escondido_tampoco_se_puede_abrir(cliente, con_odoo_qa,
+                                             monkeypatch):
+    monkeypatch.setenv(contactos.VAR_PREFIJOS_OCULTOS, "6000-00")
+    assert contactos.ficha("t60000030", sesion=sesion_abierta()) is None
+    r = cliente.get("/contactos/t60000030", follow_redirects=False)
+    assert r.status_code == 303
+
+
+# ---------------------------------------------------------------------------
+# ② La columna «Responsable» y el filtro «Sin responsable», encendidos
+# ---------------------------------------------------------------------------
+
+def test_la_columna_responsable_sale_de_los_resp_de_sus_leads(
+        cliente, con_odoo_qa, con_linear_qa):
+    v = contactos.lista(sesion=sesion_abierta())
+    por_nombre = {c["nombre"]: c for c in v["contactos"]}
+    assert por_nombre["Empresa QA Hotel"]["resp_texto"] == "Ruben"
+    # LEAD-21 no lo tomó nadie: sin responsable, vacío honesto.
+    assert por_nombre["Cliente QA Solo Lead"]["resp_texto"] == ""
+    texto = cliente.get("/contactos").text
+    assert "<span>Responsable</span>" in texto
+    # Y «Fuente» salió de la cabecera de la lista (sigue en la página).
+    assert "<span>Fuente</span>" not in texto
+    assert "De dónde llegó" in cliente.get("/contactos/t60000030").text
+
+
+def test_el_filtro_sin_responsable_filtra_de_verdad(cliente, con_odoo_qa,
+                                                    con_linear_qa):
+    v = contactos.lista(filtro="sin_responsable", sesion=sesion_abierta())
+    assert v["filtro"] == "sin_responsable"
+    nombres = [c["nombre"] for c in v["contactos"]]
+    assert "Empresa QA Hotel" not in nombres       # lo atiende Ruben
+    assert "Cliente QA Solo Lead" in nombres       # nadie lo tomó
+    texto = cliente.get("/contactos").text
+    assert 'href="/contactos?f=sin_responsable"' in texto
+
+
+def test_sin_linear_el_filtro_se_apaga_SOLO_y_no_miente(con_odoo_qa):
+    """Sin leads nadie tendría responsable: decir «todos sin responsable»
+    sería mentira. El filtro se apaga y dice por qué."""
+    assert contactos.linear_conectado() is False
+    v = contactos.lista(sesion=sesion_abierta())
+    apagado = next(f for f in v["filtros"] if f["clave"] == "sin_responsable")
+    assert apagado["apagado"] is True
+    assert apagado["motivo"] == contactos.MOTIVO_SIN_RESPONSABLE
+    # Y pedirlo por URL no devuelve la lista entera disfrazada de filtrada.
+    pedido = contactos.lista(filtro="sin_responsable", sesion=sesion_abierta())
+    assert pedido["filtro"] == "todos"
+
+
+# ---------------------------------------------------------------------------
+# ③ Unir los repetidos por NÚMERO DE ORDEN
+# ---------------------------------------------------------------------------
+
+def test_une_por_numero_de_orden_la_fila_local_sin_telefono(con_odoo_qa):
+    """La fila local no tiene celular, pero dice que ES la orden S00111 —
+    y Odoo dice que esa orden es del Hotel. Se une por ese hecho, no por
+    el parecido del nombre."""
+    n = _servicio_local(cliente="Hotel escrito a mano", celular=None,
+                        orden="S00111", orden_id=111)
+    v = contactos.lista(sesion=sesion_abierta())
+    nombres = [c["nombre"] for c in v["contactos"]]
+    assert "Hotel escrito a mano" not in nombres   # no estrenó fila
+    hotel = next(c for c in v["contactos"]
+                 if c["nombre"] == "Empresa QA Hotel")
+    assert hotel["fuente_texto"] == "Odoo + Local"
+    assert [f["n"] for f in hotel["locales"]] == [n]
+    assert v["unidos_por_orden"] == 1 and v["sin_unir"] == 0
+
+
+def test_sin_orden_que_case_se_queda_sola_y_se_cuenta(con_odoo_qa):
+    _servicio_local(cliente="Cliente QA Suelto", celular=None,
+                    orden="S09999", orden_id=9999)
+    v = contactos.lista(sesion=sesion_abierta())
+    assert "Cliente QA Suelto" in [c["nombre"] for c in v["contactos"]]
+    assert v["unidos_por_orden"] == 0 and v["sin_unir"] == 1
+
+
+def test_la_union_NO_escribe_en_odoo(con_odoo_qa):
+    """El doble de Odoo revienta con cualquier método que no sea
+    search_read: si unir escribiera algo, esta prueba no pasaría."""
+    _servicio_local(cliente="Hotel escrito a mano", celular=None,
+                    orden="S00111", orden_id=111)
+    assert contactos.lista(sesion=sesion_abierta())["unidos_por_orden"] == 1
+
+
+def test_la_union_SE_PUEDE_DESHACER_y_se_vuelve_a_hacer(con_odoo_qa):
+    """La condición (b) del dueño: la unión es una vista, así que
+    deshacerla es anotar la excepción — y volver a unir es quitarla.
+    Nada se borra en Odoo ni en la venta."""
+    n = _servicio_local(cliente="Hotel escrito a mano", celular=None,
+                        orden="S00111", orden_id=111)
+    assert contactos.lista(sesion=sesion_abierta())["unidos_por_orden"] == 1
+
+    contactos.no_unir("servicio", n, por="qa-director")
+    v = contactos.lista(sesion=sesion_abierta())
+    assert "Hotel escrito a mano" in [c["nombre"] for c in v["contactos"]]
+    assert v["unidos_por_orden"] == 0 and v["excepciones"] == 1
+    # La venta sigue entera: la excepción solo decide en qué fila se ve.
+    assert contactos.ficha(f"ls{n}", sesion=sesion_abierta()) is not None
+
+    contactos.volver_a_unir("servicio", n)
+    v = contactos.lista(sesion=sesion_abierta())
+    assert v["unidos_por_orden"] == 1 and v["excepciones"] == 0
+    assert "Hotel escrito a mano" not in [c["nombre"] for c in v["contactos"]]
+
+
+def test_la_pantalla_dice_cuantos_se_unieron_y_cuantos_quedan(cliente,
+                                                              con_odoo_qa):
+    """La condición (c): los números, en la pantalla y con palabras."""
+    _servicio_local(cliente="Hotel escrito a mano", celular=None,
+                    orden="S00111", orden_id=111)
+    _servicio_local(cliente="Cliente QA Suelto", celular=None,
+                    orden="S09999", orden_id=9999)
+    v = contactos.lista(sesion=sesion_abierta())
+    assert v["unidos_por_orden"] == 1 and v["sin_unir"] == 1
+    assert "1 venta sin teléfono unida a su cliente por el número de orden" \
+        in v["aviso_union"]
+    assert "1 sin con qué unirla" in v["aviso_union"]
+    assert "No queda ningún nombre repetido." in v["aviso_union"]
+    assert v["aviso_union"] in cliente.get("/contactos").text
+
+
+def test_cuenta_los_repetidos_que_QUEDAN(con_odoo_qa):
+    """Si quedan dos filas con el mismo nombre, el aviso lo dice en vez
+    de celebrar una limpieza que no pasó."""
+    _servicio_local(cliente="Cliente QA Gemelo", celular=None,
+                    orden="S09998", orden_id=9998)
+    _venta_local(cliente="Cliente QA Gemelo", celular=None,
+                 orden="S09997", orden_id=9997)
+    v = contactos.lista(sesion=sesion_abierta())
+    assert v["repetidos"] == 2
+    assert "Quedan 2 filas con un nombre repetido." in v["aviso_union"]
+
+
+def test_contactos_sigue_sin_una_sola_ruta_de_escritura(cliente, con_odoo_qa):
+    """La tabla del «deshacer» existe, pero la pantalla sigue siendo de
+    SOLO LECTURA: el botón que la escribe es el «Unir» del punto B2, que
+    todavía no está aprobado."""
+    from app.main import app
+    for ruta in [r for r in app.routes
+                 if str(getattr(r, "path", "")).startswith("/contactos")]:
+        metodos = getattr(ruta, "methods", None) or set()
+        assert not (metodos & {"POST", "PUT", "PATCH", "DELETE"}), ruta.path
+    assert "<form" not in cliente.get("/contactos/t60000030").text

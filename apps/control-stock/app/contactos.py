@@ -76,13 +76,36 @@ proceso del 8095 antes de escribirlas:
   Odoo (`account.move`) del partner casado. «Citas» se queda. Con Odoo
   sin configurar o caído los tres números salen «sin dato» y el hueco se
   dice — nunca un $0 fingido.
+
+Y el BLOQUE 56 (7/10/2026), las tres respuestas de Abraham al reporte del
+53:
+
+- **Las filas de PRUEBA se esconden por AMBIENTE, no por código.** La
+  variable `CONTACTOS_OCULTAR_PREFIJOS_TEL` (ver `prefijos_ocultos`)
+  trae los prefijos de teléfono que ESTA instancia no quiere ver. **En
+  producción va vacía o ausente, y entonces no se esconde absolutamente
+  nada.** No hay ni una lista de nombres ni un bloque de números escrito
+  en el fuente: el fuente solo sabe leer la variable.
+- **La columna «Responsable» y el filtro «Sin responsable» ENCENDIDOS**:
+  el dato existe desde que el lead es fuente (es el `Resp:` de sus
+  leads, el mismo que usa `control.puede_tocar`). Si Linear no se puede
+  leer, no se sabe de quién es nadie: la columna sale vacía y el filtro
+  se APAGA solo, diciendo por qué — nunca «todos sin responsable», que
+  sería mentira.
+- **Los repetidos se unen por NÚMERO DE ORDEN** (`_unir`): una fila local
+  sin teléfono trae su `S00xxx`, y esa orden tiene dueño en Odoo, así que
+  la fila se une al contacto de ese partner. Es un HECHO de Odoo, no un
+  parecido de nombres. Tres condiciones del dueño, cumplidas: se une
+  **solo en lo que muestra la app** (cero escrituras a Odoo), **se puede
+  deshacer** (la tabla `contacto_no_unir`, abajo) y la pantalla **dice
+  cuántos se unieron y cuántos repetidos quedan**.
 """
 
 import os
 import re
 import time
 
-from . import (agenda, control, cotizaciones, crm_twenty, datos_roles,
+from . import (agenda, control, cotizaciones, crm_twenty, datos, datos_roles,
                linear_leads, ventas)
 
 # ---------------------------------------------------------------------------
@@ -174,20 +197,143 @@ PANEL_POR_DEFECTO = PANELES[0][0]
 # de la ficha del lead (60): es una supervisión, no un archivo.
 MENSAJES_DEL_CHAT = 60
 
-# Los filtros como enlaces GET (?f=). «Sin responsable» NO está aquí:
-# va aparte, APAGADO, porque el dato no existe todavía en ninguna fuente.
+# Los filtros como enlaces GET (?f=). «Sin responsable» ENTRÓ en el
+# BLOQUE 56: el dato existe desde que el lead es fuente (su `Resp:`). Se
+# apaga SOLO si Linear no se pudo leer, porque entonces nadie tendría
+# responsable y el filtro mentiría.
 FILTROS = (
     ("todos", "Todos"),
     ("con_venta", "Con venta"),
     ("sin_venta", "Sin venta"),
     ("empresas", "Empresas"),
+    ("sin_responsable", "Sin responsable"),
 )
-FILTRO_APAGADO = "Sin responsable"
+MOTIVO_SIN_RESPONSABLE = ("No se pudieron leer los leads, que es donde vive "
+                          "el responsable: este filtro no se puede usar "
+                          "ahora.")
 
 # Estados de sale.order que cuentan como VENTA (confirmada) y como
 # COTIZACIÓN abierta. 'cancel' no cuenta en ningún lado.
 _ESTADOS_VENTA = ("sale", "done")
 _ESTADOS_COTIZACION = ("draft", "sent")
+
+
+# ---------------------------------------------------------------------------
+# El «deshacer» de la unión (BLOQUE 56, condición b del dueño)
+# ---------------------------------------------------------------------------
+
+def iniciar_tablas():
+    """La única tabla propia de Contactos: las EXCEPCIONES a la unión.
+
+    La unión de repetidos es una VISTA calculada (nada se escribe en Odoo
+    ni en Twenty), así que «deshacer» no es borrar nada: es anotar que ESE
+    par no se une. Una fila aquí = una aparición local que se queda sola
+    aunque su número de orden diga de quién es.
+
+    Se identifica por la aparición local, no por el contacto resultante:
+    `clase` es «venta» o «servicio» y `referencia` el número de fila de
+    `ventas_locales` / `cotizaciones_servicio`. Así la excepción sobrevive
+    aunque el partner de Odoo cambie de nombre o de teléfono.
+
+    **Esta tabla se LEE desde la lista; el botón que la escribe vive con
+    el «Unir» del punto B2**, que todavía no está aprobado para
+    construirse. Mientras tanto la válvula existe y es una fila: por eso
+    `no_unir()` / `volver_a_unir()` están aquí y NINGUNA ruta las llama.
+    """
+    with datos._db() as con:
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS contacto_no_unir (
+                clase TEXT NOT NULL,
+                referencia TEXT NOT NULL,
+                por TEXT NOT NULL DEFAULT '',
+                epoch INTEGER NOT NULL,
+                PRIMARY KEY (clase, referencia)
+            )
+        """)
+
+
+def _excepciones():
+    """{(clase, referencia)} — los pares que NO se unen. Si la tabla no
+    existe todavía (base vieja), no hay excepciones: se une todo."""
+    try:
+        with datos._db() as con:
+            filas = con.execute(
+                "SELECT clase, referencia FROM contacto_no_unir").fetchall()
+    except Exception:
+        return set()
+    return {(f["clase"], str(f["referencia"])) for f in filas}
+
+
+def no_unir(clase, referencia, por=""):
+    """Deshace una unión: de aquí en adelante esa aparición local se
+    muestra sola. No la llama ninguna ruta todavía (ver `iniciar_tablas`)."""
+    with datos._db() as con:
+        con.execute(
+            "INSERT OR REPLACE INTO contacto_no_unir (clase, referencia,"
+            " por, epoch) VALUES (?,?,?,?)",
+            (clase, str(referencia), por, int(time.time())))
+
+
+def volver_a_unir(clase, referencia):
+    """Quita la excepción: esa aparición vuelve a unirse por su orden."""
+    with datos._db() as con:
+        con.execute(
+            "DELETE FROM contacto_no_unir WHERE clase=? AND referencia=?",
+            (clase, str(referencia)))
+
+
+# ---------------------------------------------------------------------------
+# Lo que ESTE ambiente esconde (BLOQUE 56, punto 1)
+# ---------------------------------------------------------------------------
+
+VAR_PREFIJOS_OCULTOS = "CONTACTOS_OCULTAR_PREFIJOS_TEL"
+
+
+def prefijos_ocultos():
+    """Los prefijos de teléfono que esta INSTANCIA no quiere ver.
+
+    Por qué existe: la base de PRUEBAS arrastra filas de QA («QA …»,
+    «Prueba …», rellenos) que son partner normales de Odoo — creados como
+    se crea un cliente—, así que no hay ninguna señal estructural que las
+    separe de una persona real. Sacarlas por su NOMBRE sería una lista a
+    dedo, que envejece sola y un día tapa a un cliente. Lo que sí las
+    distingue es que la casa las carga con teléfonos del bloque de QA.
+
+    Por eso esto es un **ajuste del AMBIENTE y no una regla del código**:
+    el fuente no sabe ni un número; lee `CONTACTOS_OCULTAR_PREFIJOS_TEL`
+    de la instancia donde corre. **En producción va vacía o ausente, y
+    entonces no se esconde nada en absoluto.** Se escriben separados por
+    coma y se normalizan igual que un teléfono, así que da lo mismo
+    «6000-00», «60000» o «+507 6000-00».
+
+    Un contacto SIN teléfono nunca se esconde: sin el dato no se juzga.
+
+    Lo del `507`: un prefijo no es un número completo, así que el
+    normalizador de la casa no le quita el país (solo lo hace cuando lo
+    que queda es un número entero). Aquí sí se le quita, porque quien
+    escribe la variable copia el número como lo ve. Un celular de Panamá
+    empieza en 6, así que un prefijo que arranca en 507 es el país.
+    """
+    crudo = os.environ.get(VAR_PREFIJOS_OCULTOS) or ""
+    vistos = []
+    for parte in crudo.split(","):
+        prefijo = re.sub(r"\D", "", parte)
+        if prefijo.startswith("00"):
+            prefijo = prefijo[2:]
+        if prefijo.startswith("507") and len(prefijo) > 3:
+            prefijo = prefijo[3:]
+        if prefijo and prefijo not in vistos:
+            vistos.append(prefijo)
+    return tuple(vistos)
+
+
+def _esconder(contactos, prefijos):
+    """(los que se muestran, cuántos se escondieron)."""
+    if not prefijos:
+        return contactos, 0
+    quedan = [c for c in contactos
+              if not (c["tel_norm"] and c["tel_norm"].startswith(prefijos))]
+    return quedan, len(contactos) - len(quedan)
 
 
 def normalizar_telefono(crudo):
@@ -216,7 +362,7 @@ def _nombre_plano(nombre):
 # ---------------------------------------------------------------------------
 
 _cache_odoo = {"en": None, "partners": [], "plata": {}, "sistema": 0,
-               "aviso_sistema": ""}
+               "aviso_sistema": "", "por_orden": {}}
 
 
 def reiniciar_cache():
@@ -226,6 +372,7 @@ def reiniciar_cache():
     _cache_odoo["plata"] = {}
     _cache_odoo["sistema"] = 0
     _cache_odoo["aviso_sistema"] = ""
+    _cache_odoo["por_orden"] = {}
 
 
 def _ids_de_sistema():
@@ -303,10 +450,16 @@ def _leer_odoo():
     ordenes = ventas._ejecutar(
         "sale.order", "search_read",
         [[["partner_id", "!=", False], ["state", "!=", "cancel"]]],
-        {"fields": ["partner_id", "amount_total", "state"], "limit": 4000})
+        {"fields": ["name", "partner_id", "amount_total", "state"],
+         "limit": 4000})
     plata = {}
+    # El mapa que une los repetidos (BLOQUE 56): número de orden → dueño.
+    # Sale de la MISMA pasada que ya se hacía, sin una consulta más.
+    por_orden = {}
     for orden in ordenes:
         pid = orden["partner_id"][0]
+        if orden.get("name"):
+            por_orden[orden["name"]] = pid
         fila = plata.setdefault(pid, {"ventas_n": 0, "ventas_total": 0.0,
                                       "cotiz_n": 0, "cotiz_total": 0.0})
         monto = float(orden.get("amount_total") or 0)
@@ -316,12 +469,12 @@ def _leer_odoo():
         elif orden.get("state") in _ESTADOS_COTIZACION:
             fila["cotiz_n"] += 1
             fila["cotiz_total"] += monto
-    return partners, plata, sistema_n, aviso_sistema
+    return partners, plata, sistema_n, aviso_sistema, por_orden
 
 
 def _odoo_vacio(aviso):
     return {"partners": [], "plata": {}, "ok": False, "aviso": aviso,
-            "sistema": 0, "aviso_sistema": ""}
+            "sistema": 0, "aviso_sistema": "", "por_orden": {}}
 
 
 def datos_odoo():
@@ -335,7 +488,7 @@ def datos_odoo():
     if not ventas.configurado():
         return _odoo_vacio(AVISO_SIN_ODOO)
     try:
-        partners, plata, sistema_n, aviso_sistema = _leer_odoo()
+        partners, plata, sistema_n, aviso_sistema, por_orden = _leer_odoo()
     except Exception as fallo:
         if _cache_odoo["en"] is not None:
             edad = max(0, int((time.time() - _cache_odoo["en"]) // 60))
@@ -343,6 +496,7 @@ def datos_odoo():
                     "plata": _cache_odoo["plata"], "ok": True,
                     "sistema": _cache_odoo["sistema"],
                     "aviso_sistema": _cache_odoo["aviso_sistema"],
+                    "por_orden": _cache_odoo["por_orden"],
                     "aviso": (f"Odoo no contestó: mostrando la última "
                               f"lectura buena, de hace {edad} min.")}
         return _odoo_vacio(f"Odoo no contestó: la lista sale solo de los "
@@ -352,8 +506,10 @@ def datos_odoo():
     _cache_odoo["plata"] = plata
     _cache_odoo["sistema"] = sistema_n
     _cache_odoo["aviso_sistema"] = aviso_sistema
+    _cache_odoo["por_orden"] = por_orden
     return {"partners": partners, "plata": plata, "ok": True, "aviso": "",
-            "sistema": sistema_n, "aviso_sistema": aviso_sistema}
+            "sistema": sistema_n, "aviso_sistema": aviso_sistema,
+            "por_orden": por_orden}
 
 
 def twenty_conectado():
@@ -446,6 +602,7 @@ def _contacto_nuevo(cid, tel_norm):
     return {
         "id": cid, "tel_norm": tel_norm, "nombre": "", "telefono": "",
         "tipo": "Persona", "partner_ids": [], "locales": [], "leads": [],
+        "resps": [],    # los `Resp:` de sus leads — el responsable real
         "fuentes": [],  # se arma al final: Odoo / Local / CRM
     }
 
@@ -457,7 +614,7 @@ def _clave_de_lead(lead):
     return "ld" + re.sub(r"[^A-Za-z0-9_-]", "", ref)
 
 
-def _unir(od, leads=()):
+def _unir(od, leads=(), marcador=None):
     """La lista unificada, calculada al armar la vista (casamiento EN
     LECTURA, sin escribir NADA). Clave: el teléfono normalizado; sin
     teléfono cada aparición queda como su propio contacto (el nombre
@@ -470,6 +627,12 @@ def _unir(od, leads=()):
     de un issue de Linear es el nombre tal como lo escribió quien atendió
     el chat, y la ficha de Odoo suele estar más cuidada."""
     contactos = {}
+    # Lo que la unión por número de orden necesita y lo que cuenta para
+    # el reporte del dueño (BLOQUE 56, condición c).
+    clave_de_partner = {}
+    por_orden = od.get("por_orden") or {}
+    excepciones = _excepciones()
+    cuenta = {"unidos_por_orden": 0, "sin_unir": 0, "excepciones": 0}
 
     def tomar(clave, tel_norm):
         if clave not in contactos:
@@ -479,6 +642,7 @@ def _unir(od, leads=()):
     for p in od["partners"]:
         tel_norm = normalizar_telefono(p.get("phone"))
         clave = f"t{tel_norm}" if tel_norm else f"o{p['id']}"
+        clave_de_partner[p["id"]] = clave
         c = tomar(clave, tel_norm)
         c["partner_ids"].append(p["id"])
         # El nombre de Odoo manda sobre el texto libre local.
@@ -492,11 +656,26 @@ def _unir(od, leads=()):
 
     for fila in _locales():
         tel_norm = normalizar_telefono(fila["celular"])
+        clase = "venta" if fila["origen"] == "venta" else "servicio"
+        propia = ("lv" if fila["origen"] == "venta" else "ls") + str(fila["n"])
         if tel_norm:
             clave = f"t{tel_norm}"
+        elif (clase, str(fila["n"])) in excepciones:
+            # Deshecho a mano: esta aparición se queda sola (BLOQUE 56 b).
+            cuenta["excepciones"] += 1
+            clave = propia
+        elif (fila["orden"]
+              and por_orden.get(fila["orden"]) in clave_de_partner):
+            # LA UNIÓN POR NÚMERO DE ORDEN (BLOQUE 56 c): esta fila local
+            # ES la orden S00xxx, y Odoo dice de quién es esa orden. No es
+            # un parecido de nombres: es un hecho, y no escribe nada —
+            # solo decide a qué fila de la pantalla va.
+            clave = clave_de_partner[por_orden[fila["orden"]]]
+            cuenta["unidos_por_orden"] += 1
         else:
-            prefijo = "lv" if fila["origen"] == "venta" else "ls"
-            clave = prefijo + str(fila["n"])
+            # Sin teléfono y sin orden que case: se queda sola y se dice.
+            cuenta["sin_unir"] += 1
+            clave = propia
         c = tomar(clave, tel_norm)
         c["locales"].append(fila)
         if not c["nombre"]:
@@ -514,6 +693,9 @@ def _unir(od, leads=()):
         clave = f"t{tel_norm}" if tel_norm else _clave_de_lead(lead)
         c = tomar(clave, tel_norm)
         c["leads"].append(lead.get("ref") or "")
+        resp = (lead.get("resp") or "").strip()
+        if resp and resp not in c["resps"]:
+            c["resps"].append(resp)
         if not c["nombre"] or c["nombre"] == "—":
             c["nombre"] = (lead.get("nombre") or "").strip() or c["nombre"]
         if not c["telefono"] and lead.get("celular"):
@@ -532,6 +714,11 @@ def _unir(od, leads=()):
             fuentes.append("CRM")
         c["fuentes"] = fuentes
         c["fuente_texto"] = " + ".join(fuentes)
+        # El responsable del contacto: los `Resp:` de sus leads, que es el
+        # único lugar donde ese dato existe. Sin leads legibles queda
+        # vacío, y la lista apaga su filtro en vez de mentir.
+        c["resps"] = sorted(c["resps"])
+        c["resp_texto"] = " · ".join(c["resps"])
         # La plata: con partner casado manda Odoo (la venta local vive
         # allá también — no se suma dos veces); sin partner, lo local.
         if c["partner_ids"]:
@@ -560,7 +747,24 @@ def _unir(od, leads=()):
         c["con_venta"] = c["ventas_n"] > 0
         lista.append(c)
     lista.sort(key=lambda c: (_nombre_plano(c["nombre"]) or "~", c["id"]))
+    if marcador is not None:
+        # Lo que el dueño pidió decir con números (BLOQUE 56 c): cuántas
+        # apariciones se unieron por su orden, cuántas quedaron solas y
+        # cuántas uniones están deshechas a mano.
+        marcador.update(cuenta)
+        marcador["repetidos"] = _repetidos(lista)
     return lista
+
+
+def _repetidos(lista):
+    """Cuántas filas comparten nombre con otra: lo que todavía se VE como
+    repetido después de unir. Es la cuenta honesta de lo que falta."""
+    por_nombre = {}
+    for c in lista:
+        plano = _nombre_plano(c["nombre"])
+        if plano and plano != "—":
+            por_nombre.setdefault(plano, []).append(c)
+    return sum(len(filas) for filas in por_nombre.values() if len(filas) > 1)
 
 
 # ---------------------------------------------------------------------------
@@ -785,6 +989,33 @@ def _casa_busqueda(contacto, q):
     return False
 
 
+def _aviso_union(marcador):
+    """La frase que dice cuántos se unieron y cuántos quedan — la
+    condición (c) del dueño, en la pantalla y no solo en un informe."""
+    unidos = marcador.get("unidos_por_orden", 0)
+    sin_unir = marcador.get("sin_unir", 0)
+    excepciones = marcador.get("excepciones", 0)
+    repetidos = marcador.get("repetidos", 0)
+    if not (unidos or sin_unir or excepciones or repetidos):
+        return ""
+    if not (unidos or sin_unir or excepciones):
+        # Nada que unir, pero el repetido que queda se dice igual: callarlo
+        # haría parecer la lista más limpia de lo que está.
+        return f"Quedan {repetidos} filas con un nombre repetido."
+    partes = [f"{unidos} venta{'s' if unidos != 1 else ''} sin teléfono "
+              f"unida{'s' if unidos != 1 else ''} a su cliente por el "
+              f"número de orden"]
+    if sin_unir:
+        partes.append(f"{sin_unir} sin con qué unirla"
+                      f"{'s' if sin_unir != 1 else ''}")
+    if excepciones:
+        partes.append(f"{excepciones} separada"
+                      f"{'s' if excepciones != 1 else ''} a mano")
+    cola = (f" Quedan {repetidos} filas con un nombre repetido."
+            if repetidos else " No queda ningún nombre repetido.")
+    return " · ".join(partes) + "." + cola
+
+
 # ---------------------------------------------------------------------------
 # La lista (GET /contactos)
 # ---------------------------------------------------------------------------
@@ -808,16 +1039,28 @@ def lista(q="", filtro="", sesion=None):
     instante y refresca por detrás."""
     od = datos_odoo()
     leads, aviso_leads = _leads_crudos()
-    contactos = _unir(od, leads)
+    marcador = {}
+    contactos = _unir(od, leads, marcador)
+    # Lo que ESTE ambiente esconde (BLOQUE 56, punto 1). En producción la
+    # variable va vacía y esto no quita ni una fila.
+    contactos, escondidos = _esconder(contactos, prefijos_ocultos())
     total_sin_filtrar = len(contactos)
 
-    filtro = filtro if filtro in {clave for clave, _n in FILTROS} else "todos"
+    # «Sin responsable» solo se puede usar si los leads se leyeron: sin
+    # ellos nadie tendría responsable y el filtro diría una mentira.
+    resp_sabido = not aviso_leads
+    claves = {clave for clave, _n in FILTROS}
+    filtro = filtro if filtro in claves else "todos"
+    if filtro == "sin_responsable" and not resp_sabido:
+        filtro = "todos"
     if filtro == "con_venta":
         contactos = [c for c in contactos if c["con_venta"]]
     elif filtro == "sin_venta":
         contactos = [c for c in contactos if not c["con_venta"]]
     elif filtro == "empresas":
         contactos = [c for c in contactos if c["tipo"] == "Empresa"]
+    elif filtro == "sin_responsable":
+        contactos = [c for c in contactos if not c["resps"]]
 
     q = (q or "").strip()
     if q:
@@ -846,10 +1089,26 @@ def lista(q="", filtro="", sesion=None):
         "total": total_sin_filtrar,
         "q": q,
         "filtro": filtro,
-        "filtros": [{"clave": clave, "nombre": nombre,
-                     "activo": clave == filtro}
-                    for clave, nombre in FILTROS],
-        "filtro_apagado": FILTRO_APAGADO,
+        "filtros": [
+            {"clave": clave, "nombre": nombre, "activo": clave == filtro,
+             "apagado": clave == "sin_responsable" and not resp_sabido,
+             "motivo": (MOTIVO_SIN_RESPONSABLE
+                        if clave == "sin_responsable" and not resp_sabido
+                        else "")}
+            for clave, nombre in FILTROS],
+        # Los números que el dueño pidió ver (BLOQUE 56 c) y lo que este
+        # ambiente escondió (punto 1).
+        "unidos_por_orden": marcador.get("unidos_por_orden", 0),
+        "sin_unir": marcador.get("sin_unir", 0),
+        "excepciones": marcador.get("excepciones", 0),
+        "repetidos": marcador.get("repetidos", 0),
+        "aviso_union": _aviso_union(marcador),
+        "escondidos": escondidos,
+        "aviso_escondidos": (
+            f"{escondidos} fila{'s' if escondidos != 1 else ''} de prueba "
+            f"escondida{'s' if escondidos != 1 else ''} por el ajuste de "
+            f"este ambiente ({VAR_PREFIJOS_OCULTOS}). En producción va "
+            f"vacío y no se esconde nada." if escondidos else ""),
         "aviso_odoo": od["aviso"],
         "aviso_twenty": aviso_twenty(),
         # A7: si los leads no se pudieron leer, falta una fuente entera y
@@ -996,6 +1255,10 @@ def ficha(cid, sesion=None, panel=""):
     od = datos_odoo()
     leads, aviso_leads = _leads_crudos()
     contactos = _unir(od, leads)
+    # Lo escondido por ambiente tampoco se puede ABRIR: si no está en la
+    # lista, su página no existe (lo mismo que hacen las cuentas de
+    # sistema, que ni siquiera llegan hasta aquí).
+    contactos, _escondidos = _esconder(contactos, prefijos_ocultos())
     contacto = next((c for c in contactos if c["id"] == cid), None)
     if contacto is None:
         return None
