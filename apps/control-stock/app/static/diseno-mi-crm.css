@@ -9,7 +9,10 @@
    distinto. */
 /* ---------- cabecera ---------- */
 .mc-acciones{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.mc-sub{margin:0;padding:0 28px 14px;font-size:13px;color:var(--d-suave)}
+/* El renglón de ayuda vive DENTRO de main desde el BLOQUE 54 (antes
+   quedaba suelto en el grid del armazón), así que el margen lateral ya
+   lo puso main y acá sobraba: se veía indentado el doble. */
+.mc-sub{margin:0 0 10px;padding:0;font-size:13px;color:var(--d-suave)}
 
 /* ---------- el botón APAGADO de la casa: se ve apagado de verdad ------ */
 .mc-apagado{
