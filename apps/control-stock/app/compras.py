@@ -152,18 +152,20 @@ ORDEN = [e["clave"] for e in ESTADOS]
 # Columnas que EXISTEN en Linear pero no tienen columna propia en pantalla
 # (item 8 del lote, 7/10/2026)
 #
-# «Abonado» no es un lugar donde esté la mercancía: es que al proveedor se le
-# adelantó plata. Mezclar las dos cosas en la misma fila obliga a elegir —una
-# compra pedida Y abonada no puede estar en dos columnas— y el camino deja de
-# leerse. Pagar es una cosa, dónde va la mercancía es otra: el adelanto baja a
-# ser una MARCA en la tarjeta («Abonado» / «Pagado»), igual que en las ventas.
+# «Abonado» no es un lugar donde esté la mercancía: es que al proveedor
+# se le adelantó plata. Mezclar las dos cosas en la misma fila obliga a
+# elegir —una compra pedida Y abonada no puede estar en dos columnas— y
+# el camino deja de leerse. Pagar es una cosa, dónde va la mercancía es
+# otra: el adelanto baja a ser una MARCA en la tarjeta («Abonado» /
+# «Pagado»), igual que en las ventas.
 #
 # **El estado NO se borra de Linear** (eso lo decide Abraham, y este módulo
 # nunca crea ni borra nada del catálogo). Sigue en `ESTADOS`, así que
 # `mover()` lo acepta, `columnas_que_faltan()` lo exige y un enlace viejo
-# sigue funcionando. Lo único que cambia es la PANTALLA: la compra que esté
-# en «Abonado» se muestra en la columna que la ABSORBE —«Pedido», porque una
-# compra abonada ya se le pidió al proveedor— y su tarjeta lleva la marca.
+# sigue funcionando. Lo único que cambia es la PANTALLA: la compra que
+# esté en «Abonado» se muestra en la columna que la ABSORBE —«Pedido»,
+# porque una compra abonada ya se le pidió al proveedor— y su tarjeta
+# lleva la marca.
 # Así no desaparece ninguna: medido el 7/10/2026, hoy el proyecto COMPRAS
 # tiene 0 compras en total, «Abonado» incluida.
 #

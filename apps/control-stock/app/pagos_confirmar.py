@@ -126,15 +126,15 @@ def sumas_confirmadas():
 # ---------------------------------------------------------------------------
 # Las tres palabras de contexto de una fila de la cola (7/10/2026)
 #
-# «Falta la fecha de la venta» era el reclamo; el método y el quién vinieron
-# con él. La regla de la casa manda sobre las ganas de llenar la fila: lo
+# «Falta la fecha de la venta» era el reclamo; el método y el quién
+# vinieron con él. La regla de la casa manda sobre las ganas de llenar: lo
 # que no se sabe SE DICE. Por eso cada una de estas tres tiene su frase de
 # «todavía no» y ninguna devuelve un guion mudo ni una fecha de hoy.
 # ---------------------------------------------------------------------------
 
-# Los tres salen SIN rótulo: el rótulo («Cómo llegó:», «Marcó:») lo pone la
-# plantilla, que es donde se ve. Acá vive el VALOR, y el valor de lo que no
-# se sabe es decirlo.
+# Los tres salen SIN rótulo: el rótulo («Cómo llegó:», «Marcó:») lo
+# pone la plantilla, que es donde se ve. Acá vive el VALOR, y el valor
+# de lo que no se sabe es decirlo.
 SIN_FECHA = "sin fecha"
 SIN_METODO = "todavía no se sabe (se elige al confirmar)"
 SIN_MARCA = "nadie todavía"

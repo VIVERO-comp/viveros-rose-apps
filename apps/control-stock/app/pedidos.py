@@ -199,7 +199,8 @@ def _plata_de(tarjeta, plata_info):
     if fila is None:
         return {"clase": "sin_dato", "texto": "Plata sin dato", "debe": None}
     if fila["debe"] > _CENTAVO:
-        return {"clase": "debe", "texto": f"Debe {calculos.dinero(fila['debe'])}",
+        return {"clase": "debe",
+                "texto": f"Debe {calculos.dinero(fila['debe'])}",
                 "debe": fila["debe"]}
     return {"clase": "pagado", "texto": "Pagado", "debe": 0.0}
 
