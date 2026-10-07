@@ -86,6 +86,54 @@ a.ct-r:hover b{text-decoration:underline;text-underline-offset:2px}
 .ct-tabla{display:flex;flex-direction:column;gap:8px;min-width:0}
 .ct-pie-tabla{font-size:12.5px;color:var(--d-suave);line-height:1.4}
 
+/* ---- LA REJILLA DEL LIENZO, que nunca se había construido (7/10/2026).
+   Las tres tablas existían con el contenido correcto pero `.ct-tabla` es
+   un flex en columna suelto y `.ct-det` otro: los cinco bloques salían
+   APILADOS y a todo lo ancho. A 1440px eran cinco bloques de 784px y la
+   columna medía 986px de alto, con el ancho vacío al costado — la queja
+   del dueño. El lienzo (AbrahamContacto.dc.html) tiene dos rejillas que
+   acá no estaban: `g2` (250px + el resto) y `g3` (tres iguales).
+
+   LOS DOS ESCALONES, Y POR QUÉ ESTOS. Las dos preguntas son distintas y
+   por eso son dos reglas, no una:
+
+   · `.ct-g3` (las tres al costado) desde 560 de LIENZO, el escalón MEDIO.
+     Hasta 1120 la columna angosta todavía no cabe, así que las tres se
+     reparten el ancho ENTERO de la columna de datos: a 1024px de ventana
+     son 3 de ~236px y a 1280 son 3 de ~201px.
+   · `.ct-g2` (las dos cajas en la columna angosta) desde 1120, el escalón
+     HOLGADO, que es justo el que significa «hay sitio para el contenido Y
+     un panel al lado». Ahí la ficha queda igual que el lienzo: 250px de
+     cajas y tres tablas de ~167px, que es lo que el lienzo mismo mide.
+
+   OJO, ESTO SE MIDIÓ Y NO ERA OBVIO: el ancho de `.ct-det` NO crece con
+   el lienzo. Medido en la punta: lienzo 784 → det 728, lienzo 1040 → det
+   624, lienzo 1200 → det 784. Baja en el medio porque al pasar 940 el
+   panel de 340 se pone al costado y le resta. Por eso los escalones de
+   acá no se pueden leer como «el ancho que va a tener la columna»: 1120
+   es el primer punto a partir del cual det vuelve a crecer de verdad
+   (det = lienzo − 360) y ya no baja nunca más. ---- */
+.ct-g2{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-items:start}
+.ct-apilado{display:flex;flex-direction:column;gap:12px;min-width:0}
+.ct-g3{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;align-items:start}
+@container lienzo (min-width:560px){
+  .ct-g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@container lienzo (min-width:1120px){
+  .ct-g2{grid-template-columns:250px minmax(0,1fr)}
+}
+/* DENTRO de la rejilla las filas son angostas de verdad: la caja mide
+   250px y cada tabla ~167px a 1440, que es lo mismo que mide el lienzo.
+   Con eso, una fila de «etiqueta + número» ya no entra en un renglón y
+   `.ct-fila` (flex, con ellipsis) empezó a recortar LO QUE IMPORTA:
+   «$1,1…», «debe $2…», «2026-10-…». Un monto o una fecha a medias es
+   peor que una línea de más, así que acá la fila SE PARTE en vez de
+   recortar. El recorte sigue vivo para un solo texto larguísimo —el
+   nombre de una cotización—, que es justo lo que el lienzo también
+   recorta. Fuera de la rejilla (el nombre del contacto arriba) nada
+   cambia: la regla está acotada a `.ct-g2`. */
+.ct-g2 .ct-fila{flex-wrap:wrap}
+
 /* Las cuatro cifras del lienzo. Las apagadas llevan su píldora, nunca un
    número inventado. */
 .ct-g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}

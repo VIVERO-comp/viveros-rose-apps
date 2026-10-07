@@ -44,9 +44,15 @@
         <span class="ct-pista num">{{ v.contacto.id }}</span>
       </div>
 
-      {# Las cuatro cifras del lienzo. Las dos de la izquierda son reales
-         (salen de Odoo y de Vender); las dos de la derecha no tienen
-         fuente todavía y van apagadas EN SU LUGAR, nunca en $0.00. #}
+      {# Las cifras del lienzo. Las dos reales salen de Odoo y de Vender.
+         El lienzo tenía cuatro: «Gastado» y «Ganancia» iban apagadas con
+         su «Todavía no». LAS DOS SALIERON el 7/10/2026 por la guía de Jay
+         (punto 6: «Remove the Profit / Spent tiles — margins are out»).
+         Este es el ÚNICO punto en que el lienzo NO manda, porque es
+         anterior a esa orden; en todo lo demás de esta pantalla se sigue
+         el lienzo tal cual. La lista la decide Python
+         (`contactos.APAGADOS_PLATA`, hoy vacía): si algún día vuelven, el
+         bucle las pinta solo. #}
       <div class="ct-g4">
         <div class="ct-k">
           {% if v.permiso.dinero %}<b class="num">{% if v.contacto.cotiz_total %}{{ v.contacto.cotiz_total | dinero }}{% else %}—{% endif %}</b>
@@ -62,6 +68,17 @@
         <div class="ct-k"><span class="ct-tn">{{ v.todavia_no }}</span><span class="ct-kl">{{ nombre }}</span></div>
         {% endfor %}
       </div>
+
+      {# LA REJILLA DEL LIENZO (`g2` de AbrahamContacto.dc.html), que
+         nunca había llegado: las dos cajas de datos en una COLUMNA
+         ANGOSTA a la izquierda y las tres tablas AL COSTADO. Hasta hoy
+         los cinco bloques existían con el contenido correcto pero
+         apilados a todo lo ancho, uno debajo del otro — a 1440px eran
+         cinco bloques de 784px y 986px de alto. Nadie quitó nada: la
+         rejilla no se construyó. El reparto lo deciden dos reglas de
+         `diseno-contactos.css`, medidas sobre el LIENZO. #}
+      <div class="ct-g2">
+      <div class="ct-apilado">
 
       {# «Cuándo nos pagan» (A14, BLOQUE 53): sale de las facturas REALES
          de Odoo. Sin partner de Odoo no hay facturas y eso se DICE; con
@@ -101,6 +118,10 @@
         </div>
       </div>
 
+      </div>{# fin de la columna angosta: las dos cajas #}
+
+      {# …y al costado, lo que tiene con nosotros. #}
+      <div class="ct-apilado">
       <div class="ct-sec">Lo que tiene con nosotros</div>
       {% if not v.permiso.dinero %}
       {# El candado, dicho en su lugar y decidido en el servidor: acá no
@@ -109,10 +130,11 @@
       {% else %}
       {% if v.nada_con_nosotros %}<p class="ct-hueco">{{ v.sin_tratos }}</p>{% endif %}
 
-      {# LAS TRES TABLAS DEL LIENZO (A14). Cotizado = lo que todavía no
-         está facturado; Facturado = facturas con saldo; Pagado = las que
-         ya se cobraron. Cada una dice su vacío con palabras, nunca con un
-         «—» mudo. #}
+      {# LAS TRES TABLAS DEL LIENZO (A14), ahora UNA AL LADO DE LA OTRA
+         (`g3` del lienzo). Cotizado = lo que todavía no está facturado;
+         Facturado = facturas con saldo; Pagado = las que ya se cobraron.
+         Cada una dice su vacío con palabras, nunca con un «—» mudo. #}
+      <div class="ct-g3">
       <div class="ct-tabla">
         <div class="ct-sec">Cotizado</div>
         {% for t in v.tratos %}
@@ -170,7 +192,10 @@
         <div class="ct-pie-tabla">Cobrado de este contacto: <b class="num">{{ v.facturacion.cobrado | dinero }}</b></div>
         {% endif %}
       </div>
+      </div>{# fin de las tres tablas al costado #}
       {% endif %}
+      </div>{# fin de lo que tiene con nosotros #}
+      </div>{# fin de la rejilla del lienzo #}
 
       {% if v.posibles %}
       <div class="ct-sec">Posible mismo contacto</div>
