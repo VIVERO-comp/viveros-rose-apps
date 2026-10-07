@@ -344,7 +344,8 @@ def test_se_ve_que_las_columnas_siguen_al_costado():
     esconde) y la orilla en degradado, que al llegar al final cae sobre
     blanco y se apaga sola."""
     css = _sin_blancos(open(CSS).read())
-    assert "overflow-x:scroll" in css
+    assert "overflow-x:auto" in css
+    assert "::-webkit-scrollbar-thumb" in css
     assert "scroll-snap-type:xproximity" in css
     assert "scroll-snap-align:start" in css
     assert "position:sticky;right:0" in css

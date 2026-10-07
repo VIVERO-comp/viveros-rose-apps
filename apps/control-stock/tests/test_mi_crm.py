@@ -204,3 +204,71 @@ def test_una_fila_de_por_responder_lleva_ver_chat_apagado_con_data_href(
     # Y no existe un enlace VIVO a esa ruta futura (solo el data-href
     # del botón apagado).
     assert '<a href="/chat/' not in texto
+
+
+# ---------------------------------------------------------------------------
+# BLOQUE 59 · que se lea como tablero (7/10/2026)
+# ---------------------------------------------------------------------------
+#
+# Medido antes de tocar nada, con el elemento renderizado: a 1024 y a 1280
+# de ventana las CUATRO etapas salían en DOS FILAS de dos cuadros, porque
+# la reja solo se ponía en fila desde 1120px de lienzo (≈1420 de ventana).
+# Y «Seguimientos» era una caja de 152px de alto para decir que no hay
+# ninguno, al lado de «Por responder».
+# ---------------------------------------------------------------------------
+
+_CSS_MC = "app/static/diseno-mi-crm.css"
+_HTML_MC = "app/plantillas/mi_crm.html"
+
+
+def _apretado(ruta):
+    return re.sub(r"\s+", "", open(ruta).read())
+
+
+def test_las_cuatro_etapas_van_una_al_lado_de_la_otra():
+    """Un carril de kanban, no una reja que se parte: columnas de ancho
+    fijo que crecen si sobra sitio y se corren de lado si no caben. Una
+    sola regla, no tres escalones."""
+    css = _apretado(_CSS_MC)
+    assert ".mc-board{display:flex" in css
+    assert "flex:10200px" in css          # ni encoge por debajo de 200, ni deja de crecer
+    # Y ya no quedan escalones de reja para el tablero.
+    assert "grid-template-columns:repeat(4" not in css.split(".mc-board")[1][:400]
+
+
+def test_seguimientos_es_una_tira_y_por_responder_sigue_siendo_caja():
+    """Lo primero lo pidió Abraham; lo segundo está ABIERTO con él, así
+    que no se decide acá. La tira ya existe: el día que diga que sí, es
+    cambiar una clase."""
+    html = open(_HTML_MC).read()
+    tira = html.split('class="mc-tira"', 1)[1].split("</section>", 1)[0]
+    assert "Seguimientos" in tira
+    assert '<p class="mc-hueco">' not in tira      # el párrafo dentro de la caja se fue
+    caja = html.split('class="mc-bx" aria-label="Por responder"', 1)[1]
+    assert "Por responder" in caja.split("</section>", 1)[0]
+
+
+def test_el_aviso_de_seguimientos_lo_sigue_diciendo_python():
+    """La tira cambia la FORMA, no el dato: el texto sigue saliendo de
+    `mi_crm`, no escrito en la plantilla."""
+    html = open(_HTML_MC).read()
+    assert "v.seguimientos.aviso" in html
+
+
+def test_se_ve_que_las_columnas_siguen_al_costado_en_mi_crm():
+    """Misma señal que Compras y por la misma razón. La barra se pinta a
+    mano (en macOS la de fábrica es flotante y se esconde) y la orilla en
+    degradado se apaga sola al llegar al final, así que no puede mentir."""
+    css = _apretado(_CSS_MC)
+    assert "overflow-x:auto" in css
+    assert "::-webkit-scrollbar-thumb" in css
+    assert "scroll-snap-align:start" in css
+    assert "position:sticky;right:0" in css
+    assert '<b class="mc-orilla" aria-hidden="true"></b>' in open(_HTML_MC).read()
+
+
+def test_la_orilla_no_dice_nada_y_no_se_lee():
+    """Es paint: ni texto, ni enlace, ni foco. Un lector de pantalla no
+    tiene por qué tropezarse con un degradado."""
+    html = open(_HTML_MC).read()
+    assert 'class="mc-orilla" aria-hidden="true"></b>' in html

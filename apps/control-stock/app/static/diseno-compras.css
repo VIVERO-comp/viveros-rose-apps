@@ -197,12 +197,24 @@ body.cpd .cpd-res{
    pantalla real (harían falta 1716px de lienzo, o sea ~2010 de ventana), y
    hoy no había NI UNA señal de que hubiera más.
 
-   La señal es la barra de desplazamiento del carril, hecha visible a
-   propósito: `overflow-x:scroll` en vez de `auto` y la barra pintada —en
-   macOS la barra flotante se esconde hasta que alguien arrastra, y por eso
-   un carril que sí se desplazaba se veía como un tablero cortado. Es la
-   única señal que NO puede mentir: su carrito mide exactamente la parte que
-   se está viendo (2 de 6 columnas = un tercio del carril).
+   Son DOS señales, y ninguna puede mentir.
+
+   1) La barra del carril, PINTADA a mano (`scrollbar-color` y
+      `::-webkit-scrollbar`). Eso es lo que la hace visible, no el
+      `overflow`: en macOS la barra de fábrica es flotante y se esconde
+      hasta que alguien arrastra, y por eso un carril que sí se desplazaba
+      se veía como un tablero cortado. Pintarla la vuelve de las de
+      siempre, que ocupan su sitio y se quedan. Queda en `auto` —no en
+      `scroll`— para que donde todo quepa no haya un riel vacío diciendo
+      que falta algo. Su carrito mide exactamente la parte que se ve.
+
+   2) La orilla en degradado (`.cpd-orilla`, más abajo), que tampoco puede
+      mentir: al llegar al final cae sobre blanco y se apaga sola.
+
+   OJO, lo que NO se pudo verificar acá: el Chrome sin cabeza con el que se
+   mide usa barras flotantes pase lo que pase (medido: la barra ocupa 0px
+   de alto en los tres modos), así que la señal 1 está razonada y no
+   medida. La 2 sí está medida — por eso son dos y no una.
 
    Y el `scroll-snap` hace que un empujón caiga en el borde de una columna
    en vez de a mitad de palabra.
@@ -215,7 +227,7 @@ body.cpd .cpd-res{
    el cromo en diseno-base.css. */
 @media (min-width:768px){
   body.cpd .cpd-envuelve .ret-tablero{
-    overflow-x:scroll;padding-bottom:9px;
+    overflow-x:auto;padding-bottom:9px;
     scrollbar-width:thin;scrollbar-color:#BFBFBF transparent;
     scroll-snap-type:x proximity;overscroll-behavior-x:contain;
   }
