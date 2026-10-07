@@ -1,0 +1,34 @@
+{# Las DOS vistas de la pestaña Vender: el tablero y la tabla (punto 8 del
+   BLOQUE 56 — «quitá el resumen de la derecha, hacé una vista»).
+
+   Es el MISMO control de la casa: la caja con borde y la cara activa en
+   gris de `.segmento` (Control, Compras, Calendario, Conversaciones) y de
+   `.pd-seg` (Pedidos). No se inventa un control nuevo, y no gasta el
+   botón negro, que en Vender ya es «+ Nueva venta».
+
+   La GEOMETRÍA se copia, no el archivo: `.segmento` vive en
+   calendario.css y Vender no carga esa hoja (igual que Pedidos, que por
+   eso tiene su propia `.pd-seg`). Las medidas son las mismas — 40px de
+   alto, 15px de letra, borde de campo y `--d-gris-activo` en la activa.
+
+   Se incluye DOS VECES, el patrón que ya usan Compras y Conversaciones:
+   la copia de la cabecera sirve a la computadora y la de
+   `vv_clase='seg-movil'` al teléfono — porque bajo 900px la cabecera
+   entera está `display:none` y sin la segunda copia la tabla quedaría
+   INALCANZABLE en el celular (es el defecto que ya apareció una vez con
+   «Respuestas»). El CSS decide cuál se ve; el HTML no decide nada.
+
+   Variables (con {% with %} antes del include):
+   - vender_vistas  la lista que armó Python (_vender_vistas): texto, href
+                    y cuál está activa
+   - vv_clase       clase extra (hoy solo 'seg-movil' para la copia del
+                    teléfono); vacío para la de la cabecera #}
+{# El `aria-current` va en un {% if %} y NO como texto dentro de un {{ }}:
+   con el autoescape prendido, `{{ 'aria-current="page"' }}` sale con sus
+   comillas convertidas en `&#34;` y el atributo no existe. Comprobado
+   contra el entorno Jinja de la app, no supuesto. Le pasa hoy a
+   `_vistas_compras.html` (sus dos enlaces, y por él a Compras y a
+   Proveedores), que es de otro frente: queda reportado, no tocado. #}
+<div class="vd-seg {{ vv_clase or '' }}" role="group" aria-label="Cómo ver las ventas">
+  {% for v in vender_vistas %}<a class="{{ 'on' if v.activa }}" href="{{ v.href }}"{% if v.activa %} aria-current="page"{% endif %}>{{ v.texto }}</a>{% endfor %}
+</div>

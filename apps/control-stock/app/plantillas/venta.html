@@ -26,6 +26,9 @@
 {% with bm_titulo='Vender', bm_sub='Ventas locales del vivero' %}{% include '_barra_movil.html' %}{% endwith %}
 
 {% call cab.cabecera('Vender') %}
+  {# Las DOS vistas de la pestaña (punto 8 del BLOQUE 56), con el segmento
+     de la casa. Cuál está activa lo decide Python. #}
+  {% include '_vistas_vender.html' %}
   {% if ventas_activo %}
   {# El único botón negro de la pantalla (computadora). El "(N en curso)"
      de siempre no se pierde: viaja dentro del mismo botón. #}
@@ -34,6 +37,10 @@
 {% endcall %}
 
 <main class="vd-main">
+  {# La copia del teléfono del segmento de vistas: bajo 900px la cabecera
+     está escondida, y sin esto la tabla sería inalcanzable en el celular. #}
+  {% with vv_clase='seg-movil' %}{% include '_vistas_vender.html' %}{% endwith %}
+
   {% if error_venta %}
   <div class="vd-alerta">{{ error_venta }}</div>
   {% endif %}
@@ -99,12 +106,69 @@
     <a class="vd-rev-btn" href="{{ vender_alerta.href }}">Revisar</a>
   </div>
   {% endif %}
+  {# Las píldoras solo existen en el TABLERO del teléfono: lo que esconden
+     son sus secciones, y en la tabla no esconderían nada. Python manda la
+     lista vacía en la otra vista. #}
+  {% if vender_pildoras %}
   <nav class="vd-fl" aria-label="Qué ventas ver">
     {% for p in vender_pildoras %}
     <a class="vd-fc{% if p.activa %} on{% endif %}" href="{{ p.href }}">{{ p.texto }} {{ p.cuenta }}</a>
     {% endfor %}
   </nav>
-  <div class="vd-lienzo">
+  {% endif %}
+
+  {% if vender_vista == 'tabla' %}
+  {# ───────────── VISTA 2: LA TABLA (punto 8 del BLOQUE 56) ─────────────
+     La misma lista única de siempre, en el orden de siempre (número de
+     orden descendente), con las cinco columnas que pidió Abraham:
+     contacto · fecha · interés · etapa · monto cobrado o por cobrar.
+     Todas llegan decididas de Python (main._vender_tabla) y ninguna
+     cuesta un viaje nuevo a Odoo.
+
+     El nombre abre EL MISMO panel que la tarjeta del tablero
+     (data-panel-liga): la tabla no estrena ni una ruta, y así ninguna
+     acción se queda sin puerta por cambiar de vista.
+
+     DE LADO la tabla se desplaza DENTRO de su caja (.vd-tabla-caja), no
+     la pantalla: medido, el `scrollWidth` del documento es igual al
+     ancho de la ventana en los ocho anchos (390 · 768 · 1024 · 1280 ·
+     1366 · 1440 · 1600 · 1920). HACIA ABAJO mueve `main`, como todas las
+     demás pantallas de la app. #}
+  <div class="vd-tabla-caja">
+    <table class="vd-tabla">
+      <thead>
+        <tr>
+          <th scope="col">Contacto</th>
+          <th scope="col">Fecha</th>
+          <th scope="col">Interés</th>
+          <th scope="col">Etapa</th>
+          <th scope="col" class="vd-td-num">Monto</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in vender_tabla %}
+        <tr class="vd-tr" id="{{ r.ancla }}">
+          <th scope="row"><a class="vd-abrir" data-panel-liga href="{{ r.abrir_url }}">{{ r.cliente }}</a></th>
+          <td class="vd-td-fecha">{{ r.fecha }}</td>
+          {# El MISMO chip de interés del panel (.vd-chip-tipo), con el
+             estilo que ya decide `colores` — ni una clase nueva. #}
+          <td><span class="vd-chip-tipo" style="{{ r.chip_estilo }}">{{ r.interes }}</span></td>
+          <td class="vd-td-etapa">{{ r.etapa }}</td>
+          {# El monto DICE cuál de las dos cosas es: en «Pagado» está
+             cobrado, en las otras dos está por cobrar. Es el rótulo que
+             le faltaba al resumen que se fue. #}
+          <td class="vd-td-num">
+            <b class="num{% if not r.cobrado %} vd-rojo{% endif %}">{{ r.total | dinero }}</b>
+            <span class="vd-hint">{{ r.monto_rotulo }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  {# ─────────── VISTA 1: EL TABLERO, con el ancho que liberó el
+     resumen de la derecha (punto 8 del BLOQUE 56) ─────────── #}
   <div class="vd-tablero">
     {% for col in vender_columnas %}
     {# En el teléfono la columna es una SECCIÓN del lienzo: su título
@@ -158,29 +222,20 @@
     </section>
     {% endfor %}
   </div>
-  {# El resumen (pantalla 09): los mismos totales de las columnas y cómo
-     pagaron las pagadas. Nada se inventa: resta lo que el tablero ya
-     muestra. Desde el BLOQUE 53 (A11) no se esconde nunca: con sitio va
-     al costado y sin sitio BAJA aquí mismo, debajo del tablero, como una
-     fila de tiles. Lo decide el CSS mirando el LIENZO. #}
-  <aside class="vd-res" aria-label="Resumen de ventas">
-    {% for col in vender_columnas %}
-    <div class="vd-tile">
-      <span class="vd-tile-k">{{ col.titulo }}</span>
-      <span class="vd-tile-v num">{{ col.total | dinero }}</span>
-      <span class="vd-hint">{{ col.cuenta }} en el tablero</span>
-    </div>
-    {% endfor %}
-    {% if vender_pagos %}
-    <div class="vd-pvs">
-      <span class="vd-pvs-k">Cómo pagaron</span>
-      {% for pago in vender_pagos %}
-      <div class="vd-pv"><span class="vd-pv-n">{{ pago.nombre }}</span><span class="vd-hint">{{ pago.cuenta }} venta{{ '' if pago.cuenta == 1 else 's' }}</span><span class="num">{{ pago.monto | dinero }}</span></div>
-      {% endfor %}
-    </div>
-    {% endif %}
-  </aside>
-  </div>
+  {# EL RESUMEN DE LA DERECHA SE FUE (punto 8 del BLOQUE 56, 7/10/2026):
+     Abraham lo pidió dos veces mirando la pantalla. Eran cuatro tarjetas
+     —Cotizado, Confirmado, Pagado y «Cómo pagaron»— y las tres primeras
+     repetían los totales que el encabezado de cada columna ya pinta,
+     pero con un rótulo que prometía un cobrable y entregaba una
+     facturación (medido: $3.768,75 contra los $41.068 de Finanzas, en el
+     mismo entorno). «Cómo pagaron» YA vive en Finanzas, al lado de
+     «Cobrado y confirmado» y con su prueba de cuadre, así que acá solo
+     se saca.
+
+     Y el ancho que el panel ocupaba se lo lleva el tablero: de 1440
+     para arriba el hueco era el RESUMEN estirándose (280px a 1440, 440 a
+     1600, 760 a 1920) mientras el tablero se quedaba en 852. #}
+  {% endif %}
   {% endif %}
 </main>
 

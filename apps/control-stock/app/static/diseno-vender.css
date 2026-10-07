@@ -41,9 +41,39 @@
   white-space:nowrap;flex-shrink:0;
 }
 
+/* ---------- el selector de las DOS vistas (BLOQUE 56, punto 8) --------
+   El MISMO control de la casa: la caja con borde y la cara activa en gris
+   de `.segmento` (Control, Compras, Calendario) y de `.pd-seg` (Pedidos),
+   con sus mismas medidas — 40px de alto, 15px de letra, borde de campo y
+   `--d-gris-activo` en la activa.
+
+   La geometría se copia y no el archivo porque `.segmento` vive en
+   calendario.css y Vender no carga esa hoja; es exactamente el caso de
+   Pedidos, que por eso tiene su propia `.pd-seg`. Si algún día el
+   segmento se muda a diseno-base.css, estas cuatro reglas se borran y la
+   plantilla no cambia. */
+.vd-seg{
+  display:inline-flex;border:1px solid var(--d-borde-campo);
+  border-radius:10px;overflow:hidden;flex-shrink:0;
+}
+.vd-seg a{
+  height:40px;display:inline-flex;align-items:center;padding:0 16px;
+  font-size:15px;color:var(--d-tinta);text-decoration:none;
+}
+.vd-seg a.on{background:var(--d-gris-activo);font-weight:700}
+/* La copia del teléfono solo existe ahí (la prende el bloque de ≤899px). */
+.vd-seg.seg-movil{display:none}
+
 /* ---------- el tablero ---------- */
 .vd-nada{font-size:13px;color:var(--d-suave);padding:8px 2px}
-.vd-tablero{display:flex;gap:12px;align-items:flex-start}
+/* El `overflow-x:auto` es lo que hace que el tablero se desplace DE LADO
+   cuando las columnas no caben, en vez de mover la pantalla entera (A1 y
+   G2). Vivía en el bloque del resumen lateral, que se fue con el panel
+   (BLOQUE 56, punto 8); acá ya no depende de ningún carril. */
+.vd-tablero{
+  display:flex;gap:12px;align-items:flex-start;
+  min-width:0;overflow-x:auto;padding-bottom:4px;
+}
 .vd-col{
   flex:1 1 0;min-width:0;background:var(--d-col);
   border-radius:var(--d-radio-col);padding:8px;
@@ -190,37 +220,91 @@
 .vd-p-nota{text-align:center}
 .num{font-variant-numeric:tabular-nums}
 
-/* ---------- el resumen lateral (pantalla 09) ----------
-   A11 (BLOQUE 53): el resumen YA NO SE ESCONDE. Antes, por debajo de
-   1400px de ventana, se guardaba entero (su `display:none` de base) para
-   que la tercera columna del tablero no quedara clipeada — o sea que
-   Cotizado, Confirmado, Pagado y «Cómo pagaron» desaparecían sin decir
-   nada. Ahora BAJA DEBAJO del tablero: el lienzo envuelve, el tablero se
-   lleva el ancho entero y el resumen se acomoda como una fila de tiles
-   debajo. Nada desaparece.
-   Y la pregunta «¿cabe al lado?» la contesta el LIENZO (@container), no
-   la ventana: con el menú escondido el resumen cabe al lado en una
-   ventana donde con el menú abierto no cabría, y las dos cosas son
-   ciertas. */
-.vd-lienzo{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
-.vd-tablero{flex:1 1 100%;min-width:0;overflow-x:auto;padding-bottom:4px}
-.vd-res{
-  display:flex;flex:1 1 100%;flex-direction:row;flex-wrap:wrap;gap:10px;
+/* ---------- EL RESUMEN LATERAL SE FUE (BLOQUE 56, punto 8, 7/10/2026) --
+   Aquí vivían `.vd-lienzo`, `.vd-res`, `.vd-tile*` y `.vd-pvs*`: el carril
+   de dos hermanos (tablero + resumen) que A11 había conseguido que
+   envolviera en vez de esconderse. Abraham pidió quitar el resumen, así
+   que el carril no tiene segundo hermano y el tablero vive solo en el
+   lienzo. Lo único que había que rescatar de ese bloque era el
+   `overflow-x:auto` del tablero, que subió a su regla de base.
+
+   Medido antes y después con el elemento renderizado (CDP). La cifra es
+   la TIRA DE COLUMNAS —de la izquierda de «Cotizado» a la derecha de
+   «Pagado»—, que es lo que se ve pintado, no la caja del tablero:
+
+     ventana   lienzo   columnas ANTES   columnas DESPUÉS
+      1024       728        728              728
+      1280       984        984              984
+      1366      1070       1044             1044
+      1440      1144        852             1044
+      1600      1304        852             1044
+      1920      1624        852             1044
+
+   O sea: de 1440 para arriba el hueco ERA el resumen estirándose (280px
+   a 1440, 440 a 1600, 760 a 1920) mientras la tira se quedaba clavada en
+   852. Lo que queda de hueco —26px a 1366, 100 a 1440, 260 a 1600, 580 a
+   1920— es el TOPE DE 340px por columna, no el resumen: ver el bloque de
+   860px más abajo.
+
+   ---------- la VISTA DE TABLA (BLOQUE 56, punto 8) ----------
+   La segunda vista sobre el mismo trabajo: cinco columnas de texto, que
+   sí usan el ancho entero en cualquier lienzo. Se desplaza DENTRO de su
+   caja (nunca la pantalla: G2), y el `min-width` de la tabla es lo que
+   impide la celda de una palabra por línea en el teléfono (A1) — ahí la
+   caja se desliza de lado, como el tablero. */
+.vd-tabla-caja{
+  overflow-x:auto;background:#fff;border:1px solid var(--d-borde);
+  border-radius:var(--d-radio-col);
 }
-.vd-res>*{flex:1 1 236px}
-.vd-tile{
-  border:1.5px solid #5DBB8C;border-radius:var(--d-radio-col);
-  padding:12px 16px;display:flex;flex-direction:column;gap:2px;background:#fff;
+.vd-tabla{width:100%;min-width:620px;border-collapse:collapse;font-size:14px}
+.vd-tabla th,.vd-tabla td{
+  text-align:left;padding:10px 14px;
+  border-bottom:1px solid var(--d-borde);vertical-align:middle;
 }
-.vd-tile-k{font-size:13px;font-weight:600}
-.vd-tile-v{font-size:24px;font-weight:700;line-height:1.2}
-.vd-pvs{
-  border:1.5px solid #5DBB8C;border-radius:var(--d-radio-col);
-  padding:12px 16px;display:flex;flex-direction:column;gap:10px;background:#fff;
+.vd-tabla tbody tr:last-child th,.vd-tabla tbody tr:last-child td{border-bottom:0}
+/* EL ENCABEZADO NO VA PEGADO (`position:sticky`), y es a propósito:
+   MEDIDO con 52 filas a 1440px, un sticky acá sería INERTE y no daría
+   ningún error. `overflow-x:auto` hace que el `overflow-y` compute `auto`
+   también, así que `.vd-tabla-caja` es contenedor de scroll en los dos
+   ejes — y como su alto es automático, su `clientHeight` es igual a su
+   `scrollHeight` (2739 = 2739): nunca scrollea por dentro. Quien scrollea
+   es `main` (828 de alto contra 2815 de contenido), que es el contenedor
+   de scroll de TODA la app (`main{overflow-y:auto}` en styles.css). Con
+   `main.scrollTop = 300`, el `<th>` pasó de y=119 a y=-181: se fue los
+   300px enteros.
+   Dejarlo quieto pide acotarle el alto a la caja —el patrón del item 6 de
+   Finanzas— y eso es una decisión de altura que este punto no pidió y que
+   el frente de G2 ya midió como peligrosa (acotar el alto del tablero lo
+   encogía a 0). Queda reportado, con el valor que habría que elegir. */
+.vd-tabla thead th{
+  background:var(--d-col);
+  font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--d-suave);white-space:nowrap;
 }
-.vd-pvs-k{font-size:14px;font-weight:700}
-.vd-pv{display:flex;align-items:baseline;gap:8px;min-width:0}
-.vd-pv-n{flex:1;min-width:0;font-weight:600;font-size:14px}
+.vd-tabla tbody th{font-weight:600}
+/* En la TARJETA el nombre va en un renglón con puntos suspensivos
+   (`.vd-abrir`), porque ahí lo acota el ancho de la tarjeta. En una celda
+   de tabla ese `nowrap` no recorta nada: EMPUJA la columna, y con un
+   nombre largo le pedía 210px de ancho mínimo a la primera columna. Acá
+   el nombre se parte en dos renglones y no se esconde ni una letra. */
+.vd-tabla .vd-abrir{white-space:normal;overflow:visible;text-overflow:clip}
+.vd-tabla tbody tr:hover{background:var(--d-col)}
+/* La fecha NO se parte (una fecha en dos renglones se lee mal). La etapa
+   SÍ: «Confirmado · falta cobrar» es el título más largo de las tres
+   columnas y con `nowrap` le pedía 821px de ancho mínimo a la tabla, así
+   que a 1024 de ventana (728 de lienzo) la caja ya se deslizaba de lado
+   en una computadora. Medido: con la etapa partiendo baja a 736, y con el
+   nombre partiendo también (ver `.vd-tabla .vd-abrir`) a 726 — que entra
+   en los 728. En el teléfono su mínimo es 629 y ahí sí se desliza, que es
+   donde toca. */
+.vd-td-fecha{color:#3F3F3F;white-space:nowrap}
+.vd-td-etapa{color:#3F3F3F}
+.vd-td-num{text-align:right;white-space:nowrap}
+/* El monto arriba y la palabra que dice qué es (cobrado / por cobrar)
+   debajo, para que la cifra no quede sin rótulo — que es justo lo que
+   le faltaba al resumen que se fue. */
+.vd-td-num>b{display:block;font-size:15px}
+.vd-td-num>.vd-hint{display:block;font-size:11.5px}
 
 /* ---------- la cara celular del cuerpo (BLOQUE 37, pantalla 25) ----------
    El aviso de atoradas, las píldoras Pendientes/Pagadas, el título de
@@ -251,52 +335,40 @@
      por línea (la regla de A1), y el `1` de crecer es lo que se lleva la
      franja. Después: 320px de columna y el 95% del lienzo usado.
 
-     El tope de 340px es el ancho del panel de la ficha del contacto
-     (`.ct-cols` en diseno-contactos.css), no un número nuevo: pasado
-     eso, una tarjeta con un nombre a la izquierda y un monto a la
-     derecha deja de ser tarjeta y se vuelve una banda. */
+     EL TOPE DE 340px, REVISADO AL IRSE EL PANEL (BLOQUE 56, punto 8).
+     Lo que SÍ murió con el panel fue el bloque de 1120px, que devolvía
+     las columnas a 276 fijos para que el resumen cupiera al costado: una
+     sola regla, borrada entera, y por eso ahora las columnas crecen en
+     TODOS los anchos (el día anterior se quedaban en 852 de 1144 a
+     1440). El tope se queda, y no es un número de este carril: 340 es el
+     ancho del panel de la ficha del contacto (`.ct-cols` en
+     diseno-contactos.css). Pasado eso, una tarjeta con un nombre a la
+     izquierda y un monto a la derecha deja de ser tarjeta y se vuelve
+     una banda.
+
+     LO QUE EL TOPE DEJA SIN USAR, medido y dicho en voz alta: tres
+     columnas de 340 más dos huecos de 12 son 1044, así que desde 1366 de
+     ventana (1070 de lienzo) el tablero se queda en 1044 y sobra lienzo
+     — 100px a 1440, 260 a 1600, 580 a 1920. ANTES, a esos tres anchos,
+     el tablero medía 852 y el sobrante se lo llevaba el resumen, así que
+     esto es una mejora de 192px en los tres; pero el hueco no desaparece.
+     Darle ese ancho al tablero es subir o quitar ESTE `max-width` —un
+     solo valor, en un solo lugar— a cambio de tarjetas más anchas que el
+     lienzo del panel de contacto. Es decisión de Abraham, y la vista de
+     TABLA sí usa el ancho entero en cualquier lienzo. */
   .vd-col{flex:1 0 276px;max-width:340px}
-}
-@container lienzo (min-width: 1120px){
-  /* Con 1120px de LIENZO el resumen vuelve al costado: 852 del tablero +
-     12 de hueco + 236 de los tiles = 1100, y el lienzo que mide el
-     @container es el de ADENTRO del padding de .vd-main (la ventana menos
-     el menú menos los 56 de respiro): a 1440px de ventana son 1144, que
-     entran justos. A 1280 son 984 y el resumen baja. El tablero
-     dimensiona por su CONTENIDO (flex-basis auto) y el resumen toma el
-     resto — con flex:1 en los dos hermanos, el resumen se llevaba la
-     mitad del lienzo y la tercera columna quedaba clipeada debajo
-     (visto en vivo a 1500px). 1120 es el escalón HOLGADO de la escala
-     compartida (diseno-base.css). */
-  .vd-tablero{flex:0 1 auto}
-  .vd-res{flex:1 1 236px;min-width:236px;flex-direction:column;flex-wrap:nowrap}
-  .vd-res>*{flex:0 0 auto}
-  /* Y acá las columnas vuelven a su ancho fijo del lienzo. No es un
-     capricho: con el resumen AL COSTADO el tablero se dimensiona por su
-     contenido (`flex:0 1 auto`, arriba), así que si las columnas
-     pudieran crecer hasta 340 su contenido pediría 1044 y el resumen ya
-     no cabría en la fila — se iría abajo a 1440, que es DONDE HOY SÍ
-     CABE. O sea: dejarlas crecer acá rompería lo que A11 arregló.
-
-     ESTE BLOQUE ENTERO ES DEL PANEL y se va con él (punto 8 del BLOQUE
-     56). El día que el resumen se quite, borrarlo deja al tablero solo
-     en el lienzo y las columnas crecen hasta 340 en todos los anchos,
-     que es lo que se quiere. No hace falta tocar nada más.
-
-     LO QUE ESTE BLOQUE NO ARREGLA, dicho en voz alta: de 1440 para
-     arriba el tablero se queda en 852 y el resumen se estira —280 a
-     1440, 440 a 1600, 760 a 1920—. O sea que la mitad vacía que se ve a
-     1920 **es del RESUMEN, no del tablero**. Para dárselo al tablero
-     habría que cambiarle el `flex` a `.vd-tablero` de acá arriba, y eso
-     ya es tocar el tablero: queda sin hacer a propósito y reportado,
-     porque se resuelve solo cuando el panel se vaya. */
-  .vd-col{flex:0 0 276px;max-width:none}
 }
 
 /* ---------- teléfono ---------- */
 @media (max-width: 899px){
   .vd-svc-pc{display:none}        /* los chips viven en la barra de abajo */
   .vd-main{padding:12px 16px 170px}
+  /* La copia del segmento de vistas: acá la cabecera está escondida, y
+     sin esto la tabla sería inalcanzable desde el celular (el defecto que
+     ya apareció una vez con «Respuestas»). Las dos caras se reparten el
+     ancho, igual que el `.segmento.seg-movil` de Compras. */
+  .vd-seg.seg-movil{display:flex;width:100%;margin-bottom:12px}
+  .vd-seg.seg-movil a{flex:1;justify-content:center;padding:0 10px}
   /* El aviso rojo de arriba (lienzo: «N ventas por revisar»; el dato
      real son las atoradas — main._vender_alerta). */
   .vd-alerta-rev{
