@@ -38,10 +38,17 @@ def con_claves(monkeypatch):
 
 
 def test_sin_claves_no_hay_boton_ni_aviso(cliente):
+    """Item 3 (7/10/2026): el aviso decía «faltan las claves VAPID
+    (VAPID_CLAVE_PUBLICA y VAPID_CLAVE_PRIVADA en el .env del droplet)».
+    Quien abre Ajustes no pone variables en ningún servidor: el motivo
+    técnico vive en el log y en app/avisos.py, y acá se dice lo único que
+    el lector puede saber."""
     cuerpo = cliente.get("/?tab=ajustes").text
     assert "Avisos en este celular" in cuerpo
     assert 'id="activar-avisos"' not in cuerpo       # sin claves no se ofrece
-    assert "faltan las claves VAPID" in cuerpo
+    assert "Los avisos todavía no están activados." in cuerpo
+    for jerga in ("VAPID", ".env", "droplet", "servidor"):
+        assert jerga not in cuerpo, jerga
 
 
 def test_con_claves_el_boton_lleva_la_clave_publica(cliente, monkeypatch):

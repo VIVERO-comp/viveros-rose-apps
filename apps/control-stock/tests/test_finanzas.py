@@ -203,7 +203,7 @@ def test_con_una_confirmacion_previa_sale_el_metodo_y_el_nombre(
                         lambda: {9101: 100.0})
     texto = admin.get("/finanzas").text
     assert "Voucher de Yappy" in texto
-    assert "marcó: Rubén, el 05/10/2026" in texto
+    assert "Marcó: Rubén, el 05/10/2026" in texto
 
 
 def test_una_fecha_que_no_se_entiende_no_se_inventa():

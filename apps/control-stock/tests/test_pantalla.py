@@ -1,3 +1,5 @@
+import pytest
+
 from app import datos
 
 
@@ -186,3 +188,43 @@ def test_solo_tres_chips_de_filtro(cliente, con_inventario):
         assert f'data-cat="{categoria}"' not in r.text
     assert "En 0" in r.text
     assert 'onclick="chip(this,"' not in r.text
+
+
+# ---------------------------------------------------------------------------
+# Ajustes: lo que NO le pertenece (items 1 y 2 del lote, 7/10/2026)
+# ---------------------------------------------------------------------------
+
+def test_crear_producto_nace_escondido_y_es_solo_de_stock(cliente,
+                                                          con_inventario):
+    """Item 1: el único botón negro de la app —«+ Crear producto»— salía
+    flotando en Inicio y en AJUSTES, pantallas que no crean productos. Es de
+    Stock. Dos candados: nace con `hidden` (la página abre en Inicio) y el
+    JS solo lo muestra en Stock.
+    """
+    # `/` a secas redirige al Calendario (22/09/2026): el lienzo del home
+    # se pide con ?tab=. Ajustes es justo la pantalla del reclamo.
+    cuerpo = cliente.get("/?tab=ajustes").text
+    assert 'id="fab-agregar" href="/productos/crear" hidden' in cuerpo
+    import pathlib
+
+    from app import main
+    js = (pathlib.Path(main.__file__).parent / "static" / "app.js").read_text()
+    assert 'document.getElementById("fab-agregar").hidden = id !== "stock";' in js
+    # Y el gemelo de la barra del teléfono sigue con la misma regla.
+    assert 'document.getElementById("bm-crear").style.display = id === "stock"' in js
+
+
+@pytest.mark.parametrize("seccion", [
+    "Mi cuenta", "Avisos en este celular", "Hoja de inventario"])
+def test_cada_seccion_de_ajustes_dice_su_nombre_una_sola_vez(
+        cliente, con_inventario, seccion):
+    """Item 2: el nombre vivía en el <summary> y OTRA VEZ adentro, uno
+    debajo del otro. Queda el del summary.
+
+    Se cuenta el `seccion-titulo` repetido, no el nombre a secas: una
+    sección con varias partes (Equipo, Roles) sí lleva un título por parte,
+    y eso está bien — ahí cada uno nombra algo distinto.
+    """
+    cuerpo = cliente.get("/?tab=ajustes").text
+    assert f'<b>{seccion}</b>' in cuerpo            # el del summary, el bueno
+    assert f'class="seccion-titulo">{seccion}<' not in cuerpo

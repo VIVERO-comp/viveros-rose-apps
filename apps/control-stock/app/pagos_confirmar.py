@@ -126,20 +126,23 @@ def sumas_confirmadas():
 # ---------------------------------------------------------------------------
 # Las tres palabras de contexto de una fila de la cola (7/10/2026)
 #
-# «Falta la fecha de la venta» era el reclamo; el método y el quién vinieron
-# con él. La regla de la casa manda sobre las ganas de llenar la fila: lo
+# «Falta la fecha de la venta» era el reclamo; el método y el quién
+# vinieron con él. La regla de la casa manda sobre las ganas de llenar: lo
 # que no se sabe SE DICE. Por eso cada una de estas tres tiene su frase de
 # «todavía no» y ninguna devuelve un guion mudo ni una fecha de hoy.
 # ---------------------------------------------------------------------------
 
-SIN_FECHA = "sin fecha en Odoo"
-SIN_METODO = "todavía sin método: se elige al confirmar"
-SIN_MARCA = "nadie la ha marcado todavía"
+# Los tres salen SIN rótulo: el rótulo («Cómo llegó:», «Marcó:») lo
+# pone la plantilla, que es donde se ve. Acá vive el VALOR, y el valor
+# de lo que no se sabe es decirlo.
+SIN_FECHA = "sin fecha"
+SIN_METODO = "todavía no se sabe (se elige al confirmar)"
+SIN_MARCA = "nadie todavía"
 
 
 def fecha_de_venta(crudo):
     """`2026-10-02 15:04:33` → `02/10/2026`. Lo que no se entienda sale
-    como «sin fecha en Odoo»: una fecha a medias se lee como un dato."""
+    como «sin fecha»: una fecha a medias se lee como un dato."""
     texto = str(crudo or "").strip()[:10]
     partes = texto.split("-")
     if len(partes) != 3 or not all(p.isdigit() for p in partes):
@@ -164,9 +167,8 @@ def marco_de(confirmacion):
     quien = (confirmacion.get("por") or "").strip()
     cuando = fecha_de_venta(confirmacion.get("en"))
     if not quien:
-        return f"marcada el {cuando}, sin nombre de quién"
-    return (f"{quien}" if cuando == SIN_FECHA
-            else f"{quien}, el {cuando}")
+        return f"alguien el {cuando}, sin nombre"
+    return quien if cuando == SIN_FECHA else f"{quien}, el {cuando}"
 
 
 def cola():

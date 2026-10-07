@@ -57,8 +57,8 @@ _CENTAVO = 0.009
 REPORTES = ("Ventas del mes", "Cobros por método", "Ventas por persona",
             "Cuentas por cobrar")
 
-# Item 5 (7/10/2026): el botón decía «Todavía no — falta el sí de Jay», y
-# ese permiso ya no es el motivo. Confirmar un pago es del asiento SYSTEM
+# Item 5 (7/10/2026): el botón decía «Todavía no — falta el sí de Jay»,
+# y ese permiso ya no es el motivo. Confirmar un pago es del asiento SYSTEM
 # MANAGER y se hace en /pagos-por-confirmar: acá, que es solo lectura, el
 # botón queda apagado y nada más. Decir un motivo que ya no aplica es peor
 # que no decir ninguno — manda a preguntarle a quien no decide.

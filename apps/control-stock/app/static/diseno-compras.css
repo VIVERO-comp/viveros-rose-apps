@@ -111,6 +111,16 @@ body.cpd .ret-tarjeta a.cmp-falta{
 }
 body.cpd .ret-tarjeta a.cmp-falta:hover{text-decoration:underline;text-underline-offset:2px}
 body.cpd .cmp-plata{font-size:11.5px;color:var(--d-tinta);font-weight:600}
+/* La MARCA del pago al proveedor (item 8, 7/10/2026): «Abonado» o
+   «Pagado». Es la pastilla de 22px de los demás chips de la tarjeta —ni un
+   tamaño nuevo—, en ámbar cuando falta plata y en verde cuando no falta.
+   Reemplaza a la columna «Abonado»: pagar es una marca, no un lugar. */
+body.cpd .cmp-marca{
+  display:inline-flex;align-items:center;height:22px;padding:0 8px;
+  border-radius:11px;background:#FDF3E2;color:#8A5B14;
+  font-size:11.5px;font-weight:600;line-height:1;white-space:nowrap;
+}
+body.cpd .cmp-marca.cmp-marca-full{background:#E8F5EE;color:#1F7A4D}
 body.cpd .ret-tarjeta .eq-texto{font-size:12px;color:var(--d-suave)}
 body.cpd .hace-alerta{color:var(--d-rojo)}
 /* El botón del rincón de la tarjeta (el `.ob` del lienzo): píldora de 28px

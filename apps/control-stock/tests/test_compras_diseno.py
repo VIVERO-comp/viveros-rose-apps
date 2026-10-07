@@ -103,11 +103,16 @@ def test_los_css_compartidos_no_se_tocaron():
 
 def test_el_color_de_cada_columna_viaja_desde_la_paleta(cliente):
     """`--cpd-col` y el chip del contador los pone el servidor con
-    compras.ESTADOS (paleta.json): la piel nueva no trae hex de estado."""
+    paleta.json: la piel nueva no trae hex de estado.
+
+    Sobre las columnas de PANTALLA (`ORDEN_PANTALLA`), que desde el item 8
+    son seis: «Abonado» sigue en la paleta y en Linear, pero ya no tiene
+    columna que pintar."""
     texto = cliente.get("/compras").text
-    for estado in compras.ESTADOS:
-        assert f"--cpd-col:{estado['color']}" in texto, estado["clave"]
-        assert estado["chip"] in texto, estado["clave"]
+    for clave in compras.ORDEN_PANTALLA:
+        estado = compras.POR_CLAVE[clave]
+        assert f"--cpd-col:{estado['color']}" in texto, clave
+        assert estado["chip"] in texto, clave
 
 
 def test_la_piel_nueva_no_trae_hex_de_estado_a_mano():
@@ -135,9 +140,10 @@ def test_el_tablero_conserva_sus_acciones(cliente, de_dueno):
     # La hamburguesa.
     assert "Mostrar u ocultar el menú" in texto
     # El pie de cada columna subió a ser el hint bajo el título, pero
-    # sigue ahí con sus palabras.
-    for estado in compras.ESTADOS:
-        assert estado["pie"] in texto, estado["clave"]
+    # sigue ahí con sus palabras. Las de PANTALLA (item 8): «Abonado» ya
+    # no tiene columna, así que tampoco pie.
+    for clave in compras.ORDEN_PANTALLA:
+        assert compras.POR_CLAVE[clave]["pie"] in texto, clave
 
 
 def test_la_tarjeta_conserva_sus_enlaces(cliente, de_dueno):

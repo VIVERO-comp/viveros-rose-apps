@@ -137,17 +137,60 @@ def _issue(identifier="VIV-401", titulo="Sacos de tierra",
 
 
 # ---------------------------------------------------------------------------
-# Las 7 columnas
+# Las columnas de PANTALLA (6) y los estados de Linear (7)
 # ---------------------------------------------------------------------------
 
-def test_el_tablero_trae_las_7_columnas_en_orden():
+def test_el_tablero_no_pinta_la_columna_abonado():
+    """Item 8 (7/10/2026): «Abonado» no es un lugar donde esté la
+    mercancía, es plata adelantada al proveedor. Bajó a ser una marca de la
+    tarjeta y su columna desapareció de la PANTALLA."""
     columnas = compras.tablero()
     assert [c["clave"] for c in columnas] == [
-        "POR_PEDIR", "COTIZANDO", "PEDIDO", "ABONADO", "EN_CAMINO",
-        "RECIBIDO", "CERRADO"]
+        "POR_PEDIR", "COTIZANDO", "PEDIDO", "EN_CAMINO", "RECIBIDO",
+        "CERRADO"]
     assert [c["titulo"] for c in columnas] == [
-        "Por pedir", "Cotizando", "Pedido", "Abonado", "En camino",
-        "Recibido", "Cerrado"]
+        "Por pedir", "Cotizando", "Pedido", "En camino", "Recibido",
+        "Cerrado"]
+
+
+def test_el_estado_abonado_SIGUE_VIVO_en_linear():
+    """Quitar la columna de la pantalla NO es borrar el estado allá: el
+    código no borra nada del catálogo de Linear, `mover()` sigue aceptando
+    la clave y `columnas_que_faltan()` sigue exigiéndola."""
+    assert "ABONADO" in compras.POR_CLAVE
+    assert "ABONADO" in compras.ORDEN
+    assert len(compras.ESTADOS) == 7
+    assert "ABONADO" not in compras.ORDEN_PANTALLA
+
+
+def test_una_compra_en_abonado_no_desaparece_del_tablero():
+    """La absorbe «Pedido» —una compra abonada ya se le pidió— y su
+    tarjeta lleva la marca. Ninguna compra se vuelve invisible."""
+    assert compras.columna_en_pantalla("ABONADO") == "PEDIDO"
+    por_clave = {c["clave"]: [x["ref"] for x in c["compras"]]
+                 for c in compras.tablero()}
+    # VIV-204 es la de muestra que vive en ABONADO.
+    assert "VIV-204" in por_clave["PEDIDO"]
+    tarjeta = next(x for c in compras.tablero() for x in c["compras"]
+                   if x["ref"] == "VIV-204")
+    assert tarjeta["estado"] == "ABONADO"       # en Linear, intacto
+    assert tarjeta["marca_pago"] in ("Abonado", "Pagado")
+
+
+def test_la_marca_del_pago_sale_de_la_plata_y_sabe_callarse():
+    # Con plata de Odoo manda la plata: saldo 0 es «Pagado», algo pagado
+    # con saldo es «Abonado», nada pagado no dice nada.
+    pagada = {"hay": True, "total": 100.0, "pagado": 100.0}
+    abonada = {"hay": True, "total": 100.0, "pagado": 40.0}
+    seca = {"hay": True, "total": 100.0, "pagado": 0.0}
+    assert compras.marca_pago({}, pagada) == "Pagado"
+    assert compras.marca_pago({}, abonada) == "Abonado"
+    assert compras.marca_pago({}, seca) == ""
+    # Sin plata conocida, lo que diga el tablero — y nada más.
+    assert compras.marca_pago({"estado": "ABONADO"}, None) == "Abonado"
+    assert compras.marca_pago({"estado": "PEDIDO"}, None) == ""
+    assert compras.marca_pago({"estado": "PEDIDO"},
+                              {"hay": False}) == ""
 
 
 def test_los_dos_nombres_largos_no_chocan_con_los_pedidos_en_linea():
@@ -173,6 +216,8 @@ def test_cada_compra_cae_en_su_columna():
 # ---------------------------------------------------------------------------
 
 def test_la_paleta_tiene_las_7_claves_con_una_familia_que_existe():
+    """Las SIETE, no las seis de la pantalla: la paleta acompaña al
+    catálogo de Linear, y «Abonado» sigue allá."""
     asignado = colores.ASIGNACIONES["estado_compra"]
     assert set(asignado) == set(compras.ORDEN)
     for estado in compras.ESTADOS:
@@ -274,7 +319,7 @@ def test_la_tarjeta_sin_plata_no_pinta_barra(cliente):
     assert "cmp-barra" not in tarjeta_201
     tarjeta_205 = texto.split('data-ref="VIV-205"')[1].split("</div>")[0]
     assert "cmp-barra" in tarjeta_205
-    assert "$625.00 / $1250.00" in tarjeta_205
+    assert "$625.00 / $1,250.00" in tarjeta_205   # con la coma (item 6)
 
 
 def test_la_pantalla_no_espera_a_odoo_para_la_plata(monkeypatch):
@@ -299,11 +344,14 @@ def test_sin_el_proyecto_el_tablero_sale_vacio_con_su_aviso(monkeypatch, cliente
     respuesta = cliente.get("/compras")
     assert respuesta.status_code == 200          # nunca un 500
     texto = respuesta.text
-    assert "El proyecto COMPRAS todavía no existe" in texto
-    assert "el código no crea proyectos ni columnas" in texto
-    # Las 7 columnas siguen ahí, vacías.
-    for estado in compras.ESTADOS:
-        assert estado["titulo"] in texto
+    # En palabras simples (item 9, 7/10/2026): sin «Linear», sin el nombre
+    # del proyecto ni el del equipo. El detalle técnico vive en el log.
+    assert "El tablero de compras todavía no está creado" in texto
+    assert "Lo crea Abraham: la app no lo hace sola" in texto
+    assert "Linear" not in texto
+    # Las columnas de pantalla siguen ahí, vacías.
+    for clave in compras.ORDEN_PANTALLA:
+        assert compras.POR_CLAVE[clave]["titulo"] in texto
     assert "data-ref=" not in texto
 
 
@@ -320,7 +368,7 @@ def test_si_falta_una_columna_la_pantalla_la_nombra(monkeypatch, cliente):
     _linear_falso(monkeypatch, columnas=columnas)
     assert faltante in compras.columnas_que_faltan()
     texto = cliente.get("/compras").text
-    assert "le faltan estas columnas" in texto and faltante in texto
+    assert "Faltan columnas por crear" in texto and faltante in texto
 
 
 def test_si_linear_no_contesta_la_pantalla_lo_dice_y_no_revienta(monkeypatch, cliente):
@@ -608,12 +656,12 @@ def test_un_empleado_sin_etiqueta_no_mueve_ni_las_sin_asignar():
 # La pantalla
 # ---------------------------------------------------------------------------
 
-def test_la_pantalla_pinta_las_7_columnas_y_sus_compras(cliente):
+def test_la_pantalla_pinta_sus_columnas_y_sus_compras(cliente):
     respuesta = cliente.get("/compras")
     assert respuesta.status_code == 200
     texto = respuesta.text
-    for estado in compras.ESTADOS:
-        assert estado["titulo"] in texto
+    for clave in compras.ORDEN_PANTALLA:
+        assert compras.POR_CLAVE[clave]["titulo"] in texto
     assert "50 sacos de tierra negra" in texto
     assert "Agroservicios del Istmo" in texto
     assert "P00016" in texto
@@ -655,7 +703,7 @@ def test_solo_el_que_puede_mover_ve_la_tarjeta_arrastrable(cliente, de_dueno):
 def test_un_empleado_sin_etiqueta_no_ve_nada_arrastrable(cliente):
     texto = cliente.get("/compras").text
     assert 'draggable="true"' not in texto
-    assert "Sin etiqueta." in texto
+    assert "Todavía no te toca ninguna." in texto
     # Pero VE el tablero completo, igual que en Control.
     assert "50 sacos de tierra negra" in texto
 
@@ -756,3 +804,23 @@ def test_el_menu_lleva_a_compras(cliente):
         assert 'href="/compras"' in texto or ruta == "/compras", ruta
     # Y la pestaña se marca como activa en su propia pantalla.
     assert 'class="pil on"' in cliente.get("/compras").text
+
+
+# ---------------------------------------------------------------------------
+# Item 9 · la pantalla habla en palabras, no en nombres de sistema
+# ---------------------------------------------------------------------------
+
+# Lo que la cara de Compras NO puede decir: el nombre del tablero donde vive
+# el estado, el del equipo, el del campo del issue, ni el de un sistema que
+# quien compra no administra. Todo eso vive en el docstring del módulo.
+JERGA_PROHIBIDA_COMPRAS = ("Linear", "equipo VIV", "issue", "Resp:",
+                           "P000xx", "Odoo", "Twenty", "instancia",
+                           "res.partner", "BLOQUE")
+
+
+@pytest.mark.parametrize("palabra", JERGA_PROHIBIDA_COMPRAS)
+def test_el_tablero_no_habla_en_tecnico(cliente, palabra):
+    cuerpo = cliente.get("/compras").text
+    import re as _re
+    visible = " ".join(_re.sub(r"<[^>]+>", " ", cuerpo).split())
+    assert palabra not in visible, f"«{palabra}» se ve en el tablero"
