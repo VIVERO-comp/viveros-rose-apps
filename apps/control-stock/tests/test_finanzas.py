@@ -388,6 +388,87 @@ def test_no_se_puede_meter_plata_en_diferencia_sin_poder_enumerarla(
     assert finanzas.TEXTO_DIF_SIN_IDENTIFICAR in admin.get("/finanzas").text
 
 
+def test_la_plata_de_una_cotizacion_con_pago_encima_SE_VE_como_plata(
+        admin, db_limpia, monkeypatch):
+    """EL AGUJERO que destapó el choque del 7/10, y es el peor de los dos.
+
+    Una cotización sin confirmar CON un pago encima es clase H. Su plata
+    no puede entrar a «Pagos por confirmar» (no es una venta confirmada),
+    pero el aviso de abajo reportaba el SALDO (`debe`) en vez de la plata
+    sin revisar (`monto_nuevo`): con un saldo chico o en cero, esos pesos
+    no aparecían en NINGÚN número de la pantalla. Dinero invisible, justo
+    en la pantalla donde se decide si entró plata."""
+    monkeypatch.setattr(pagos_confirmar, "_informe", lambda: {"ventas": [
+        {"orden_id": 501, "nombre": "S00501", "cliente": "QA Cotización",
+         "total": 500.0, "pagado": 500.0, "debe": 0.0, "clase": "H",
+         "confirmada": False, "motivo": "cotización con pago encima"},
+    ], "huecos": []})
+    datos = finanzas.resumen()
+    # No entra a los cinco números: no es una venta confirmada.
+    assert _tarjeta(datos, "Vendido")["monto"] == 0.0
+    assert _tarjeta(datos, "Pagos por confirmar")["monto"] == 0.0
+    # Pero la plata SE VE, y es la plata, no un saldo.
+    assert (datos["cola_fuera"]["n"], datos["cola_fuera"]["monto"]) \
+        == (1, 500.0)
+    texto = admin.get("/finanzas").text
+    # La frase la arma Python, así que la prueba afirma ESA, no un literal
+    # del HTML que el próximo merge pueda relabelar por su cuenta.
+    assert datos["cola_fuera"]["texto"] in texto
+    assert "$500.00 sin revisar" in datos["cola_fuera"]["texto"]
+    assert "S00501" in texto
+
+
+def test_una_venta_pagada_sin_la_marca_NO_pasa_por_cotizacion(
+        admin, db_limpia, monkeypatch):
+    """El candado de clase. Si una foto vieja (un despliegue a medias, un
+    doble de pruebas) entrega una venta clase D sin el campo `confirmada`,
+    tratarla como cotización le cambia de bolsillo a la plata en silencio
+    — pasó el 7/10 con una fila de $300. La clase D solo existe en ventas
+    confirmadas, y esa dirección sí se puede usar."""
+    monkeypatch.setattr(pagos_confirmar, "_informe", lambda: {"ventas": [
+        {"orden_id": 601, "nombre": "S00601", "cliente": "QA Sin Marca",
+         "total": 300.0, "pagado": 300.0, "debe": 0.0, "clase": "D",
+         "motivo": ""},   # <-- sin `confirmada`, a propósito
+    ], "huecos": []})
+    datos = finanzas.resumen()
+    assert _tarjeta(datos, "Vendido")["monto"] == 300.0
+    assert [p["orden"] for p in datos["pendientes"]] == ["S00601"]
+    assert datos["otros_pendientes"] == []
+    assert _cuadra(datos) == (300.0, 300.0)
+    # Y una clase A sin marca sigue siendo cotización: el candado es de
+    # una sola dirección, no un «todo cuenta».
+    monkeypatch.setattr(pagos_confirmar, "_informe", lambda: {"ventas": [
+        {"orden_id": 602, "nombre": "S00602", "cliente": "QA Cotización",
+         "total": 90.0, "pagado": 0.0, "debe": 90.0, "clase": "A",
+         "motivo": ""},
+    ], "huecos": []})
+    assert _tarjeta(finanzas.resumen(), "Vendido")["monto"] == 0.0
+
+
+def test_las_dos_listas_dicen_el_contexto_con_LAS_MISMAS_palabras(
+        admin, monkeypatch, db_limpia):
+    """El choque del 7/10: el renglón «cuándo · cómo · quién» estaba
+    COPIADO en los dos bloques, un frente le cambió el rótulo a uno y el
+    otro se quedó viejo. Ahora sale de una sola macro, así que la misma
+    fila se lee igual caiga donde caiga."""
+    monkeypatch.setattr(pagos_confirmar, "_informe", lambda: {"ventas": [
+        {"orden_id": 701, "nombre": "S00701", "cliente": "QA Confirmada",
+         "fecha": "2026-10-02 15:04:33", "total": 300.0, "pagado": 300.0,
+         "debe": 0.0, "clase": "D", "confirmada": True, "motivo": ""},
+        {"orden_id": 702, "nombre": "S00702", "cliente": "QA Cotización",
+         "fecha": "2026-10-02 15:04:33", "total": 200.0, "pagado": 200.0,
+         "debe": 0.0, "clase": "H", "confirmada": False, "motivo": ""},
+    ], "huecos": []})
+    datos = finanzas.resumen()
+    assert len(datos["pendientes"]) == 1 and len(datos["otros_pendientes"]) == 1
+    texto = admin.get("/finanzas").text
+    # El renglón de contexto aparece DOS veces, idéntico: una por lista.
+    renglon = (f"Venta del {pagos_confirmar.fecha_de_venta('2026-10-02')} · "
+               f"{pagos_confirmar.SIN_METODO} · marcó: "
+               f"{pagos_confirmar.SIN_MARCA}")
+    assert texto.count(renglon) == 2, "las dos listas ya no dicen lo mismo"
+
+
 def test_el_universo_vive_en_un_solo_lugar_para_que_a18_lo_herede(mundo):
     """Cruce obligatorio del encargo: A18 (abrir «Por cobrar» por
     antigüedad) tiene que leer EXACTAMENTE esta lista. Si cada pantalla
@@ -432,12 +513,18 @@ def test_la_plata_informada_sobre_una_cotizacion_se_ve_pero_no_suma(
     """S00006 es clase F y todavía cotización: no entra en los cuatro, y
     la pantalla la muestra con su aviso — es justo la plata mal puesta."""
     datos = finanzas.resumen()
-    assert datos["cola_fuera"] == {"n": 1, "monto": 70.0}
+    # S00006 es clase F: alguien DICE que se pagó y el sistema no tiene la
+    # plata, así que lo sin revisar es $0.00 — el reclamo se ve, pero no se
+    # cuenta como dinero que entró. Es la distinción con el caso H, donde
+    # la plata sí está (ver la prueba del agujero, más abajo).
+    assert (datos["cola_fuera"]["n"], datos["cola_fuera"]["monto"]) \
+        == (1, 0.0)
     assert [p["orden"] for p in datos["otros_pendientes"]] == ["S00006"]
     assert [p["orden"] for p in datos["pendientes"]] == ["S00002", "S00003",
                                                          "S00005"]
     texto = admin.get("/finanzas").text
-    assert "1 pago informado sobre cotizaciones" in texto
+    assert datos["cola_fuera"]["texto"] in texto
+    assert "1 pago sobre cotizaciones" in datos["cola_fuera"]["texto"]
     assert "S00006" in texto
 
 
@@ -533,10 +620,15 @@ def test_cero_rutas_post_bajo_finanzas():
 # Item 4 · cada fila de la cola dice cuándo, cómo y quién
 # ---------------------------------------------------------------------------
 
+# `confirmada` (BLOQUE 59.2): es una venta clase D, pagada completa, que
+# RE-ENTRA a la cola por plata nueva. La clase D solo existe en órdenes
+# confirmadas (el motor la asigna dentro de `if confirmada:`), así que la
+# marca es FIEL — y sin ella esta fila se iba al bloque «todavía es una
+# cotización», que es falso de esta venta.
 VENTA_CON_FECHA = [
     {"orden_id": 9101, "nombre": "S09101", "cliente": "Cliente QA Fecha",
      "fecha": "2026-10-02 15:04:33", "total": 300.0, "pagado": 300.0,
-     "debe": 0.0, "clase": "D", "motivo": ""},
+     "debe": 0.0, "clase": "D", "confirmada": True, "motivo": ""},
 ]
 
 

@@ -195,8 +195,31 @@ def ventas_del_universo(informe):
     Devuelve (confirmadas, sin_confirmar)."""
     vivas = [v for v in (informe.get("ventas") or [])
              if (v.get("clase") or "").strip().upper() != "CANCELADA"]
-    return ([v for v in vivas if v.get("confirmada")],
-            [v for v in vivas if not v.get("confirmada")])
+    return ([v for v in vivas if _es_confirmada(v)],
+            [v for v in vivas if not _es_confirmada(v)])
+
+
+# Las clases que SOLO existen en una venta confirmada. No es deducir el
+# estado de la clase —eso es justo lo que no se puede hacer, porque F, G y
+# H caen de los dos lados— sino usar la única dirección que el motor
+# garantiza: `_clasificar()` asigna C, D y E DENTRO de `if confirmada:`.
+# Sirve de candado cuando el campo no viaja: si una foto vieja (un
+# despliegue a medias, un doble de pruebas) entrega una venta pagada sin
+# la marca, tratarla como «cotización» le cambia de bolsillo a la plata en
+# silencio — pasó el 7/10 con una fila clase D de $300 que se fue al
+# bloque «todavía es una cotización».
+_CLASES_SOLO_CONFIRMADAS = ("C", "D", "E")
+
+
+def _es_confirmada(venta):
+    """La marca manda; si no viaja (o viaja en None), la clase decide en
+    la única dirección en que es segura. Vale igual para una fila del
+    informe que para una de la cola, que la lleva tal cual."""
+    marca = venta.get("confirmada")
+    if marca is not None:
+        return bool(marca)
+    return (venta.get("clase") or "").strip().upper() \
+        in _CLASES_SOLO_CONFIRMADAS
 
 
 def _tarjeta(titulo, monto, hint, n=None, rojo=False):
@@ -268,14 +291,36 @@ def resumen():
     # Lo por confirmar: la suma de la plata NUEVA de cada fila de la cola
     # (monto_nuevo — la misma cifra que confirma el system manager), SOLO
     # de las ventas confirmadas. La lista de abajo sigue completa.
-    de_confirmadas = [p for p in pendientes if p.get("confirmada")]
-    otros_pendientes = [p for p in pendientes if not p.get("confirmada")]
+    # El MISMO criterio que arriba, con el mismo candado: una fila de la
+    # cola clase C/D/E sin la marca es una venta confirmada, no una
+    # cotización.
+    de_confirmadas = [p for p in pendientes if _es_confirmada(p)]
+    otros_pendientes = [p for p in pendientes if not _es_confirmada(p)]
     por_confirmar = round(sum(float(p.get("monto_nuevo") or 0)
                               for p in de_confirmadas), 2) \
         if con_datos else None
-    cola_fuera_monto = round(sum(float(p.get("debe") or 0)
+    # OJO con lo que se reporta acá, que es un agujero que ya se abrió una
+    # vez (7/10/2026): esta cifra tiene que ser la PLATA SIN REVISAR de
+    # esas filas (`monto_nuevo`), NO su saldo (`debe`). Una cotización sin
+    # confirmar con un pago encima es clase H, y su saldo puede ser
+    # cualquier cosa mientras la plata que entró y nadie revisó son esos
+    # `monto_nuevo`. Con `debe` acá, esa plata no aparecía en NINGÚN número
+    # de la pantalla: ni en «Pagos por confirmar» (no es venta confirmada)
+    # ni en este aviso (que mostraba un saldo). Dinero invisible.
+    cola_fuera_monto = round(sum(float(p.get("monto_nuevo") or 0)
                                  for p in otros_pendientes), 2)
-    cola_fuera = ({"n": len(otros_pendientes), "monto": cola_fuera_monto}
+    cola_fuera = ({"n": len(otros_pendientes), "monto": cola_fuera_monto,
+                   # La frase la arma PYTHON (regla 10), no la plantilla.
+                   # No es purismo: este renglón estaba escrito en el HTML
+                   # y en la primera fusión se separó de su gemelo del
+                   # bloque de arriba. Lo que vive en un solo lugar de
+                   # Python no puede derivar en un merge, y la prueba
+                   # puede afirmar la constante en vez de un literal.
+                   "texto": (
+                       f"Además hay {len(otros_pendientes)} pago"
+                       f"{'s' if len(otros_pendientes) != 1 else ''} sobre "
+                       "cotizaciones que el cliente todavía no confirmó, con "
+                       f"{calculos.dinero(cola_fuera_monto)} sin revisar")}
                   if otros_pendientes else None)
 
     # «Cómo pagaron» (BLOQUE 59.4): el desglose de la tarjeta de arriba,
