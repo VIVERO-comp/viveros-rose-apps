@@ -27,6 +27,53 @@ body{font-size:15px}
 }
 .barra .btn.icono{width:40px;justify-content:center;padding:0;font-size:16px}
 .barra .btn.chico{font-size:14px}
+/* ---------------------------------------------------------------------------
+   EL BUSCADOR ÚNICO de «Actividad nueva» (BLOQUE 59, item 4 de Jay).
+
+   Aspecto solamente: quién casa con qué, qué fila sale y a dónde lleva su
+   enlace lo decide app/agenda.py y llega pintado desde Jinja2.
+   Las clases viven en este archivo —el de la piel de esta pantalla— y no
+   en diseno-base.css, porque el buscador solo existe acá.
+   --------------------------------------------------------------------------- */
+.bus{display:flex;flex-direction:column;gap:8px}
+.bus-fila{display:flex;gap:8px;align-items:center}
+.bus-fila .campo{flex:1;min-width:0}
+.bus-nota{margin:0;font-size:12px;line-height:1.45;color:var(--d-suave)}
+/* Una fuente que no se pudo leer NO se dice en gris de nota al pie: se
+   dice en rojo, porque significa que falta gente de la lista. */
+.bus-nota-hueco,.bus-nota-roto{
+  color:var(--d-rojo);background:var(--d-rojo-fondo);
+  border-radius:var(--d-radio-boton);padding:6px 9px;
+}
+.bus-elegido{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 10px;border:1px solid var(--d-borde);
+  border-radius:var(--d-radio-boton);background:var(--d-verde-fondo);
+}
+.bus-elegido-roto{background:var(--d-rojo-fondo);border-color:var(--d-rojo)}
+.bus-quien{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;flex:1;min-width:0}
+.bus-nom{font-size:14px;font-weight:600}
+.bus-ref{
+  font-size:11px;font-weight:700;letter-spacing:.02em;
+  padding:2px 6px;border-radius:999px;
+  background:var(--d-gris-activo);color:var(--d-tinta);
+}
+.bus-filas{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;
+  max-height:260px;overflow-y:auto}
+.bus-it{
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;
+  gap:4px 10px;padding:8px 10px;text-decoration:none;color:var(--d-tinta);
+  border:1px solid var(--d-borde-tarjeta);border-radius:var(--d-radio-boton);
+  background:#fff;
+}
+.bus-it:hover,.bus-it:focus-visible{background:var(--d-gris-activo)}
+.bus-it-quien,.bus-it-dato{display:flex;flex-wrap:wrap;align-items:baseline;gap:3px 8px;min-width:0}
+.bus-tel{font-size:12px;font-variant-numeric:tabular-nums;color:var(--d-suave)}
+.bus-fuente{
+  font-size:10px;text-transform:uppercase;letter-spacing:.04em;
+  color:var(--d-suave);
+}
+
 @media (min-width:900px){
   .barra .hamb{
     width:44px;height:44px;border-color:var(--d-borde-boton);

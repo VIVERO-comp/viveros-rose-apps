@@ -657,17 +657,28 @@ def test_el_form_trae_datalist_y_select_de_responsable(cliente):
     assert "selected" not in sel
 
 
-def test_el_selector_de_lead_trae_los_vivos_y_no_los_cerrados(cliente):
+def test_el_buscador_abre_con_los_leads_vivos_y_sin_los_cerrados(cliente):
+    # El selector de 32 opciones lo reemplazó el buscador único (BLOQUE
+    # 59), pero la regla de siempre se queda: un lead cerrado no recibe
+    # trabajo nuevo. Sin nada escrito salen los vivos — lo mismo que
+    # enseñaba el selector, ahora buscable.
     from app import linear_leads
     linear_leads.reiniciar_muestra()
     cuerpo = _abrir(cliente, nueva="1").text
-    sel = cuerpo[cuerpo.index('name="lead"'):][:1600]
-    assert ">Sin lead<" in sel
-    assert "LEAD-91 · Tamara" in sel
-    assert "Soledad" not in sel          # LEAD-84, Ganado
-    assert "Monica Gama" not in sel      # LEAD-83, Perdido
-    # Sin lead pedido, nada preseleccionado.
-    assert "selected" not in sel
+    bus = cuerpo[cuerpo.index('<div class="bus"'):]
+    bus = bus[:bus.index("</div>\n</div>") if "</div>\n</div>" in bus else len(bus)]
+    # Los leads se nombran por su REF, nunca por el nombre de la clienta:
+    # los de la semilla son datos REALES y limpiarlos del repo público es
+    # un pendiente abierto. El nombre se lee de la muestra.
+    assert linear_leads.uno("LEAD-91")["nombre"] in bus
+    assert "LEAD-91" in bus
+    assert "LEAD-84" not in bus          # Ganado: cerrado
+    assert linear_leads.uno("LEAD-84")["nombre"] not in bus
+    assert "LEAD-83" not in bus          # Perdido: cerrado
+    assert linear_leads.uno("LEAD-83")["nombre"] not in bus
+    # Y el campo que el POST lee sigue siendo `lead`, ahora escondido y
+    # vacío porque nadie eligió todavía.
+    assert 'name="lead" value=""' in cuerpo
 
 
 def test_crear_con_lead_va_por_el_camino_de_la_fase_4(cliente):
@@ -739,15 +750,17 @@ def test_un_lead_desconocido_rebota_con_su_ref(cliente):
     assert "LEAD-999" in unquote(r.headers["location"])
 
 
-def test_el_enlace_del_log_deja_el_selector_de_lead_puesto(cliente):
-    # El log de «Leads de servicio» ahora manda también lead=<ref>: el
-    # form abre con el selector elegido y coherente con el cliente.
+def test_el_enlace_del_log_deja_el_lead_ya_elegido(cliente):
+    # El log de «Leads de servicio» manda lead=<ref>: el form abre con esa
+    # persona ya elegida en el buscador y coherente con el cliente.
     from app import linear_leads
     linear_leads.reiniciar_muestra()
     cuerpo = _abrir(cliente).text
     assert "lead=LEAD-90" in cuerpo            # la liga del log lo lleva
     form = _abrir(cliente, nueva="1", lead="LEAD-91").text
-    assert 'value="LEAD-91" selected' in form
+    # El campo que se guarda, y la pastilla que lo dice en pantalla.
+    assert 'name="lead" value="LEAD-91"' in form
+    assert '<b class="bus-ref">LEAD-91</b>' in form
 
 
 def test_el_responsable_por_defecto_es_quien_esta_en_la_sesion(cliente, monkeypatch):

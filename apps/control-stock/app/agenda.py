@@ -271,12 +271,15 @@ def clientes_para_sugerir(actividades):
     ya trae, deduplicados sin distinguir mayúsculas y en orden
     alfabético.
 
-    Los leads del embudo NO van aquí a propósito: viven en el selector
-    «Lead» de al lado (`leads_para_conectar`), que además AMARRA la
-    actividad — esto sugiere los clientes que no son leads (los que ya
-    aparecen en el calendario). La lista viaja RENDERIZADA: cero
-    consultas al vuelo mientras se escribe, y el campo sigue siendo texto
-    libre (un cliente nuevo se escribe igual).
+    Los leads del embudo NO van aquí a propósito: los trae el buscador
+    único de al lado (`buscar_personas`), que además AMARRA la actividad.
+    Esto cubre la CUARTA fuente, la que el buscador no mira: el cliente
+    que solo existe como texto en una actividad vieja del calendario — no
+    es partner de Odoo, no es cliente de Vender y no es lead de nadie.
+
+    La lista viaja RENDERIZADA: cero consultas al vuelo mientras se
+    escribe, y el campo sigue siendo texto libre (un cliente nuevo se
+    escribe igual).
     """
     nombres = {}
     for actividad in actividades or []:
@@ -286,18 +289,230 @@ def clientes_para_sugerir(actividades):
     return sorted(nombres.values(), key=str.lower)
 
 
-def leads_para_conectar():
-    """[{ref, nombre}] de los leads VIVOS del embudo, para el selector
-    «Lead» de «Actividad nueva» (29/09/2026): elegir uno crea la
-    actividad AMARRADA por el mismo camino que la Fase 4. Un cerrado no
-    recibe trabajo nuevo, así que queda fuera. Vacío si Linear no
-    contesta — el form sale sin opciones y sigue sirviendo."""
+def leads_para_buscar():
+    """([{ref, nombre, celular, estado, estado_nombre, resp}], aviso).
+
+    Los leads VIVOS del embudo, que son los que pueden recibir trabajo
+    nuevo: un cerrado queda fuera. **El aviso es la mitad importante**: si
+    Linear no contesta, quien busque tiene que leer que falta una fuente
+    entera, porque una lista vacía se lee como «esa persona no existe».
+    """
     try:
         leads = linear_leads.listar()
+    except linear_leads.ErrorLeads as fallo:
+        return [], f"{AVISO_LEADS_HUECO} ({fallo})"
+    return [{"ref": l["ref"], "nombre": l["nombre"],
+             "celular": l.get("celular") or "",
+             "estado": l.get("estado") or "",
+             "estado_nombre": l.get("estado_nombre") or "",
+             "resp": l.get("resp") or ""}
+            for l in leads if not l.get("cerrado")], ""
+
+
+# `leads_para_conectar()` se fue con el selector que la pedía (BLOQUE 59):
+# su única llamada era el `<select name="lead">` que el buscador único
+# reemplazó, y la lista de leads vivos la sirve ahora `leads_para_buscar()`
+# —la misma, pero con el aviso de cuando Linear no contesta—.
+
+
+# ---------------------------------------------------------------------------
+# EL BUSCADOR ÚNICO de «Actividad nueva» (BLOQUE 59, item 4 de Jay)
+#
+# Antes el formulario traía DOS campos para la misma pregunta: un selector
+# con los leads vivos y, al lado, un «Cliente» de texto libre. Quien
+# agendaba tenía que saber de antemano si la persona era un lead del CRM o
+# un cliente que solo existe en Odoo, y si se equivocaba de campo la
+# actividad nacía suelta sin que nada avisara.
+#
+# Ahora hay UNA pregunta —«quién»— y una sola caja donde se escribe un
+# nombre o un teléfono. Las dos fuentes se buscan juntas:
+#
+#   los leads VIVOS del embudo      linear_leads.listar()  (vía leads_para_buscar)
+#   la gente de Odoo + Vender + CRM contactos.buscar()     (la unión de A7)
+#
+# Y se devuelve UNA fila por persona: si esa persona tiene un lead vivo, la
+# fila lo trae, y elegirla amarra la actividad igual que antes. Si no, la
+# fila es un cliente suelto y la actividad nace sin lead, como siempre.
+#
+# Lo que el buscador NO hace, a propósito: inventar. Si Linear o Odoo no se
+# pueden leer, la fuente ausente se DICE en los avisos (`contactos.buscar`
+# y `leads_para_buscar` los traen) — nunca una lista vacía con cara de «no
+# hay nadie».
+# ---------------------------------------------------------------------------
+
+AVISO_LEADS_HUECO = ("Linear no contestó: los leads del embudo no entran en "
+                     "esta búsqueda")
+
+# Cuántas filas se pintan. Más que esto no se lee de un vistazo, y el
+# resto se dice con un número en vez de esconderse.
+TOPE_BUSCADOR = 12
+
+# Sin nada escrito salen los leads vivos (lo que enseñaba el selector de
+# antes): cero costo, porque `linear_leads.listar()` sirve lo guardado.
+# Los contactos entran al escribir, y eso también es una decisión de
+# COSTO: `contactos.buscar()` le pregunta a Odoo por todos los partner y
+# sus órdenes, y abrir el formulario no tiene por qué pagar eso.
+PISTA_SIN_BUSCAR = ("Escribí un nombre o un teléfono para buscar también "
+                    "entre los clientes de Odoo y de Vender.")
+
+VACIO_BUSCADOR = ("Nadie con ese nombre ni con ese teléfono. Escribí el "
+                  "nombre en «Cliente» y la actividad nace suelta.")
+
+
+def _fila_persona(nombre, telefono, lead, detalle, fuente, clave):
+    """UNA fila del buscador, que es UNA persona.
+
+    `lead` es el LEAD-NN vivo que le cuelga, o "". Es el campo que decide
+    todo lo de después: con lead la actividad nace amarrada (y con un tipo
+    agendable el embudo se mueve); sin lead, suelta.
+    """
+    return {"clave": clave, "nombre": nombre, "telefono": telefono,
+            "lead": lead, "detalle": detalle, "fuente": fuente,
+            "es_lead": bool(lead)}
+
+
+def buscar_personas(q="", tope=TOPE_BUSCADOR):
+    """TODO lo que el buscador único pinta, decidido acá (regla 10).
+
+    Devuelve `{"q", "filas", "cuenta", "mas", "avisos", "pista", "vacio",
+    "con_contactos"}`. Las filas vienen con `lead` y `nombre` ya
+    resueltos: la plantilla solo arma el enlace con esos dos valores, y el
+    POST de siempre (`/calendario/actividad`) los recibe en los campos
+    `lead` y `cliente` que ya existían — por eso el guardado no se toca.
+    """
+    from . import contactos  # diferido: contactos importa este módulo
+
+    q = (q or "").strip()
+    vivos, aviso_leads = leads_para_buscar()
+    por_ref = {l["ref"]: l for l in vivos}
+    # El teléfono normalizado de cada lead vivo, para reconocerlo dentro de
+    # una fila de contactos que vino por el lado de Odoo.
+    ref_por_tel = {}
+    for lead in vivos:
+        tel = contactos.normalizar_telefono(lead["celular"])
+        if tel:
+            ref_por_tel.setdefault(tel, lead["ref"])
+
+    avisos = [aviso_leads] if aviso_leads else []
+    filas = []
+    usados = set()
+    # Los que `contactos.buscar` encontró y NO devolvió por su propio tope.
+    # Se cuentan aparte porque si no, el «hay N más» de abajo mentiría por
+    # lo bajo: diría solo los que este módulo recortó.
+    sobrantes = 0
+
+    if q:
+        # Con algo escrito: la unión entera (Odoo + Vender + CRM). Se pide
+        # con el tope ya puesto para no traer cientos de filas que nadie va
+        # a pintar.
+        hallado = contactos.buscar(q, tope=tope)
+        # SOLO el hueco de Odoo. El de Linear que trae `contactos` es el de
+        # SU tercera fuente, y acá los leads vienen de `linear_leads`
+        # directo (ver el bucle de abajo): repetir ese aviso diría «faltan
+        # los leads» mientras los leads están a la vista.
+        if hallado["aviso_odoo"]:
+            avisos.append(hallado["aviso_odoo"])
+        sobrantes = max(0, hallado["cuenta"] - len(hallado["filas"]))
+        for fila in hallado["filas"]:
+            ref = next((r for r in fila["leads"] if r in por_ref), "")
+            if not ref:
+                ref = ref_por_tel.get(
+                    fila["tel_norm"]
+                    or contactos.normalizar_telefono(fila["telefono"]), "")
+            if ref:
+                usados.add(ref)
+            filas.append(_fila_persona(
+                nombre=fila["nombre"],
+                telefono=fila["telefono"],
+                lead=ref,
+                detalle=(_detalle_lead(por_ref[ref]) if ref else ""),
+                fuente=fila["fuente_texto"],
+                clave=fila["id"]))
+
+    # Los leads vivos que ninguna fila de contactos trajo. Con `q` esto
+    # tapa el hueco de verdad: si Linear no se puede leer DESDE contactos
+    # (su tercera fuente exige una key de verdad, ver
+    # `contactos.linear_conectado`) o si Odoo está caído, el lead seguiría
+    # estando y hay que poder elegirlo. Sin `q` son TODOS: lo que enseñaba
+    # el selector de antes, igual pero buscable.
+    for lead in vivos:
+        if lead["ref"] in usados:
+            continue
+        if q and not contactos.casa_busqueda(
+                {"nombre": lead["nombre"], "telefono": lead["celular"],
+                 "tel_norm": contactos.normalizar_telefono(lead["celular"])},
+                q):
+            continue
+        filas.append(_fila_persona(
+            nombre=lead["nombre"], telefono=lead["celular"],
+            lead=lead["ref"], detalle=_detalle_lead(lead), fuente="CRM",
+            clave=lead["ref"]))
+
+    # Los leads primero —elegir uno es lo que amarra el trabajo— y cada
+    # grupo por nombre: un orden que no depende de qué fuente contestó
+    # primero.
+    filas.sort(key=lambda f: (0 if f["es_lead"] else 1,
+                              (f["nombre"] or "").lower()))
+    cuenta = len(filas) + sobrantes
+    mas = sobrantes
+    if tope and len(filas) > tope:
+        mas += len(filas) - tope
+        filas = filas[:tope]
+
+    return {"q": q, "filas": filas, "cuenta": cuenta, "mas": mas,
+            "avisos": avisos, "con_contactos": bool(q),
+            "pista": "" if q else PISTA_SIN_BUSCAR,
+            "vacio": VACIO_BUSCADOR}
+
+
+def _detalle_lead(lead):
+    """«Por agendar · Mary» — el estado del embudo y quién lo atiende."""
+    partes = [lead.get("estado_nombre") or lead.get("estado") or ""]
+    if lead.get("resp"):
+        partes.append(lead["resp"])
+    return " · ".join(p for p in partes if p)
+
+
+def elegido_en_el_buscador(ref_lead="", cliente="", tipo=""):
+    """La persona YA elegida, para la pastilla de arriba del buscador.
+
+    Se arma con los MISMOS dos campos que el formulario le manda al POST
+    (`lead` y `cliente`), leídos de vuelta: lo que la pantalla dice que
+    está elegido es exactamente lo que se va a guardar, sin un tercer
+    lugar donde la verdad pueda diferir.
+
+    El `tipo` entra solo para decir la consecuencia con la verdad: los
+    cinco tipos agendables mueven el lead a «Agendado», y cualquier otro
+    (un Alquiler, una reunión) deja la actividad amarrada sin tocar el
+    estado. Es la regla que ya vive en el POST, dicha antes de guardar.
+
+    None cuando no hay nadie elegido todavía.
+    """
+    ref_lead = (ref_lead or "").strip()
+    cliente = (cliente or "").strip()
+    if not ref_lead and not cliente:
+        return None
+    if not ref_lead:
+        return {"lead": "", "nombre": cliente, "detalle": "", "existe": True,
+                "aviso": "Cliente suelto: la actividad no se amarra a "
+                         "ningún lead."}
+    try:
+        lead = linear_leads.uno(ref_lead)
     except linear_leads.ErrorLeads:
-        return []
-    return [{"ref": l["ref"], "nombre": l["nombre"]}
-            for l in leads if not l.get("cerrado")]
+        lead = None
+    if lead is None:
+        # Un ref que ya no está en el tablero (o Linear caído): el POST lo
+        # va a rechazar con este mismo criterio, así que se dice ANTES en
+        # vez de dejar que el guardado sea la primera noticia.
+        return {"lead": ref_lead, "nombre": cliente or ref_lead,
+                "detalle": "", "existe": False,
+                "aviso": linear_leads.mensaje_lead_ausente(ref_lead)}
+    return {"lead": lead["ref"], "nombre": cliente or lead["nombre"],
+            "detalle": _detalle_lead(lead), "existe": True,
+            "aviso": ("La actividad nace amarrada y el lead pasa a "
+                      "«Agendado»." if tipo in POR_CLAVE else
+                      "La actividad nace amarrada a este lead, sin mover "
+                      "su estado.")}
 
 
 def agendar(ref_lead, tipo, fecha, hora=None, resp="", dur=None, lugar="",

@@ -1,0 +1,88 @@
+{# EL BUSCADOR ÚNICO de «Actividad nueva» (BLOQUE 59, item 4 de Jay).
+
+   Una sola pregunta —«quién»— y una sola caja: se escribe un nombre o un
+   teléfono y salen juntos los LEADS vivos del embudo y los CONTACTOS (los
+   clientes de Odoo, los de Vender y los del CRM). Quien agenda ya no tiene
+   que saber de antemano de qué lado está la persona.
+
+   ESTE PEDAZO ES UNO SOLO, y lo sirve una sola función de Python
+   (`main._buscador_persona_contexto`): la pantalla entera lo incluye y
+   `/calendario/buscar` lo devuelve tal cual para que el navegador lo
+   cambie sin recargar. Nada se decide acá: las filas llegan con su enlace
+   armado, los avisos escritos y la pastilla del elegido resuelta.
+
+   Elegir una fila es volver a este mismo formulario con los DOS campos
+   que el POST ya leía antes de todo esto: `lead` (amarra la actividad) y
+   `cliente` (el nombre). Por eso el guardado no se tocó.                  #}
+<div class="bus" data-buscador data-buscador-fuente="{{ bus_fuente }}">
+
+  {# Quién está elegido, leído de los MISMOS dos campos que se van a
+     guardar: lo que la pantalla dice es exactamente lo que se guarda. #}
+  {% if bus_elegido %}
+  <div class="bus-elegido {{ 'bus-elegido-roto' if not bus_elegido.existe }}">
+    <span class="bus-quien">
+      {% if bus_elegido.lead %}<b class="bus-ref">{{ bus_elegido.lead }}</b>{% endif %}
+      <b class="bus-nom">{{ bus_elegido.nombre }}</b>
+      {% if bus_elegido.detalle %}<small class="tenue">{{ bus_elegido.detalle }}</small>{% endif %}
+    </span>
+    <a class="btn chico" href="{{ bus_liga_quitar }}">Quitar</a>
+  </div>
+  {% if bus_elegido.aviso %}
+  <p class="bus-nota {{ 'bus-nota-roto' if not bus_elegido.existe }}">{{ bus_elegido.aviso }}</p>
+  {% endif %}
+  {% else %}
+  <p class="bus-nota">Nadie elegido todavía. Buscá a la persona acá abajo, o
+    escribí el nombre en «Cliente» y la actividad nace suelta.</p>
+  {% endif %}
+
+  {# El campo de búsqueda pertenece al form GET de abajo (atributo `form`),
+     no al POST del formulario: así `qp` nunca llega al guardado y un form
+     no queda metido dentro de otro, que el HTML no permite. #}
+  <div class="bus-fila">
+    <input class="campo" type="search" id="qp" name="qp" form="f-buscar-persona"
+           value="{{ bus.q }}" autocomplete="off"
+           placeholder="Nombre o teléfono"
+           aria-label="Buscar la persona entre los leads y los contactos">
+    <button class="btn chico" type="submit" form="f-buscar-persona">Buscar</button>
+  </div>
+
+  {# Nada se inventa: cada fuente que no se pudo leer se DICE. Una lista
+     vacía sin esto se lee como «esa persona no existe». #}
+  {% for aviso in bus.avisos %}
+  <p class="bus-nota bus-nota-hueco">{{ aviso }}</p>
+  {% endfor %}
+
+  {% if bus.pista %}<p class="bus-nota">{{ bus.pista }}</p>{% endif %}
+
+  {% if bus.filas %}
+  <ul class="bus-filas">
+    {% for f in bus.filas %}
+    <li>
+      {# El enlace es de verdad: sin JS, elegir navega y el servidor pinta
+         el formulario con esta persona puesta. Con JS, los dos valores de
+         abajo —los MISMOS que el enlace lleva, decididos acá en el
+         servidor— se copian al form GET para que lo recién escrito en el
+         formulario viaje también. #}
+      <a class="bus-it" href="{{ f.liga }}" data-buscador-elegir
+         data-lead="{{ f.lead }}" data-cliente="{{ f.nombre }}">
+        <span class="bus-it-quien">
+          {% if f.lead %}<b class="bus-ref">{{ f.lead }}</b>{% endif %}
+          <b class="bus-nom">{{ f.nombre }}</b>
+        </span>
+        <span class="bus-it-dato">
+          {% if f.telefono %}<span class="bus-tel">{{ f.telefono }}</span>{% endif %}
+          {% if f.detalle %}<small class="tenue">{{ f.detalle }}</small>{% endif %}
+          <small class="bus-fuente">{{ f.fuente }}</small>
+        </span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% if bus.mas %}
+  <p class="bus-nota">Hay {{ bus.mas }} más que no caben acá: afiná el nombre
+    o escribí el teléfono completo.</p>
+  {% endif %}
+  {% elif bus.q %}
+  <p class="bus-nota">{{ bus.vacio }}</p>
+  {% endif %}
+</div>
