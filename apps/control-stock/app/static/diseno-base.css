@@ -287,6 +287,11 @@ main, .tablero{container-type:inline-size;container-name:lienzo}
    900/899 dentro de styles.css, que son de otros frentes. */
 @media (max-width:899.98px){ .phone > .cab{display:none} }
 @media (max-width:767.98px){ .tablero > .cab{display:none} }
+/* Y en la franja de tablet de las pantallas de tablero (768–899px) el
+   menú es la FILA de arriba, no un costado que se pueda guardar: ahí las
+   tres rayas no tendrían nada que abrir, así que no se pintan. Un botón
+   que no hace nada es peor que no tenerlo. */
+@media (max-width:899.98px){ .tablero > .cab .hamb{display:none} }
 
 /* =============== G2 · NINGUNA PANTALLA SE DESPLAZA ENTERA ============
    (BLOQUE 54)
