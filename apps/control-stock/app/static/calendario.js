@@ -39,17 +39,71 @@
     pintaRecogida();
   }
 
-  // Elegir un lead rellena Cliente si estaba vacío (29/09/2026):
-  // presentación pura — el dato que manda es el select, y lo resuelve el
-  // servidor (con lead elegido, el cliente de la actividad es el del lead).
-  var leadSel = document.getElementById('lead');
-  var clienteCampo = document.getElementById('cliente');
-  if (leadSel && clienteCampo) {
-    leadSel.addEventListener('change', function () {
-      var opcion = leadSel.options[leadSel.selectedIndex];
-      if (!clienteCampo.value.trim() && opcion) {
-        clienteCampo.value = opcion.getAttribute('data-nombre') || '';
-      }
+  /* EL BUSCADOR ÚNICO de «Actividad nueva», sin recargar (BLOQUE 59).
+
+     LA REGLA 10 QUEDA INTACTA, igual que en panel.js: el pedazo lo arma
+     el SERVIDOR (main._buscador_persona_contexto, la misma función que usa
+     la página entera). Este bloque no escribe una etiqueta de HTML, no
+     decide quién casa con qué y no guarda ningún estado: le pide al
+     servidor ESE MISMO pedazo y lo mete en su caja.
+
+     Lo único que hace de más es LLEVARSE lo ya escrito: el form GET del
+     buscador vive fuera del formulario, así que sus campos escondidos
+     traen lo que el servidor pintó, no lo que la persona acaba de teclear.
+     Antes de buscar se copian los valores vivos de los campos del mismo
+     nombre — es plomería, no una decisión: es lo que el navegador haría
+     solo si los dos forms fueran uno, y sin esto buscar a alguien perdería
+     la fecha, la hora y la nota.
+
+     SIN JS: el form GET se manda como siempre y la página recarga con el
+     mismo formulario abierto; elegir una fila es un <a href> de verdad.
+     Nada de esto es un requisito para que el buscador funcione. */
+  var busCaja = document.querySelector('[data-buscador]');
+  var busForm = document.getElementById('f-buscar-persona');
+  var busFormularioNuevo = busCaja ? busCaja.closest('form') : null;
+  var busFuente = busCaja ? busCaja.getAttribute('data-buscador-fuente') : '';
+  if (busCaja && busForm && busFuente && window.fetch) {
+    var busUltimo = 0;
+
+    // Los campos escondidos se ponen al día con lo que hay escrito ahora
+    // en el formulario de la actividad (mismo `name`, mismo dato).
+    var busSincronizar = function () {
+      if (!busFormularioNuevo) return;
+      var ocultos = busForm.querySelectorAll('input[type="hidden"]');
+      Array.prototype.forEach.call(ocultos, function (oculto) {
+        var vivo = busFormularioNuevo.elements[oculto.name];
+        if (vivo && typeof vivo.value === 'string') oculto.value = vivo.value;
+      });
+    };
+
+    busForm.addEventListener('submit', function (evento) {
+      busSincronizar();
+      // `qp` ya viene en el FormData: la caja de escribir declara
+      // `form="f-buscar-persona"`, así que pertenece a este form aunque
+      // se pinte adentro del otro.
+      var consulta = new URLSearchParams(new FormData(busForm)).toString();
+      evento.preventDefault();
+      var mio = ++busUltimo;
+      fetch(busFuente + '?' + consulta, {credentials: 'same-origin'})
+        .then(function (r) {
+          if (!r.ok) throw new Error(r.status);
+          return r.text();
+        })
+        .then(function (html) {
+          if (mio !== busUltimo) return;
+          busCaja.outerHTML = html;
+          // La caja se reemplazó entera: se vuelve a tomar y se devuelve el
+          // foco a donde estaba la mano.
+          busCaja = document.querySelector('[data-buscador]');
+          var nuevo = busCaja && busCaja.querySelector('#qp');
+          if (nuevo) nuevo.focus();
+        })
+        .catch(function () {
+          if (mio !== busUltimo) return;
+          // El camino de siempre: que el form se mande y la página
+          // recargue. Mejor una recarga que un buscador que no busca.
+          busForm.submit();
+        });
     });
   }
 

@@ -959,6 +959,18 @@ def _permiso(sesion, leads, aviso_leads=""):
 # El buscador (A7)
 # ---------------------------------------------------------------------------
 
+def casa_busqueda(contacto, q):
+    """El casamiento del buscador, PÚBLICO desde el BLOQUE 59.
+
+    El buscador único del calendario (item 4 de Jay) tiene que encontrar a
+    la gente exactamente como la encuentra esta pestaña —nombre suelto o
+    teléfono normalizado—, así que llama a esto en vez de escribir su
+    propio criterio: dos casamientos distintos para la misma persona es un
+    bug esperando turno.
+    """
+    return _casa_busqueda(contacto, q)
+
+
 def _casa_busqueda(contacto, q):
     """¿Este contacto casa con lo que se escribió en el buscador?
 
@@ -1123,6 +1135,58 @@ def lista(q="", filtro="", sesion=None):
                 f"de la lista." if od.get("sistema") else "")),
         "vacio": VACIO_LISTA,
     }
+
+
+# ---------------------------------------------------------------------------
+# La misma gente, para quien solo necesita ENCONTRARLA (BLOQUE 59)
+# ---------------------------------------------------------------------------
+
+def buscar(q, tope=0):
+    """Las personas que casan con `q`, SIN un centavo de plata.
+
+    La misma unión de la lista (`_unir`: los partner de Odoo + los clientes
+    locales de Vender + los leads del CRM) y el mismo casamiento
+    (`casa_busqueda`), pero devolviendo solo lo que un buscador necesita:
+    nombre, teléfono, de qué fuentes sale y los leads que le cuelgan. Por
+    eso NO recibe sesión: no hay nada que tapar, porque la plata no se
+    calcula ni viaja.
+
+    La usa el buscador único del calendario (item 4 de Jay). Vive acá, y no
+    allá, para que la regla de quién es «la misma persona» siga teniendo un
+    solo dueño: si mañana la unión cambia, cambia para los dos.
+
+    Devuelve `{"filas", "cuenta", "mas", "aviso_odoo", "aviso_crm"}`. Los
+    huecos van SEPARADOS, no en una bolsa: un buscador que calla una
+    fuente ausente parece estar diciendo «esa persona no existe», pero
+    quien llama puede tener esa fuente por otro lado y entonces repetir el
+    aviso sería la mentira contraria. (Es el caso del calendario: sus
+    leads salen de `linear_leads` directo, así que el hueco de Linear de
+    ACÁ no es el suyo.)
+    """
+    q = (q or "").strip()
+    od = datos_odoo()
+    leads, aviso_leads = _leads_crudos()
+    contactos = _unir(od, leads)
+    # Lo que ESTE ambiente esconde (BLOQUE 56, punto 1): el buscador no
+    # puede encontrar lo que la lista tapa, o serían dos verdades.
+    contactos, _escondidos = _esconder(contactos, prefijos_ocultos())
+
+    casan = [c for c in contactos if casa_busqueda(c, q)]
+    casan.sort(key=lambda c: (_nombre_plano(c["nombre"]) or "~", c["id"]))
+    cuenta = len(casan)
+    mas = 0
+    if tope and cuenta > tope:
+        mas = cuenta - tope
+        casan = casan[:tope]
+
+    return {
+        "filas": [{"id": c["id"], "nombre": c["nombre"],
+                   "telefono": c["telefono"], "tel_norm": c["tel_norm"],
+                   "tipo": c["tipo"], "leads": list(c["leads"]),
+                   "fuente_texto": c["fuente_texto"]}
+                  for c in casan],
+        "cuenta": cuenta, "mas": mas,
+        "aviso_odoo": od["aviso"], "aviso_crm": aviso_leads}
 
 
 # ---------------------------------------------------------------------------

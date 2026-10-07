@@ -222,9 +222,7 @@
           <a class="btn chico tenue" href="{{ ligas.refrescar }}">⟳ Volver a preguntarle a Linear</a>
         </div>
       </details>
-      {% if puede_escribir %}
       <a class="btn oro" href="{{ ligas.nueva }}">+ Nueva actividad</a>
-      {% endif %}
       </span>
     {% endcall %}
 
@@ -320,7 +318,7 @@
           </span>
         </a>
         {% else %}
-        <div class="mov-vacio">Nada agendado este día.{% if puede_escribir %}<br>El + de arriba crea una actividad.{% endif %}</div>
+        <div class="mov-vacio">Nada agendado este día.<br>El + de arriba crea una actividad.</div>
         {% endfor %}
       </div>
     </div>
@@ -347,7 +345,7 @@
                     <span class="dnum" style="font-size:13px">{{ col.dow }}</span>
                   {% endif %}
                   {% if col.cant %}<span class="cant-dia">{{ col.cant }}</span>{% endif %}
-                  {% if puede_escribir %}<a class="mas" href="{{ col.liga_nueva }}" title="Nueva actividad este día">+</a>{% endif %}
+                  <a class="mas" href="{{ col.liga_nueva }}" title="Nueva actividad este día">+</a>
                 </div>
                 {% endfor %}
               </div>
@@ -397,7 +395,7 @@
             <div class="num">
               <a class="n" href="{{ celda.liga }}">{{ celda.num }}</a>
               {% if celda.atrasadas %}<span class="punto-at">● {{ celda.atrasadas }}</span>{% endif %}
-              {% if puede_escribir %}<a class="mas" href="{{ celda.liga_nueva }}" title="Nueva actividad este día">+</a>{% endif %}
+              <a class="mas" href="{{ celda.liga_nueva }}" title="Nueva actividad este día">+</a>
             </div>
             {% for barra in celda.barras %}
             <a class="barrita {{ 'hecha' if barra.a.estado == 'hecha' }} {{ 'cancel' if barra.a.estado == 'cancel' }}"
@@ -456,9 +454,7 @@
 {# El botón negro de abajo del celular (diseño Orquesta, pantalla 17):
    + Nueva actividad a lo ancho, fijo. En computadora el CSS lo esconde
    (ahí manda el de la barra). Es el MISMO enlace de siempre. #}
-{% if puede_escribir %}
 <div class="cal-bar-nueva"><a class="btn" href="{{ movil.ligas.nueva }}">+ Nueva actividad</a></div>
-{% endif %}
 
 {# En el teléfono el menú es el MISMO navbar de abajo que el resto de la
    app (pedido del dueño, 22/09/2026); el CSS lo esconde en computadora,
@@ -750,7 +746,7 @@ No se borra nada: el issue {{ abierta.ref }} queda en Linear marcado como Cancel
 </form>
 {% endif %}
 
-{% if nueva and puede_escribir %}
+{% if nueva %}
 <a class="telon" href="{{ ligas.cerrar }}" aria-label="Cerrar"></a>
 <form class="modal" method="post" action="/calendario/actividad?volver={{ volver|urlencode }}">
   <div class="cab-panel">
@@ -774,21 +770,22 @@ No se borra nada: el issue {{ abierta.ref }} queda en Linear marcado como Cancel
         {% for t in cal.TIPOS %}<option value="{{ t.clave }}" {{ 'selected' if t.clave == pre.tipo }}>{{ t.nombre }}</option>{% endfor %}
       </select>
     </div>
-    {# Conectar lead (29/09/2026, punto 5): con un lead elegido la
-       actividad nace AMARRADA — con tipo agendable va por el camino de la
-       Fase 4 (el lead pasa a Agendado, el saldo sale en su ficha); con
-       otro tipo, amarrada sin mover el estado. «Sin lead» = suelta, como
-       siempre. El enlace del log de Leads de servicio llega con esto ya
-       elegido. #}
-    <div class="campo-caja">
-      <label for="lead">Lead</label>
-      <select class="sel ancho" id="lead" name="lead">
-        <option value="">Sin lead</option>
-        {% for l in leads_para_conectar %}
-        <option value="{{ l.ref }}" {{ 'selected' if l.ref == pre.lead }}
-                data-nombre="{{ l.nombre }}">{{ l.ref }} · {{ l.nombre }}</option>
-        {% endfor %}
-      </select>
+    {# EL BUSCADOR ÚNICO (BLOQUE 59, item 4 de Jay): reemplaza el selector
+       de 32 leads que vivía acá. Antes había que saber de antemano si la
+       persona era un lead del CRM o un cliente que solo existe en Odoo;
+       ahora se busca por nombre o teléfono y salen los dos juntos.
+
+       Lo que NO cambió: con un lead elegido la actividad nace AMARRADA
+       —con tipo agendable va por el camino de la Fase 4 (el lead pasa a
+       Agendado, el saldo sale en su ficha); con otro tipo, amarrada sin
+       mover el estado—, y sin lead nace suelta, como siempre. El campo
+       que el POST lee sigue siendo `lead`, ahora escondido: lo pone el
+       servidor con lo que se eligió en el buscador. El enlace del log de
+       Leads de servicio llega con esto ya elegido, igual que antes. #}
+    <div class="campo-caja ancho">
+      <label for="qp">Quién</label>
+      <input type="hidden" name="lead" value="{{ pre.lead }}">
+      {% include '_buscador_persona.html' %}
     </div>
     <div class="campo-caja">
       <label for="cliente">Cliente</label>
@@ -864,9 +861,32 @@ No se borra nada: el issue {{ abierta.ref }} queda en Linear marcado como Cancel
   </details>
   <div class="acciones pie-form" style="justify-content:flex-end">
     <a class="btn" href="{{ ligas.cerrar }}">Cancelar</a>
+    {# Donde esta instancia no escribe (el 8095: CALENDARIO_ESCRITURA=0),
+       el botón se pinta IGUAL pero apagado y con su motivo — esconderlo
+       hace que alguien lo busque. La regla no vive acá: el POST ya
+       rechaza en modo lectura; esto lo dice antes de llenar el form. #}
+    {% if guardar_motivo %}
+    <button class="btn" type="button" disabled
+            title="{{ guardar_motivo }}">Crear en Linear — {{ guardar_motivo }}</button>
+    {% else %}
     <button class="btn oro" type="submit" data-guardando="Guardando…">Crear en Linear</button>
+    {% endif %}
   </div>
+  {% if guardar_motivo %}
+  <p class="pie-nota">{{ guardar_motivo }}: buscar y elegir a la persona sí
+    funciona completo —es lectura—, pero esta instancia no crea el issue.</p>
+  {% else %}
   <p class="pie-nota">El issue nace como “Tipo — Cliente” en el CALENDARIO ROSE, con su etiqueta, su responsable y su fecha.</p>
+  {% endif %}
+</form>
+{# El form GET del buscador: va FUERA del POST (el HTML no deja un form
+   dentro de otro) y solo lleva los campos escondidos que devuelven el
+   mismo formulario con lo que ya estaba puesto. La caja de escribir vive
+   arriba, dentro del panel, amarrada a este form por su `form="…"`. #}
+<form id="f-buscar-persona" method="get" action="/calendario" hidden>
+  {% for campo in bus_ocultos %}
+  <input type="hidden" name="{{ campo.nombre }}" value="{{ campo.valor }}">
+  {% endfor %}
 </form>
 {% endif %}
 

@@ -4355,10 +4355,145 @@ def _puede_tocar(actividad, yo):
     # return f"Esa actividad es de {de_quien}: vos la ves, pero no la cambiás."
 
 
+# Los campos del formulario «Actividad nueva» que viajan en la dirección:
+# el rebote de un error ya los usaba (ver `calendario_crear`), y el
+# buscador de personas los usa para volver al MISMO formulario con lo que
+# ya estaba escrito. `resp` es el assignee de Linear y `resp_nombre` la
+# etiqueta `Resp:` del trabajo: son dos cosas distintas y viajan las dos.
+_CAMPOS_ACTIVIDAD_NUEVA = ("tipo", "cliente", "lead", "fecha", "hora", "dur",
+                           "prioridad", "lugar", "recogida", "nota", "resp",
+                           "resp_nombre")
+
+
+def _pre_actividad(request, empleada, estado):
+    """Lo que el formulario «Actividad nueva» trae puesto al abrirse.
+
+    Vive aparte desde el BLOQUE 59 porque lo necesitan DOS caminos: la
+    pantalla entera y el pedazo del buscador (`/calendario/buscar`), que
+    tiene que devolver enlaces capaces de volver a este mismo formulario
+    sin perder nada de lo ya escrito.
+    """
+    q = request.query_params
+    return {
+        "fecha": q.get("fecha") or estado["dia"],
+        "hora": q.get("hora") or calendario.HORA_POR_DEFECTO,
+        "resp": q.get("resp") or estado["yo"]["id"],
+        # El responsable del select (29/09/2026): por defecto, quien está
+        # en la sesión SI su nombre es una etiqueta Resp: real (misma
+        # sugerencia que al agendar un lead); si no, queda "" = Sin
+        # asignar. En el rebote vuelve lo elegido.
+        "resp_nombre": (q.get("resp_nombre")
+                        or agenda.responsable_de_empleada(empleada)),
+        # El lead a conectar: lo trae el enlace del log de «Leads de
+        # servicio», el buscador de personas, o el rebote de un error.
+        "lead": q.get("lead", ""),
+        # Si el crear falló, el formulario vuelve CON lo escrito: estos
+        # llegan en la dirección del rebote (ver calendario_crear).
+        "tipo": q.get("tipo", ""),
+        "cliente": q.get("cliente", ""),
+        "lugar": q.get("lugar", ""),
+        "nota": q.get("nota", ""),
+        "dur": q.get("dur", ""),
+        "prioridad": q.get("prioridad", ""),
+        "recogida": q.get("recogida", ""),
+    }
+
+
+def _buscador_persona_contexto(request, empleada):
+    """EL BUSCADOR ÚNICO de «Actividad nueva», armado en UN solo lugar.
+
+    Lo llaman los DOS caminos que lo pintan (el mismo patrón que
+    `_panel_lead_contexto` para el panel del lead): la pantalla entera del
+    calendario, que lo incluye dentro del formulario, y `/calendario/
+    buscar`, que devuelve ESE MISMO pedazo para que el navegador lo cambie
+    sin recargar. Una sola función, para que no haya una segunda puerta
+    que se olvide de tapar algo.
+
+    Todo lo que la plantilla necesita llega decidido (regla 10): las filas
+    con su enlace ya armado, la pastilla de quién está elegido, los campos
+    escondidos del form GET y los avisos de cada fuente ausente. La
+    plantilla no calcula direcciones ni el navegador arma estado.
+    """
+    estado = _estado_calendario(request, empleada)
+    pre = _pre_actividad(request, empleada, estado)
+    # `qp` («q de persona») y no `q`: `q` es el buscador de ACTIVIDADES de
+    # la barra de arriba, y pisarlo filtraría el calendario entero.
+    qp = (request.query_params.get("qp") or "").strip()
+
+    bus = agenda.buscar_personas(qp)
+    # Lo que el formulario conserva al ELEGIR: su propio estado menos las
+    # dos cosas que la fila elegida decide (`lead` y `cliente`).
+    puestos = {campo: pre[campo] for campo in _CAMPOS_ACTIVIDAD_NUEVA
+               if campo not in ("lead", "cliente") and pre.get(campo)}
+    for fila in bus["filas"]:
+        # Elegir una fila es volver a ESTE formulario con los dos campos
+        # que el POST ya leía: `lead` (amarra) y `cliente` (el nombre).
+        fila["liga"] = _liga(estado, nueva="1", qp=qp, lead=fila["lead"],
+                             cliente=fila["nombre"], **puestos)
+
+    return {
+        "bus": bus,
+        "bus_elegido": agenda.elegido_en_el_buscador(
+            pre["lead"], pre["cliente"], tipo=pre["tipo"]),
+        # Quitar al elegido: el mismo formulario sin esos dos campos.
+        "bus_liga_quitar": _liga(estado, nueva="1", qp=qp, **puestos),
+        # El form GET del buscador manda a /calendario (sin JS, una
+        # recarga) y los campos escondidos son los que lo devuelven igual.
+        # Acá SÍ van `lead` y `cliente`: buscar otra vez no tiene por qué
+        # des-elegir a quien ya se eligió.
+        "bus_ocultos": _ocultos_del_buscador(
+            estado, {campo: pre[campo] for campo in _CAMPOS_ACTIVIDAD_NUEVA
+                     if pre.get(campo)}),
+        # De dónde pide el navegador el MISMO pedazo, sin recargar.
+        "bus_fuente": "/calendario/buscar",
+    }
+
+
+def _ocultos_del_buscador(estado, puestos):
+    """[{nombre, valor}] — los `<input type=hidden>` del form GET.
+
+    Son los mismos datos que `_liga` mete en un enlace, puestos como
+    campos: un form GET solo manda lo que lleva adentro, así que sin esto
+    buscar a alguien perdería la fecha, el tipo y la nota ya escritos.
+    """
+    campos = {
+        "nueva": "1", "dia": estado["dia"], "vista": estado["vista"],
+        "mio": "1" if estado["solo_mio"] else "0",
+        "apagados": ",".join(sorted(estado["apagados"])),
+        "quien": estado["quien"], "q": estado["q"],
+        "hechas": "1" if estado["hechas"] else "0", "mes": estado["mes"],
+    }
+    campos.update(puestos)
+    return [{"nombre": nombre, "valor": valor}
+            for nombre, valor in campos.items() if valor not in ("", None)]
+
+
+@app.get("/calendario/buscar")
+def calendario_buscar(request: Request):
+    """El PEDAZO del buscador de personas, ya armado por el servidor.
+
+    Lo pide `calendario.js` al buscar, con los MISMOS campos del
+    formulario, para cambiarlo en su caja sin recargar la página. No
+    decide nada que la pantalla entera no decida igual: el contexto sale
+    de `_buscador_persona_contexto`, la única fuente de los dos caminos.
+
+    Buscar es LECTURA: esta ruta existe también donde el calendario es de
+    solo lectura (el 8095), porque encontrar a una persona no escribe
+    nada. Lo que allá queda apagado es el botón de guardar.
+    """
+    return plantillas.TemplateResponse(
+        request, "_buscador_persona.html",
+        _buscador_persona_contexto(request, request.state.empleada))
+
+
 @app.get("/calendario")
 def calendario_pantalla(request: Request):
     empleada = request.state.empleada
     estado = _estado_calendario(request, empleada)
+    # Lo que el formulario trae puesto: la MISMA función que usa el pedazo
+    # del buscador, para que los enlaces de elegir vuelvan a un formulario
+    # idéntico al que se estaba llenando.
+    pre = _pre_actividad(request, empleada, estado)
     dia_hoy = calendario.hoy().isoformat()
     ancla = datetime.strptime(estado["dia"], "%Y-%m-%d").date()
     error = request.query_params.get("error") or None
@@ -4506,41 +4641,33 @@ def calendario_pantalla(request: Request):
         "notas": calendario.comentarios(id_abierta) if abierta else [],
         "puede_tocar_abierta": (_puede_tocar(abierta, yo) is None) if abierta else False,
         "nueva": request.query_params.get("nueva") == "1",
-        # Las sugerencias del campo Cliente y el selector «Lead»
-        # (29/09/2026): armados EN PYTHON y renderizados — nada consulta
-        # al vuelo. Solo cuando el formulario está abierto: una pintada
-        # normal del calendario no va a preguntarle los leads a Linear.
+        # Las sugerencias del campo Cliente (29/09/2026): armadas EN
+        # PYTHON y renderizadas — nada consulta al vuelo. Solo cuando el
+        # formulario está abierto. El selector de 32 leads de al lado lo
+        # reemplazó el buscador único (BLOQUE 59), que trae leads Y
+        # contactos; este datalist se queda porque cubre una cuarta
+        # fuente que el buscador no mira: los clientes que solo existen
+        # como texto en una actividad del calendario.
         "clientes_sugeridos": (
             agenda.clientes_para_sugerir(todas)
             if request.query_params.get("nueva") == "1" else []),
-        "leads_para_conectar": (
-            agenda.leads_para_conectar()
-            if request.query_params.get("nueva") == "1" else []),
-        "pre": {
-            "fecha": request.query_params.get("fecha") or estado["dia"],
-            "hora": request.query_params.get("hora") or calendario.HORA_POR_DEFECTO,
-            "resp": request.query_params.get("resp") or yo["id"],
-            # El responsable del select (29/09/2026): por defecto, quien
-            # está en la sesión SI su nombre es una etiqueta Resp: real
-            # (misma sugerencia que al agendar un lead); si no, queda "" =
-            # Sin asignar. En el rebote vuelve lo elegido.
-            "resp_nombre": (request.query_params.get("resp_nombre")
-                            or agenda.responsable_de_empleada(empleada)),
-            # El lead a conectar (29/09/2026): lo trae el enlace del log de
-            # «Leads de servicio», o el rebote de un error.
-            "lead": request.query_params.get("lead", ""),
-            # Si el crear falló, el formulario vuelve CON lo escrito: estos
-            # llegan en la dirección del rebote (ver calendario_crear).
-            "tipo": request.query_params.get("tipo", ""),
-            "cliente": request.query_params.get("cliente", ""),
-            "lugar": request.query_params.get("lugar", ""),
-            "nota": request.query_params.get("nota", ""),
-            "dur": request.query_params.get("dur", ""),
-            "prioridad": request.query_params.get("prioridad", ""),
-            "recogida": request.query_params.get("recogida", ""),
-        },
+        "pre": pre,
+        # EL BUSCADOR ÚNICO (BLOQUE 59), por la MISMA función que sirve el
+        # pedazo de /calendario/buscar. Solo con el formulario abierto:
+        # una pintada normal del calendario no busca a nadie.
+        **(_buscador_persona_contexto(request, empleada)
+           if request.query_params.get("nueva") == "1"
+           else {"bus": None, "bus_elegido": None, "bus_ocultos": [],
+                 "bus_liga_quitar": "", "bus_fuente": "/calendario/buscar"}),
         "modo": calendario.modo(),
         "puede_escribir": calendario.escritura_activa() or not calendario.configurado(),
+        # El botón de guardar, APAGADO con su motivo donde no se escribe
+        # (el 8095: `CALENDARIO_ESCRITURA=0`, `modo()` = lectura). Se
+        # pinta igual, nunca escondido: esconderlo hace que alguien lo
+        # busque. La REGLA no vive acá —el POST ya rechaza en lectura—,
+        # esto es decirlo antes de que alguien llene el formulario.
+        "guardar_motivo": ("En pruebas no se guarda"
+                           if calendario.modo() == "lectura" else ""),
         "ligas": {
             "hoy": _liga(estado, dia=dia_hoy, mes=dia_hoy),
             "anterior": _liga(estado,
