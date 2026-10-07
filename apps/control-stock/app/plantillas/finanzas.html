@@ -79,14 +79,23 @@
   <div class="fz-g2">
     <section class="fz-c" aria-label="Pagos por confirmar">
       <span class="fz-ct">Pagos por confirmar{% if f.con_datos %} · {{ f.pendientes | length }}{% endif %}</span>
-      {% for p in f.pendientes %}
       {# Los tres datos que faltaban (item 4, 7/10/2026): CUÁNDO fue la
          venta, CÓMO llegó la plata y QUIÉN la marcó. Las tres frases las
          arma Python (`pagos_confirmar.cola`) y las tres saben decir que
-         todavía no se sabe — ninguna se inventa. #}
+         todavía no se sabe — ninguna se inventa.
+
+         UNA SOLA macro para las DOS listas (7/10/2026). Antes este
+         renglón estaba copiado en los dos bloques, y en la primera
+         fusión los dos se separaron: un frente le cambió el rótulo al de
+         arriba («Cómo llegó:», «Marcó:») y el de abajo se quedó con el
+         viejo, así que la misma fila decía una cosa u otra según en qué
+         lista cayera. Con la macro, cambiar el rótulo una vez lo cambia
+         en las dos — no hay forma de que vuelvan a derivar. #}
+      {% macro contexto(p) %}<span class="fz-hint">Venta del {{ p.fecha_texto }} · {{ p.metodo_texto }} · marcó: {{ p.marco_texto }}</span>{% endmacro %}
+      {% for p in f.pendientes %}
       <div class="fz-r">
         <span class="fz-quien"><b>{{ p.orden or '—' }}</b><span class="fz-hint">{{ p.cliente or 'Sin cliente' }}{% if p.fuera_de_odoo %} · el pago se informó por fuera: todavía no está en el sistema{% endif %}{% if p.aviso_reentrada %} · {{ p.aviso_reentrada }}{% endif %}</span>
-          <span class="fz-hint">Venta del {{ p.fecha_texto }} · {{ p.metodo_texto }} · marcó: {{ p.marco_texto }}</span></span>
+          {{ contexto(p) }}</span>
         <b class="num">{{ p.monto_nuevo | dinero }}</b>
         <button class="fz-apagado chico" type="button" disabled>Confirmar — {{ f.boton_confirmar }}</button>
       </div>
@@ -98,13 +107,13 @@
          se escondieran, la pantalla taparía justo la plata mal puesta. #}
       {% if f.cola_fuera %}
       <div class="fz-it">
-        <span>Además hay {{ f.cola_fuera.n }} pago{{ 's' if f.cola_fuera.n != 1 }} informado{{ 's' if f.cola_fuera.n != 1 }} sobre cotizaciones que el cliente todavía no confirmó, por {{ f.cola_fuera.monto | dinero }}<span class="fz-hint"> — no cuentan en los cuatro números de arriba; se trabajan en Pagos por confirmar</span></span>
+        <span>{{ f.cola_fuera.texto }}<span class="fz-hint"> — no cuentan en los cinco números de arriba porque no son ventas confirmadas, pero la plata existe y hay que mirarla: se trabajan en Pagos por confirmar</span></span>
       </div>
       {% for p in f.otros_pendientes %}
       <div class="fz-r">
-        <span class="fz-quien"><b>{{ p.orden or '—' }}</b><span class="fz-hint">{{ p.cliente or 'Sin cliente' }} · todavía es una cotización</span>
-          <span class="fz-hint">Venta del {{ p.fecha_texto }} · {{ p.metodo_texto }} · marcó: {{ p.marco_texto }}</span></span>
-        <b class="num">{{ p.debe | dinero }}</b>
+        <span class="fz-quien"><b>{{ p.orden or '—' }}</b><span class="fz-hint">{{ p.cliente or 'Sin cliente' }} · todavía es una cotización{% if p.fuera_de_odoo %} · el pago se informó por fuera: todavía no está en el sistema{% endif %}{% if p.aviso_reentrada %} · {{ p.aviso_reentrada }}{% endif %}</span>
+          {{ contexto(p) }}</span>
+        <b class="num">{{ p.monto_nuevo | dinero }}</b>
       </div>
       {% endfor %}
       {% endif %}

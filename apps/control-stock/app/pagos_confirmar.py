@@ -290,12 +290,18 @@ def cola(informe=None):
             "total": round(float(venta.get("total") or 0), 2),
             "clase": clase,
             "motivo": venta.get("motivo") or "",
-            # ¿La venta está confirmada en Odoo? Viaja tal cual desde el
+            # ¿La venta está confirmada en Odoo? Viaja TAL CUAL desde el
             # informe (BLOQUE 59.2): la cola sigue mostrando TODO lo que
             # tiene plata o señal de plata — un pago sobre una cotización
             # sin confirmar es justo lo que hay que ver — pero Finanzas
             # necesita poder sumar solo las confirmadas.
-            "confirmada": bool(venta.get("confirmada")),
+            # **Sin `bool()` a propósito**: un None (una foto vieja que no
+            # trae el campo) tiene que llegar como None y no como False,
+            # para que quien decida pueda distinguir «no está confirmada»
+            # de «no se sabe» y caer en su candado. Un `bool()` acá
+            # borraba esa diferencia y mandaba una venta pagada al montón
+            # de las cotizaciones.
+            "confirmada": venta.get("confirmada"),
             # F = el dinero NO está en Odoo: la fila lo dice para que la
             # evidencia que se pida sea la de verdad.
             "fuera_de_odoo": clase == "F",
