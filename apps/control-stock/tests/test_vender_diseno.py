@@ -388,3 +388,83 @@ def test_menu_sin_pestanas_inventadas(cliente, odoo):
 def test_el_cajon_movil_tiene_su_x_de_cerrar(cliente, odoo):
     pagina = cliente.get("/venta").text
     assert 'class="nav-cerrar"' in pagina
+
+
+# ---------------------------------------------------------------------------
+# BLOQUE 59 · el ancho y el ras del tablero (7/10/2026)
+# ---------------------------------------------------------------------------
+#
+# Lo que el dueño reportó y lo que la MEDICIÓN dijo (elemento renderizado,
+# sobre el mismo CSS que corre en el 8095):
+#
+#   «las tarjetas no miden igual»  → FALSO: las nueve miden 78px exactas en
+#       las tres columnas, de 1024 a 1920. Lo desparejo era dónde ARRANCA la
+#       primera de cada columna: y=204 · 205 · 187.
+#   «el título se parte en dos»    → CIERTO: esa cabecera medía 42px contra
+#       24 de las otras dos. Y había una segunda causa sin reportar: el pie
+#       de «Cotizado» ocupa 2 renglones (34px) contra 17.
+#   «sobra ancho a 1280»           → CIERTO, con otro número: a 1280 las tres
+#       columnas usaban el 87% del lienzo (852 de 984), no la mitad. La mitad
+#       exacta es a 1920 — y ahí el hueco es del RESUMEN, no del tablero.
+# ---------------------------------------------------------------------------
+
+import re as _re
+
+_CSS_VD = "app/static/diseno-vender.css"
+
+
+def _apretado_vd():
+    return _re.sub(r"\s+", "", open(_CSS_VD).read())
+
+
+def test_la_cabecera_de_columna_tiene_altura_fija():
+    """Para que las tres columnas arranquen al ras aunque un título ocupe
+    dos renglones y un pie también. 42 y 34 son lo MEDIDO del caso más
+    largo que ya existe, no números elegidos."""
+    css = _apretado_vd()
+    assert "min-height:42px" in css
+    assert "min-height:34px" in css
+    # Y el pie es un <span>: sin `display:block` el min-height no hace nada.
+    assert "display:block;min-height:34px" in css
+
+
+def test_la_altura_fija_de_la_cabecera_no_llega_al_telefono():
+    """Ahí las columnas son secciones apiladas: no hay con quién alinearse
+    y 42px serían 24 de aire por sección."""
+    css = _apretado_vd()
+    movil = css.split("@media(max-width:899px)", 1)[1]
+    assert ".vd-ch{border:0;padding:0;min-height:0}" in movil
+
+
+def test_las_columnas_llenan_el_carril_cuando_el_resumen_esta_debajo():
+    """`1 0 276px`: crecen hasta llenar (el 1) y NUNCA bajan de 276 (el 0),
+    que es lo que impide la tarjeta de una palabra por línea."""
+    css = _apretado_vd()
+    bloque = css.split("@containerlienzo(min-width:860px)", 1)[1].split("}", 2)
+    assert "flex:10276px" in bloque[0]
+    assert "max-width:340px" in bloque[0]
+
+
+def test_con_el_resumen_al_costado_las_columnas_vuelven_a_su_ancho_fijo():
+    """Si crecieran también ahí, el contenido del tablero pediría 1044 y el
+    resumen se iría abajo a 1440 — justo donde A11 consiguió que quepa.
+
+    Este bloque es DEL PANEL y se va con él (punto 8 del BLOQUE 56):
+    borrarlo deja las columnas creciendo en todos los anchos, que es lo que
+    se quiere el día que el resumen no esté."""
+    css = _apretado_vd()
+    bloque = css.split("@containerlienzo(min-width:1120px)", 1)[1]
+    assert ".vd-col{flex:00276px;max-width:none}" in bloque
+    # Y el tablero NO se tocó: el hueco de 1440 para arriba es del resumen
+    # estirándose, y se resuelve cuando el panel se quite.
+    assert ".vd-tablero{flex:01auto}" in bloque
+
+
+def test_la_tarjeta_sigue_midiendo_lo_mismo_en_las_tres_columnas():
+    """Medido: 78px en las tres. Queda clavado para que el día que alguien
+    le agregue un renglón a la tarjeta de «Pagado» —el visto, un chip— la
+    suite lo diga en vez de dejar las columnas desparejas otra vez."""
+    css = _apretado_vd()
+    assert "min-height:78px" in css
+    # el visto vive en una fila de alto fijo, así que no empuja la tarjeta
+    assert ".vd-pie{align-items:center;gap:4px6px;min-height:28px}" in css
