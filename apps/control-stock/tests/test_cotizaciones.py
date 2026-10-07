@@ -1326,7 +1326,7 @@ def test_editar_comenta_el_antes_y_el_despues_si_esta_conectada(odoo, leads_de_m
     comentarios = linear_leads.comentarios(lead["id"])
     orden = registro["orden"]
     assert comentarios[-1]["texto"] == (
-        f"🧾 {orden} · de $1300.00 a $111.00 — editada por Rubén")
+        f"🧾 {orden} · de $1,300.00 a $111.00 — editada por Rubén")
 
 
 def test_editar_sin_cambiar_el_total_no_comenta(odoo, leads_de_muestra):

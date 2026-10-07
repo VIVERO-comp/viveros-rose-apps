@@ -186,8 +186,12 @@ function tab(id, btn) {
   recordarScroll();
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("activa"));
   seccion.classList.add("activa");
-  // El enlace flotante "Crear producto" estorba encima del detalle.
-  document.getElementById("fab-agregar").hidden = id === "detalle";
+  // "Crear producto" es de STOCK y de nadie más (7/10/2026). Hasta hoy la
+  // condición era `id === "detalle"`, así que el único botón negro de la
+  // app también salía flotando en Inicio y —el que se vio— en AJUSTES, una
+  // pantalla que no crea nada. La regla es la misma que ya cumple su gemelo
+  // de la barra del teléfono (#bm-crear) tres renglones abajo: solo Stock.
+  document.getElementById("fab-agregar").hidden = id !== "stock";
   // La barra del teléfono: el título acompaña a la pestaña y Crear producto
   // (el único botón negro) solo se ve en Stock. En el detalle la barra se
   // esconde entera: ahí mandan ← Volver y Guardar ficha de .det-top.

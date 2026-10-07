@@ -560,7 +560,7 @@ def test_la_pantalla_pinta_los_cinco_bloques(cliente, con_odoo):
                    "Sin dueño", "Clientes esperando"):
         assert titulo in cuerpo
     assert "Escuela Las Américas" in cuerpo
-    assert "$4 200.00" in cuerpo
+    assert "$4,200.00" in cuerpo   # con la coma de la casa (7/10/2026)
     assert "$500.00" in cuerpo
 
 

@@ -42,8 +42,8 @@ responde 503 y no hace nada, igual que el barrido del frontend.
 import os
 from datetime import datetime, timedelta
 
-from . import (almacen_waha, avisos, calendario, crm_twenty, linear_leads,
-               mapas, ventas)
+from . import (almacen_waha, avisos, calculos, calendario, crm_twenty,
+               linear_leads, mapas, ventas)
 from .datos import ZONA_PANAMA
 
 # El horario de atención del vivero (Abraham, 25/09/2026). Aquí solo se usa
@@ -403,7 +403,9 @@ def titular(datos):
 
 
 def _plata(monto):
-    return "$" + f"{float(monto or 0):,.2f}".replace(",", " ")
+    """EL formato de la casa (`calculos.dinero`), también en el aviso de
+    las 7 p.m.: hasta el 7/10/2026 ponía un espacio donde va la coma."""
+    return calculos.dinero(float(monto or 0))
 
 
 def mandar(dia=None):

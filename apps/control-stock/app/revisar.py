@@ -21,6 +21,7 @@ todavía se está escribiendo — y las pruebas pueden suplantarlo limpio.
 
 from datetime import datetime
 
+from . import calculos
 from .datos import ZONA_PANAMA, _db
 
 # La palabra de pantalla de cada clase del informe. Las clases A..H NO son
@@ -55,9 +56,10 @@ def informe():
 
 
 def _dinero(monto):
-    """Con separador de miles: el renglón de fuera de alcance habla de
-    montos de cuatro cifras ($3,109.85) y sin la coma se leen mal."""
-    return f"${monto:,.2f}"
+    """EL formateador de la casa (`calculos.dinero`): coma de miles y dos
+    decimales. El renglón de fuera de alcance habla de montos de cuatro
+    cifras ($3,109.85) y sin la coma se leen mal."""
+    return calculos.dinero(monto)
 
 
 def preparar(ventas):

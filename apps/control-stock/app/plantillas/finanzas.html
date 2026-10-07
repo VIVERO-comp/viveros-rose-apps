@@ -7,8 +7,13 @@
    pantalla jordan-finanzas). TODO lo que se pinta llegó decidido de
    Python (app/finanzas.py, regla 10) y sale de los MOTORES de la casa
    (informe de /revisar, cola de pagos, cifras.py). SOLO LECTURA: ni un
-   <form>; «Confirmar» va APAGADO con «Todavía no — falta el sí de Jay»
-   (BLOQUE 22.1) — confirmar de verdad sigue en /pagos-por-confirmar. #}
+   <form>; «Confirmar» va APAGADO con «Todavía no» a secas (item 5 del
+   lote, 7/10/2026: confirmar es del asiento System manager, no un permiso
+   pendiente) — confirmar de verdad sigue en /pagos-por-confirmar.
+
+   LAS PALABRAS SON DE NEGOCIO (item 7): acá no entra el nombre de una ruta
+   (/revisar), ni el de un archivo (cifras.py), ni el de un sistema que el
+   lector no administra. Lo que el número significa, sí. #}
 <link rel="stylesheet" href="/static/diseno-finanzas.css?v={{ v_estaticos }}">
 
 {% with bm_titulo='Finanzas', bm_sub='Solo lectura' %}{% include '_barra_movil.html' %}{% endwith %}
@@ -25,10 +30,10 @@
   {# El hueco se dice SIEMPRE: con Odoo caído los números dependientes
      salen «sin dato», jamás un $0 fingido. #}
   {% if f.huecos %}
-  <div class="fz-alerta">Esta foto tiene huecos: {{ f.huecos | join(' · ') }}</div>
+  <div class="fz-alerta">Faltan datos para completar esta foto: {{ f.huecos | join(' · ') }}</div>
   {% endif %}
   {% if f.descuadre is not none %}
-  <div class="fz-alerta">Los cuatro números no cierran entre sí por ${{ '%.2f' | format(f.descuadre | abs) }} — la foto fina está en /revisar. Acá se dice, no se esconde.</div>
+  <div class="fz-alerta">Los cuatro números de arriba no suman entre sí: se van por {{ f.descuadre | abs | dinero }}. El detalle venta por venta está en Ventas a revisar. Se dice, no se esconde.</div>
   {% endif %}
 
   <div class="fz-g4">
@@ -45,15 +50,20 @@
     <section class="fz-c" aria-label="Pagos por confirmar">
       <span class="fz-ct">Pagos por confirmar{% if f.con_datos %} · {{ f.pendientes | length }}{% endif %}</span>
       {% for p in f.pendientes %}
+      {# Los tres datos que faltaban (item 4, 7/10/2026): CUÁNDO fue la
+         venta, CÓMO llegó la plata y QUIÉN la marcó. Las tres frases las
+         arma Python (`pagos_confirmar.cola`) y las tres saben decir que
+         todavía no se sabe — ninguna se inventa. #}
       <div class="fz-r">
-        <span class="fz-quien"><b>{{ p.orden or '—' }}</b><span class="fz-hint">{{ p.cliente or 'Sin cliente' }}{% if p.fuera_de_odoo %} · pago informado FUERA de Odoo{% endif %}{% if p.aviso_reentrada %} · {{ p.aviso_reentrada }}{% endif %}</span></span>
-        <b class="num">${{ '%.2f' | format(p.monto_nuevo) }}</b>
+        <span class="fz-quien"><b>{{ p.orden or '—' }}</b><span class="fz-hint">{{ p.cliente or 'Sin cliente' }}{% if p.fuera_de_odoo %} · el pago se informó por fuera: todavía no está en el sistema{% endif %}{% if p.aviso_reentrada %} · {{ p.aviso_reentrada }}{% endif %}</span>
+          <span class="fz-hint">Venta del {{ p.fecha_texto }} · {{ p.metodo_texto }} · marcó: {{ p.marco_texto }}</span></span>
+        <b class="num">{{ p.monto_nuevo | dinero }}</b>
         <button class="fz-apagado chico" type="button" disabled>Confirmar — {{ f.boton_confirmar }}</button>
       </div>
       {% else %}
-      <p class="fz-hueco">{% if f.con_datos %}La cola está vacía: nada marcado sin revisar.{% else %}La cola no se pudo leer — el hueco está dicho arriba.{% endif %}</p>
+      <p class="fz-hueco">{% if f.con_datos %}No hay nada esperando: toda la plata que entró ya se revisó.{% else %}La lista no se pudo leer — arriba dice por qué.{% endif %}</p>
       {% endfor %}
-      <span class="fz-hint">Es LA MISMA cola de /pagos-por-confirmar, en solo lectura. Confirmar guarda quién revisó, cuándo y qué vio, y no marca la entrega — acá queda apagado hasta el sí de Jay.</span>
+      <span class="fz-hint">Es la misma lista de Pagos por confirmar, acá solo para mirar. Dar por buena una plata deja guardado quién la revisó, cuándo y qué vio, y no marca la entrega; eso se hace desde Pagos por confirmar.</span>
     </section>
     <section class="fz-c" aria-label="Cifras a revisar">
       <span class="fz-ct">Cifras a revisar</span>
@@ -63,8 +73,9 @@
         <button class="fz-apagado chico" type="button" disabled>Ver — Todavía no</button>
       </div>
       {% endfor %}
-      {# A10: el nombre del módulo («cifras.py») no le dice nada a nadie. #}
-      <span class="fz-hint">Las dos cifras a propósito de la casa. Aquí se revisan, no se corrigen solas.</span>
+      {# A10 · item 9 del 54: el nombre del módulo («cifras.py») no le
+         decía nada a nadie. #}
+      <span class="fz-hint">Dos cifras para mirar de cerca. Acá se revisan: no se arreglan solas.</span>
     </section>
   </div>
 

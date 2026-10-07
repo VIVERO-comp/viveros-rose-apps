@@ -47,7 +47,7 @@ Qué es — y qué no:
 import time
 from datetime import datetime, timedelta
 
-from . import (colores, cotizaciones, datos, datos_roles, entregas,
+from . import (calculos, colores, cotizaciones, datos, datos_roles, entregas,
                venta_estado, ventas)
 from .datos import ZONA_PANAMA
 from .datos_roles import _plano
@@ -201,7 +201,7 @@ def _plata_de(tarjeta, plata_info):
     if fila is None:
         return {"clase": "sin_dato", "texto": "Plata sin dato", "debe": None}
     if fila["debe"] > _CENTAVO:
-        return {"clase": "debe", "texto": f"Debe ${fila['debe']:,.2f}",
+        return {"clase": "debe", "texto": f"Debe {calculos.dinero(fila['debe'])}",
                 "debe": fila["debe"]}
     return {"clase": "pagado", "texto": "Pagado", "debe": 0.0}
 

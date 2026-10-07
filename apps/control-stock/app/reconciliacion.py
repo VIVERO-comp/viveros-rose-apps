@@ -64,7 +64,7 @@ import re
 import sqlite3
 from datetime import date, datetime, timedelta, timezone
 
-from . import linear_leads, ventas
+from . import calculos, linear_leads, ventas
 from .datos import ZONA_PANAMA, _db, _ruta_db
 
 # ---------------------------------------------------------------------------
@@ -368,7 +368,7 @@ def _fuera_de_alcance():
         return vacio, (f"El diario «{DIARIO_FUERA_DE_ALCANCE}» no se pudo "
                        f"leer: {_error(fallo)}")
     detalle = [
-        (f"{f.get('name') or ''} · ${float(f.get('amount_total') or 0):,.2f}"
+        (f"{f.get('name') or ''} · {calculos.dinero(f.get('amount_total') or 0)}"
          + (" · impaga" if f.get("payment_state") in ("not_paid", "partial")
             else ""))
         for f in facturas]
@@ -579,11 +579,11 @@ def _pagado_de(orden, facturas):
         if (factura.get("move_type") or "") == "out_refund":
             entro = -entro
             renglones.append(
-                f"Nota de crédito {nombre}: resta ${abs(entro):,.2f}")
+                f"Nota de crédito {nombre}: resta {calculos.dinero(abs(entro))}")
         else:
             renglones.append(
                 f"Factura {nombre}: {factura.get('payment_state') or '—'}, "
-                f"entró ${entro:,.2f}")
+                f"entró {calculos.dinero(entro)}")
         pagado += entro
     return round(pagado, 2), renglones
 
@@ -648,10 +648,11 @@ def _clasificar(s):
         clases["H"] = TEXTO_H_ETIQUETA
     elif cotizacion and not sin_pago:
         clases["H"] = ("Revisar: cotización sin confirmar con pago encima "
-                       f"(${s['pagado']:,.2f})")
+                       f"({calculos.dinero(s['pagado'])})")
     elif s["pagado"] > s["total"] + _CENTAVO:
-        clases["H"] = (f"Revisar: pagado (${s['pagado']:,.2f}) mayor que el "
-                       f"total (${s['total']:,.2f})")
+        clases["H"] = (f"Revisar: pagado ({calculos.dinero(s['pagado'])}) "
+                       f"mayor que el total "
+                       f"({calculos.dinero(s['total'])})")
 
     # F: alguien dice que se pagó, pero Odoo no tiene la plata. F NUNCA
     # significa pagado: es un aviso de regularizar.
@@ -675,11 +676,12 @@ def _clasificar(s):
         # fuera (F) o anomalía (H), esas ganan por el desempate.
         if s["debe"] > _CENTAVO:
             if s["entregado_odoo"]:
-                clases["C"] = f"Entregado, debe ${s['debe']:,.2f}"
+                clases["C"] = f"Entregado, debe {calculos.dinero(s['debe'])}"
             elif s["pagado"] > _CENTAVO:
-                clases["C"] = f"Con abono, debe ${s['debe']:,.2f}"
+                clases["C"] = f"Con abono, debe {calculos.dinero(s['debe'])}"
             else:
-                clases["C"] = f"Confirmada sin pago; debe ${s['debe']:,.2f}"
+                clases["C"] = ("Confirmada sin pago; debe "
+                               f"{calculos.dinero(s['debe'])}")
         if cubre and not s["entregado_odoo"]:
             clases["D"] = "Pagada completa en Odoo; salida sin validar"
         if cubre and s["entregado_odoo"]:
@@ -728,6 +730,9 @@ def informe_datos():
 
     - `contadores`: {"A"…"H": n, "rojo": F+G+H}.
     - `ventas`: lista de dicts con orden_id, nombre, cliente, telefono,
+      fecha (`date_order` de Odoo tal cual, "AAAA-MM-DD HH:MM:SS", o "" si
+      la orden no la trae — NUNCA la de hoy: una fecha inventada es peor
+      que ninguna),
       total, pagado, debe, clase, motivo, marca_prueba, entregado_odoo,
       entregado_calendario (True/False/None = sin datos), historica
       (True solo para la tanda cerrada `ORDENES_HISTORICAS`: ventas
@@ -853,7 +858,7 @@ def informe_datos():
         # Las dos caras de la entrega, SIEMPRE en renglones separados.
         fuentes_odoo = [
             f"Odoo: orden {orden.get('name') or ''} en estado "
-            f"{orden.get('state') or ''}, total ${total:,.2f}",
+            f"{orden.get('state') or ''}, total {calculos.dinero(total)}",
             *p["renglones_facturas"],
             renglon_salida,
         ]
@@ -918,6 +923,11 @@ def informe_datos():
             "nombre": orden.get("name") or "",
             "cliente": cliente,
             "telefono": p["telefono"],
+            # La fecha de la venta, cruda de Odoo. Ya se leía (`date_order`
+            # está en CAMPOS_VENTA, es lo que ordena el universo) pero se
+            # quedaba adentro: la cola de pagos no tenía cómo decir DE
+            # CUÁNDO es cada fila (7/10/2026).
+            "fecha": orden.get("date_order") or "",
             "total": total,
             "pagado": pagado,
             "debe": debe,
@@ -956,6 +966,10 @@ def _escribir_csv(datos, carpeta):
         for v in datos["ventas"]:
             pluma.writerow([
                 v["clase"], v["nombre"], v["cliente"],
+                # El CSV va SIN `$` y SIN coma de miles a propósito: es
+                # para una hoja de cálculo, y una coma ahí la leería como
+                # texto (o partiría la celda). El formato de la casa
+                # (`calculos.dinero`) es para lo que lee una persona.
                 f"{v['total']:.2f}", f"{v['pagado']:.2f}",
                 f"{v['debe']:.2f}", v["motivo"],
                 " | ".join(v["fuentes_odoo"]),
@@ -997,7 +1011,7 @@ def _cli(argv=None):
                               ("pagos", "Pago")):
         for r in hoy_creado[familia]:
             renglon = (f"    {etiqueta} {r['nombre']} · "
-                       f"{r['cliente'] or '—'} · ${r['monto']:,.2f} · "
+                       f"{r['cliente'] or '—'} · {calculos.dinero(r['monto'])} · "
                        f"{r['estado'] or '—'} · creado por {r['creado_por']}")
             if r["sospecha"]:
                 renglon += f" — {r['sospecha']}"
@@ -1006,14 +1020,14 @@ def _cli(argv=None):
             print(renglon)
     if hoy_creado["ordenes"]:
         print("    Total de pedidos creados hoy: "
-              f"${hoy_creado['total_ordenes']:,.2f}")
+              f"{calculos.dinero(hoy_creado['total_ordenes'])}")
     canceladas = sum(1 for v in datos["ventas"] if v["clase"] == "CANCELADA")
     if canceladas:
         print(f"  Canceladas (informativas, últimos {DIAS_CANCELADAS} "
               f"días): {canceladas}")
     fuera = datos["fuera_de_alcance"]
     print(f"  Fuera de alcance («{DIARIO_FUERA_DE_ALCANCE}»): "
-          f"{fuera['n']} facturas · ${fuera['total']:,.2f}")
+          f"{fuera['n']} facturas · {calculos.dinero(fuera['total'])}")
     for hueco in datos["huecos"]:
         print(f"  HUECO: {hueco}")
     if not datos["ventas"] and datos["huecos"]:

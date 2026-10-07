@@ -32,7 +32,7 @@
            data-nombre="Envío · {{ opcion.vehiculo }} · {{ opcion.zona }}"
            {{ 'checked' if eleccion == opcion.clave }}>
     <span>{{ opcion.vehiculo_pantalla }} · {{ opcion.zona }}
-      ({{ opcion.tiempo }}) — ${{ '%.2f' | format(precios[opcion.clave]) }}</span>
+      ({{ opcion.tiempo }}) — {{ precios[opcion.clave] | dinero }}</span>
   </label>
   {% endfor %}
   <label class="opcion-envio">

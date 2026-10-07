@@ -8,7 +8,7 @@ Los leads de muestra que importan (app/linear_leads.py):
 
     LEAD-91  Tamara              Por agendar   Abono 50%   saldo $762.50
     LEAD-90  Juan Carlos Lopez   Por agendar   Pagado 100% saldo $0, sin Resp:
-    LEAD-89  Boda Las Nubes      Agendado      Abono 50%   saldo $1 200
+    LEAD-89  Boda Las Nubes      Agendado      Abono 50%   saldo $1,200
     LEAD-88  Hotel Bristol       Entregado     Cobrar saldo saldo $300
 """
 
@@ -90,8 +90,11 @@ def test_el_bloque_lista_los_que_ya_pagaron_con_su_saldo():
     assert bloque["error"] == ""
 
 
-def test_el_saldo_se_escribe_con_el_espacio_de_los_miles():
-    assert agenda.plata(1525) == "$1 525.00"
+def test_el_saldo_se_escribe_con_el_formato_unico_de_la_casa():
+    """7/10/2026: la agenda ponía un ESPACIO donde va la coma y era la
+    tercera cara del mismo dinero. Ahora delega en `calculos.dinero` como
+    todo lo demás (ver tests/test_dinero_formato.py)."""
+    assert agenda.plata(1525) == "$1,525.00"
     assert agenda.plata(0) == "$0.00"
 
 

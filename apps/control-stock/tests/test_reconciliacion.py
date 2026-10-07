@@ -663,10 +663,14 @@ def test_contrato_exacto_de_informe_datos(odoo):
     assert set(datos["fuera_de_alcance"]) == {"n", "total", "detalle", "nombre"}
     venta = datos["ventas"][0]
     assert set(venta) == {
-        "orden_id", "nombre", "cliente", "telefono", "total", "pagado",
-        "debe", "clase", "motivo", "marca_prueba", "entregado_odoo",
-        "entregado_calendario", "historica", "fuentes_odoo",
-        "fuentes_otras"}
+        "orden_id", "nombre", "cliente", "telefono", "fecha", "total",
+        "pagado", "debe", "clase", "motivo", "marca_prueba",
+        "entregado_odoo", "entregado_calendario", "historica",
+        "fuentes_odoo", "fuentes_otras"}
+    # `fecha` es el `date_order` crudo de Odoo (7/10/2026): la cola de
+    # pagos lo necesita para decir DE CUÁNDO es cada fila, y quien lo
+    # muestra decide el formato.
+    assert isinstance(venta["fecha"], str)
     assert isinstance(venta["fuentes_odoo"], list)
     assert isinstance(venta["fuentes_otras"], list)
     hoy_creado = datos["creado_hoy"]

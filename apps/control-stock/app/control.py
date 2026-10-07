@@ -37,8 +37,9 @@ import httpx
 from datetime import date, datetime, timedelta
 from urllib.parse import quote
 
-from . import (agenda, avisos, calendario, colores, cot_lead, cotizaciones, crm_twenty,
-               datos_roles, linear_leads, mantenimiento, resumen, ventas)
+from . import (agenda, avisos, calculos, calendario, colores, cot_lead,
+               cotizaciones, crm_twenty, datos_roles, linear_leads,
+               mantenimiento, resumen, ventas)
 from .datos import ZONA_PANAMA, _db
 
 VISTAS = ("empleado", "estado")
@@ -1114,12 +1115,13 @@ LEYENDA_SIN_PLATA = ("El monto lo ven quien lo atiende, el Director y "
 
 
 def _dinero(monto):
-    """El mismo formato del filtro `dinero` de las plantillas, con la coma
-    de los miles: una fila que dice «Total $1,150.00» se lee de un golpe.
-    Vive acá porque estas filas se componen en Python (regla 10) y el
-    filtro de Jinja no se puede llamar desde el servidor sin arrastrar
-    main.py — que importa este módulo."""
-    return f"${monto:,.2f}"
+    """EL formateador de la casa (`calculos.dinero`), el MISMO que el
+    filtro `dinero` de las plantillas: una fila que dice «Total $1,150.00»
+    se lee de un golpe. Se llama desde acá —y no el filtro de Jinja—
+    porque estas filas se componen en Python (regla 10), y el filtro no se
+    puede llamar desde el servidor sin arrastrar main.py, que importa este
+    módulo."""
+    return calculos.dinero(monto)
 
 
 def _recortado(texto, largo=LARGO_ULTIMO_MENSAJE):

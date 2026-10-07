@@ -20,7 +20,7 @@ import re
 from datetime import date, datetime, timedelta
 
 from .datos import ZONA_PANAMA, _db
-from . import crm_leads, linear_leads, ventas
+from . import calculos, crm_leads, linear_leads, ventas
 
 # Un presupuesto cancelado no suma al ingreso esperado de la oportunidad.
 # (Vivía en app/proyectos.py hasta que Proyectos se retiró, 24/09/2026.)
@@ -1331,8 +1331,9 @@ def _comentar_edicion(registro, leido, total_antes, autor):
     if total_antes is None or round(float(total_antes), 2) == round(float(total_despues), 2):
         return  # guardó sin mover la plata: no hay nada que contar
     quien = f" por {autor}" if (autor or "").strip() else ""
-    texto = (f"🧾 {leido.get('name') or lead_issue} · de ${float(total_antes):.2f} "
-             f"a ${float(total_despues):.2f} — editada{quien}")
+    texto = (f"🧾 {leido.get('name') or lead_issue} · "
+             f"de {calculos.dinero(total_antes)} "
+             f"a {calculos.dinero(total_despues)} — editada{quien}")
     try:
         lead = linear_leads.uno(lead_issue)
         if lead is None:
