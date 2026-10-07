@@ -47,6 +47,12 @@
   {% if error_aviso %}<div class="ct-alerta">{{ error_aviso }}</div>{% endif %}
   {% if v.aviso_odoo %}<div class="ct-alerta">{{ v.aviso_odoo }}</div>{% endif %}
   <div class="ct-hueco">{{ v.aviso_twenty }}</div>
+  {# A7: el lead del CRM es una fuente de esta lista. Si no se pudo leer,
+     faltan filas y se DICE — nunca se finge una lista completa. #}
+  {% if v.aviso_crm %}<div class="ct-hueco">{{ v.aviso_crm }}</div>{% endif %}
+  {# A8: cuántas cuentas de sistema quedaron fuera (o el hueco de no haber
+     podido comprobarlo, que es cuando no se saca a nadie). #}
+  {% if v.aviso_sistema %}<div class="ct-hueco">{{ v.aviso_sistema }}</div>{% endif %}
   {# El candado dicho, no escondido: si alguna fila va tapada, la pantalla
      explica por qué en vez de mostrar un «—» mudo. #}
   {% if v.aviso_tapados %}<div class="ct-hueco">{{ v.aviso_tapados }}</div>{% endif %}
