@@ -228,20 +228,23 @@
    lienzo. Lo único que había que rescatar de ese bloque era el
    `overflow-x:auto` del tablero, que subió a su regla de base.
 
-   Medido antes y después, con el elemento renderizado (CDP):
+   Medido antes y después con el elemento renderizado (CDP). La cifra es
+   la TIRA DE COLUMNAS —de la izquierda de «Cotizado» a la derecha de
+   «Pagado»—, que es lo que se ve pintado, no la caja del tablero:
 
-     ventana   lienzo   tablero ANTES   tablero DESPUÉS
-      1024       728        728             728
-      1280       984        984             984
-      1366      1070       1070            1070
-      1440      1144        852            1044
-      1600      1304        852            1044
-      1920      1624        852            1044
+     ventana   lienzo   columnas ANTES   columnas DESPUÉS
+      1024       728        728              728
+      1280       984        984              984
+      1366      1070       1044             1044
+      1440      1144        852             1044
+      1600      1304        852             1044
+      1920      1624        852             1044
 
    O sea: de 1440 para arriba el hueco ERA el resumen estirándose (280px
-   a 1440, 440 a 1600, 760 a 1920) mientras el tablero se quedaba clavado
-   en 852. Lo que queda de hueco a partir de 1366 es el TOPE DE 340px por
-   columna — ver el bloque de 860px más abajo.
+   a 1440, 440 a 1600, 760 a 1920) mientras la tira se quedaba clavada en
+   852. Lo que queda de hueco —26px a 1366, 100 a 1440, 260 a 1600, 580 a
+   1920— es el TOPE DE 340px por columna, no el resumen: ver el bloque de
+   860px más abajo.
 
    ---------- la VISTA DE TABLA (BLOQUE 56, punto 8) ----------
    La segunda vista sobre el mismo trabajo: cinco columnas de texto, que
