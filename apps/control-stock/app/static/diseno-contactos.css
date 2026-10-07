@@ -134,9 +134,21 @@ a.ct-r:hover b{text-decoration:underline;text-underline-offset:2px}
    cambia: la regla está acotada a `.ct-g2`. */
 .ct-g2 .ct-fila{flex-wrap:wrap}
 
-/* Las cuatro cifras del lienzo. Las apagadas llevan su píldora, nunca un
-   número inventado. */
-.ct-g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+/* Las cifras del lienzo. Las apagadas llevan su píldora, nunca un número
+   inventado.
+
+   Eran CUATRO; quedan DOS desde que Jay mandó sacar «Gastado» y
+   «Ganancia» (su guía del 6/10, punto 6: los márgenes salen). Con la
+   rejilla de cuatro, las dos reales quedaban de 188 px con ~400 px
+   vacíos al costado — justo la queja del espacio muerto que Abraham
+   escribió DOS veces, una de ellas sobre esta misma pantalla. Así que
+   `auto-fit` reparte entre las que de verdad hay: con dos salen anchas,
+   y si algún día vuelve una tercera no hay que tocar nada.
+
+   El piso del `minmax` lo fija la regla de más abajo (140 px, el ancho
+   en que dos tarjetas todavía entran de lado en el teléfono); acá va el
+   mismo valor para que el archivo no diga dos cosas. */
+.ct-g4{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
 .ct-k{border:1px solid var(--d-borde-pil);border-radius:6px;min-height:66px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:8px;text-align:center}
 .ct-k b{font-size:17px;font-weight:600}
 .ct-kl{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--d-suave)}
@@ -176,14 +188,18 @@ a.ct-r:hover b{text-decoration:underline;text-underline-offset:2px}
 .ct-m.v{align-self:flex-end;background:var(--d-verde-fondo);border:1px solid #CFE6D6}
 .ct-mt{font-size:11.5px;color:var(--d-suave)}
 
-/* Las cuatro cifras: de a dos mientras el lienzo sea angosto, de a cuatro
-   en cuanto cada una tenga ~130px — con 4 columnas en un lienzo de 300px
-   quedaban rótulos de una palabra por línea (A1). 560px es el escalón
-   MEDIO de la escala compartida. */
-.ct-g4{grid-template-columns:repeat(2,minmax(0,1fr))}
-@container lienzo (min-width:560px){
-  .ct-g4{grid-template-columns:repeat(4,minmax(0,1fr))}
-}
+/* Acá vivían dos reglas más para las cifras —de a dos en lienzo angosto,
+   de a cuatro desde 560— que PISABAN la de arriba y le devolvían las
+   cuatro columnas. Se retiraron: con `auto-fit` el reparto lo decide
+   cuántas tarjetas hay de verdad, así que las dos que quedan salen
+   anchas y no hace falta un escalón por cantidad.
+
+   Lo que esas reglas cuidaban sigue cuidado, y por eso el piso es 140 y
+   no 220: con 4 columnas en un lienzo de 300 px los rótulos quedaban en
+   una palabra por línea (el defecto A1), y 140 es el ancho en que dos
+   tarjetas todavía entran de lado en el teléfono (140·2 + 10 de hueco =
+   290). Abajo de eso se apilan, que es lo correcto. */
+.ct-g4{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
 
 /* ---------- celular ---------- */
 @media (max-width:767.98px){
