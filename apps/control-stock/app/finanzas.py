@@ -147,7 +147,7 @@ TEXTO_DIF_SIN_FOTO = ("No se pudo revisar si todo calza: arriba dice qué "
 
 
 def ventas_del_universo(informe):
-    """EL universo de los cuatro números, en UN SOLO lugar: las ventas
+    """EL universo de los cinco términos, en UN SOLO lugar: las ventas
     CONFIRMADAS del informe, sin canceladas.
 
     Está suelta a propósito. **A18 (abrir «Por cobrar» por antigüedad)
