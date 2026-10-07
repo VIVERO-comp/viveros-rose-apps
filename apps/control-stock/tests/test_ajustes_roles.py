@@ -147,6 +147,74 @@ def test_sin_empleadas_nadie_se_siembra_y_los_deberes_avisan(db_limpia):
     assert all(d["aviso"] == "sin_persona" for d in datos_roles.deberes_estado())
 
 
+def test_una_cuenta_DESACTIVADA_no_se_siembra_aunque_calce(tmp_path,
+                                                           monkeypatch):
+    """El sembrado solo mira cuentas ACTIVAS. Importa porque `empleadas`
+    no borra: la cuenta vieja de alguien sigue ahí y calza por nombre.
+    Si se la sembrara, el rol se vería ocupado mientras el trabajo queda
+    sin dueño — y nada avisaría.
+
+    Medido el 7/10/2026 en las dos bases: dos cuentas inactivas calzan
+    con pistas de la semilla y las dos quedan afuera por esto."""
+    monkeypatch.setenv("CONTROL_STOCK_DB", str(tmp_path / "inactivas.db"))
+    datos.iniciar_db()
+    # La cuenta vieja, desactivada, y la viva: las dos calzan con «ruben».
+    seguridad.crear_empleada("ruben", "Rubén", "x")
+    seguridad.desactivar("ruben")
+    seguridad.crear_empleada("ruben@viverorose.com", "Ruben", "x")
+    datos_roles.iniciar_tablas()
+    assert [p["usuario"] for p in
+            _rol_por_nombre("PH y proyectos grandes")["personas"]] == [
+        "ruben@viverorose.com"]
+
+
+def test_una_pista_con_DOS_candidatas_avisa_en_vez_de_elegir(tmp_path,
+                                                             monkeypatch,
+                                                             caplog):
+    """Pendiente 69: con dos cuentas ACTIVAS que calzan con la misma
+    pista, elegir es peor que no sembrar — el desempate no lo decide
+    nadie (ganaría la primera que devuelva el SELECT) y nadie se
+    enteraría. Se deja el hueco, que la pantalla ya pinta, y se avisa en
+    el log."""
+    monkeypatch.setenv("CONTROL_STOCK_DB", str(tmp_path / "ambigua.db"))
+    datos.iniciar_db()
+    # Dos cuentas activas que calzan con «ruben» (la pista de PH).
+    seguridad.crear_empleada("ruben@viverorose.com", "Ruben", "x")
+    seguridad.crear_empleada("ruben.perez@viverorose.com", "Rubén Pérez", "x")
+    # Y una que calza con «mary», para que el resto sí se siembre.
+    seguridad.crear_empleada("mary@viverorose.com", "Mary", "x")
+    with caplog.at_level("WARNING", logger="control_stock"):
+        datos_roles.iniciar_tablas()
+    ph = _rol_por_nombre("PH y proyectos grandes")
+    assert ph["personas"] == [], "eligió una de las dos en vez de avisar"
+    avisos = [r.getMessage() for r in caplog.records
+              if "semilla de roles" in r.getMessage()]
+    assert len(avisos) == 1 and "'ruben'" in avisos[0]
+    assert "ruben@viverorose.com" in avisos[0]
+    assert "ruben.perez@viverorose.com" in avisos[0]
+    # Lo NO ambiguo se siembra igual: una pista dudosa no tumba el resto.
+    assert [p["usuario"] for p in _rol_por_nombre("Eventos")["personas"]] == [
+        "mary@viverorose.com"]
+
+
+def test_con_la_primera_pista_ambigua_se_usa_la_SEGUNDA(tmp_path, monkeypatch):
+    """Las pistas de una fila son ALTERNATIVAS («salomon», «info@»): si la
+    primera es ambigua, se prueba la siguiente en vez de rendirse. Así una
+    homonimia no deja un deber huérfano cuando hay otra forma de
+    identificar a la persona."""
+    monkeypatch.setenv("CONTROL_STOCK_DB", str(tmp_path / "segunda.db"))
+    datos.iniciar_db()
+    # «salomon» calza con dos cuentas activas...
+    seguridad.crear_empleada("salomon.a", "Salomón A", "x")
+    seguridad.crear_empleada("salomon.b", "Salomón B", "x")
+    # ...pero «info@» calza con una sola, que es la de verdad.
+    seguridad.crear_empleada("info@viverorose.com", "Operaciones", "x")
+    datos_roles.iniciar_tablas()
+    assert [p["usuario"] for p in
+            _rol_por_nombre("Operaciones y banco")["personas"]] == [
+        "info@viverorose.com"]
+
+
 # ---------------------------------------------------------------------------
 # Roles: renombrar, duplicar, personas
 # ---------------------------------------------------------------------------

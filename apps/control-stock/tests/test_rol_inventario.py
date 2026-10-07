@@ -106,25 +106,39 @@ def test_duplicar_el_rol_no_copia_el_slug(db_limpia):
 # ---------------------------------------------------------------------------
 
 def test_matriz_solo_inventario(db_limpia, monkeypatch):
+    """La matriz completa del predicado, con la celda del BLOQUE 59: una
+    ETIQUETA DE TRABAJO (rol sin slug) no lo mueve — es la misma regla de
+    acceso_de(), y acá es obligatoria: si los dos predicados no cuentan lo
+    mismo se arma un loop de redirects (ver el test de abajo)."""
     monkeypatch.setenv("AJUSTES_ADMINS", "jefa")
-    for usuario in ("jefa", "omar", "mixta", "nueva"):
+    for usuario in ("jefa", "omar", "mixta", "nueva", "etiquetada",
+                    "solo_etiqueta"):
         seguridad.crear_empleada(usuario, usuario.capitalize(), "clave-de-prueba")
     rol_inv = _rol_inventario_n()
     with datos._db() as con:
-        otro = con.execute("SELECT n FROM roles WHERE slug IS NULL "
-                           "AND activo=1 LIMIT 1").fetchone()["n"]
+        otro = con.execute("SELECT n FROM roles WHERE slug=?",
+                           (datos_roles.SLUG_OPERACIONES,)).fetchone()["n"]
+        etiqueta = con.execute("SELECT n FROM roles WHERE slug IS NULL "
+                               "AND activo=1 LIMIT 1").fetchone()["n"]
     # jefa: admin fijada en el servidor Y con el rol — en la V2 el rol
     # manda: también queda encerrada (su timón es Ajustes, por ruta).
     assert datos_roles.poner_persona(rol_inv, "jefa", "x") is None
     # omar: solo el rol Inventario.
     assert datos_roles.poner_persona(rol_inv, "omar", "x") is None
-    # mixta: Inventario + otro rol.
+    # mixta: Inventario + otro rol CON SLUG.
     assert datos_roles.poner_persona(rol_inv, "mixta", "x") is None
     assert datos_roles.poner_persona(otro, "mixta", "x") is None
+    # etiquetada: Inventario + una etiqueta de trabajo (sin slug).
+    assert datos_roles.poner_persona(rol_inv, "etiquetada", "x") is None
+    assert datos_roles.poner_persona(etiqueta, "etiquetada", "x") is None
+    # solo_etiqueta: nada más que la etiqueta de trabajo.
+    assert datos_roles.poner_persona(etiqueta, "solo_etiqueta", "x") is None
     # nueva: sin roles.
     assert datos_roles.solo_inventario(_empleada("jefa")) is True
     assert datos_roles.solo_inventario(_empleada("omar")) is True
     assert datos_roles.solo_inventario(_empleada("mixta")) is False
+    assert datos_roles.solo_inventario(_empleada("etiquetada")) is True
+    assert datos_roles.solo_inventario(_empleada("solo_etiqueta")) is False
     assert datos_roles.solo_inventario(_empleada("nueva")) is False
 
 
@@ -252,11 +266,15 @@ def test_el_candado_sobrevive_el_renombre_del_rol(cliente_omar, con_inventario):
         "sku": "PL-ROMERO", "cantidad": 7, "esperada": 2}).status_code == 403
 
 
-def test_con_otro_rol_ademas_no_hay_puerta(db_limpia, con_inventario):
+def test_con_otro_rol_CON_SLUG_ademas_no_hay_vista_plana(db_limpia,
+                                                         con_inventario):
+    """Inventario + otro rol CON SLUG (un permiso de verdad): el predicado
+    da False, así que /stock es la pestaña de siempre y la persona navega
+    con la UNIÓN de los dos alcances, no encerrada en /stock."""
     seguridad.crear_empleada("mixta", "Mixta", "clave-de-prueba")
     with datos._db() as con:
-        otro = con.execute("SELECT n FROM roles WHERE slug IS NULL "
-                           "AND activo=1 LIMIT 1").fetchone()["n"]
+        otro = con.execute("SELECT n FROM roles WHERE slug=?",
+                           (datos_roles.SLUG_OPERACIONES,)).fetchone()["n"]
     datos_roles.poner_persona(_rol_inventario_n(), "mixta", "x")
     datos_roles.poner_persona(otro, "mixta", "x")
     c = TestClient(app)
@@ -264,11 +282,46 @@ def test_con_otro_rol_ademas_no_hay_puerta(db_limpia, con_inventario):
                                "contrasena": "clave-de-prueba"},
                follow_redirects=False)
     assert r.status_code == 303
-    # Navega como cualquiera: /venta no redirige a /stock.
+    # /venta está en el alcance de Operaciones: no redirige a /stock.
     assert c.get("/venta", follow_redirects=False).status_code == 200
     # Y /stock la manda a su pestaña de siempre (la vista plana es del rol).
     r = c.get("/stock", follow_redirects=False)
     assert (r.status_code, r.headers["location"]) == (303, "/?tab=stock")
+
+
+def test_inventario_mas_etiqueta_de_trabajo_queda_ACOTADO_y_SIN_LOOP(
+        db_limpia, con_inventario):
+    """BLOQUE 59, la celda que obliga a mover los DOS predicados juntos.
+
+    Inventario + una etiqueta de trabajo (rol sin slug): antes el alcance
+    salía None y la persona navegaba toda la app. Ahora queda acotada a
+    /stock — y por eso `solo_inventario` tiene que seguir siendo True
+    aquí: si diera False, /stock mandaría a /?tab=stock, la puerta
+    mandaría /?tab=stock de vuelta a /stock y el navegador moriría con
+    TooManyRedirects (medido). Esta prueba fija las dos mitades."""
+    seguridad.crear_empleada("etiq", "Etiq", "clave-de-prueba")
+    with datos._db() as con:
+        etiqueta = con.execute("SELECT n FROM roles WHERE slug IS NULL "
+                               "AND activo=1 LIMIT 1").fetchone()["n"]
+    datos_roles.poner_persona(_rol_inventario_n(), "etiq", "x")
+    datos_roles.poner_persona(etiqueta, "etiq", "x")
+    c = TestClient(app)
+    assert c.post("/login", data={"usuario": "etiq",
+                                  "contrasena": "clave-de-prueba"},
+                  follow_redirects=False).status_code == 303
+    # La PUERTA existe y es la del rol Inventario.
+    alcance = datos_roles.acceso_de(_empleada("etiq"))["alcance"]
+    assert alcance is not None, "la etiqueta de trabajo apagó el candado"
+    assert (alcance["casa"], alcance["prefijos"]) == ("/stock", ("/stock",))
+    # Y /stock sirve la vista plana: SIN loop — se sigue el redirect de
+    # verdad, que es lo único que distingue un loop de un 303 sano.
+    assert datos_roles.solo_inventario(_empleada("etiq")) is True
+    r = c.get("/stock", follow_redirects=True)
+    assert r.status_code == 200 and str(r.url).endswith("/stock")
+    # Lo de otros roles rebota a su casa, como a cualquier solo-inventario.
+    r = c.get("/venta", follow_redirects=False)
+    assert (r.status_code, r.headers["location"].split("?")[0]) == (303,
+                                                                    "/stock")
 
 
 def test_la_bitacora_es_de_admins_tambien_dentro_de_stock(cliente_omar):

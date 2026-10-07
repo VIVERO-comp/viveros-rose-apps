@@ -913,8 +913,10 @@ def sesion_de(empleada, es_admin=False):
     `ve_todo` es el director, finanzas y el admin — y también quien no
     tiene una puerta por rol, que es el MISMO fail-open de transición que
     ya aplica `datos_roles.acceso_de` en toda la app (alcance None =
-    director, sin rol, o un rol sin slug). Operaciones y Atención sí
-    quedan acotados: su alcance existe y no es de ver-todo.
+    director, sin rol, o SOLO roles sin slug). Operaciones y Atención sí
+    quedan acotados: su alcance existe y no es de ver-todo — y desde el
+    BLOQUE 59 una etiqueta de trabajo al lado (Eventos, PH…) ya no se los
+    vuelve a abrir.
 
     `resp` es la etiqueta `Resp:` que le corresponde a la persona, la
     misma que usa `control.puede_tocar()`. Solo se pregunta cuando hace

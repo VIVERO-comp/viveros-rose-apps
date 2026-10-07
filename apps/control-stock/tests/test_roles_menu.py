@@ -31,12 +31,13 @@ contra el encierro de emergencia. Ajustes además quedó partido: lo
 TÉCNICO sigue solo-admin y lo de NEGOCIO pasa a «admin O director».
 """
 
+import re
 from urllib.parse import unquote
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app import datos, datos_roles, seguridad
+from app import contactos, datos, datos_roles, seguridad
 from app.main import app
 
 CLAVE = "clave-de-prueba"
@@ -437,26 +438,244 @@ def test_sin_rol_sigue_como_hoy_fail_open_explicito(cliente):
     assert cliente.post("/venta/no-existe").status_code == 404
 
 
-def test_un_rol_sin_slug_mantiene_abierta_la_puerta(db_limpia):
-    """El fail-open de hoy también cubre los roles-espacio (pods como
-    Eventos): atención + un pod navega como hoy — la puerta acotada es de
-    quien SOLO tiene roles con alcance. (Mismo trato que inventario+otro
-    rol en el BLOQUE 13.)"""
+# ---------------------------------------------------------------------------
+# BLOQUE 59: una ETIQUETA DE TRABAJO no apaga el candado del rol
+#
+# EL DEFECTO (medido en el 8095 el 7/10/2026, las 13 cuentas activas): el
+# alcance quedaba en None —sin puerta— cuando ALGUNO de los roles de la
+# persona no acotaba, y los roles «de trabajo» (los que no tienen slug) no
+# acotan. O sea: darle a alguien su descripción de trabajo le APAGABA el
+# candado, en silencio, mientras la pantalla le seguía mostrando el menú
+# recortado — aparentando un límite que ya no existía, que es peor que no
+# tener candado. El reparto medido: 5 acotadas de verdad · 3 con la puerta
+# abierta por el defecto · 2 abiertas POR DISEÑO (Director) · 2 en el
+# fail-open de transición (sin un solo rol con slug) · 1 sin ningún rol.
+#
+# LA REGLA: el alcance sale SOLO de los roles CON SLUG. Una etiqueta de
+# trabajo no aporta nada al alcance y tampoco lo apaga.
+#
+# Los CINCO casos de esa medición tienen cada uno su prueba, nombrada por
+# su número, para que nadie «arregle» el que no es un bug: el Director es
+# amplio por su propio ALCANCE_DE_ROL y el fail-open de transición es una
+# decisión explícita (precisión 8), no un descuido.
+#
+# Y la verificación tiene que mirar LA PUERTA, no el menú: el 7/10 un
+# barrido de 5 roles × 16 pantallas por HTTP dio limpio con el candado
+# abierto. Así que acá se le pregunta a acceso_de() qué alcance devuelve, y
+# además se pide una ruta FUERA del alcance midiendo el <h1> que sale (el
+# rebote honesto devuelve 200, no un 403: el código de respuesta no
+# distingue entrar de rebotar).
+# ---------------------------------------------------------------------------
+
+# La forma real de las tres cuentas del defecto: UN rol con slug (el
+# permiso) más UNA etiqueta de trabajo de la semilla (dato, no código —
+# acá no hay un solo nombre de persona).
+LOS_3_DEL_DEFECTO = [
+    ("operaciones", "PH y proyectos grandes"),
+    ("atencion", "Eventos"),
+    ("finanzas", "Owner view"),
+]
+
+
+def _etiqueta_de_trabajo(nombre):
+    """El `n` de un rol de la semilla SIN slug: una etiqueta de trabajo,
+    no un permiso. Se busca por el nombre de la SEMILLA (dato)."""
     with datos._db() as con:
-        pod = con.execute("SELECT n FROM roles WHERE slug IS NULL "
-                          "AND activo=1 LIMIT 1").fetchone()["n"]
-    seguridad.crear_empleada("mixta2", "Mixta2", CLAVE)
-    datos_roles.poner_persona(_rol_n("atencion"), "mixta2", "x")
-    datos_roles.poner_persona(pod, "mixta2", "x")
+        fila = con.execute(
+            "SELECT n FROM roles WHERE slug IS NULL AND activo=1 "
+            "AND nombre=?", (nombre,)).fetchone()
+    assert fila, f"la semilla no trae la etiqueta de trabajo {nombre!r}"
+    return fila["n"]
+
+
+def _con_rol_y_etiqueta(usuario, slug, etiqueta):
+    """Una empleada con UN rol con slug Y una etiqueta de trabajo al lado,
+    ya logueada: la forma exacta de las tres cuentas del defecto."""
+    seguridad.crear_empleada(usuario, usuario.capitalize(), CLAVE)
+    assert datos_roles.poner_persona(_rol_n(slug), usuario, "korto") is None
+    assert datos_roles.poner_persona(_etiqueta_de_trabajo(etiqueta), usuario,
+                                     "korto") is None
     c = TestClient(app)
-    assert c.post("/login", data={"usuario": "mixta2", "contrasena": CLAVE},
+    assert c.post("/login", data={"usuario": usuario, "contrasena": CLAVE},
                   follow_redirects=False).status_code == 303
-    # Con atención sola, GET /finanzas rebotaría 303 a su casa; con el
-    # pod al lado la puerta queda abierta y la ruta llega a su handler
-    # (cuyo candado propio responde 403: ni rol de finanzas ni admin).
-    r = c.get("/finanzas", follow_redirects=False)
-    assert r.status_code == 403 and "cola de pagos" in r.text
+    return c
+
+
+def _alcance_del_slug(slug):
+    """El alcance que le toca a quien tiene ESE slug y nada más: lo que
+    acceso_de() debe devolver con o sin etiquetas de trabajo al lado."""
+    a = datos_roles.ALCANCE_DE_ROL[slug]
+    return {"prefijos": a["prefijos"], "casa": a["casa"],
+            "ver_todo": a["ver_todo"], "slugs": frozenset({slug})}
+
+
+def _h1_de(respuesta):
+    """El <h1 class="cab-titulo"> de la pantalla que SALE. Un 200 no dice
+    si entraste o si te rebotaron —el rebote honesto también es 200—: lo
+    que distingue es el título."""
+    m = re.search(r'<h1 class="cab-titulo">(.*?)</h1>', respuesta.text,
+                  flags=re.S)
+    return m.group(1).strip() if m else ""
+
+
+@pytest.mark.parametrize("slug,etiqueta", LOS_3_DEL_DEFECTO)
+def test_caso1_una_etiqueta_de_trabajo_NO_apaga_el_candado(db_limpia, slug,
+                                                           etiqueta):
+    """CASO 1 de 5 — las 3 cuentas que el defecto dejaba con la puerta
+    abierta (en el 8095: Operaciones + PH, Atención + Eventos, Finanzas +
+    Owner view). Su alcance tiene que EXISTIR y ser EXACTAMENTE el de su
+    rol con slug: la etiqueta de trabajo no suma ni resta."""
+    _con_rol_y_etiqueta(f"b59_1_{slug}", slug, etiqueta)
+    empleada = _empleada(f"b59_1_{slug}")
+    # La persona SÍ tiene la etiqueta de trabajo: el caso es el de verdad.
+    nombres = {r["nombre"] for r in datos_roles.roles_activos_de(empleada["id"])}
+    assert etiqueta in nombres
+    acceso = datos_roles.acceso_de(empleada)
+    assert acceso["alcance"] is not None, (
+        "la etiqueta de trabajo apagó el candado del rol")
+    assert acceso["alcance"] == _alcance_del_slug(slug)
+
+
+@pytest.mark.parametrize("slug,etiqueta", LOS_3_DEL_DEFECTO)
+def test_caso1_el_menu_recortado_sigue_siendo_el_del_rol(db_limpia, slug,
+                                                         etiqueta):
+    """El otro lado del caso 1: el menú ya salía recortado ANTES del
+    arreglo (de ahí que el barrido por HTTP diera limpio con el candado
+    abierto). Esta prueba fija que el arreglo no lo movió: menú y puerta
+    salen de la misma fuente y ahora dicen lo mismo."""
+    _con_rol_y_etiqueta(f"b59_m_{slug}", slug, etiqueta)
+    acceso = datos_roles.acceso_de(_empleada(f"b59_m_{slug}"))
+    # Con UN solo rol con menú, el menú sale en SU orden (el del lienzo):
+    # Finanzas abre con Finanzas, no con Conversaciones. La etiqueta de
+    # trabajo no es un rol con menú, así que no vuelve esto una unión.
+    assert [p["clave"] for p in acceso["menu"]] == list(
+        datos_roles.MENU_DE_ROL[slug])
+
+
+def test_caso2_el_director_sigue_amplio_POR_DISENO_no_por_el_defecto(db_limpia):
+    """CASO 2 de 5 — las 2 cuentas de Director del 8095. Su alcance es
+    None por su PROPIO ALCANCE_DE_ROL (la Dirección pasa todo), NO por el
+    fail-open: se prueba con el Director SOLO, sin ninguna etiqueta al
+    lado, y después con una al lado para mostrar que da igual.
+
+    Si alguien «arregla» esto más adelante creyendo que es el mismo bug
+    del caso 1, esta prueba se lo impide: amplio es la decisión."""
+    assert datos_roles.ALCANCE_DE_ROL[datos_roles.SLUG_DIRECTOR] is None
+    c = _con_roles("b59_dir", "director")
+    # Director SOLO —sin una sola etiqueta de trabajo— ya es None.
+    assert datos_roles.roles_activos_de("b59_dir")[0]["slug"] == "director"
+    assert len(datos_roles.roles_activos_de("b59_dir")) == 1
+    assert datos_roles.acceso_de(_empleada("b59_dir"))["alcance"] is None
+    # Y la puerta de verdad: pasa a pantallas de otros roles.
+    assert c.get("/compras", follow_redirects=False).status_code == 200
+    assert c.get("/conversaciones", follow_redirects=False).status_code == 200
+    # Con una etiqueta de trabajo al lado, exactamente lo mismo.
+    datos_roles.poner_persona(_etiqueta_de_trabajo("Eventos"), "b59_dir", "x")
+    assert datos_roles.acceso_de(_empleada("b59_dir"))["alcance"] is None
+
+
+def test_caso3_sin_ningun_rol_con_slug_sigue_el_fail_open_de_transicion(
+        db_limpia, con_inventario):
+    """CASO 3 de 5 — las 2 cuentas del 8095 que solo cargan etiquetas de
+    trabajo (una con «Operaciones y banco», otra con «System manager»).
+    Ese fail-open es el caso para el que se escribió y NO se toca: sin un
+    solo rol con slug el código no tiene ninguna regla que aplicar, y
+    prometer una puerta sobre una regla que no existe sería peor."""
+    seguridad.crear_empleada("b59_trans", "Transicion", CLAVE)
+    datos_roles.poner_persona(_etiqueta_de_trabajo("Operaciones y banco"),
+                              "b59_trans", "x")
+    acceso = datos_roles.acceso_de(_empleada("b59_trans"))
+    assert acceso["alcance"] is None
+    # Sin ningún rol con menú propio, el menú completo: el recorte y la
+    # puerta siguen contando la misma historia.
+    assert [p["clave"] for p in acceso["menu"]] == list(
+        datos_roles.MENU_COMPLETO)
+    c = TestClient(app)
+    assert c.post("/login", data={"usuario": "b59_trans",
+                                  "contrasena": CLAVE},
+                  follow_redirects=False).status_code == 303
+    assert c.get("/compras", follow_redirects=False).status_code == 200
     assert c.post("/venta/no-existe").status_code == 404
+    # Con DOS etiquetas de trabajo, igual de abierto.
+    datos_roles.poner_persona(_etiqueta_de_trabajo("Eventos"), "b59_trans", "x")
+    assert datos_roles.acceso_de(_empleada("b59_trans"))["alcance"] is None
+
+
+@pytest.mark.parametrize("slug", ("operaciones", "atencion", "inventario",
+                                  "finanzas"))
+def test_caso4_los_ya_acotados_no_cambian_en_nada(db_limpia, slug):
+    """CASO 4 de 5 — las 5 cuentas QA del 8095, cada una con UN solo rol
+    con slug y ya acotada de verdad. Cero efectos colaterales: su alcance
+    sigue siendo exactamente el de su ALCANCE_DE_ROL."""
+    _con_roles(f"b59_4_{slug}", slug)
+    assert datos_roles.acceso_de(
+        _empleada(f"b59_4_{slug}"))["alcance"] == _alcance_del_slug(slug)
+
+
+def test_caso5_sin_ningun_rol_sigue_abierto(db_limpia):
+    """CASO 5 de 5 — la cuenta del 8095 sin un solo rol. Mismo fail-open
+    de transición que el caso 3: nada que acotar con."""
+    seguridad.crear_empleada("b59_sin", "Sin rol", CLAVE)
+    assert datos_roles.roles_activos_de("b59_sin") == []
+    assert datos_roles.acceso_de(_empleada("b59_sin"))["alcance"] is None
+
+
+@pytest.mark.parametrize("slug,etiqueta,ruta_ajena,casa,titulo", [
+    ("operaciones", "PH y proyectos grandes", "/conversaciones", "/mi-crm",
+     "Mi CRM"),
+    ("atencion", "Eventos", "/compras", "/mi-crm", "Mi CRM"),
+])
+def test_la_ruta_fuera_del_alcance_REBOTA_de_verdad(db_limpia, slug, etiqueta,
+                                                    ruta_ajena, casa, titulo):
+    """La prueba de que el candado CIERRA, no solo de que el alcance no es
+    None: se escribe a mano la URL de una pantalla ajena —como la
+    escribiría la persona, que es justo lo que el menú recortado no
+    impide— y se mide la PANTALLA QUE SALE.
+
+    El rebote honesto devuelve 200 (la casa del rol con su aviso), así que
+    el código de respuesta no sirve de prueba: lo que distingue es el
+    <h1>. Antes del arreglo estas dos rutas respondían 200 con el <h1> de
+    la pantalla AJENA."""
+    c = _con_rol_y_etiqueta(f"b59_r_{slug}", slug, etiqueta)
+    # 1) la puerta corta con el aviso honesto hacia su casa…
+    r = c.get(ruta_ajena, follow_redirects=False)
+    assert r.status_code == 303, ruta_ajena
+    destino, aviso = _rebote(r)
+    assert destino == casa and "tu rol no la usa" in aviso
+    # 2) …y lo que de verdad llega al navegador es SU casa, no la ajena.
+    seguido = c.get(ruta_ajena, follow_redirects=True)
+    assert seguido.status_code == 200
+    assert _h1_de(seguido) == titulo, (
+        f"{ruta_ajena} no rebotó: salió la pantalla "
+        f"{_h1_de(seguido)!r} en vez de {titulo!r}")
+
+
+def test_finanzas_con_etiqueta_recupera_el_403_de_TODA_escritura(db_limpia):
+    """El tercer caso del defecto no se mide con un rebote: Finanzas es
+    `ver_todo`, así que sus GET pasan POR DISEÑO (modo ver de verdad). Lo
+    que la etiqueta de trabajo le apagaba era el 403 de toda escritura."""
+    c = _con_rol_y_etiqueta("b59_fin", "finanzas", "Owner view")
+    for metodo in ("POST", "PUT", "PATCH", "DELETE"):
+        r = c.request(metodo, "/ajustar")
+        assert r.status_code == 403, metodo
+        assert "solo ver" in r.text, metodo
+
+
+def test_el_arreglo_tambien_cierra_el_candado_del_dinero_y_del_chat(db_limpia):
+    """`acceso_de` no la lee solo la puerta de rutas: `contactos.sesion_de`
+    saca de ella su `ve_todo` —ver el DINERO y el CHAT de cualquier
+    contacto, no solo de los suyos—. Con el defecto, las tres cuentas del
+    caso 1 lo veían todo. Las dos leen LA MISMA función, así que el mismo
+    arreglo las cierra: esta prueba fija que no quedó un segundo camino
+    con la regla vieja."""
+    _con_rol_y_etiqueta("b59_din", "atencion", "Eventos")
+    empleada = _empleada("b59_din")
+    assert contactos.sesion_de(empleada, es_admin=False)["ve_todo"] is False
+    # Y el fail-open de transición sigue viendo todo, como hoy.
+    seguridad.crear_empleada("b59_din2", "Din2", CLAVE)
+    datos_roles.poner_persona(_etiqueta_de_trabajo("Eventos"), "b59_din2", "x")
+    assert contactos.sesion_de(_empleada("b59_din2"),
+                               es_admin=False)["ve_todo"] is True
 
 
 # ---------------------------------------------------------------------------

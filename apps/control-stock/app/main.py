@@ -304,9 +304,11 @@ def _puerta_por_rol(request, empleada, alcance):
     """LA puerta global por rol (BLOQUE 20 punto 1), en su V2 (BLOQUE 29
     aprobado: «el rol manda aunque seas admin»). Recibe `alcance` ya
     calculado por datos_roles.acceso_de (la MISMA fuente del menú,
-    precisión 4). Con alcance None (director, sin rol, o un rol sin
+    precisión 4). Con alcance None (director, sin rol, o SOLO roles sin
     slug) no corta nada: el fail-open de transición es decisión explícita
-    (precisión 8), fijada con test.
+    (precisión 8), fijada con test. Desde el BLOQUE 59 una etiqueta de
+    trabajo al lado de un rol con slug ya NO abre esta puerta: el alcance
+    sale solo de los roles con slug.
 
     - La EXCEPCIÓN DEL ADMIN ya NO es global: es POR RUTA
       (datos_roles.RUTAS_SISTEMA — Ajustes y sistema): un admin con rol

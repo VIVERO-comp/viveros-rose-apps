@@ -27,6 +27,7 @@ listar_roles(), marcas_activas(), tipos_venta_activos(), llegadas_activas()
 y quien_ocupa(deber) de aquí, sin re-trabajo.
 """
 
+import logging
 import time
 import unicodedata
 
@@ -417,25 +418,55 @@ def _sembrar(con):
 
 
 def _empleadas_activas(con):
+    """Las cuentas ACTIVAS del login. El filtro `activa=1` es del candado,
+    no cosmético: una cuenta desactivada sigue en la tabla (`empleadas` no
+    borra) y sembrarle un rol se lo daría a nadie — el rol se vería
+    ocupado y el trabajo quedaría sin dueño. El ORDER BY es para que el
+    aviso de una pista ambigua salga siempre igual."""
     return [dict(f) for f in con.execute(
-        "SELECT usuario, nombre, email FROM empleadas WHERE activa=1")]
+        "SELECT usuario, nombre, email FROM empleadas WHERE activa=1 "
+        "ORDER BY usuario")]
 
 
 def _casar_pista(pistas, empleadas):
-    """El usuario de la primera empleada que calce con alguna pista, o None.
+    """El usuario de la ÚNICA empleada activa que calce con alguna pista,
+    o None.
 
     Calza si la pista aparece dentro del usuario o del email, o si alguna
-    palabra del nombre empieza con ella (sin acentos ni mayúsculas). Si
-    nadie calza no se inventa nada: el rol queda sin persona y la pantalla
-    lo avisa.
+    palabra del nombre empieza con ella (sin acentos ni mayúsculas).
+
+    Dos cosas que NO hace, y la segunda es el apunte del 7/10/2026:
+
+    - **No inventa**: si nadie calza, el rol queda sin persona y la
+      pantalla lo avisa (la lista de personas vacía, y el ⚠ del deber).
+    - **No ELIGE**: con dos candidatas activas para la misma pista,
+      elegir es peor que no sembrar, porque el desempate no lo decide
+      nadie — ganaría la primera que devuelva el SELECT y nadie se
+      enteraría. Se deja el hueco (que la pantalla ya pinta, y ponerle
+      la persona a mano es un clic) y se avisa en el log.
+
+    Medido el 7/10/2026 contra las DOS bases, de solo lectura: las 6
+    pistas de SEMILLA_ROLES tienen UNA sola candidata activa en cada una
+    (producción: 11 cuentas, 7 activas; pruebas: 17 y 13), así que esto
+    no cambia nada de lo ya sembrado. Las dos cuentas inactivas que
+    calzaban por nombre quedaban afuera desde siempre, por el `activa=1`
+    de _empleadas_activas: el riesgo era el de MAÑANA, cuando entre
+    alguien con un nombre parecido.
     """
     for pista in pistas:
         plana = _plano(pista)
-        for e in empleadas:
-            if plana in _plano(e["usuario"]) or plana in _plano(e["email"] or ""):
-                return e["usuario"]
-            if any(p.startswith(plana) for p in _plano(e["nombre"]).split()):
-                return e["usuario"]
+        calzan = [e["usuario"] for e in empleadas
+                  if plana in _plano(e["usuario"])
+                  or plana in _plano(e["email"] or "")
+                  or any(p.startswith(plana)
+                         for p in _plano(e["nombre"]).split())]
+        if len(calzan) == 1:
+            return calzan[0]
+        if calzan:
+            logging.getLogger("control_stock").warning(
+                "semilla de roles: la pista %r calza con %d cuentas activas "
+                "(%s). No se siembra ninguna: ponle la persona a mano en "
+                "Ajustes → Roles.", pista, len(calzan), ", ".join(calzan))
     return None
 
 
@@ -521,20 +552,30 @@ def roles_activos_de(usuario):
 def solo_inventario(empleada):
     """EL predicado del rol Inventario — el único lugar donde se decide.
 
-    True para una empleada cuyo ÚNICO rol activo es el del slug
-    'inventario'. De aquí cuelgan las tres cosas, siempre juntas: el
-    menú (=[Stock]), el redirect global a /stock y los candados de los
-    POST. La matriz: solo-inventario → True · inventario+otro rol →
-    False · sin roles → False · **admin+inventario → True** (V2 del
-    BLOQUE 29: el rol manda aunque seas admin — la excepción del admin
-    ya no vive en el predicado sino POR RUTA, en RUTAS_SISTEMA: un admin
-    con este rol conserva Ajustes y nada más). Se compara por SLUG,
-    jamás por el nombre: la fila se puede renombrar sin soltar un solo
-    candado.
+    True para una empleada cuyo único rol CON SLUG es 'inventario'. De
+    aquí cuelgan las tres cosas, siempre juntas: el menú (=[Stock]), el
+    redirect global a /stock y los candados de los POST. La matriz:
+    solo-inventario → True · inventario+**otro rol con slug** → False ·
+    inventario+**una etiqueta de trabajo** (rol sin slug) → **True** ·
+    sin roles → False · solo etiquetas de trabajo → False ·
+    **admin+inventario → True** (V2 del BLOQUE 29: el rol manda aunque
+    seas admin — la excepción del admin ya no vive en el predicado sino
+    POR RUTA, en RUTAS_SISTEMA: un admin con este rol conserva Ajustes y
+    nada más). Se compara por SLUG, jamás por el nombre: la fila se
+    puede renombrar sin soltar un solo candado.
+
+    **Por qué las etiquetas de trabajo no cuentan (BLOQUE 59)**: es la
+    MISMA regla de acceso_de() —un rol sin slug es una etiqueta, no un
+    permiso— y aquí además es obligatoria, no una elección de estilo. Si
+    los dos predicados no cuentan lo mismo se arma un LOOP de redirects
+    medido: con el alcance acotado a ('/stock',) y este predicado en
+    False, /stock manda a /?tab=stock y la puerta manda /?tab=stock de
+    vuelta a /stock, hasta TooManyRedirects. Quien cambie uno de los dos
+    tiene que mover el otro.
 
     `empleada` es el dict de la sesión (request.state.empleada)."""
-    mios = roles_activos_de(empleada["id"])
-    return len(mios) == 1 and mios[0]["slug"] == SLUG_INVENTARIO
+    mios = [r["slug"] for r in roles_activos_de(empleada["id"]) if r["slug"]]
+    return len(mios) == 1 and mios[0] == SLUG_INVENTARIO
 
 
 def crm_chico(slugs):
@@ -565,15 +606,19 @@ def acceso_de(empleada):
       /mi-crm (BLOQUE 39.2) y el solo-inventario su Stock a /stock (la
       vista plana). Un admin SIEMPRE lleva Ajustes en el menú — es el
       espejo visible de RUTAS_SISTEMA.
-    - alcance: None = sin puerta (como hoy). Es None cuando la persona no
-      tiene roles, o cuando ALGUNO de sus roles no acota (director, o un
-      rol sin slug como los pods: Eventos, PH…) — ese FAIL-OPEN de
-      transición es decisión explícita (precisión 8), fijada con test; la
-      excepción del ADMIN ya no es global (V2): vive POR RUTA en
+    - alcance: None = sin puerta. El alcance sale SOLO de los roles CON
+      SLUG (BLOQUE 59): un rol sin slug es una ETIQUETA DE TRABAJO
+      —Eventos, PH y proyectos grandes, Operaciones y banco—, no un
+      permiso, así que no aporta nada al alcance y tampoco lo apaga.
+      Es None cuando la persona no tiene NINGÚN rol con slug —ese es el
+      FAIL-OPEN de transición, decisión explícita (precisión 8), fijado
+      con test— o cuando alguno de sus roles con slug no acota (el
+      director, cuyo ALCANCE_DE_ROL es None a propósito).
+      Si todos sus roles CON SLUG acotan: {"prefijos": unión, "casa": la
+      del primer slug en PRIORIDAD_CASA, "ver_todo": True si algún rol lo
+      es (finanzas), "slugs": set} — la puerta del middleware lo aplica.
+      La excepción del ADMIN ya no es global (V2): vive POR RUTA en
       RUTAS_SISTEMA, aplicada en main._puerta_por_rol.
-      Si todos sus roles acotan: {"prefijos": unión, "casa": la del
-      primer slug en PRIORIDAD_CASA, "ver_todo": True si algún rol lo es
-      (finanzas), "slugs": set} — la puerta del middleware lo aplica.
     """
     roles = roles_activos_de(empleada["id"])
     slugs = [r["slug"] for r in roles if r["slug"] in ALCANCE_DE_ROL]
@@ -613,9 +658,27 @@ def acceso_de(empleada):
         menu.append({"clave": "ajustes", "titulo": "Ajustes",
                      "href": "/?tab=ajustes"})
 
-    abierto = (not roles) or any(
-        r["slug"] not in ALCANCE_DE_ROL or ALCANCE_DE_ROL[r["slug"]] is None
-        for r in roles)
+    # EL CANDADO (BLOQUE 59): el alcance sale SOLO de los roles CON SLUG.
+    # Antes bastaba UN rol que no acotara para dejar el alcance en None, y
+    # los roles «de trabajo» (sin slug) no acotan: darle a alguien su
+    # descripción de trabajo le APAGABA el candado, en silencio y con el
+    # menú recortado aparentando un límite que ya no existía (medido en el
+    # 8095: 3 de 13 cuentas con la puerta abierta por eso). Un rol sin slug
+    # es una etiqueta, no un permiso: no vota.
+    #
+    # El FAIL-OPEN se reserva para los dos casos en que el código no TIENE
+    # una regla que aplicar, no para los que sí:
+    #   - ningún rol con slug (el caso de transición para el que se
+    #     escribió: una empleada sin rol, o solo con etiquetas de trabajo);
+    #   - un slug que el código no sabe acotar (sin fila en ALCANCE_DE_ROL),
+    #     o cuya fila es None a propósito (el director).
+    # Ojo con lo segundo: un slug nuevo en ROLES_CON_SLUG al que se le
+    # olvide su fila de ALCANCE_DE_ROL abre la puerta en vez de cerrarla
+    # (es la hermana del lookup directo a la paleta de linear_leads: una
+    # entrada que falta no da error, cambia el comportamiento).
+    con_slug = [r["slug"] for r in roles if r["slug"]]
+    abierto = (not con_slug) or any(
+        s not in ALCANCE_DE_ROL or ALCANCE_DE_ROL[s] is None for s in con_slug)
     if abierto:
         return {"menu": menu, "alcance": None}
     prefijos = []

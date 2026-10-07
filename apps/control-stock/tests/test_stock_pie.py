@@ -290,10 +290,16 @@ def test_el_campo_mide_lo_mismo_que_los_botones_de_su_fila():
 
 def test_el_candado_del_rol_inventario_sigue_donde_estaba():
     """A3 y A4 son aspecto y guardado de la lista: ni una línea de
-    permisos. El rol sigue decidiéndose en el predicado único."""
+    permisos. El rol sigue decidiéndose en el predicado único.
+
+    El renglón que se vigila se movió una vez, en el BLOQUE 59, y a
+    propósito: el predicado pasó a contar solo los roles CON SLUG (una
+    etiqueta de trabajo ya no lo mueve), que es la misma regla de
+    `acceso_de`. La semántica que esta prueba cuida —UN solo lugar
+    decide, y decide por slug— no cambió."""
     predicado = open("app/datos_roles.py").read()
     assert "def solo_inventario(empleada):" in predicado
-    assert "len(mios) == 1 and mios[0][\"slug\"] == SLUG_INVENTARIO" in predicado
+    assert "len(mios) == 1 and mios[0] == SLUG_INVENTARIO" in predicado
 
 
 def test_los_tokens_de_color_estan_definidos_para_TODA_la_hoja():
