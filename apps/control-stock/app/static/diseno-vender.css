@@ -249,7 +249,7 @@
      `flex:1 0 276px` crecen hasta llenar el carril: el `0` de encoger es
      lo que impide que bajen de 276 y la tarjeta se parta en una palabra
      por línea (la regla de A1), y el `1` de crecer es lo que se lleva la
-     franja. Despué: 320px de columna y el 95% del lienzo usado.
+     franja. Después: 320px de columna y el 95% del lienzo usado.
 
      El tope de 340px es el ancho del panel de la ficha del contacto
      (`.ct-cols` en diseno-contactos.css), no un número nuevo: pasado
