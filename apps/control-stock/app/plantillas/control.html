@@ -72,7 +72,7 @@
            todos lo puedan ver», Abraham), así que el título ya no puede
            decir «Lo tuyo»: mentiría. Mover sigue siendo solo lo suyo. #}
         {% if vista == 'empleado' %}Arrastra para repartir · cambia la etiqueta Resp: en Linear
-        {% elif not alc.admin and alc.resp_propio %}Todo el tablero · movés solo lo tuyo, {{ alc.resp_propio }}
+        {% elif not alc.admin and alc.resp_propio %}Todo el tablero · movés solo lo tuyo, {{ alc.resp_propio | nombre_visible }}
         {% elif not alc.admin %}Todo el tablero · todavía no te toca ningún lead
         {% else %}Arrastrar entre estados es una corrección: pide el motivo{% endif %}
       </span>
@@ -116,8 +116,8 @@
     {% if aviso %}<div class="aviso-ok">{{ aviso }}
       <a class="cierra-banner" href="/control?vista={{ vista }}{{ ver_query }}" aria-label="Cerrar el aviso">×</a></div>{% endif %}
     {% if modo == 'lectura' %}
-    <div class="solo-lectura"><b>Solo lectura.</b> Esta instancia mira el
-      tablero real pero no escribe en Linear.</div>
+    <div class="solo-lectura"><b>Solo lectura.</b> Acá se mira el tablero real, pero no se
+      escribe nada.</div>
     {% endif %}
     {% if not alc.admin and not alc.resp_propio %}
     <div class="solo-lectura"><b>Sin etiqueta.</b> Tu cuenta todavía no tiene
@@ -148,7 +148,7 @@
           <span class="tenue">Al reasignar, la petición le llega a la otra
             persona. Queda guardado quién dijo que no y por qué.</span>
           <button class="btn dc-apagado chico" type="button" disabled
-                  title="Las peticiones llegan en el punto 2 del plan de roles">Reasignar — Todavía no</button>
+                  title="Pedirle el lead a alguien todavía no se puede">Reasignar — Todavía no</button>
         </div>
       </section>
     </div>
@@ -264,7 +264,9 @@
                  columnas vivas de «Por estado» — en «Por empleado» la
                  columna YA es el responsable, y un cerrado no se reparte. #}
               {% if vista == 'estado' and not l.cerrado and l.resp %}
-              <span class="ctl-av" role="img" aria-label="Responsable: {{ l.resp }}" title="Responsable: {{ l.resp }}">{{ l.resp[:1] }}</span>
+              {# A15: la inicial y el título se escriben como se lee el
+                 nombre; el dato `l.resp` sigue siendo el de Linear. #}
+              <span class="ctl-av" role="img" aria-label="Responsable: {{ l.resp | nombre_visible }}" title="Responsable: {{ l.resp | nombre_visible }}">{{ (l.resp | nombre_visible)[:1] }}</span>
               {% endif %}
               {# «Asignar» (lienzo de Roles): la puerta al cuadro de
                  asignar desde la tarjeta sin dueño. Repartir es cosa del
@@ -298,8 +300,8 @@
         Los Ganado y Perdido no se reparten.
       {% else %}
         El embudo se mueve solo (el mensaje del cliente, la cotización, el pago
-        y el calendario). Arrastrar aquí es una corrección a mano, y por eso
-        pide el motivo y queda anotada en el issue.
+        y el calendario). Arrastrar aquí es una corrección a mano, y por eso pide el motivo
+      y queda anotada en la tarjeta de Linear.
       {% endif %}
     </p>
   </div>
@@ -361,7 +363,9 @@
        número inventado ahí sería el peor de todos. #}
     {% for p in asignando.gente %}
     <label class="dc-opt">
-      <input type="radio" name="quien" value="{{ p.nombre }}">
+      {# El valor es la CLAVE (el nombre de la etiqueta `Resp:` de
+         Linear); lo que se lee al lado es cómo se escribe (A15). #}
+      <input type="radio" name="quien" value="{{ p.clave }}">
       <span class="dc-opt-av" aria-hidden="true">{{ p.inicial }}</span>
       <span class="dc-opt-quien"><b>{{ p.nombre }}</b>
         <span class="tenue">{{ p.detalle }}{% if p.actual %} · lo tiene hoy{% endif %}</span></span>
@@ -386,7 +390,7 @@
 
   <div class="acciones">
     <button class="btn dc-apagado" type="button" disabled
-            title="Las peticiones llegan en el punto 2 del plan de roles">{{ asignando.accion }} — Todavía no</button>
+            title="Pedirle el lead a alguien todavía no se puede">{{ asignando.accion }} — Todavía no</button>
   </div>
   {# El pie del lienzo, palabra por palabra, más la verdad de hoy: el
      cuadro todavía no manda nada. #}

@@ -313,7 +313,7 @@ def conectar(orden_id, lead):
     Odoo)."""
     pp = _pp_de(lead)
     if not pp:
-        raise ValueError("Ese lead no tiene una referencia PP-XXXXX.")
+        raise ValueError("Ese lead no tiene su código PP- de cliente.")
     orden_id = int(orden_id)
     actual = ventas._ejecutar(
         "sale.order", "read", [[orden_id]],
@@ -348,7 +348,7 @@ def marcar_real(orden_id, lead):
     `conectar` primero)."""
     pp = _pp_de(lead)
     if not pp:
-        raise ValueError("Ese lead no tiene una referencia PP-XXXXX.")
+        raise ValueError("Ese lead no tiene su código PP- de cliente.")
     orden_id = int(orden_id)
     actual = ventas._ejecutar("sale.order", "read", [[orden_id]],
                               {"fields": ["lead_ref"]})

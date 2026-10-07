@@ -14,7 +14,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from app import (datos, datos_roles, entregas, pedidos, seguridad,
+from app import (colores, datos, datos_roles, entregas, pedidos, seguridad,
                  venta_estado)
 
 HOY = date(2026, 10, 6)
@@ -301,6 +301,49 @@ def test_filtro_por_tipo_de_venta(base):
     assert filtros == {"plant retail": 1, "rental event": 1}
     # Un tipo inventado no filtra nada (se ignora, no se truena).
     assert pedidos.tablero(tipo="no-existe", hoy=HOY)["tipo"] is None
+    # Los chips se LEEN en palabras de la casa, pero el filtro de la URL
+    # sigue viajando con el dato del catálogo (BLOQUE 53 · A9/A10).
+    titulos = {f["nombre"]: f["titulo"] for f in tablero["filtros"]}
+    assert titulos == {"plant retail": "Plantas",
+                       "rental event": "Eventos"}
+
+
+# ---------------------------------------------------------------------------
+# A9 del BLOQUE 53: la tarjeta como el lienzo — el chip con el NOMBRE y el
+# COLOR del interés, y la raya de color de la izquierda
+# ---------------------------------------------------------------------------
+
+def test_la_tarjeta_dice_el_interes_en_palabras_de_la_casa(base):
+    """El catálogo guarda «plant retail» (vocabulario del decision
+    record): el dato NO se reescribe, pero la tarjeta se lee en español y
+    trae el color del interés desde la paleta compartida."""
+    n = _venta_local(orden="S00101", orden_id=101)
+    _en_estado_2(n)                      # tipo = "plant retail"
+    tarjeta = pedidos.tablero(hoy=HOY)["columnas"][0]["tarjetas"][0]
+    assert tarjeta["tipo_venta"] == "plant retail"   # el dato, intacto
+    assert tarjeta["tipo_titulo"] == "Plantas"       # lo que se lee
+    # El color sale de la paleta (familia green del interés Plantas), no
+    # de un hex escrito en la plantilla.
+    assert tarjeta["acento"] == colores.color_interes("Plantas") != ""
+    assert "background:" in tarjeta["chip_estilo"]
+
+
+def test_un_tipo_sin_interes_queda_neutro_y_se_muestra_tal_cual(base):
+    """«PH» no cae en ninguno de los 5 intereses: se muestra TAL CUAL y
+    sin color — darle uno sería clasificarlo, y eso no lo decide el
+    código."""
+    n = _servicio_local(orden="S00102", orden_id=102)
+    _en_estado_2(n, origen="servicio", tipo="PH")
+    tarjeta = pedidos.tablero(hoy=HOY)["columnas"][0]["tarjetas"][0]
+    assert tarjeta["tipo_titulo"] == "PH"
+    assert tarjeta["acento"] == ""       # la tarjeta queda neutra
+
+
+def test_las_pistas_de_las_columnas_no_hablan_de_estados(base):
+    """A10: ninguna pista le habla al programador («estado 3»)."""
+    for columna in pedidos.tablero(hoy=HOY)["columnas"]:
+        assert "estado 3" not in columna["pista"]
+        assert "estado" not in columna["pista"].lower()
 
 
 # ---------------------------------------------------------------------------

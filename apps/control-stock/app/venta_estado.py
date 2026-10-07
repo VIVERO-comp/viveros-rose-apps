@@ -99,8 +99,10 @@ ESTADOS = {
 }
 
 # El chip corto de la lista de Vender (la etiqueta larga es de la ficha).
-ETIQUETA_CORTA = {1: "1 · Acordada", 2: "2 · Plata confirmada",
-                  3: "3 · Cerrada"}
+# BLOQUE 53 · A10: sin el número del estado delante. El número es de
+# adentro; el chip tiene que decirle a la persona qué falta o qué pasó.
+ETIQUETA_CORTA = {1: "Falta el pago", 2: "Falta entregar",
+                  3: "Entregada y cobrada"}
 
 # Por qué un estado no se puede poner a mano, en palabras de pantalla.
 MOTIVO_BLOQUEO = {

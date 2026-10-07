@@ -60,23 +60,34 @@
   font-size:12px;font-weight:600;
 }
 
-/* ---------- la tarjeta (anatomía del lienzo 07) ---------- */
+/* ---------- la tarjeta (anatomía del lienzo 07) ----------
+   DOS filas y nada más (BLOQUE 53 · A9): la raya de color de la izquierda
+   es el `border-left` de 3px, que Python repinta en línea con el color del
+   interés; el alto fijo de 78px del lienzo vive en el bloque de
+   computadora (en el teléfono la tarjeta crece para el bloque «Mover a»,
+   que ahí sí se ve). `space-between` reparte las dos filas dentro del
+   alto, como el .card del lienzo. */
 .pd-card{
   background:#fff;border:1px solid var(--d-borde-tarjeta);
   border-left:3px solid var(--d-borde-tarjeta);
   border-radius:var(--d-radio-tarjeta);padding:9px 10px;
-  display:flex;flex-direction:column;gap:6px;
+  display:flex;flex-direction:column;justify-content:space-between;gap:6px;
+  box-sizing:border-box;
 }
 .pd-fila{display:flex;justify-content:space-between;align-items:center;gap:6px;min-width:0}
+/* El NOMBRE COMPLETO manda sobre la fecha: se queda con el espacio que
+   sobra y es lo último que se recorta. */
 .pd-abrir{
-  font-weight:700;color:var(--d-tinta);text-decoration:none;min-width:0;
+  font-weight:700;color:var(--d-tinta);text-decoration:none;
+  flex:1 1 auto;min-width:0;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
 .pd-abrir:hover{text-decoration:underline;text-underline-offset:2px}
 .pd-acts{display:flex;align-items:center;gap:8px;flex-shrink:0}
-.pd-meta{display:flex;align-items:center;gap:6px;min-width:0}
-.pd-hint{font-size:12.5px;color:var(--d-suave);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pd-fecha{font-size:12.5px;color:var(--d-suave);flex-shrink:0}
+.pd-meta{display:flex;align-items:center;gap:6px;min-width:0;flex:1 1 auto}
+.pd-hint{font-size:12.5px;color:var(--d-suave);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+/* La fecha cede antes que el nombre (flex-shrink en 1, no en 0). */
+.pd-fecha{font-size:12.5px;color:var(--d-suave);flex:0 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* La inicial del responsable, como el .av sm del lienzo. */
 .pd-av{
@@ -85,15 +96,17 @@
   font-size:10.5px;font-weight:700;flex-shrink:0;
 }
 
-/* El chip del tipo de venta: neutro mientras Python no mande color
-   (t.chip_estilo pinta fondo/texto/borde encima, por eso el borde
-   transparente de base). */
+/* El chip del tipo de venta con el NOMBRE y el COLOR de su interés
+   (t.tipo_titulo / t.chip_estilo, de colores.py): el estilo en línea pinta
+   fondo, texto y borde encima, por eso el borde transparente de base. Un
+   tipo sin interés se queda con este gris. No encoge: el que cede el
+   espacio es el renglón del pedido, que lleva su ellipsis. */
 .pd-tipo{
   display:inline-flex;align-items:center;height:22px;padding:0 8px;
   border:1px solid transparent;border-radius:11px;
   background:var(--d-gris-activo);color:#3F3F3F;
   font-size:12px;font-weight:600;white-space:nowrap;
-  overflow:hidden;text-overflow:ellipsis;
+  overflow:hidden;text-overflow:ellipsis;flex-shrink:0;
 }
 
 /* Las píldoras de acción del lienzo: «Programar» contorneada en tinta,
@@ -115,6 +128,9 @@
   .pd-tablero{overflow-x:auto;padding-bottom:4px}
   /* Columnas de ancho fijo, como el tablero del lienzo. */
   .pd-col{flex:0 0 276px}
+  /* El alto del lienzo: 78px exactos, las dos filas adentro. */
+  .pd-card{height:78px}
+  .pd-fila+.pd-fila{min-height:28px}
 }
 
 /* ---------- teléfono (pantalla 23) ---------- */

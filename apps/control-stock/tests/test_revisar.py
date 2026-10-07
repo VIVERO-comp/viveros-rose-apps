@@ -245,7 +245,10 @@ def test_el_detalle_trae_las_dos_columnas_y_la_entrega_por_fuente(admin, informe
 def test_los_botones_de_m2_salen_desactivados(admin, informe_falso):
     texto = admin.get("/revisar?abrir=S00078").text
     assert "Registrar pago" in texto and "Confirmar entrega" in texto
-    assert "Fase M2" in texto
+    # El rótulo dice que todavía no andan (antes decía «Fase M2», el
+    # nombre de la tanda: jerga — BLOQUE 53 · A10).
+    assert 'class="rv-m2">Todavía no<' in texto
+    assert "Fase M2" not in texto
     # Los dos desactivados de verdad, no solo pintados.
     pago = texto.split("Registrar pago")[0].rsplit("<button", 1)[1]
     entrega = texto.split("Confirmar entrega")[0].rsplit("<button", 1)[1]

@@ -82,8 +82,9 @@
         <a class="prov-abrir" href="/conversaciones?n={{ n }}&abrir={{ c.chat_id | urlencode }}#conv-{{ loop.index }}">
           Ver la conversación →</a>
         {% else %}
-        <p class="pie-nota" style="margin:2px 0 0">Mensajes sin chatId en
-          Twenty: no se puede abrir el hilo.</p>
+        {# A10: «chatId» es el nombre del campo de Twenty. #}
+        <p class="pie-nota" style="margin:2px 0 0">Estos mensajes no tienen
+          chat en Twenty: no se puede abrir la conversación.</p>
         {% endif %}
       </div>
       {% endfor %}

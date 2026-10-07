@@ -16,6 +16,9 @@
 {# El borde de arriba de la ficha lleva el color del interés (pantalla 06),
    con la misma variable CSS de la tarjeta — desde paleta.json, vía Python. #}
 <aside class="panel-der" role="dialog" aria-label="Ficha del lead"{% if abierta.interes_color %} style="--dc-interes:{{ abierta.interes_color }}"{% endif %}>
+{# La cotización conectada se lee arriba (y no dentro del «Ver más»):
+   el pie del panel la necesita para el monto del botón negro. #}
+{% set cot = abierta.cot %}
   {# La cabecera del lienzo (06/22): el nombre primero, y debajo la línea
      con el chip del interés y «LEAD-NN · llegó por Origen» — el origen
      dejó de ser fila de Datos, ahora vive aquí. #}
@@ -99,6 +102,22 @@
     {% endfor %}
   </div>
 
+  {# --- «Ver más» (BLOQUE 53 · A16): el panel se queda con lo del lienzo
+         —cabecera, monto, las CINCO filas y el botón negro del pie— y
+         TODO lo demás se pliega acá. No se borró nada: Espera, Teléfono,
+         Llegó, Issue, Acciones, Señales, la cotización, la Conversación,
+         las notas internas, Linear y «Más opciones» siguen vivos y en el
+         mismo orden, un toque más abajo.
+
+         Es un <details> nativo, cero JS: abrirlo a mano no recarga nada.
+         Llega ABIERTO (`ver_mas`) cuando se entra por una de las tres
+         filas que apuntan adentro (Último mensaje, Cotización,
+         Historial): esas filas viajan con ?ver_mas=1 y su ancla, porque
+         un ancla sola no abre un <details> cerrado en todos los
+         navegadores. --- #}
+  <details class="dc-vermas"{% if ver_mas %} open{% endif %}>
+  <summary>Ver más</summary>
+
   {# Los datos que las cinco filas no cuentan. El responsable salió de
      aquí: lo dice la fila «Lo atiende», que además abre el cuadro de
      asignar — repetirlo dos veces en la misma pantalla era ruido. #}
@@ -108,7 +127,10 @@
     {% endif %}
     {% if abierta.celular %}<div class="dato"><b>Teléfono</b><span class="mono">{{ abierta.celular }}</span></div>{% endif %}
     <div class="dato"><b>Llegó</b><span>{{ abierta.hace }}</span></div>
-    <div class="dato"><b>Issue</b><span class="mono">{{ abierta.ref }}{% if abierta.pp %} · {{ abierta.pp }}{% endif %}</span></div>
+    {# A10: la etiqueta decía «Issue» (jerga de Linear). Los CÓDIGOS se
+       quedan: LEAD-NN y PP-NNNNN son con lo que el equipo encuentra a la
+       misma persona entre sistemas. #}
+    <div class="dato"><b>Códigos</b><span class="mono">{{ abierta.ref }}{% if abierta.pp %} · {{ abierta.pp }}{% endif %}</span></div>
   </div>
 
   {# --- Qué hago, en DOS grupos con titulito (F3, 29/09/2026, maqueta
@@ -200,7 +222,6 @@
   {# `display:contents`, así que el ancla de la fila «Cotización» no
      cambia ni un píxel del layout de la columna. #}
   <div id="dc-cotizacion" class="dc-seccion">
-  {% set cot = abierta.cot %}
   {% if not cot.ok %}
   <div class="ficha-cot-vacia">No se pudo leer Odoo: {{ cot.error }}</div>
   {% else %}
@@ -292,6 +313,9 @@
       <form method="get" action="/control" class="campo-caja" style="flex-direction:row;gap:6px">
         <input type="hidden" name="vista" value="{{ vista }}">
         <input type="hidden" name="abrir" value="{{ abierta.ref }}">
+        {# Buscar no cierra el «Ver más»: la búsqueda pasa por el servidor
+           y sin esto la capa volvería plegada, con el resultado adentro. #}
+        <input type="hidden" name="ver_mas" value="1">
         <input class="campo" type="text" name="buscar" value="{{ cot.buscar }}"
                placeholder="Buscar por número, ej. S00089" maxlength="40" autocomplete="off">
         <button class="btn chico" type="submit">Buscar</button>
@@ -360,35 +384,6 @@
     {% endif %}
   </div>
 
-  {# El pie de la ficha de los DOS lienzos (06/22 y «crm-lead-abierto»):
-     el botón grande de cobrar y, debajo, el enlace chico «Ver contacto».
-     Cobrar NO es una acción de Control —el pago se registra en Odoo y de
-     ahí baja el estado— así que va APAGADO con su «Todavía no», pero se
-     pinta SIEMPRE: el lugar es del diseño, y esconderlo cuando no hay
-     plata dejaba el pie del panel vacío.
-
-     El monto, en cambio, solo aparece cuando se sabe: es el SALDO REAL
-     de la orden real (cot_lead) y solo para quien puede ver la plata de
-     este lead. Sin saldo conocido el botón dice «Cobrar» a secas —
-     jamás un $0.00 de ejemplo. #}
-  <div class="dc-pie">
-    {% if cot.ok and cot.plata and cot.plata.saldo and abierta.ve_plata %}
-    <button class="btn dc-apagado" type="button" disabled
-            title="El cobro se registra en Odoo">Cobrar saldo {{ cot.plata.saldo | dinero }} — Todavía no</button>
-    {% else %}
-    <button class="btn dc-apagado" type="button" disabled
-            title="El cobro se registra en Odoo">Cobrar — Todavía no</button>
-    {% endif %}
-    {# «Ver contacto» del lienzo: la ficha de Contactos casa por teléfono
-       EN LECTURA, así que el camino honesto es su buscador con el celular
-       puesto — siempre resuelve, y cae en el contacto si existe. Sin
-       teléfono no hay por dónde buscar: entonces va apagado. #}
-    {% if abierta.celular %}
-    <a class="dc-lk" href="/contactos?q={{ abierta.celular | urlencode }}">Ver contacto</a>
-    {% else %}
-    <span class="dc-lk dc-lk-off" title="Este lead no tiene teléfono: no hay por dónde buscarlo">Ver contacto — Todavía no</span>
-    {% endif %}
-  </div>
   {% if abierta.url %}
   <div class="acciones">
     <a class="btn" href="{{ abierta.url }}" target="_blank" rel="noopener">Linear ↗</a>
@@ -425,8 +420,10 @@
       {% for r in responsables %}{% if r != abierta.resp %}
       <form method="post" action="/control/responsable?vista={{ vista }}">
         <input type="hidden" name="ref" value="{{ abierta.ref }}">
+        {# El `value` va con el nombre de la etiqueta `Resp:` de Linear;
+           el botón se LEE como se escribe el nombre (A15). #}
         <input type="hidden" name="resp" value="{{ r }}">
-        <button class="btn" type="submit">→ {{ r }}</button>
+        <button class="btn" type="submit">→ {{ r | nombre_visible }}</button>
       </form>
       {% endif %}{% endfor %}
       {% if abierta.resp %}
@@ -437,8 +434,8 @@
       </form>
       {% endif %}
     </div>
-    <p class="pie-nota">El responsable es la etiqueta <b>Resp:</b> del issue, no
-      el asignado: los empleados no tienen asiento de Linear.</p>
+    <p class="pie-nota">El responsable es la etiqueta <b>Resp:</b> de la tarjeta
+      de Linear, no el asignado: los empleados no tienen asiento de Linear.</p>
   </div>
 
   {# Corregir el estado a mano: pasa por el modal del motivo. #}
@@ -450,18 +447,51 @@
       {% endif %}{% endfor %}
     </div>
     <p class="pie-nota">Solo para arreglar un error: el embudo se mueve solo.
-      Pide el motivo y queda anotado en el issue, con tu nombre.</p>
+      Pide el motivo y queda anotado en la tarjeta de Linear, con tu nombre.</p>
   </div>
   </details>
   {% else %}
   <div class="solo-lectura">
     {% if modo == 'lectura' %}
-      <b>Solo lectura.</b> Esta instancia mira el tablero real pero no escribe.
+      <b>Solo lectura.</b> Acá se mira el tablero real, pero no se escribe nada.
     {% else %}
       <b>No es tuyo.</b> Este lead es de {{ abierta.resp_titulo }}: lo ves para
       coordinarte, pero lo mueve {{ abierta.resp_titulo }} o el dueño.
     {% endif %}
   </div>
   {% endif %}
+  </details>
+  {# --- Fin del «Ver más». De aquí abajo, el PIE del panel: lo del
+         lienzo, y siempre a la vista. --- #}
+
+  {# El pie de la ficha de los DOS lienzos (06/22 y «crm-lead-abierto»):
+     el botón grande de cobrar y, debajo, el enlace chico «Ver contacto».
+     Cobrar NO es una acción de Control —el pago se registra en Odoo y de
+     ahí baja el estado— así que va APAGADO con su «Todavía no», pero se
+     pinta SIEMPRE: el lugar es del diseño, y esconderlo cuando no hay
+     plata dejaba el pie del panel vacío.
+
+     El monto, en cambio, solo aparece cuando se sabe: es el SALDO REAL
+     de la orden real (cot_lead) y solo para quien puede ver la plata de
+     este lead. Sin saldo conocido el botón dice «Cobrar» a secas —
+     jamás un $0.00 de ejemplo. #}
+  <div class="dc-pie">
+    {% if cot.ok and cot.plata and cot.plata.saldo and abierta.ve_plata %}
+    <button class="btn dc-apagado" type="button" disabled
+            title="El cobro se registra en Odoo">Cobrar saldo {{ cot.plata.saldo | dinero }} — Todavía no</button>
+    {% else %}
+    <button class="btn dc-apagado" type="button" disabled
+            title="El cobro se registra en Odoo">Cobrar — Todavía no</button>
+    {% endif %}
+    {# «Ver contacto» del lienzo: la ficha de Contactos casa por teléfono
+       EN LECTURA, así que el camino honesto es su buscador con el celular
+       puesto — siempre resuelve, y cae en el contacto si existe. Sin
+       teléfono no hay por dónde buscar: entonces va apagado. #}
+    {% if abierta.celular %}
+    <a class="dc-lk" href="/contactos?q={{ abierta.celular | urlencode }}">Ver contacto</a>
+    {% else %}
+    <span class="dc-lk dc-lk-off" title="Este lead no tiene teléfono: no hay por dónde buscarlo">Ver contacto — Todavía no</span>
+    {% endif %}
+  </div>
 </aside>
 {% endif %}

@@ -45,8 +45,15 @@ DEBERES = {
         "que_hace": "reporta lo que entró al banco y ve la operación y el top line",
     },
     "owner_view": {
+        # El TÍTULO no se toca: «Owner view» y «System manager» son los
+        # nombres de los deberes del decision record de Jay, y además son
+        # el nombre del rol sembrado en la base. Renombrarlos es decisión
+        # suya (queda listado como dudoso en el BLOQUE 53 · A10).
         "titulo": "Owner view",
-        "que_hace": "ve todas las capas: respuestas, tono, pipeline",
+        # Lo que SÍ se cambió: «capas» y «pipeline» eran palabras de
+        # programador; este deber lo que hace es VER todo.
+        "que_hace": "ve todo: las respuestas, el trato y el embudo "
+                    "completo",
     },
 }
 

@@ -412,7 +412,11 @@ def _tarjeta(lead):
         "estado_chip": estado.get("chip") or "",
         "motivo_chip": (linear_leads.chip_de_motivo(lead["motivo_clave"])
                         if lead.get("motivo_clave") else ""),
-        "resp_titulo": lead.get("resp") or SIN_ASIGNAR,
+        # `resp` es el DATO (la etiqueta `Resp:` de Linear, con la que
+        # casa todo); `resp_titulo` es cómo se escribe en pantalla — y
+        # «Mary» se escribe «Mari» (BLOQUE 53 · A15).
+        "resp_titulo": linear_leads.nombre_visible(lead.get("resp"))
+                       or SIN_ASIGNAR,
         "hace_alerta": hace_alerta(lead.get("dias")),
         # Diseño Orquesta (2/10/2026): el color del interés sale de
         # paleta.json (colores.py), nunca de un hex en la plantilla. Sin
@@ -494,8 +498,11 @@ def tablero_por_empleado(leads=None, alcance_actual=None):
     columnas = [{"clave": "", "titulo": SIN_ASIGNAR,
                  "pie": "Nadie los tiene: repártelos."}]
     for nombre in linear_leads.responsables():
-        columnas.append({"clave": nombre, "titulo": nombre,
-                         "pie": f"Lo que le toca a {nombre}."})
+        # `clave` es el dato (con él se filtra y se escribe la etiqueta);
+        # el título y el pie se escriben como se lee el nombre (A15).
+        visible = linear_leads.nombre_visible(nombre)
+        columnas.append({"clave": nombre, "titulo": visible,
+                         "pie": f"Lo que le toca a {visible}."})
     for columna in columnas:
         columna["leads"] = _orden_columna(
             [l for l in leads if (l["resp"] or "") == columna["clave"]])
@@ -578,7 +585,11 @@ def filtros_ver(leads, ver, vista):
     chips = [{"clave": "", "titulo": "Todos", "cuenta": None,
               "on": ver == "", "href": liga("")}]
     for nombre in linear_leads.responsables():
-        chips.append({"clave": nombre, "titulo": nombre, "cuenta": None,
+        # El chip LEE «Mari» y FILTRA por «Mary» (A15): el nombre crudo
+        # es el de la etiqueta `Resp:` y es con el que casa el filtro.
+        chips.append({"clave": nombre,
+                      "titulo": linear_leads.nombre_visible(nombre),
+                      "cuenta": None,
                       "on": ver == nombre, "href": liga(nombre)})
     chips.append({"clave": VER_SIN_ASIGNAR, "titulo": SIN_ASIGNAR,
                   "cuenta": sin_dueno, "on": ver == VER_SIN_ASIGNAR,
@@ -1123,16 +1134,36 @@ def _fila(clave, etiqueta, valor, detalle="", href="", inicial="",
             "todavia_no": todavia_no, "alerta": alerta}
 
 
+# El «Ver más» del panel (BLOQUE 53 · A16): abajo de las cinco filas y el
+# botón negro, todo lo demás vive plegado. Tres de las cinco filas apuntan
+# a secciones que quedaron ADENTRO del pliegue, así que su destino deja de
+# ser un ancla a secas y pasa a ser la MISMA pantalla con la capa abierta
+# (?ver_mas=1) más el ancla: así el servidor manda el <details> ya abierto
+# y el navegador baja a la sección. Cero JS — un `details` cerrado no se
+# abre solo por un ancla en todos los navegadores, y fingir que sí dejaría
+# filas que no llevan a ninguna parte.
+CLAVE_VER_MAS = "ver_mas"
+
+
+def liga_ver_mas(ref, vista, ancla=""):
+    """La pantalla del panel con el «Ver más» abierto, y el ancla si se
+    pide. La arma Python (regla 10): la plantilla no concatena URLs."""
+    url = ("/control?vista=" + quote(vista or "estado") + "&abrir="
+           + quote(ref or "") + "&" + CLAVE_VER_MAS + "=1")
+    return url + ancla
+
+
 def _fila_atiende(abierta, vista):
     """Quién lo atiende: la etiqueta `Resp:` del issue, el único lugar
     donde vive el responsable (nunca el `assignee`). La fila entera abre
     el cuadro de asignar/reasignar."""
     resp = abierta.get("resp") or ""
+    visible = linear_leads.nombre_visible(resp)   # A15: «Mary» se lee «Mari»
     destino = ("/control?vista=" + quote(vista or "estado")
                + "&abrir=" + quote(abierta["ref"]) + "&asignar=1")
-    return _fila("atiende", "Lo atiende", resp or SIN_ASIGNAR,
+    return _fila("atiende", "Lo atiende", visible or SIN_ASIGNAR,
                  detalle="" if resp else "Nadie lo tiene todavía",
-                 href=destino, inicial=resp[:1].upper() if resp else "",
+                 href=destino, inicial=visible[:1].upper() if visible else "",
                  alerta=not resp)
 
 
@@ -1155,7 +1186,8 @@ def _fila_seguimiento(abierta):
                  todavia_no="Todavía no")
 
 
-def _fila_ultimo_mensaje(abierta, mensajes, nombre_cliente, sin_twenty=False):
+def _fila_ultimo_mensaje(abierta, mensajes, nombre_cliente, sin_twenty=False,
+                         destino="#dc-conversacion"):
     """Lo último que se dijo en el chat, tal cual lo tiene Twenty.
 
     Tres cosas distintas que la fila NO mezcla: Twenty caído (Nº12 del
@@ -1163,19 +1195,23 @@ def _fila_ultimo_mensaje(abierta, mensajes, nombre_cliente, sin_twenty=False):
     instancia (el 8095, con los tokens neutralizados) y un lead que de
     verdad no tiene un solo mensaje. Decir «sin mensajes» en los dos
     primeros casos sería inventar una respuesta.
+
+    `destino` es a dónde lleva la fila: desde A16 la conversación vive
+    detrás del «Ver más», así que `ficha()` le pasa la liga que abre esa
+    capa y baja al hilo.
     """
     if abierta.get("hilo_error"):
         return _fila("mensaje", "Último mensaje", abierta["hilo_error"],
-                     href="#dc-conversacion")
+                     href=destino)
     if sin_twenty:
         return _fila("mensaje", "Último mensaje",
                      "Twenty no está conectado en esta instancia",
                      detalle="La conversación vive allá; acá no se puede leer.",
-                     href="#dc-conversacion")
+                     href=destino)
     ultimo = max(mensajes, key=lambda m: m.get("fecha") or "") if mensajes else None
     if ultimo is None:
         return _fila("mensaje", "Último mensaje", "Sin mensajes todavía",
-                     href="#dc-conversacion")
+                     href=destino)
     if ultimo.get("salida"):
         quien = (ultimo.get("autor") or "").strip() or SIN_AUTOR
     else:
@@ -1184,16 +1220,17 @@ def _fila_ultimo_mensaje(abierta, mensajes, nombre_cliente, sin_twenty=False):
     return _fila("mensaje", "Último mensaje",
                  "«" + _recortado(ultimo.get("texto") or "") + "»",
                  detalle=quien + (" · " + cuando if cuando else ""),
-                 href="#dc-conversacion")
+                 href=destino)
 
 
-def _fila_cotizacion(cot, ve_plata):
+def _fila_cotizacion(cot, ve_plata, destino="#dc-cotizacion"):
     """La cotización conectada: el número de la orden REAL y su plata.
     Sin orden real no hay monto; con Odoo caído se dice, en vez de pasar
-    por «sin cotización»."""
+    por «sin cotización». `destino` como en la fila del mensaje: desde
+    A16 la sección vive detrás del «Ver más»."""
     if not cot.get("ok"):
         return _fila("cotizacion", "Cotización", "No se pudo leer Odoo",
-                     detalle=cot.get("error") or "", href="#dc-cotizacion")
+                     detalle=cot.get("error") or "", href=destino)
     plata = cot.get("plata")
     if plata:
         if ve_plata:
@@ -1202,30 +1239,31 @@ def _fila_cotizacion(cot, ve_plata):
         else:
             detalle = LEYENDA_SIN_PLATA
         return _fila("cotizacion", "Cotización", plata["orden"],
-                     detalle=detalle, href="#dc-cotizacion")
+                     detalle=detalle, href=destino)
     conectadas = cot.get("ordenes") or []
     if conectadas:
         return _fila("cotizacion", "Cotización",
                      f"{len(conectadas)} conectada"
                      + ("s" if len(conectadas) != 1 else ""),
                      detalle="Ninguna marcada como la real.",
-                     href="#dc-cotizacion", alerta=True)
+                     href=destino, alerta=True)
     return _fila("cotizacion", "Cotización", "Sin cotización conectada",
-                 href="#dc-cotizacion")
+                 href=destino)
 
 
-def _fila_historial(abierta, cuantos, ultimo):
+def _fila_historial(abierta, cuantos, ultimo, destino="#dc-notas"):
     """El historial del lead son los comentarios de su issue: cada
     corrección manual, cada cotización conectada y cada nota firmada deja
     uno. La fila lleva a Linear, que es donde viven de verdad; sin URL
-    (modo muestra) cae en las notas internas de esta misma ficha."""
+    (modo muestra) cae en las notas internas de esta misma ficha, que
+    desde A16 están detrás del «Ver más» (de ahí el `destino`)."""
     if not cuantos:
         return _fila("historial", "Historial", "Sin movimientos anotados",
-                     href=abierta.get("url") or "#dc-notas")
+                     href=abierta.get("url") or destino)
     return _fila("historial", "Historial",
                  f"{cuantos} movimiento" + ("s" if cuantos != 1 else ""),
                  detalle=("Último: " + ultimo) if ultimo else "",
-                 href=abierta.get("url") or "#dc-notas")
+                 href=abierta.get("url") or destino)
 
 
 def _monto_del_panel(cot, ve_plata):
@@ -1330,13 +1368,23 @@ def ficha(ref, buscar_cotizacion="", vista="", ve_plata=True):
     # usa el hilo. Si no se pudo leer la fecha queda lo crudo, nunca una
     # fecha inventada.
     ultimo_apunte = crm_twenty.dia_legible(crudo) or crudo
+    # Las tres secciones que viven detrás del «Ver más» (A16) se alcanzan
+    # con la liga que ABRE esa capa y baja al ancla — nunca con un ancla
+    # suelta a un <details> cerrado.
+    ref_abierta = lead["ref"]
     abierta["filas"] = [
         _fila_atiende(abierta, vista),
         _fila_seguimiento(abierta),
         _fila_ultimo_mensaje(abierta, mensajes, lead.get("nombre") or "",
-                             sin_twenty=sin_twenty),
-        _fila_cotizacion(abierta["cot"], ve_plata),
-        _fila_historial(abierta, len(historial), ultimo_apunte),
+                             sin_twenty=sin_twenty,
+                             destino=liga_ver_mas(ref_abierta, vista,
+                                                  "#dc-conversacion")),
+        _fila_cotizacion(abierta["cot"], ve_plata,
+                         destino=liga_ver_mas(ref_abierta, vista,
+                                              "#dc-cotizacion")),
+        _fila_historial(abierta, len(historial), ultimo_apunte,
+                        destino=liga_ver_mas(ref_abierta, vista,
+                                             "#dc-notas")),
     ]
     return abierta
 
@@ -1372,9 +1420,13 @@ def cuadro_asignar(abierta, leads=None):
     gente = []
     for nombre in linear_leads.responsables():
         cuantos = abiertos.get(nombre, 0)
+        visible = linear_leads.nombre_visible(nombre)   # A15
         gente.append({
-            "nombre": nombre,
-            "inicial": nombre[:1].upper(),
+            # `clave` es el dato de la etiqueta `Resp:`; `nombre` es cómo
+            # se escribe en pantalla.
+            "clave": nombre,
+            "nombre": visible,
+            "inicial": visible[:1].upper(),
             "actual": nombre == actual,
             "abiertos": cuantos,
             "detalle": (f"{cuantos} lead" + ("s" if cuantos != 1 else "")

@@ -12,7 +12,7 @@ from datetime import datetime
 
 import pytest
 
-from app import cotizaciones, ventas
+from app import cotizaciones, venta_estado, ventas
 from app.datos import ZONA_PANAMA, _db
 
 
@@ -161,12 +161,16 @@ def test_la_linea_contextual_la_decide_python(cliente, odoo):
 
 
 def test_el_panel_muestra_los_chips_y_el_estado3(cliente, odoo):
-    """Los chips que la tarjeta vieja mostraba («Cotización», «1 ·
-    Acordada» con su enlace a /venta/estado) viven ahora en el panel."""
+    """Los chips que la tarjeta vieja mostraba («Cotización» y el de los
+    tres estados, con su enlace a /venta/estado) viven ahora en el panel.
+    El chip del estado dejó de llevar el número delante (BLOQUE 53 ·
+    A10): dice qué falta, que es lo que la persona necesita."""
     n = _insertar_venta(515, "S00076", cliente="ConChips")
     pagina = cliente.get(f"/venta?abrir=v{n}").text
     assert '<span class="vd-chip">Cotización</span>' in pagina
-    assert "1 · Acordada" in pagina
+    assert venta_estado.ETIQUETA_CORTA[1] in pagina
+    assert "Falta el pago" in pagina        # y en palabras, no "1 · …"
+    assert "1 · Acordada" not in pagina
     assert f'href="/venta/estado/venta/{n}"' in pagina
 
 

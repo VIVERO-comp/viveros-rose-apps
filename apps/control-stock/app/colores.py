@@ -245,3 +245,49 @@ def color_interes(nombre):
 def chip_interes(nombre):
     """El chip pastel del interes (gris si no se conoce)."""
     return chip_estilo(familia_interes(nombre) or "gray")
+
+
+# ---------------------------------------------------------------------------
+# Los TIPOS DE VENTA del catalogo (datos_roles.tipos_venta) en palabras de
+# la casa. El catalogo guarda el vocabulario del decision record de Jay, en
+# ingles ("plant retail", "garden"...): es un DATO y no se reescribe. La
+# traduccion a lo que la empleada lee vive aqui, en Python (BLOQUE 53 · A9 y
+# A10), y cae en las 5 etiquetas de Interes de la casa cuando el tipo tiene
+# una — asi el chip y la raya de la tarjeta salen de la MISMA paleta que ya
+# usa el CRM, sin una sola clave nueva.
+#
+# Un tipo que no este en el mapa se muestra TAL CUAL: los tipos que Abraham
+# agregue a mano en Ajustes ya vienen en sus palabras, y jamas se inventa
+# una traduccion. Los tres que no caen en un Interes (PH, el proyecto
+# comercial y "otro") quedan con chip neutro a proposito: darles un color
+# seria clasificarlos, y eso lo decide el negocio.
+# ---------------------------------------------------------------------------
+
+NOMBRE_TIPO_VENTA = {
+    "plant retail": "Plantas",
+    "garden": "Paisajismo",
+    "maintenance": "Mantenimiento",
+    "rental event": "Eventos",
+    "commercial project": "Proyecto comercial",
+    "other": "Otro",
+    # "PH" se queda "PH": ya es la palabra de la casa.
+}
+
+
+def nombre_tipo_venta(nombre):
+    """El tipo de venta en palabras de la casa, o tal cual si no hay
+    traduccion. Nunca devuelve None: sin tipo, cadena vacia."""
+    crudo = (nombre or "").strip()
+    return NOMBRE_TIPO_VENTA.get(crudo.lower(), crudo)
+
+
+def chip_tipo_venta(nombre):
+    """El chip del tipo de venta: pastel de su Interes, gris si el tipo no
+    cae en ninguno. Recibe el nombre CRUDO del catalogo."""
+    return chip_interes(nombre_tipo_venta(nombre))
+
+
+def acento_tipo_venta(nombre):
+    """La raya de color de la izquierda de la tarjeta, o "" si el tipo no
+    cae en un Interes (la tarjeta queda neutra). Nombre CRUDO."""
+    return color_interes(nombre_tipo_venta(nombre))
