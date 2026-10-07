@@ -30,9 +30,6 @@
 /* El margen del contenido es del MARCO (BLOQUE 54, G1): sin esto, esta
    pantalla se quedaba con los 20px de calendario.css y su encabezado
    caía 8px a la izquierda del de las otras diez. */
-@media (min-width:900px){
-  .tablero{padding:18px 28px 24px;gap:12px}
-}
 
 /* ---------- las tarjetas y las dos columnas ----------
    A1 (BLOQUE 53): el reparto lo decide el LIENZO (@container), no la

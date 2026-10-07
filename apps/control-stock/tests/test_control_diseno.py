@@ -53,10 +53,13 @@ def test_la_pantalla_se_llama_crm_y_el_programa_sigue_siendo_control(
     # PROGRAMA se sigue llamando Control Viverorose — la ruta /control no
     # cambió.
     cuerpo = cliente.get("/control", params={"vista": "estado"}).text
-    assert "<h3>CRM</h3>" in cuerpo
-    assert '<span class="dc-marca">Todos</span>' in cuerpo
+    # BLOQUE 54, G1: el título y la hamburguesa ya no los escribe cada
+    # plantilla — salen del encabezado único (`_cabecera.html`). La
+    # sustancia es la MISMA; cambia dónde se lee.
+    assert ">CRM</h1>" in cuerpo
+    assert '<span class="cab-chip">Todos</span>' in cuerpo
     assert "<title>CRM — Control Viverorose</title>" in cuerpo
-    assert "<h3>Control</h3>" not in cuerpo
+    assert ">Control</h1>" not in cuerpo
 
 
 def test_la_marca_dice_de_quien_es_el_tablero_no_solo_que_es_del_director(
@@ -69,10 +72,13 @@ def test_la_marca_dice_de_quien_es_el_tablero_no_solo_que_es_del_director(
     # dueña: ve el tablero completo (lo de siempre), pero su marca tiene
     # que decirle que solo mueve lo suyo.
     cuerpo = cliente.get("/control", params={"vista": "estado"}).text
-    assert "<h3>CRM</h3>" in cuerpo
-    assert "dc-marca" in cuerpo
+    # BLOQUE 54, G1: el título y la hamburguesa ya no los escribe cada
+    # plantilla — salen del encabezado único (`_cabecera.html`). La
+    # sustancia es la MISMA; cambia dónde se lee.
+    assert ">CRM</h1>" in cuerpo
+    assert "cab-chip" in cuerpo
     assert "movés solo lo tuyo" in cuerpo
-    assert '<span class="dc-marca">Todos</span>' not in cuerpo
+    assert '<span class="cab-chip">Todos</span>' not in cuerpo
 
 
 def test_la_piel_nueva_se_carga_despues_de_la_base(cliente, de_dueno):
@@ -84,8 +90,9 @@ def test_la_piel_nueva_se_carga_despues_de_la_base(cliente, de_dueno):
 
 def test_el_tablero_conserva_sus_piezas(cliente, de_dueno):
     cuerpo = cliente.get("/control", params={"vista": "estado"}).text
-    # La hamburguesa y el segmento de vistas.
-    assert 'class="btn icono hamb"' in cuerpo
+    # La hamburguesa (del encabezado único desde el BLOQUE 54) y el
+    # segmento de vistas.
+    assert 'class="hamb"' in cuerpo
     assert "Por estado" in cuerpo and "Por empleado" in cuerpo
     # Las 9 columnas con su conteo y su pie de quién las mueve.
     for estado in linear_leads.ESTADOS:

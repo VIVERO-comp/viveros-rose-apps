@@ -92,9 +92,6 @@ body{font-size:15px}
 
 /* ==================== el lienzo y la columna derecha =================== */
 
-@media (min-width:900px){
-  .tablero{padding:18px 28px 24px;gap:12px}
-}
 /* A2 (BLOQUE 53): el ancho de la columna derecha lo decide el LIENZO.
    Con menos de 940px de lienzo —p. ej. una ventana de 1024 con el menú
    abierto, que deja 784— el calendario se quedaba a media pantalla y las

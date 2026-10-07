@@ -53,8 +53,9 @@ def test_la_barra_conserva_todas_sus_acciones(cliente):
     assert "terminadas" in cuerpo
     assert "⟳ Volver a preguntarle a Linear" in cuerpo
     assert "+ Nueva actividad" in cuerpo
-    # La hamburguesa del menú sigue.
-    assert 'class="btn icono hamb"' in cuerpo
+    # La hamburguesa del menú sigue (BLOQUE 54, G1: la pinta el
+    # encabezado único, `_cabecera.html`, no esta plantilla).
+    assert 'class="hamb"' in cuerpo
 
 
 def test_los_filtros_son_chips_bajo_la_barra(cliente):

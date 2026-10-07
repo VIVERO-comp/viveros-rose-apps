@@ -174,9 +174,9 @@ def test_ninguna_otra_hoja_vuelve_a_escribir_el_marco():
 
 def test_la_escala_de_anchos_es_una_sola():
     """A1: las decisiones de layout se toman sobre el LIENZO (@container)
-    y con los escalones de la escala compartida — 560, 860, 940 y 1180.
+    y con los escalones de la escala compartida — 560, 860, 940 y 1120.
     Un número nuevo ahí es una escala paralela."""
-    escalones = {"560px", "860px", "940px", "939.98px", "1180px",
+    escalones = {"560px", "860px", "940px", "939.98px", "1120px",
                  "699.98px", "559.98px"}
     sueltos = {}
     for hoja in sorted(ESTATICOS.glob("*.css")):

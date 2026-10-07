@@ -26,7 +26,6 @@
 /* El margen del contenido es del MARCO (BLOQUE 54, G1) y solo vale en
    computadora: sin la media query, en tablet esta pestaña quedaba 16px
    corrida respecto de Calendario y del CRM. */
-@media (min-width:900px){body.pvd .tablero{padding:18px 28px 24px;gap:12px}}
 body.pvd .barra{gap:12px}
 body.pvd .barra .hamb{
   width:44px;height:44px;justify-content:center;padding:0;
