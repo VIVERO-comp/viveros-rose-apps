@@ -664,7 +664,7 @@ def test_contrato_exacto_de_informe_datos(odoo):
     venta = datos["ventas"][0]
     assert set(venta) == {
         "orden_id", "nombre", "cliente", "telefono", "fecha", "total",
-        "pagado", "debe", "clase", "motivo", "marca_prueba",
+        "pagado", "debe", "clase", "motivo", "marca_prueba", "confirmada",
         "entregado_odoo", "entregado_calendario", "historica",
         "fuentes_odoo", "fuentes_otras"}
     # `fecha` es el `date_order` crudo de Odoo (7/10/2026): la cola de
@@ -680,6 +680,29 @@ def test_contrato_exacto_de_informe_datos(odoo):
         "nombre", "cliente", "monto", "estado", "creado_por", "sospecha",
         "historica"}
     assert isinstance(hoy_creado["total_ordenes"], float)
+
+
+def test_confirmada_sale_del_state_no_de_la_clase(odoo):
+    """BLOQUE 59.2: Finanzas suma solo ventas CONFIRMADAS, y el sí/no NO
+    se puede deducir de la clase A–H. Medido el 7/10 en el Odoo de pruebas:
+    de 5 filas en clase F, 1 era `sale` y 4 `draft`. Por eso el contrato
+    lleva su propio campo."""
+    etapas = odoo.con_etapas_flujo()
+    p = odoo.agregar_partner("Frontera", "6199-1111")
+    odoo.agregar_orden(p, "S00301", state="draft", amount_total=100.0)
+    odoo.agregar_orden(p, "S00302", state="sale", amount_total=200.0)
+    # Dos clase F (etapa manual «pagado» y $0 en Odoo), una de cada lado:
+    # la clase es la MISMA y `confirmada` no.
+    odoo.agregar_orden(p, "S00303", state="draft", amount_total=50.0,
+                       oportunidad=odoo.agregar_oportunidad(etapas["pagado"]))
+    odoo.agregar_orden(p, "S00304", state="sale", amount_total=60.0,
+                       oportunidad=odoo.agregar_oportunidad(etapas["pagado"]))
+    filas = _ventas_por_nombre(reconciliacion.informe_datos())
+    assert filas["S00301"]["confirmada"] is False
+    assert filas["S00302"]["confirmada"] is True
+    assert filas["S00303"]["clase"] == filas["S00304"]["clase"] == "F"
+    assert filas["S00303"]["confirmada"] is False
+    assert filas["S00304"]["confirmada"] is True
 
 
 def test_rojo_suma_f_g_h(odoo, monkeypatch):
@@ -782,6 +805,31 @@ def test_las_ordenes_internas_quedan_fuera_del_informe_y_de_creado_hoy(odoo):
     assert datos_informe["contadores"]["A"] == 1
     assert datos_informe["creado_hoy"]["ordenes"] == []
     assert datos_informe["creado_hoy"]["total_ordenes"] == 0.0
+
+
+def test_una_orden_de_utileria_CONFIRMADA_tampoco_entra(odoo):
+    """El caso de los $990 (7/10/2026). En producción hay DOS órdenes de
+    utilería de la vista previa de Vender —S00137 $190 y S00093 $800, las
+    dos `draft`— y por eso el desvío entre dos mediciones era de $990
+    clavados en «Vendido» y en «Por cobrar» a la vez.
+
+    Hoy las dos son borradores, así que el universo de ventas confirmadas
+    no las ve de ninguna manera. Pero la orden de la vista previa es FIJA
+    y se reusa: si alguna vez quedara confirmada, entraría derecho a
+    «Vendido» y falsearía el cuadre. El filtro de `client_order_ref` es
+    el que lo impide, y no depende del estado. Esto lo fija."""
+    comodin = odoo.agregar_partner("Comodín", "6000-0001")
+    odoo.agregar_orden(comodin, "S00310", state="sale", amount_total=190.0,
+                       client_order_ref="VISTA PREVIA abraham")
+    odoo.agregar_orden(comodin, "S00311", state="done", amount_total=800.0,
+                       client_order_ref="MUESTRA-PDF")
+    real = odoo.agregar_partner("Clienta Real", "6111-4444")
+    odoo.agregar_orden(real, "S00312", state="sale", amount_total=50.0)
+    filas = reconciliacion.informe_datos()["ventas"]
+    assert [v["nombre"] for v in filas] == ["S00312"]
+    # La que queda sí es confirmada: el filtro saca la utilería, no las
+    # ventas de verdad.
+    assert filas[0]["confirmada"] is True
 
 
 def test_limite_de_creado_hoy_es_la_medianoche_de_panama(odoo):

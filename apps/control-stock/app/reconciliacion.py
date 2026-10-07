@@ -733,7 +733,11 @@ def informe_datos():
       fecha (`date_order` de Odoo tal cual, "AAAA-MM-DD HH:MM:SS", o "" si
       la orden no la trae — NUNCA la de hoy: una fecha inventada es peor
       que ninguna),
-      total, pagado, debe, clase, motivo, marca_prueba, entregado_odoo,
+      total, pagado, debe, clase, motivo, marca_prueba,
+      confirmada (True si la orden está en `sale`/`done`; False mientras
+      sea cotización en `draft`/`sent`. NO se puede deducir de la clase:
+      F, G y H caen de los dos lados. En las CANCELADAS va False),
+      entregado_odoo,
       entregado_calendario (True/False/None = sin datos), historica
       (True solo para la tanda cerrada `ORDENES_HISTORICAS`: ventas
       viejas registradas tarde el 1/10, con la clase intacta y el motivo
@@ -923,6 +927,14 @@ def informe_datos():
             "nombre": orden.get("name") or "",
             "cliente": cliente,
             "telefono": p["telefono"],
+            # ¿Es una VENTA CONFIRMADA o todavía una cotización? La clase
+            # A–H no sirve para preguntarlo: F, G y H caen de los dos lados
+            # (medido el 7/10 en el Odoo de pruebas: de 5 filas en clase F,
+            # 1 era `sale` y 4 `draft`). Por eso el estado de la orden viaja
+            # como un sí/no de negocio — Finanzas lo necesita para sumar
+            # SOLO ventas confirmadas (BLOQUE 59.2), y acá es el único lugar
+            # donde el `state` de Odoo está en la mano.
+            "confirmada": (orden.get("state") or "") in ("sale", "done"),
             # La fecha de la venta, cruda de Odoo. Ya se leía (`date_order`
             # está en CAMPOS_VENTA, es lo que ordena el universo) pero se
             # quedaba adentro: la cola de pagos no tenía cómo decir DE

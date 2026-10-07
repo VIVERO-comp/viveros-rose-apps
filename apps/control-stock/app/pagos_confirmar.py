@@ -38,6 +38,11 @@ EVIDENCIAS = {
     "reporte_operaciones": "Reporte de operaciones (llegó al banco)",
 }
 
+# Una evidencia que no está en EVIDENCIAS (una fila vieja, o una que
+# alguien agregue sin pasar por acá): se MUESTRA con su propio renglón,
+# nunca se reparte entre las conocidas ni se descuenta del total.
+TEXTO_EVIDENCIA_DESCONOCIDA = "Sin clasificar: la evidencia no se reconoce"
+
 # Centavos de tolerancia al decidir si el saldo quedó en 0.
 _CENTAVO = 0.009
 
@@ -123,6 +128,42 @@ def sumas_confirmadas():
     return {int(f["orden_id"]): round(float(f["suma"]), 2) for f in filas}
 
 
+def confirmado_por_metodo(ids=None):
+    """«Cómo pagaron»: lo ya dado por bueno, partido por la evidencia que
+    vio quien confirmó. Lista de dicts {clave, texto, n, monto}, de mayor
+    a menor.
+
+    `ids` acota a un conjunto de órdenes (Finanzas pasa las CONFIRMADAS,
+    para que la suma del desglose sea EXACTAMENTE su «Cobrado y
+    confirmado» — BLOQUE 59.4: si el desglose sumara otra cosa, sería una
+    verdad más justo cuando estamos matando otra). Sin `ids`, todo.
+
+    Una evidencia que la casa no conozca NO se reparte ni se esconde: sale
+    con su propia clave y el texto lo dice. Un monto NULL suma 0 (igual
+    que `sumas_confirmadas`) pero su fila SÍ se cuenta: el hecho existe
+    aunque el monto no se sepa."""
+    with _db() as con:
+        filas = con.execute(
+            "SELECT orden_id, evidencia, COALESCE(SUM(monto), 0) AS suma,"
+            " COUNT(*) AS n FROM pago_confirmado"
+            " GROUP BY orden_id, evidencia").fetchall()
+    acumulado = {}
+    for f in filas:
+        if ids is not None and int(f["orden_id"]) not in ids:
+            continue
+        clave = f["evidencia"] or ""
+        celda = acumulado.setdefault(clave, {"n": 0, "monto": 0.0})
+        celda["n"] += int(f["n"])
+        celda["monto"] += float(f["suma"])
+    salida = [{"clave": clave,
+               "texto": EVIDENCIAS.get(clave, TEXTO_EVIDENCIA_DESCONOCIDA),
+               "n": celda["n"],
+               "monto": round(celda["monto"], 2)}
+              for clave, celda in acumulado.items()]
+    salida.sort(key=lambda d: (-d["monto"], d["texto"]))
+    return salida
+
+
 # ---------------------------------------------------------------------------
 # Las tres palabras de contexto de una fila de la cola (7/10/2026)
 #
@@ -171,12 +212,23 @@ def marco_de(confirmacion):
     return quien if cuando == SIN_FECHA else f"{quien}, el {cuando}"
 
 
-def cola():
+def cola(informe=None):
     """(pendientes, huecos): las ventas del informe con plata que nadie
     confirmó que llegó — pagado real en Odoo sin confirmación humana, o
     clase F (pago informado fuera de Odoo, a verificar). Nada se
     inventa: si el informe trae huecos, viajan tal cual y la pantalla
     los dice.
+
+    **`informe` deja PASARLE la foto ya leída** (7/10/2026). Sin él la
+    cola sigue siendo dueña de su propia lectura, exactamente como
+    siempre — /pagos-por-confirmar no cambia en nada. Lo pide Finanzas,
+    que necesita la MISMA foto para las tarjetas: medido en el 8095,
+    leía el motor DOS VECES por pintada (24 viajes a Odoo y 2 lecturas
+    de Linear, el doble que /revisar), y pasarle la foto lo baja a 12 y
+    1. No es una caché: es no pedir dos veces lo mismo en la misma
+    pintada, así que no hay dato viejo posible y las dos mitades de la
+    pantalla quedan además CONSISTENTES entre sí — antes podían salir de
+    dos lecturas distintas de Odoo.
 
     **Una orden ya confirmada RE-ENTRA cuando llega plata nueva** (fix
     del review, 5/10): el `orden_id in ya` viejo la excluía para
@@ -201,7 +253,8 @@ def cola():
     - **quién** → `pago_confirmado.por` de esa misma confirmación. Una
       fila nueva no la marcó nadie: la plata está en Odoo y nadie la ha
       revisado, y eso es lo que se escribe."""
-    informe = _informe()
+    if informe is None:
+        informe = _informe()
     ya = sumas_confirmadas()
     ultimas = confirmados()
     pendientes = []
@@ -239,6 +292,12 @@ def cola():
             "total": round(float(venta.get("total") or 0), 2),
             "clase": clase,
             "motivo": venta.get("motivo") or "",
+            # ¿La venta está confirmada en Odoo? Viaja tal cual desde el
+            # informe (BLOQUE 59.2): la cola sigue mostrando TODO lo que
+            # tiene plata o señal de plata — un pago sobre una cotización
+            # sin confirmar es justo lo que hay que ver — pero Finanzas
+            # necesita poder sumar solo las confirmadas.
+            "confirmada": bool(venta.get("confirmada")),
             # F = el dinero NO está en Odoo: la fila lo dice para que la
             # evidencia que se pida sea la de verdad.
             "fuera_de_odoo": clase == "F",
