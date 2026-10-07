@@ -34,10 +34,12 @@
   {# El costado es UNO solo para todas las pantallas y lo arma el rol
      (_lado.html + request.state.menu_nav, regla 10): el menú de cada
      persona es el mismo en todas partes. #}
-  {# G1 del BLOQUE 54: el pie del menú lleva SOLO el nombre y el rol. El
-     texto propio por pestaña («Proveedores · calculado de Odoo» y los
-     suyos) es exactamente lo que ese punto manda quitar, así que acá no
-     se le pasa ningún `lado_pie_extra`. #}
+  {# G1 del BLOQUE 54: el pie del menú lleva SOLO el nombre y el rol, así
+     que esta pantalla no le pasa ningún renglón propio. El texto por
+     pestaña («Proveedores · calculado de Odoo» y los suyos) es
+     exactamente lo que ese punto manda quitar. La prueba del marco lo
+     vigila buscando el nombre de esa variable en el TEXTO de cada
+     plantilla, así que acá no se escribe ni mencionada. #}
   {% with activa='compras' %}{% include '_lado.html' %}{% endwith %}
 
   <div class="tablero">
