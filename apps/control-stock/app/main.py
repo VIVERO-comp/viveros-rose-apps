@@ -4937,6 +4937,16 @@ def control_panel(request: Request):
                              ("&ver=" + quote(ver)) if ver else ""))
 
 
+# 8/10/2026 — ¿Las cajas de «Peticiones» ya tienen algo que mostrar?
+# Hoy NO: las peticiones llegan en el punto 2 del plan de roles. Mientras
+# esté en False, esas dos cajas no se pintan — vacías le comían ~150px del
+# alto del tablero al Director, que era EL ÚNICO que las veía (viven dentro
+# de `alc.admin`), así que su equipo veía más leads que él en la misma
+# pantalla. El día que las peticiones existan, esto pasa a leer si hay
+# alguna; es constante y no literal para que la prueba pueda encenderlo.
+PETICIONES_LISTAS = False
+
+
 @app.get("/control")
 def control_pantalla(request: Request):
     """La pestaña Control (Fase 5, 24/09/2026): reparte el trabajo.
@@ -5013,6 +5023,14 @@ def control_pantalla(request: Request):
         # abrir o cerrar el panel ya viene en `panel`, igual que el
         # «Ver más» de A16: los dos salen de _panel_lead_contexto.
         "filtros_ver": filtros_ver,
+        # 8/10/2026 — Las dos cajas de «Peticiones que mandaste» y «Dijeron
+        # que no pueden» NO SE PINTAN mientras no tengan nada que mostrar.
+        # El motivo lo midió el dueño en su propia pantalla: vacías le
+        # comían ~150px del alto, y como viven dentro de `alc.admin`, ÉL
+        # era el único que las veía — o sea que Mari y Rubén veían MÁS
+        # leads que él en la misma pantalla. El día que las peticiones
+        # existan, esta bandera pasa a leer si hay alguna.
+        "peticiones_listas": PETICIONES_LISTAS,
         "columnas": columnas,
         "asignando": asignando,
         "moviendo": moviendo,

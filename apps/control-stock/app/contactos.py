@@ -698,7 +698,13 @@ def _unir(od, leads=(), marcador=None):
         clave = f"t{tel_norm}" if tel_norm else _clave_de_lead(lead)
         c = tomar(clave, tel_norm)
         c["leads"].append(lead.get("ref") or "")
-        resp = (lead.get("resp") or "").strip()
+        # 8/10/2026 — El nombre pasa por el MISMO traductor que usa el CRM
+        # (`linear_leads.nombre_visible`), no por una copia. Sin esto el
+        # CRM decía «Mari» y Contactos «Mary» en la misma app, que es la
+        # instrucción del dueño («se escribe Mari, en pantallas, datos
+        # sembrados y documentos»). Un segundo diccionario acá habría
+        # arreglado hoy y divergido mañana.
+        resp = linear_leads.nombre_visible(lead.get("resp"))
         if resp and resp not in c["resps"]:
             c["resps"].append(resp)
         if not c["nombre"] or c["nombre"] == "—":

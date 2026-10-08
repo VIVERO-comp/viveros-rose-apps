@@ -350,8 +350,8 @@ def _etapas_del_flujo():
 def _fuera_de_alcance():
     """(dict, hueco): las facturas del diario «Ventas Super Extra»,
     contadas aparte. Su dinero no entra a ninguna clase."""
-    vacio = {"n": 0, "total": 0.0, "detalle": [],
-             "nombre": DIARIO_FUERA_DE_ALCANCE}
+    vacio = {"n": 0, "total": 0.0, "n_impagas": 0, "debe": 0.0,
+             "detalle": [], "nombre": DIARIO_FUERA_DE_ALCANCE}
     try:
         diarios = _leer("account.journal", "search_read",
                         [[["name", "=", DIARIO_FUERA_DE_ALCANCE]]],
@@ -372,9 +372,20 @@ def _fuera_de_alcance():
          + (" · impaga" if f.get("payment_state") in ("not_paid", "partial")
             else ""))
         for f in facturas]
+    # 8/10/2026 — Además del total facturado va lo que FALTA COBRAR, que
+    # es el número que al dueño le importa y el que no veía en ningún lado:
+    # Finanzas le mostraba $2.066,50 (las 3 facturas con orden) cuando le
+    # deben $5.176,35. Los $3.109,85 de diferencia son estas, impagas desde
+    # agosto. El total facturado y lo que se debe son cosas distintas y
+    # ahora viajan las dos, sin mezclarse.
+    impagas = [f for f in facturas
+               if (f.get("payment_state") or "") in ("not_paid", "partial")]
     return {"n": len(facturas),
             "total": round(sum(float(f.get("amount_total") or 0)
                                for f in facturas), 2),
+            "n_impagas": len(impagas),
+            "debe": round(sum(float(f.get("amount_residual") or 0)
+                              for f in impagas), 2),
             "detalle": detalle,
             "nombre": DIARIO_FUERA_DE_ALCANCE}, None
 

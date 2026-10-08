@@ -135,7 +135,7 @@
            una sola fila de ejemplo. «Reasignar» vive acá, también
            apagado, que es donde el lienzo lo pone. Solo el Director: es
            él quien manda las peticiones. --- #}
-    {% if alc.admin %}
+    {% if alc.admin and peticiones_listas %}
     <div class="dc-strip">
       <section class="dc-box" aria-label="Peticiones que mandaste">
         <div class="dc-box-cab"><span>Peticiones que mandaste · esperando</span>
@@ -255,9 +255,16 @@
                  columnas vivas se queda — le dice al dueño a quién falta
                  repartir, y desde que todos ven todo (28/09/2026) también
                  le dice al empleado cuáles leads son suyos para mover. #}
-              {# El hueco «Sin asignar» se sigue diciendo con todas sus
-                 letras: es lo que al dueño le marca qué falta repartir. #}
-              {% if vista == 'estado' and not l.cerrado and not l.resp %}
+              {# El hueco «Sin asignar» se dice con todas sus letras — PERO
+                 NO a quien además tiene el botón «Asignar» al lado.
+                 8/10/2026, el dueño mirando su pantalla: la tarjeta decía
+                 «Sin asignar» Y «Asignar», dos cosas para lo mismo en cuatro
+                 centímetros. Para el admin el BOTÓN ya es la señal (si
+                 tuviera dueño saldría su inicial en su lugar); para quien no
+                 puede repartir, el chip es la única forma de saberlo y se
+                 queda. #}
+              {% if vista == 'estado' and not l.cerrado and not l.resp
+                    and not alc.admin %}
               <span class="chip-est chip-nadie">{{ l.resp_titulo }}</span>
               {% endif %}
               {% if l.wa %}<a class="ctl-wa" draggable="false" href="{{ l.wa }}" target="_blank" rel="noopener" aria-label="Abrir chat">💬</a>{% endif %}

@@ -432,7 +432,31 @@ def resumen():
          "rotulo": entregado_mes["rotulo"]},
     ]
 
+    # 8/10/2026 — LAS FACTURAS QUE NO NACEN DE UNA VENTA, dichas aparte.
+    # El dueño veía «Por cobrar $2.066,50» y le debían $5.176,35: los
+    # $3.109,85 que faltaban son 29 facturas del diario «Ventas Super
+    # Extra», emitidas directo a las sucursales en agosto, que por eso no
+    # cuelgan de ninguna orden. Van FUERA de los cinco números a propósito:
+    # el cuadre suma órdenes y meterlas adentro lo rompería. Pero su plata
+    # existe y llevaba mes y medio sin que ninguna pantalla la nombrara.
+    # Sale del MISMO motor que ya las contaba (`reconciliacion`), no de una
+    # lectura nueva.
+    fuera = informe.get("fuera_de_alcance") or {}
+    sin_venta = None
+    if fuera.get("debe"):
+        sin_venta = {
+            "debe": fuera["debe"],
+            "n": fuera.get("n_impagas") or 0,
+            "titulo": "Facturas sin venta",
+            "porque": ("Se facturan directo al cliente, sin pasar por una "
+                       "cotización, así que no cuelgan de ninguna venta."),
+            "fuera": ("Por eso no entran en los cinco números de arriba, "
+                      "que suman ventas. Pero la plata existe y hay que "
+                      "cobrarla."),
+        }
+
     return {
+        "sin_venta": sin_venta,
         "tarjetas": tarjetas,
         # La cola de abajo sigue COMPLETA (es la misma de Pagos por
         # confirmar), pero partida: las de ventas confirmadas, que son las

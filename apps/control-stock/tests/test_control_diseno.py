@@ -16,7 +16,7 @@ dueño con AJUSTES_ADMINS.
 
 import pytest
 
-from app import colores, control, linear_leads, ventas
+from app import main, colores, control, linear_leads, ventas
 from test_cot_lead import OdooCotLead
 
 
@@ -149,7 +149,12 @@ def test_sin_responsable_el_hueco_sigue_diciendose(cliente, de_dueno,
     monkeypatch.setattr(linear_leads, "listar", sin_resp)
     cuerpo = cliente.get("/control", params={"vista": "estado"}).text
     assert 'class="ctl-av"' not in cuerpo
-    assert "chip-nadie" in cuerpo
+    # 8/10/2026 — Lo que esta prueba mide es que el hueco NUNCA quede mudo.
+    # Eso no cambió; cambió QUIÉN lo dice. Al dueño se lo dice el botón
+    # «Asignar» (antes salían los dos, «Sin asignar» Y «Asignar», dos cosas
+    # para lo mismo en la misma tarjeta — lo vio él en su pantalla).
+    assert 'class="ctl-asignar"' in cuerpo
+    assert "chip-nadie" not in cuerpo
 
 
 def test_la_cabecera_de_la_ficha_lleva_interes_ref_y_origen(cliente, de_dueno):
@@ -705,13 +710,18 @@ def test_asignar_desde_la_tarjeta_sin_dueno_es_del_dueno(cliente, de_dueno):
     tarjeta = cuerpo[desde:desde + 10 + corta]
     assert 'class="ctl-asignar"' in tarjeta
     assert "abrir=LEAD-86&asignar=1" in tarjeta
-    # El hueco se sigue diciendo con todas sus letras.
-    assert "chip-nadie" in tarjeta
+    # 8/10/2026 — El hueco se sigue diciendo, pero UNA sola vez: para quien
+    # puede repartir lo dice el botón, no un chip al lado que repite.
+    assert "chip-nadie" not in tarjeta
 
 
 def test_un_empleado_no_ve_el_enlace_de_asignar(cliente):
     cuerpo = cliente.get("/control", params={"vista": "estado"}).text
     assert "ctl-asignar" not in cuerpo
+    # 8/10/2026 — Y a ÉL sí le queda el chip: sin el botón, es la única
+    # forma de saber que ese lead no lo tiene nadie. El hueco nunca queda
+    # mudo para nadie; lo dice el botón o lo dice el chip, nunca los dos.
+    assert "chip-nadie" in cuerpo
 
 
 # ---- C. el cuadro de asignar / reasignar ----
@@ -851,11 +861,29 @@ def test_ver_a_no_toca_ningun_permiso():
     assert sin_dueno and all(not l["resp"] for l in sin_dueno)
 
 
-def test_las_dos_cajas_de_peticiones_estan_en_su_lugar_apagadas(cliente,
-                                                                 de_dueno):
-    # El lienzo las pone entre los filtros y el tablero. Las peticiones
-    # llegan en el punto 2 del plan de roles: las cajas se pintan igual,
-    # apagadas, y SIN una sola fila de ejemplo.
+def test_las_dos_cajas_de_peticiones_no_se_pintan_mientras_no_haya_nada(
+        cliente, de_dueno):
+    # 8/10/2026 — ANTES esta prueba fijaba que las cajas se pintaran
+    # SIEMPRE, apagadas y sin filas de ejemplo. Lo que medía de verdad era
+    # que no inventaran datos; eso se conserva abajo. Lo que cambió es el
+    # dueño midiendo su propia pantalla: vacías le comían ~150px del alto, y
+    # como viven dentro de `alc.admin` él era el ÚNICO que las veía — su
+    # equipo veía más leads que él. Mientras no haya nada, no se pintan.
+    cuerpo = cliente.get("/control", params={"vista": "estado"}).text
+    assert "dc-strip" not in cuerpo
+    assert "Peticiones que mandaste" not in cuerpo
+    # Y lo que la prueba vieja protegía sigue protegido: ni un nombre
+    # inventado en ningún lado de la pantalla.
+    assert "Reasignar — Todavía no" not in cuerpo
+
+
+def test_las_cajas_de_peticiones_vuelven_cuando_haya_algo(cliente, de_dueno,
+                                                          monkeypatch):
+    # El día que las peticiones existan, las cajas vuelven A SU LUGAR —
+    # entre los filtros y el tablero— apagadas y SIN una sola fila de
+    # ejemplo. Es la prueba vieja, conservada entera, con la bandera
+    # encendida: lo que medía no se perdió, se movió de caso.
+    monkeypatch.setattr(main, "PETICIONES_LISTAS", True)
     cuerpo = cliente.get("/control", params={"vista": "estado"}).text
     tira = cuerpo[cuerpo.index('class="dc-strip"'):cuerpo.index('class="ret-tablero"')]
     assert "Peticiones que mandaste · esperando" in tira

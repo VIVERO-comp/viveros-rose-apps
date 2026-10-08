@@ -552,6 +552,9 @@ def test_super_extra_fuera_del_dinero_y_contada_aparte(odoo):
     fuera = datos["fuera_de_alcance"]
     assert fuera["n"] == 3
     assert fuera["total"] == 180.0
+    # Y lo que se debe de ellas viaja aparte del total facturado: son
+    # cosas distintas y Finanzas necesita la segunda.
+    assert "debe" in fuera and "n_impagas" in fuera
     assert any("SE/001" in renglon for renglon in fuera["detalle"])
 
 
@@ -660,7 +663,12 @@ def test_contrato_exacto_de_informe_datos(odoo):
     assert set(datos) == {"contadores", "ventas", "fuera_de_alcance",
                           "creado_hoy", "huecos"}
     assert set(datos["contadores"]) == set("ABCDEFGH") | {"rojo"}
-    assert set(datos["fuera_de_alcance"]) == {"n", "total", "detalle", "nombre"}
+    # 8/10/2026 — el contrato gana dos campos: cuántas están IMPAGAS y
+    # cuánto se DEBE de ellas. El total facturado no servía para lo que
+    # hacía falta: Finanzas mostraba $2.066,50 cuando le debían
+    # $5.176,35, y los $3.109,85 de diferencia son justo estas.
+    assert set(datos["fuera_de_alcance"]) == {"n", "total", "n_impagas",
+                                              "debe", "detalle", "nombre"}
     venta = datos["ventas"][0]
     assert set(venta) == {
         "orden_id", "nombre", "cliente", "telefono", "fecha", "total",

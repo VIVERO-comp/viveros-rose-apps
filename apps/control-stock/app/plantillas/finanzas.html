@@ -58,8 +58,21 @@
   <div class="fz-c fz-dif">
     <span class="fz-ct">Diferencia a revisar</span>
     <span class="fz-kv num {{ 'rojo' if f.diferencia.n }} {{ 'sin-dato' if f.diferencia.monto is none }}">{% if f.diferencia.monto is none %}sin dato{% else %}{{ f.diferencia.monto | dinero }}{% endif %} · {{ f.diferencia.n }} caso{{ 's' if f.diferencia.n != 1 }}</span>
-    <span class="fz-hint">{{ f.diferencia.hint }} <a href="#casos-diferencia">Ver los casos</a></span>
+    <span class="fz-hint">{{ f.diferencia.hint }} <a class="fz-link" href="#casos-diferencia">Ver los casos</a></span>
   </div>
+
+  {# 8/10/2026 — Las facturas que NO nacen de una venta, dichas con su
+     plata. Van DESPUÉS de la línea de la regla y FUERA de los cinco
+     números a propósito: el cuadre suma órdenes y meterlas adentro lo
+     rompería. El dueño veía «Por cobrar $2.066,50» y le debían $5.176,35;
+     la diferencia vivía acá sin que ninguna pantalla la nombrara. #}
+  {% if f.sin_venta %}
+  <div class="fz-c fz-sinventa">
+    <span class="fz-ct">{{ f.sin_venta.titulo }}</span>
+    <span class="fz-kv num rojo">{{ f.sin_venta.debe | dinero }} · {{ f.sin_venta.n }} factura{{ 's' if f.sin_venta.n != 1 }}</span>
+    <span class="fz-hint">{{ f.sin_venta.porque }} {{ f.sin_venta.fuera }}</span>
+  </div>
+  {% endif %}
 
   <p class="fz-hint">{{ f.regla }} Solo cuenta lo que el cliente ya confirmó{% if f.sin_confirmar %} — las {{ f.sin_confirmar }} cotizaciones vivas quedan fuera de los cinco{% endif %}.</p>
 

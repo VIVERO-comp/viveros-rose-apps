@@ -69,3 +69,17 @@
   .fz-r{grid-template-columns:minmax(0,1fr) auto;row-gap:4px}
   .fz-r .fz-apagado{grid-column:1 / -1;justify-self:start}
 }
+
+/* 8/10/2026 — Los enlaces de Finanzas salían con el azul subrayado del
+   navegador, que no pertenece a esta paleta: un <a> sin clase hereda el
+   estilo de fábrica y desentona con todo lo demás, que es negro y gris.
+   Lo reportó el dueño mirando la pantalla. */
+.fz-link{color:var(--d-tinta,#111);font-weight:600;text-decoration:none;
+  border-bottom:1px solid var(--d-borde-pil,#E1E1E1)}
+.fz-link:hover{border-bottom-color:var(--d-tinta,#111)}
+
+/* 8/10/2026 — «Facturas sin venta»: plata que se cobra y que no entra al
+   cuadre porque no nace de una orden. Se distingue de las cinco tarjetas
+   a propósito —no es uno de los cinco números— pero con el mismo peso
+   visual que «Diferencia a revisar», que es su hermana. */
+.fz-sinventa{border-left:3px solid var(--d-critico,#A3372F)}
