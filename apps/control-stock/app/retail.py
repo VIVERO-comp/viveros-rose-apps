@@ -50,11 +50,17 @@ INDICE_ETAPA = {e["clave"]: indice for indice, e in enumerate(ETAPAS)}
 
 TTL_LEADS = 120
 
+# Trae también los cerrados (type "completed": el estado Ganado) porque esos
+# son los que descansan en la columna Entregado; solo los cancelados
+# (Perdido) quedan fuera de la consulta, y los inactivos (label
+# "Desactivado") se filtran al leer. orderBy updatedAt: si algún día hay más
+# de 80, que los vivos no se caigan por culpa de los cerrados viejos.
 CONSULTA_RETAIL = """
-query { issues(first: 80, filter: {
+query { issues(first: 80, orderBy: updatedAt, filter: {
     team: { key: { eq: "LEAD" } }
-    state: { type: { nin: ["completed", "canceled"] } }
-  }) { nodes { id identifier title description url createdAt labels { nodes { name } } } }
+    state: { type: { neq: "canceled" } }
+  }) { nodes { id identifier title description url createdAt
+               state { name type } labels { nodes { name } } } }
 }
 """
 
@@ -100,9 +106,21 @@ _MUESTRA = [
 
 
 def _crudos():
-    """Los leads retail/mayorista vivos, sin el estado de la app todavía."""
+    """Los leads retail/mayorista vivos, sin el estado de la app todavía.
+    Cada fila trae "piso": la etapa mínima que el estado del CRM impone
+    (Pedido pendiente ⇒ por entregar, Ganado ⇒ entregado). Los inactivos
+    (con motivo en el CRM / label "Desactivado" en Linear) no vienen: su
+    etapa guardada los espera para cuando revivan."""
     if not calendario.configurado():
-        return [dict(l) for l in _MUESTRA]
+        from . import crm_flujo  # aquí abajo para no ciclar imports
+        senales = crm_flujo.senales_retail()
+        filas = []
+        for l in _MUESTRA:
+            senal = senales.get(l["ref"], {})
+            if senal.get("inactivo"):
+                continue
+            filas.append(dict(l, piso=senal.get("piso")))
+        return filas
     if _cache["dato"] is not None:
         if time.time() - _cache["en"] >= TTL_LEADS:
             calendario._en_fondo("retail", _buscar)
@@ -175,6 +193,15 @@ def _buscar():
         etiqueta = next((e for e in etiquetas if e in ETIQUETAS_RETAIL), None)
         if not etiqueta:
             continue  # servicio y demás: no son de esta pestaña
+        if any((e or "").strip().lower() == "desactivado" for e in etiquetas):
+            continue  # inactivo (pedido del 23/09/2026): fuera del tablero;
+            # su etapa sigue guardada y lo espera para cuando reviva
+        estado = issue.get("state") or {}
+        piso = None
+        if (estado.get("type") or "") == "completed":
+            piso = "entregado"  # Ganado en el CRM = Entregado aquí
+        elif (estado.get("name") or "").strip().lower() == "pedido pendiente":
+            piso = "entregar"
         titulo = issue["title"] or ""
         nombre = titulo.split(" (PP-")[0].strip() or titulo
         dias = 0
@@ -187,7 +214,7 @@ def _buscar():
         filas.append({"ref": issue["identifier"], "nombre": nombre,
                       "tipo": ETIQUETAS_RETAIL[etiqueta], "dias": dias,
                       "cel": _cel_de(issue.get("description")),
-                      "url": issue.get("url") or ""})
+                      "url": issue.get("url") or "", "piso": piso})
     _cache.update({"en": time.time(), "dato": filas})
     return filas
 
@@ -259,6 +286,11 @@ def tablero():
         derivada = _etapa_derivada(lead["cotizaciones"])
         if derivada and INDICE_ETAPA[derivada] > INDICE_ETAPA[guardada]:
             guardada = derivada
+        # Y tampoco queda ATRÁS del CRM (pedido del 23/09/2026): un lead en
+        # Pedido pendiente ya está "por entregar"; uno Ganado, "Entregado".
+        piso = lead.pop("piso", None)
+        if piso and INDICE_ETAPA[piso] > INDICE_ETAPA[guardada]:
+            guardada = piso
         lead["etapa"] = guardada
         lead["entrega"] = estado.get("entrega") or ""
         lead["color"] = COLORES[lead["tipo"]]
@@ -273,6 +305,33 @@ def tablero():
     return columnas, {l["ref"]: l for l in leads}
 
 
+# Etapa del tablero -> columna del CRM (pedido de Abraham, 23/09/2026):
+# mover a "Facturado · por entregar" pone el lead en Pedido pendiente y
+# mover a "Entregado" lo pone en Ganado. Las dos primeras columnas son de
+# conversación: no tocan el CRM.
+ETAPA_A_ESTADO_CRM = {"entregar": "PEDIDO_PENDIENTE", "entregado": "GANADO"}
+
+
+def _espejar_crm(ref, etapa):
+    """Mueve el lead del espejo CRM (Linear + Twenty) a la columna que la
+    etapa manda. Best-effort: el drag de Retail nunca falla por el CRM."""
+    destino = ETAPA_A_ESTADO_CRM.get(etapa)
+    if not destino:
+        return
+    from . import crm_flujo, crm_twenty  # aquí abajo para no ciclar imports
+
+    def tarea():
+        fila = crm_flujo.lead_por_ref(ref)
+        if fila and (fila.get("estado") or "") != destino:
+            crm_flujo.mover_estado(fila["id"], destino)
+
+    if crm_twenty.twenty_configurado():
+        # Con el CRM real hay red de por medio: la pantalla no espera.
+        calendario._en_fondo(f"retail-crm-{ref}", tarea)
+    else:
+        tarea()  # en muestra es un dict en memoria: sin red, sin hilo
+
+
 def mover(ref, etapa):
     if etapa not in CLAVES_ETAPA:
         return
@@ -284,6 +343,7 @@ def mover(ref, etapa):
             ON CONFLICT(ref) DO UPDATE SET etapa = excluded.etapa,
                 actualizado = excluded.actualizado
         """, (ref, etapa, ahora))
+    _espejar_crm(ref, etapa)
 
 
 def poner_fecha(ref, nombre, entrega):
@@ -316,6 +376,7 @@ def poner_fecha(ref, nombre, entrega):
                 actividad = COALESCE(excluded.actividad, retail_etapas.actividad),
                 etapa = 'entregar', actualizado = excluded.actualizado
         """, (ref, entrega, actividad, ahora))
+    _espejar_crm(ref, "entregar")
 
 
 def _actividad_por_ref(ref_actividad):

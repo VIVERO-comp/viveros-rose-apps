@@ -2,15 +2,23 @@
 
 import pytest
 
-from app import calendario, retail
+from app import calendario, crm_flujo, retail
 
 
 @pytest.fixture(autouse=True)
 def muestra_limpia(monkeypatch):
     monkeypatch.delenv("LINEAR_API_KEY", raising=False)
     monkeypatch.delenv("LINEAR_PROJECT_CALENDARIO_ID", raising=False)
+    monkeypatch.delenv("TWENTY_API_KEY", raising=False)
     calendario.reiniciar_muestra()
     calendario.invalidar_cache()
+    # El tablero del CRM de fábrica (el drag de Retail lo muta al espejar).
+    crm_flujo.refrescar()
+    de_fabrica = {"L1": "NUEVO", "L2": "EN_CONVERSACION", "L3": "CONTACTADO",
+                  "L4": "GANADO", "L5": "CONTACTADO"}
+    for fila in crm_flujo._MUESTRA:
+        fila["motivoNoAvance"] = "SOLO_PREGUNTABA" if fila["id"] == "L5" else ""
+        fila["estado"] = de_fabrica[fila["id"]]
 
 
 def test_el_tablero_pinta_las_cuatro_columnas(cliente):
@@ -163,3 +171,58 @@ def test_la_cotizacion_creada_con_lead_pendiente_nace_vinculada(cliente):
     assert ventas.lead_pendiente("genesis") is None  # se consumió
     _columnas, por_ref = retail.tablero()
     assert por_ref["LEAD-46"]["etapa"] == "facturar"
+
+
+# ---------------------------------------------------------------------------
+# El amarre con el CRM (pedido de Abraham, 23/09/2026): "Facturado · por
+# entregar" es "Pedido pendiente", "Entregado" es "Ganado", y un lead
+# inactivo (con motivo) sale también de Retail — y vuelve donde estaba.
+# ---------------------------------------------------------------------------
+
+def _fila_crm(id_lead):
+    return next(f for f in crm_flujo._MUESTRA if f["id"] == id_lead)
+
+
+def test_mover_a_por_entregar_pone_el_crm_en_pedido_pendiente(cliente):
+    # LEAD-45 (Kev) es L2 en el espejo, En conversación.
+    cliente.post("/retail/mover", data={"ref": "LEAD-45", "etapa": "entregar"})
+    assert _fila_crm("L2")["estado"] == "PEDIDO_PENDIENTE"
+
+
+def test_mover_a_entregado_pone_el_crm_en_ganado(cliente):
+    cliente.post("/retail/mover", data={"ref": "LEAD-45", "etapa": "entregado"})
+    assert _fila_crm("L2")["estado"] == "GANADO"
+
+
+def test_mover_hacia_atras_no_toca_el_crm(cliente):
+    # Las dos primeras columnas son de conversación: el CRM no se mueve.
+    cliente.post("/retail/mover", data={"ref": "LEAD-45", "etapa": "facturar"})
+    assert _fila_crm("L2")["estado"] == "EN_CONVERSACION"
+
+
+def test_un_lead_ganado_en_el_crm_descansa_en_entregado():
+    # LEAD-44 (Soledad) está Ganado en el CRM: cae en Entregado sin que
+    # nadie la haya arrastrado aquí.
+    _columnas, por_ref = retail.tablero()
+    assert por_ref["LEAD-44"]["etapa"] == "entregado"
+
+
+def test_el_drag_del_crm_tambien_jala_al_tablero_retail():
+    assert crm_flujo.mover_estado("L2", "PEDIDO_PENDIENTE")
+    _columnas, por_ref = retail.tablero()
+    assert por_ref["LEAD-45"]["etapa"] == "entregar"
+
+
+def test_un_lead_inactivo_sale_de_retail_y_vuelve_donde_estaba(cliente):
+    # LEAD-42 (Monica) está inactiva de fábrica: no sale en el tablero.
+    _columnas, por_ref = retail.tablero()
+    assert "LEAD-42" not in por_ref
+    # Su etapa guardada la espera: al quitarle el motivo vuelve ahí mismo.
+    retail.mover("LEAD-42", "facturar")
+    assert crm_flujo.registrar_motivo("L5", "")
+    _columnas, por_ref = retail.tablero()
+    assert por_ref["LEAD-42"]["etapa"] == "facturar"
+    # Y al ponerle motivo otra vez, desaparece de nuevo.
+    assert crm_flujo.registrar_motivo("L5", "SOLO_PREGUNTABA")
+    _columnas, por_ref = retail.tablero()
+    assert "LEAD-42" not in por_ref
